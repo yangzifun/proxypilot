@@ -1,7 +1,7 @@
 /* =================================================================
- * Cloudflare Worker: Config Manager + External Link + Analytics + Domain Hosting
- * 功能：配置存储、编辑、订阅管理，包含跳转至配置生成的按钮和统计分析
- * 新增：KV 状态记录 (Session Persistence via IP)
+ *  Cloudflare Worker: Config Manager + External Link + Analytics + Domain Hosting
+ *  功能：配置存储、编辑、订阅管理，包含跳转至配置生成的按钮和统计分析
+ *  新增：域名托管属性（Cloudflare、阿里ESA、腾讯Edgeone、AWS Cloudfront、Gcore、Fastly、CacheFly、LightCDN、Vercel、Netlify、无）
  * ================================================================= */
 
 // =================================================================
@@ -80,12 +80,13 @@ async function fetchConfigsByUuidFromDB(uuid, env) {
     } catch (e) { return []; }
 }
 
-// 获取UUID访问统计
+// 获取UUID访问统计（新增函数）
 async function fetchUuidAccessStatsFromDB(uuid, env, days = 30) {
     const db = env.DB;
     if (!db) return { success: false, error: "数据库未连接" };
 
     try {
+        // 检查是否存在访问日志表
         const tableCheck = await db.prepare(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='config_access_logs'"
         ).first();
@@ -97,6 +98,7 @@ async function fetchUuidAccessStatsFromDB(uuid, env, days = 30) {
             };
         }
 
+        // 获取总访问统计
         const totalStats = await db.prepare(`
             SELECT
                 COUNT(*) as total_access,
@@ -108,6 +110,7 @@ async function fetchUuidAccessStatsFromDB(uuid, env, days = 30) {
             WHERE uuid = ?
         `).bind(uuid).first();
 
+        // 获取今日访问统计
         const today = new Date().toISOString().split('T')[0];
         const todayStats = await db.prepare(`
             SELECT
@@ -118,6 +121,7 @@ async function fetchUuidAccessStatsFromDB(uuid, env, days = 30) {
             WHERE uuid = ? AND DATE(created_at) = ?
         `).bind(uuid, today).first();
 
+        // 获取按日统计（最近指定天数）
         const startDate = new Date();
         startDate.setDate(startDate.getDate() - days);
         const startDateStr = startDate.toISOString().split('T')[0];
@@ -134,6 +138,7 @@ async function fetchUuidAccessStatsFromDB(uuid, env, days = 30) {
             ORDER BY date ASC
         `).bind(uuid, startDateStr).all();
 
+        // 获取最近50条访问记录
         const recentLogs = await db.prepare(`
             SELECT
                 uuid, query_type, client_ip, user_agent, created_at
@@ -193,6 +198,7 @@ async function handleAddConfig(request, env) {
     const { uuid, config_data, domain_hosting = 'Cloudflare' } = body;
     if (!uuid || !config_data) return jsonResponse({ error: '字段缺失' }, 400);
 
+    // 验证域名托管参数 - 已扩展列表
     const validDomainHostings = [
         'Cloudflare', '阿里ESA', '腾讯Edgeone', 'AWS Cloudfront',
         'Gcore', 'Fastly', 'CacheFly', 'LightCDN', 'Vercel', 'Netlify',
@@ -210,7 +216,7 @@ async function handleAddConfig(request, env) {
     }
     if (stmts.length === 0) return jsonResponse({ error: '无有效配置' }, 400);
     await env.DB.batch(stmts);
-    return jsonResponse({ success: true, uuid: uuid }); // 返回 UUID 供 Router 更新 KV
+    return jsonResponse({ success: true });
 }
 
 async function handleUpdateConfig(request, env) {
@@ -222,6 +228,7 @@ async function handleUpdateConfig(request, env) {
     if(protocol === 'unknown') return jsonResponse({ error: '不支持的配置格式' }, 400);
     const remark = extractRemarkFromConfig(config_data, protocol);
 
+    // 验证域名托管参数 - 已扩展列表
     const validDomainHostings = [
         'Cloudflare', '阿里ESA', '腾讯Edgeone', 'AWS Cloudfront',
         'Gcore', 'Fastly', 'CacheFly', 'LightCDN', 'Vercel', 'Netlify',
@@ -241,6 +248,14 @@ async function handleGetConfigs(uuid, env) {
     return jsonResponse({ uuid, configs: results });
 }
 
+// 新增：获取UUID访问统计API
+async function handleGetUuidStats(uuid, env) {
+    if (!uuid) return jsonResponse({ error: 'UUID Required' }, 400);
+
+    const stats = await fetchUuidAccessStatsFromDB(uuid, env, 30);
+    return jsonResponse(stats);
+}
+
 async function handleDelete(type, value, env) {
     const sql = type === 'uuid' ? 'DELETE FROM configs WHERE uuid = ?' : 'DELETE FROM configs WHERE id = ?';
     await env.DB.prepare(sql).bind(value).run();
@@ -248,7 +263,7 @@ async function handleDelete(type, value, env) {
 }
 
 // =================================================================
-//  MAIN ROUTER (已修改：集成 KV 状态管理)
+//  MAIN ROUTER
 // =================================================================
 
 export default {
@@ -258,9 +273,6 @@ export default {
         const method = request.method;
         const DOMAIN_NAME = url.origin;
 
-        // 1. 获取客户端 IP 用于区分用户
-        const clientIP = request.headers.get('CF-Connecting-IP') || 'unknown-ip';
-
         const manageUUID = new URLPattern({ pathname: '/manage/configs/:uuid' });
         const manageID = new URLPattern({ pathname: '/manage/configs/id/:id' });
         const subUUID = new URLPattern({ pathname: '/sub/:uuid' });
@@ -268,70 +280,25 @@ export default {
 
         try {
             if (method === 'GET') {
-                if (path === '/') {
-                    // 2. 访问首页：尝试从 KV 读取该 IP 上次使用的 UUID
-                    let lastUsedUuid = '';
-                    if (env.KV && clientIP !== 'unknown-ip') {
-                        try {
-                            lastUsedUuid = await env.KV.get(`user_last_uuid_${clientIP}`);
-                        } catch (e) { console.error("KV Read Error:", e); }
-                    }
-
-                    // 3. 将 UUID 注入到 HTML 模板中，前端 JS 会读取这个变量
-                    let html = managePageHtmlContent.replace(/YOUR_WORKER_DOMAIN_PATH/g, DOMAIN_NAME);
-                    html = html.replace(/__SERVER_INJECTED_UUID__/g, lastUsedUuid || '');
-
-                    return new Response(html, {
-                        headers: { 'Content-Type': 'text/html;charset=UTF-8' }
-                    });
-                }
+                if (path === '/') return new Response(managePageHtmlContent.replace(/YOUR_WORKER_DOMAIN_PATH/g, DOMAIN_NAME), { headers: { 'Content-Type': 'text/html;charset=UTF-8' } });
 
                 const subMatch = subUUID.exec(url);
                 if (subMatch) return await handleRawSubscription(subMatch.pathname.groups.uuid, env);
 
                 const uuidMatch = manageUUID.exec(url);
-                if (uuidMatch) {
-                    const currentUuid = uuidMatch.pathname.groups.uuid;
+                if (uuidMatch) return await handleGetConfigs(uuidMatch.pathname.groups.uuid, env);
 
-                    // 4. 查询配置 API：异步将 UUID 写入 KV，记录该 IP 的状态 (保留30天)
-                    if (env.KV && clientIP !== 'unknown-ip') {
-                        ctx.waitUntil(env.KV.put(`user_last_uuid_${clientIP}`, currentUuid, { expirationTtl: 60 * 60 * 24 * 30 }));
-                    }
-
-                    return await handleGetConfigs(currentUuid, env);
-                }
-
+                // 新增：处理UUID统计请求
                 const statsMatch = uuidStats.exec(url);
                 if (statsMatch) {
                     const urlObj = new URL(request.url);
                     const days = urlObj.searchParams.get('days') || 30;
-                    const currentUuid = statsMatch.pathname.groups.uuid;
-
-                    // 统计查询时也顺便更新 KV
-                    if (env.KV && clientIP !== 'unknown-ip') {
-                        ctx.waitUntil(env.KV.put(`user_last_uuid_${clientIP}`, currentUuid, { expirationTtl: 60 * 60 * 24 * 30 }));
-                    }
-
-                    const stats = await fetchUuidAccessStatsFromDB(currentUuid, env, parseInt(days));
+                    const stats = await fetchUuidAccessStatsFromDB(statsMatch.pathname.groups.uuid, env, parseInt(days));
                     return jsonResponse(stats);
                 }
             }
 
-            if (method === 'POST' && path === '/manage/configs') {
-                // 添加配置时，因为 Body 只能读一次，我们先克隆 request 获取 uuid
-                // 但为了不影响 handleAddConfig 的逻辑，我们在 handleAddConfig 返回后，如果成功，
-                // 其实 handleAddConfig 内部并没有返回 UUID 给我们，所以这里简单做法是 clone
-                const cloneReq = request.clone();
-                try {
-                    const body = await cloneReq.json();
-                    if (body.uuid && env.KV && clientIP !== 'unknown-ip') {
-                        ctx.waitUntil(env.KV.put(`user_last_uuid_${clientIP}`, body.uuid, { expirationTtl: 60 * 60 * 24 * 30 }));
-                    }
-                } catch(e) {}
-
-                return await handleAddConfig(request, env);
-            }
-
+            if (method === 'POST' && path === '/manage/configs') return await handleAddConfig(request, env);
             if (method === 'PUT' && path === '/manage/configs') return await handleUpdateConfig(request, env);
 
             if (method === 'DELETE') {
@@ -349,7 +316,7 @@ export default {
 };
 
 // =================================================================
-//  FRONTEND CONTENT (Updated with KV State Injection)
+//  FRONTEND CONTENT (Updated with Link and Analytics and Domain Hosting)
 // =================================================================
 
 const newGlobalStyle = `
@@ -359,6 +326,7 @@ html { font-size: 87.5%; } body, html { margin: 0; padding: 0; min-height: 100%;
 .profile-name { font-size: 2.2rem; color: #3d474d; margin-bottom: 10px; font-weight: bold;}
 .profile-quote { color: #89949B; margin-bottom: 27px; min-height: 1.2em; }
 .nav-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 27px; }
+/* Modified nav-btn for unified A-tag behavior */
 .nav-btn { display: inline-flex; align-items: center; justify-content: center; padding: 8px 16px; text-align: center; background: #E8EBED; border: 2px solid #89949B; border-radius: 4px; color: #5a666d; text-decoration: none !important; font-weight: 500; font-size: 0.95rem; line-height: 1.2; transition: all 0.3s; white-space: nowrap; cursor: pointer; box-sizing: border-box; }
 .nav-btn:hover:not(:disabled) { background: #89949B; color: white; }
 .nav-btn:disabled { opacity: 0.6; cursor: not-allowed;}
@@ -379,6 +347,7 @@ textarea:focus, input:focus, select:focus { outline: none; border-color: #3d474d
 @keyframes slideIn { to { opacity: 1; transform: translateX(0); } }
 @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; transform: translateX(100%); } }
 
+/* Table & Modal Specific */
 .table-container { overflow-x: auto; border: 2px solid #89949B; border-radius: 4px; background: #fff; margin-top:20px;}
 table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 th, td { padding: 10px 14px; text-align: left; border-bottom: 2px solid #E8EBED; white-space: nowrap; }
@@ -387,7 +356,15 @@ th { font-weight: bold; color: #3d474d; background-color: #f0f2f5; }
 .actions-cell button { margin-right: 5px; padding: 4px 8px; font-size: 0.8rem; }
 .domain-hosting-cell { font-size: 0.85rem; font-weight: 500; }
 
-.hosting-badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 500; line-height: 1.4; }
+/* Domain Hosting Badges - 扩展样式 */
+.hosting-badge { 
+    display: inline-block; 
+    padding: 2px 8px; 
+    border-radius: 12px; 
+    font-size: 0.75rem; 
+    font-weight: 500; 
+    line-height: 1.4;
+}
 .hosting-cloudflare { background: #F6821F; color: #fff; border: 1px solid #F6821F; }
 .hosting-aliyun { background: #FE6A00; color: #fff; border: 1px solid #FE6A00; }
 .hosting-tencent { background: #4A86FF; color: #fff; border: 1px solid #4A86FF; }
@@ -401,6 +378,7 @@ th { font-weight: bold; color: #3d474d; background-color: #f0f2f5; }
 .hosting-none { background: #f8f9fa; color: #6c757d; border: 1px solid #6c757d; }
 .hosting-other { background: #f0f0f0; color: #666; border: 1px solid #666; }
 
+/* Modal Styles */
 .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 100; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.3s; }
 .modal-overlay.open { opacity: 1; pointer-events: auto; }
 .modal { background: #fff; width: 90%; max-width: 600px; max-height: 90vh; overflow-y: auto; border-radius: 8px; padding: 25px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); transform: translateY(-20px); transition: transform 0.3s; }
@@ -414,6 +392,7 @@ th { font-weight: bold; color: #3d474d; background-color: #f0f2f5; }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
 
+/* Statistics Styles */
 .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
 .stat-box { background: #f0f4f8; padding: 15px; border-radius: 4px; border-left: 4px solid #3b82f6; text-align: center; }
 .stat-num { font-size: 1.8rem; color: #1e40af; font-weight: bold; display: block; }
@@ -437,12 +416,46 @@ th { font-weight: bold; color: #3d474d; background-color: #f0f2f5; }
 .timestamp { color: #6b7280; font-family: monospace; }
 .log-type { font-weight: 500; }
 
-.hosting-select { padding: 10px 12px; border: 2px solid #89949B; border-radius: 4px; background-color: #fff; font-size: 0.9rem; color: #5a666d; font-family: 'SF Mono', 'Courier New', monospace; cursor: pointer; transition: all 0.2s ease; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M2.5 4.5L6 8L9.5 4.5' stroke='%235a666d' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; background-size: 12px; padding-right: 32px; }
-.hosting-select:hover { border-color: #5a666d; background-color: #f8f9fa; }
-.hosting-select:focus { outline: none; border-color: #3d474d; box-shadow: 0 0 0 3px rgba(93, 105, 109, 0.1); }
-.hosting-select:disabled { opacity: 0.6; cursor: not-allowed; background-color: #f0f2f5; }
-.hosting-option { padding: 10px 12px; font-size: 0.9rem; font-family: 'SF Mono', 'Courier New', monospace; }
-.hosting-option:hover { background-color: #f0f2f5; }
+/* Enhanced Select Styles */
+.hosting-select { 
+    padding: 10px 12px; 
+    border: 2px solid #89949B; 
+    border-radius: 4px; 
+    background-color: #fff;
+    font-size: 0.9rem;
+    color: #5a666d;
+    font-family: 'SF Mono', 'Courier New', monospace;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M2.5 4.5L6 8L9.5 4.5' stroke='%235a666d' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 12px;
+    padding-right: 32px;
+}
+.hosting-select:hover { 
+    border-color: #5a666d; 
+    background-color: #f8f9fa;
+}
+.hosting-select:focus { 
+    outline: none; 
+    border-color: #3d474d; 
+    box-shadow: 0 0 0 3px rgba(93, 105, 109, 0.1);
+}
+.hosting-select:disabled { 
+    opacity: 0.6; 
+    cursor: not-allowed;
+    background-color: #f0f2f5;
+}
+.hosting-option { 
+    padding: 10px 12px; 
+    font-size: 0.9rem;
+    font-family: 'SF Mono', 'Courier New', monospace;
+}
+.hosting-option:hover {
+    background-color: #f0f2f5;
+}
 `;
 
 const managePageHtmlContent = `
@@ -458,6 +471,7 @@ const managePageHtmlContent = `
 <body>
   <div id="toast-container"></div>
   
+  <!-- Editor Modal -->
   <div id="editModalOverlay" class="modal-overlay">
     <div class="modal">
       <div class="modal-header">
@@ -513,8 +527,10 @@ const managePageHtmlContent = `
       <h1 class="profile-name">配置管理器</h1>
       <p class="profile-quote">节点存储与订阅管理</p>
       
+      <!-- Action Buttons (Modified for Unified Style) -->
       <div class="nav-grid">
          <button class="nav-btn primary" disabled style="opacity:1;cursor:default;">管理面板</button>
+         <!-- Added 'primary' class to make the link look exactly like the main button -->
          <a href="https://cfst.yangzifun.org" target="_blank" class="nav-btn primary">CF配置生成</a>
       </div>
 
@@ -525,6 +541,7 @@ const managePageHtmlContent = `
            <button id="queryBtn" class="nav-btn primary" onclick="manageQueryByUuid()">查询</button>
         </div>
         
+        <!-- Modified Subscription Link Area: Now uses input field for unified style -->
         <div id="subLinkDisplay" class="form-group hidden" style="display:none; gap:10px; margin-top:10px;">
            <input type="text" id="subUrlLink" readonly style="margin-bottom:0; color:#5a666d; background-color: #f8f9fa;">
            <button class="nav-btn" onclick="copySubLink()" style="white-space: nowrap;">复制</button>
@@ -586,13 +603,16 @@ const managePageHtmlContent = `
             <option value="其他">其他</option>
           </select>
           <div class="info-box">
-            <strong>说明：</strong> 选择此配置使用的域名托管服务。
+            <strong>说明：</strong> 选择此配置使用的域名托管服务。这有助于管理和分类不同CDN厂商的配置。
             <br>新增选项：Gcore, Fastly, CacheFly, LightCDN, Vercel, Netlify，"无"表示不使用域名托管。
           </div>
         </div>
         <div class="form-group">
           <label>配置数据 (可批量添加)</label>
-          <textarea id="addConfigData" placeholder="支持批量添加：\nvmess://...\nvless://...\ntrojan://..." rows="4"></textarea>
+          <textarea id="addConfigData" placeholder="支持批量添加：
+vmess://...
+vless://...
+trojan://..." rows="4"></textarea>
         </div>
         <button onclick="manageAddConfig()" class="nav-btn primary" style="width:100%">添加到当前 UUID</button>
       </div>
@@ -603,119 +623,100 @@ const managePageHtmlContent = `
 
   <script>
     const WORKER_DOMAIN = "YOUR_WORKER_DOMAIN_PATH";
-    // KV 注入点：后端会替换此字符串为真实 UUID
-    const AUTO_FILL_UUID = "__SERVER_INJECTED_UUID__"; 
-
     const toastIcons = { success: '✅', error: '❌', info: 'ℹ️' };
     let currentUuid = '';
     let statsChart = null;
     let currentChartType = 'split';
     
+    // 域名托管服务样式映射 - 已扩展
     const hostingStyleMap = {
-      'Cloudflare': 'hosting-cloudflare', '阿里ESA': 'hosting-aliyun', '腾讯Edgeone': 'hosting-tencent',
-      'AWS Cloudfront': 'hosting-aws', 'Gcore': 'hosting-gcore', 'Fastly': 'hosting-fastly',
-      'CacheFly': 'hosting-cachefly', 'LightCDN': 'hosting-lightcdn', 'Vercel': 'hosting-vercel',
-      'Netlify': 'hosting-netlify', '无': 'hosting-none', '其他': 'hosting-other'
+      'Cloudflare': 'hosting-cloudflare',
+      '阿里ESA': 'hosting-aliyun',
+      '腾讯Edgeone': 'hosting-tencent',
+      'AWS Cloudfront': 'hosting-aws',
+      'Gcore': 'hosting-gcore',
+      'Fastly': 'hosting-fastly',
+      'CacheFly': 'hosting-cachefly',
+      'LightCDN': 'hosting-lightcdn',
+      'Vercel': 'hosting-vercel',
+      'Netlify': 'hosting-netlify',
+      '无': 'hosting-none',
+      '其他': 'hosting-other'
     };
     
-    function showToast(m, t='info') {
-       const c = document.getElementById('toast-container');
-       const el = document.createElement('div');
-       el.className = 'toast';
-       el.innerHTML = '<span>' + (toastIcons[t] || '') + ' ' + m + '</span>';
-       c.appendChild(el);
-       setTimeout(() => { if(el.parentNode) el.parentNode.removeChild(el); }, 5000);
+    function showToast(m,t='info'){const c=document.getElementById('toast-container');const x=document.createElement('div');x.className='toast';x.innerHTML=\`<span>\${toastIcons[t]} \${m}</span>\`;c.appendChild(x);setTimeout(()=>x.remove(),4000)}
+    function setButtonLoading(b,l,t){if(l){b.ds=b.innerHTML;b.disabled=true;b.innerHTML='...'}else{b.disabled=false;if(b.ds)b.innerHTML=b.ds}}
+
+    /* Parser */
+    function b64DecodeUnicode(str) { return decodeURIComponent(atob(str).split('').map(c=>'%'+('00'+c.charCodeAt(0).toString(16)).slice(-2)).join('')); }
+    function b64EncodeUnicode(str) { return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g,(m,p1)=>String.fromCharCode(parseInt(p1,16)))); }
+
+    /* Date Formatting */
+    function formatDate(dateStr) {
+      if (!dateStr) return '';
+      const date = new Date(dateStr);
+      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+      const day = date.getDate().toString().padStart(2, '0');
+      return \`\${month}/\${day}\`;
+    }
+    
+    function formatDateTime(dateStr) {
+      if (!dateStr) return '';
+      const date = new Date(dateStr);
+      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+      const day = date.getDate().toString().padStart(2, '0');
+      const hours = date.getHours().toString().padStart(2, '0');
+      const minutes = date.getMinutes().toString().padStart(2, '0');
+      return \`\${month}/\${day} \${hours}:\${minutes}\`;
     }
 
-    async function manageQueryByUuid() {
-       const inp = document.getElementById('queryUuidInput');
-       const val = inp.value.trim();
-       if (!val) return showToast('请输入 UUID', 'error');
-       
-       currentUuid = val;
-       document.getElementById('queryBtn').disabled = true;
-       document.getElementById('queryBtn').innerText = '查询中...';
-
-       try {
-           const res = await fetch(WORKER_DOMAIN + '/manage/configs/' + val);
-           if (!res.ok) throw new Error('查询失败 ' + res.status);
-           const data = await res.json();
-           renderConfigs(data.configs);
-           showStatsCard(true);
-           showAddCard(true);
-           
-           // 显示订阅链接
-           const subLink = WORKER_DOMAIN + '/sub/' + val;
-           const linkBox = document.getElementById('subLinkDisplay');
-           const linkInp = document.getElementById('subUrlLink');
-           linkInp.value = subLink;
-           linkBox.classList.remove('hidden');
-           linkBox.style.display = 'flex';
-           
-           // 加载统计
-           loadUuidStats();
-       } catch (e) {
-           showToast(e.message, 'error');
-           document.getElementById('resultCard').classList.add('hidden');
-       } finally {
-           document.getElementById('queryBtn').disabled = false;
-           document.getElementById('queryBtn').innerText = '查询';
-       }
+    /* Modal Logic */
+    function openEditModal(config) {
+        document.getElementById('edit-id').value = config.id;
+        let p = 'unknown'; const l = config.config_data;
+        if(l.startsWith('vmess://')) p='vmess'; 
+        else if(l.startsWith('vless://')) p='vless'; 
+        else if(l.startsWith('trojan://')) p='trojan';
+        else if(l.startsWith('hysteria2://')) p='hysteria2';
+        else if(l.startsWith('tuic://')) p='tuic';
+        else if(l.startsWith('anytls://')) p='anytls';
+        else if(l.startsWith('socks5://')) p='socks5';
+        else if(l.startsWith('any-reality://')) p='any-reality';
+        else if(l.startsWith('ss://')) p='ss';
+        
+        document.getElementById('edit-protocol').value = p;
+        ['ps','add','port','id-uuid','net','type','host','path','tls','sni'].forEach(k=>document.getElementById('edit-'+k).value='');
+        
+        // 设置域名托管下拉框
+        const hostingSelect = document.getElementById('edit-domain-hosting');
+        hostingSelect.value = config.domain_hosting || 'Cloudflare';
+        
+        try {
+            if (p === 'vmess') {
+                const c = JSON.parse(b64DecodeUnicode(l.substring(8)));
+                document.getElementById('edit-ps').value = c.ps||''; document.getElementById('edit-add').value = c.add||''; document.getElementById('edit-port').value = c.port||''; document.getElementById('edit-id-uuid').value = c.id||''; document.getElementById('edit-net').value = c.net||'tcp'; document.getElementById('edit-type').value = c.type||''; document.getElementById('edit-host').value = c.host||''; document.getElementById('edit-path').value = c.path||''; document.getElementById('edit-tls').value = c.tls||''; document.getElementById('edit-sni').value = c.sni||'';
+            } else if (p === 'vless' || p === 'trojan' || 
+                      p === 'hysteria2' || p === 'tuic' ||
+                      p === 'anytls' || p === 'socks5' ||
+                      p === 'any-reality' || p === 'ss') {
+                const u = new URL(l);
+                document.getElementById('edit-ps').value = u.hash?decodeURIComponent(u.hash.substring(1)):''; 
+                document.getElementById('edit-add').value = u.hostname; 
+                document.getElementById('edit-port').value = u.port; 
+                document.getElementById('edit-id-uuid').value = u.username; 
+                document.getElementById('edit-net').value = u.searchParams.get('type')||'tcp'; 
+                document.getElementById('edit-type').value = u.searchParams.get('headerType')||''; 
+                document.getElementById('edit-host').value = u.searchParams.get('host')||''; 
+                document.getElementById('edit-path').value = u.searchParams.get('path')||u.searchParams.get('serviceName')||''; 
+                document.getElementById('edit-tls').value = u.searchParams.get('security')==='tls'?'tls':''; 
+                document.getElementById('edit-sni').value = u.searchParams.get('sni')||'';
+            }
+        } catch(e) { alert('解析失败'); return; }
+        document.getElementById('editModalOverlay').classList.add('open');
     }
-
-    function renderConfigs(list) {
-       const c = document.getElementById('queryResultsContainer');
-       const card = document.getElementById('resultCard');
-       c.innerHTML = '';
-       if (!list || list.length === 0) {
-           c.innerHTML = '<p style="text-align:center;color:#89949B;">暂无配置数据</p>';
-           card.classList.remove('hidden');
-           return;
-       }
-       
-       const tableDiv = document.createElement('div');
-       tableDiv.className = 'table-container';
-       let h = '<table><thead><tr><th>ID</th><th>托管</th><th>备注</th><th>协议</th><th>配置预览</th><th>操作</th></tr></thead><tbody>';
-       
-       list.forEach(item => {
-           const badgeClass = hostingStyleMap[item.domain_hosting] || 'hosting-cloudflare';
-           h += '<tr>';
-           h += '<td>' + item.id + '</td>';
-           h += '<td><span class="hosting-badge ' + badgeClass + '">' + (item.domain_hosting || 'Cloudflare') + '</span></td>';
-           h += '<td>' + (item.remark || '-') + '</td>';
-           h += '<td>' + item.protocol + '</td>';
-           h += '<td class="config-data-cell">' + item.config_data.substring(0, 50) + '...</td>';
-           h += '<td class="actions-cell">';
-           h += '<button class="nav-btn" onclick="openEditModal(' + JSON.stringify(item).replace(/"/g, '&quot;') + ')">编辑</button>';
-           h += '<button class="nav-btn" style="color:#d44;border-color:#d44;" onclick="deleteOne(' + item.id + ')">删除</button>';
-           h += '</td></tr>';
-       });
-       h += '</tbody></table>';
-       tableDiv.innerHTML = h;
-       c.appendChild(tableDiv);
-       card.classList.remove('hidden');
-    }
-
-    async function manageAddConfig() {
-       const txt = document.getElementById('addConfigData').value.trim();
-       const hosting = document.getElementById('domainHostingSelect').value;
-       if (!currentUuid) return showToast('请先查询 UUID', 'error');
-       if (!txt) return showToast('请输入配置数据', 'error');
-       
-       try {
-           const res = await fetch(WORKER_DOMAIN + '/manage/configs', {
-               method: 'POST',
-               headers: { 'Content-Type': 'application/json' },
-               body: JSON.stringify({ uuid: currentUuid, config_data: txt, domain_hosting: hosting })
-           });
-           const d = await res.json();
-           if (d.error) throw new Error(d.error);
-           showToast('添加成功', 'success');
-           document.getElementById('addConfigData').value = '';
-           manageQueryByUuid();
-       } catch (e) { showToast(e.message, 'error'); }
-    }
-
+    
+    function closeEditModal() { document.getElementById('editModalOverlay').classList.remove('open'); }
+    
     async function saveEditedConfig() {
         const id = document.getElementById('edit-id').value;
         const proto = document.getElementById('edit-protocol').value;
@@ -729,175 +730,378 @@ const managePageHtmlContent = `
         const path = document.getElementById('edit-path').value;
         const tls = document.getElementById('edit-tls').value;
         const sni = document.getElementById('edit-sni').value;
-        const hosting = document.getElementById('edit-domain-hosting').value;
-
-        let newConfig = '';
+        const domainHosting = document.getElementById('edit-domain-hosting').value;
+        
+        let nL = '';
         if (proto === 'vmess') {
-            const vmessObj = {
-                v: "2", ps: ps, add: add, port: port, id: uuid, aid: "0", scy: "auto",
-                net: net, type: type || "none", host: host, path: path, tls: tls, sni: sni
-            };
-            newConfig = 'vmess://' + btoa(JSON.stringify(vmessObj));
-        } else {
-            showToast('仅演示 VMess 编辑拼装，其他协议建议删除后重新添加', 'info');
-            closeEditModal();
-            return; 
-        }
-
-        try {
-           const res = await fetch(WORKER_DOMAIN + '/manage/configs', {
-               method: 'PUT',
-               headers: {'Content-Type': 'application/json'},
-               body: JSON.stringify({ id: id, config_data: newConfig, domain_hosting: hosting })
-           });
-           const d = await res.json();
-           if(d.error) throw new Error(d.error);
-           showToast('修改成功', 'success');
-           closeEditModal();
-           manageQueryByUuid();
-        } catch(e) { showToast(e.message, 'error'); }
-    }
-
-    async function deleteOne(id) {
-       if(!confirm('确定删除此配置?')) return;
-       try {
-           const res = await fetch(WORKER_DOMAIN + '/manage/configs/id/' + id, { method: 'DELETE' });
-           if(res.ok) { showToast('已删除', 'success'); manageQueryByUuid(); }
-           else showToast('删除失败', 'error');
-       } catch(e) { showToast(e.message, 'error'); }
-    }
-
-    async function deleteAll() {
-       if(!currentUuid) return;
-       if(!confirm('确定清空该 UUID 下所有配置? 此操作不可恢复!')) return;
-       try {
-           const res = await fetch(WORKER_DOMAIN + '/manage/configs/' + currentUuid, { method: 'DELETE' });
-           if(res.ok) { showToast('已清空', 'success'); manageQueryByUuid(); }
-           else showToast('清空失败', 'error');
-       } catch(e) { showToast(e.message, 'error'); }
-    }
-
-    function copySubLink() {
-       const el = document.getElementById('subUrlLink');
-       el.select();
-       document.execCommand('copy');
-       showToast('订阅链接已复制', 'success');
-    }
-
-    function openEditModal(item) {
-        document.getElementById('edit-id').value = item.id;
-        document.getElementById('edit-protocol').value = item.protocol;
-        document.getElementById('edit-domain-hosting').value = item.domain_hosting || 'Cloudflare';
-        
-        if (item.protocol === 'vmess') {
-            try {
-                const v = JSON.parse(atob(item.config_data.substring(8)));
-                document.getElementById('edit-ps').value = v.ps || '';
-                document.getElementById('edit-add').value = v.add || '';
-                document.getElementById('edit-port').value = v.port || '';
-                document.getElementById('edit-id-uuid').value = v.id || '';
-                document.getElementById('edit-net').value = v.net || 'tcp';
-                document.getElementById('edit-type').value = v.type || '';
-                document.getElementById('edit-host').value = v.host || '';
-                document.getElementById('edit-path').value = v.path || '';
-                document.getElementById('edit-tls').value = v.tls || '';
-                document.getElementById('edit-sni').value = v.sni || v.host || '';
-            } catch(e) {}
-        } else {
-             document.getElementById('edit-ps').value = item.remark || '';
-        }
-        
-        document.getElementById('editModalOverlay').classList.add('open');
-    }
-
-    function closeEditModal() {
-        document.getElementById('editModalOverlay').classList.remove('open');
-    }
-
-    function showStatsCard(show) {
-        const el = document.getElementById('statsCard');
-        if(show) el.classList.remove('hidden');
-        else el.classList.add('hidden');
-    }
-
-    function showAddCard(show) {
-        const el = document.getElementById('addCard');
-        if(show) el.classList.remove('hidden');
-        else el.classList.add('hidden');
-    }
-
-    async function loadUuidStats() {
-        if(!currentUuid) return;
-        const days = document.getElementById('statsDays').value;
-        try {
-            const res = await fetch(WORKER_DOMAIN + '/manage/stats/' + currentUuid + '?days=' + days);
-            const data = await res.json();
-            if(data.success) {
-                renderStats(data);
+            nL = 'vmess://' + b64EncodeUnicode(JSON.stringify({
+                v: "2", ps, add, port, id: uuid, aid: "0", scy: "auto",
+                net, type, host, path, tls, sni
+            }));
+        } else if (proto === 'vless' || proto === 'trojan' || 
+                  proto === 'hysteria2' || proto === 'tuic' ||
+                  proto === 'anytls' || proto === 'socks5' ||
+                  proto === 'any-reality' || proto === 'ss') {
+            let u = new URL(proto + '://' + uuid + '@' + add + ':' + port);
+            if (net !== 'tcp') u.searchParams.set('type', net);
+            if (type) u.searchParams.set('headerType', type);
+            if (tls === 'tls') {
+                u.searchParams.set('security', 'tls');
+                if (sni) u.searchParams.set('sni', sni);
             }
-        } catch(e) { console.error(e); }
+            if (host) u.searchParams.set('host', host);
+            if (path) {
+                if (net === 'grpc') u.searchParams.set('serviceName', path);
+                else u.searchParams.set('path', path);
+            }
+            u.hash = encodeURIComponent(ps);
+            nL = u.toString();
+        }
+        
+        const b = document.querySelector('.modal .primary');
+        const o = b.innerHTML;
+        setButtonLoading(b, true);
+        try {
+            const r = await fetch('/manage/configs', {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    id, 
+                    config_data: nL,
+                    domain_hosting: domainHosting
+                })
+            });
+            const result = await r.json();
+            if (result.success) {
+                showToast('保存成功', 'success');
+                closeEditModal();
+                manageQueryByUuid();
+            }
+        } catch (e) {
+            showToast(e.message, 'error');
+        } finally {
+            setButtonLoading(b, false, o);
+        }
+    }
+
+    /* Statistics Functions */
+    async function loadUuidStats() {
+      if (!currentUuid) return;
+      
+      const days = document.getElementById('statsDays').value;
+      try {
+        const response = await fetch(\`/manage/stats/\${currentUuid}?days=\${days}\`);
+        const data = await response.json();
+        
+        if (data.success) {
+          displayStatsSummary(data);
+          renderStatsChart(data.daily_stats);
+          displayRecentLogs(data.recent_logs);
+          updateChartButtons();
+        } else {
+          showToast(data.error || '无法加载统计数据', 'error');
+          document.getElementById('statsSummary').innerHTML = \`
+            <div style="text-align: center; padding: 20px; color: #6b7280;">
+              <p>\${data.error || '无统计信息'}</p>
+              <p><small>请确保已升级到v2.0+版本并启用访问日志记录</small></p>
+            </div>
+          \`;
+        }
+      } catch (error) {
+        showToast('获取统计失败: ' + error.message, 'error');
+      }
     }
     
-    function renderStats(data) {
-        const summary = document.getElementById('statsSummary');
-        summary.innerHTML = \`
-            <div class="stat-box"><span class="stat-num">\${data.total_access}</span><span class="stat-label">总访问量</span></div>
-            <div class="stat-box"><span class="stat-num">\${data.today_total}</span><span class="stat-label">今日访问</span></div>
-            <div class="stat-box"><span class="stat-num">\${data.subscription_count}</span><span class="stat-label">订阅获取</span></div>
+    function displayStatsSummary(stats) {
+      const container = document.getElementById('statsSummary');
+      
+      const subscriptionPercent = stats.total_access > 0 ? 
+        Math.round(stats.subscription_count / stats.total_access * 100) : 0;
+      const apigenPercent = stats.total_access > 0 ? 
+        Math.round(stats.apigen_count / stats.total_access * 100) : 0;
+      
+      container.innerHTML = \`
+        <div class="stat-box">
+          <span class="stat-num">\${stats.total_access}</span>
+          <span class="stat-label">总访问次数</span>
+          <span class="stat-sub">首次: \${stats.first_access ? formatDate(stats.first_access) : '从未'}</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-num">\${stats.today_total}</span>
+          <span class="stat-label">今日访问</span>
+          <span class="stat-sub">订阅:\${stats.today_subscription} | 网页:\${stats.today_apigen}</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-num">\${stats.subscription_count}</span>
+          <span class="stat-label">订阅访问</span>
+          <span class="stat-sub">占比 \${subscriptionPercent}%</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-num">\${stats.apigen_count}</span>
+          <span class="stat-label">网页生成</span>
+          <span class="stat-sub">占比 \${apigenPercent}%</span>
+        </div>
+      \`;
+    }
+    
+    function renderStatsChart(dailyStats) {
+      const ctx = document.getElementById('statsChart').getContext('2d');
+      
+      // 处理数据
+      const dates = dailyStats.map(item => formatDate(item.date));
+      const totals = dailyStats.map(item => item.total);
+      const subscriptions = dailyStats.map(item => item.subscription);
+      const apigens = dailyStats.map(item => item.api_generation);
+      
+      // 销毁现有图表
+      if (statsChart) {
+        statsChart.destroy();
+      }
+      
+      // 创建新图表
+      let datasets = [];
+      
+      switch (currentChartType) {
+        case 'total':
+          datasets = [{
+            label: '总访问量',
+            data: totals,
+            borderColor: '#3b82f6',
+            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+            borderWidth: 2,
+            fill: true,
+            tension: 0.4
+          }];
+          break;
+          
+        case 'split':
+          datasets = [
+            {
+              label: '订阅访问',
+              data: subscriptions,
+              borderColor: '#10b981',
+              backgroundColor: 'rgba(16, 185, 129, 0.1)',
+              borderWidth: 2,
+              fill: true,
+              tension: 0.4
+            },
+            {
+              label: '网页生成',
+              data: apigens,
+              borderColor: '#f59e0b',
+              backgroundColor: 'rgba(245, 158, 11, 0.1)',
+              borderWidth: 2,
+              fill: true,
+              tension: 0.4
+            }
+          ];
+          break;
+      }
+      
+      statsChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: dates,
+          datasets: datasets
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'top',
+            },
+            title: {
+              display: true,
+              text: \`UUID: \${currentUuid.substring(0, 8)}... 访问趋势\`
+            },
+            tooltip: {
+              mode: 'index',
+              intersect: false
+            }
+          },
+          scales: {
+            x: {
+              grid: {
+                display: false
+              },
+              title: {
+                display: true,
+                text: '日期'
+              }
+            },
+            y: {
+              beginAtZero: true,
+              ticks: {
+                precision: 0
+              },
+              title: {
+                display: true,
+                text: '访问次数'
+              }
+            }
+          },
+          interaction: {
+            intersect: false,
+            mode: 'index'
+          }
+        }
+      });
+    }
+    
+    function displayRecentLogs(logs) {
+      const container = document.getElementById('recentLogs');
+      
+      if (!logs || logs.length === 0) {
+        container.innerHTML = '<div style="text-align: center; padding: 20px; color: #6b7280;">暂无访问记录</div>';
+        return;
+      }
+      
+      let html = '';
+      logs.forEach(log => {
+        const typeClass = log.query_type === 'subscription' ? 'type-subscription' : 'type-apigen';
+        const typeText = log.query_type === 'subscription' ? '订阅' : '网页';
+        const userAgentShort = log.user_agent ? 
+          (log.user_agent.length > 30 ? log.user_agent.substring(0, 30) + '...' : log.user_agent) : 
+          '未知';
+        
+        html += \`
+          <div class="access-log-item">
+            <div>
+              <span class="timestamp">\${formatDateTime(log.created_at)}</span>
+              <span class="log-type \${typeClass}">\${typeText}</span>
+            </div>
+            <div style="color: #6b7280; font-size: 0.8rem;" title="\${log.user_agent || '未知'}">
+              \${userAgentShort}
+            </div>
+          </div>
         \`;
-        
-        const logs = document.getElementById('recentLogs');
-        if(data.recent_logs && data.recent_logs.length > 0) {
-            logs.innerHTML = data.recent_logs.map(l => \`
-                <div class="access-log-item">
-                    <span class="timestamp">\${l.created_at.replace('T', ' ').split('.')[0]}</span>
-                    <span class="type-badge \${l.query_type === 'subscription' ? 'type-subscription' : 'type-apigen'}">\${l.query_type}</span>
-                    <span>\${l.client_ip}</span>
-                </div>
-            \`).join('');
-        } else {
-            logs.innerHTML = '<div style="text-align:center;padding:10px;">暂无记录</div>';
-        }
-
-        const ctx = document.getElementById('statsChart').getContext('2d');
-        if(statsChart) statsChart.destroy();
-        
-        const labels = data.daily_stats.map(d => d.date);
-        const totalData = data.daily_stats.map(d => d.total);
-        const subData = data.daily_stats.map(d => d.subscription);
-        const apiData = data.daily_stats.map(d => d.api_generation);
-
-        let datasets = [];
-        if (currentChartType === 'total') {
-            datasets.push({ label: '总访问量', data: totalData, borderColor: '#3b82f6', tension: 0.1 });
-        } else {
-            datasets.push({ label: '订阅获取', data: subData, borderColor: '#1e40af', tension: 0.1 });
-            datasets.push({ label: 'API管理', data: apiData, borderColor: '#065f46', tension: 0.1 });
-        }
-        
-        statsChart = new Chart(ctx, {
-            type: 'line',
-            data: { labels: labels, datasets: datasets },
-            options: { responsive: true, maintainAspectRatio: false }
-        });
+      });
+      
+      container.innerHTML = html;
     }
-
+    
     function switchChartType(type) {
-        currentChartType = type;
-        document.getElementById('chartTotalBtn').className = type === 'total' ? 'nav-btn active' : 'nav-btn';
-        document.getElementById('chartSplitBtn').className = type === 'split' ? 'nav-btn active' : 'nav-btn';
-        loadUuidStats();
+      currentChartType = type;
+      updateChartButtons();
+      loadUuidStats(); // 重新加载图表
+    }
+    
+    function updateChartButtons() {
+      document.getElementById('chartTotalBtn').classList.toggle('active', currentChartType === 'total');
+      document.getElementById('chartSplitBtn').classList.toggle('active', currentChartType === 'split');
     }
 
-    // 自动填充与查询逻辑
-    window.addEventListener('DOMContentLoaded', () => {
-        if (AUTO_FILL_UUID && AUTO_FILL_UUID !== "null" && AUTO_FILL_UUID.length > 5 && AUTO_FILL_UUID !== "__" + "SERVER_INJECTED_UUID" + "__") {
-            document.getElementById('queryUuidInput').value = AUTO_FILL_UUID;
-            manageQueryByUuid();
-            showToast('已自动恢复上次会话', 'success');
-        }
-    });
+    /* Main Interaction */
+    async function manageQueryByUuid(){
+        const b=document.getElementById('queryBtn'); setButtonLoading(b,true);
+        const u=document.getElementById('queryUuidInput').value.trim();
+        if(!u){ showToast('请输入 UUID','error'); setButtonLoading(b,false,b.innerHTML); return;}
+        
+        currentUuid = u;
+        
+        // Show sections
+        document.getElementById('resultCard').classList.remove('hidden');
+        document.getElementById('statsCard').classList.remove('hidden');
+        document.getElementById('addCard').classList.remove('hidden');
+        const l=\`\${WORKER_DOMAIN}/sub/\${u}\`; 
+        // Modified: Set value to input instead of href/innerText
+        const input = document.getElementById('subUrlLink');
+        input.value = l; 
+        document.getElementById('subLinkDisplay').style.display = 'flex';
+        document.getElementById('subLinkDisplay').classList.remove('hidden');
 
+        try{
+            const r=await fetch(\`/manage/configs/\${u}\`);
+            const c=document.getElementById('queryResultsContainer');
+            if(r.status===404){ c.innerHTML='<p style="padding:20px;text-align:center;color:#89949B">未找到配置，请直接添加。</p>'; }
+            else {
+                const d=await r.json();
+                let h='<div class="table-container"><table><thead><tr><th>备注</th><th>协议</th><th>域名托管</th><th>配置</th><th>操作</th></tr></thead><tbody>';
+                d.configs.forEach(Row=>{
+                    const sc = JSON.stringify(Row).replace(/"/g, '&quot;');
+                    const hosting = Row.domain_hosting || 'Cloudflare';
+                    const hostingClass = hostingStyleMap[hosting] || 'hosting-other';
+                    h+=\`<tr>
+                        <td>\${Row.remark||'-'}</td>
+                        <td>\${Row.protocol}</td>
+                        <td class="domain-hosting-cell"><span class="hosting-badge \${hostingClass}">\${hosting}</span></td>
+                        <td class="config-data-cell">\${Row.config_data.substring(0,40)}...</td>
+                        <td class="actions-cell">
+                            <button class="nav-btn" data-config="\${sc}" onclick="openEditModal(JSON.parse(this.dataset.config))">编辑</button>
+                            <button class="nav-btn" style="background:#d44;color:#fff;border-color:#d44" onclick="delOne(\${Row.id})">删除</button>
+                        </td>
+                    </tr>\`;
+                });
+                h+='</tbody></table></div>'; c.innerHTML=h;
+            }
+            
+            // 加载统计信息
+            await loadUuidStats();
+            
+        } catch(e){ showToast(e.message,'error'); } finally{ setButtonLoading(b,false,b.innerHTML); }
+    }
+    
+    async function manageAddConfig(){
+        const u=document.getElementById('queryUuidInput').value; 
+        const d=document.getElementById('addConfigData').value;
+        const hosting = document.getElementById('domainHostingSelect').value;
+        
+        if(!u||!d) {
+            showToast('UUID或配置为空','error');
+            return;
+        }
+        
+        try {
+            const response = await fetch('/manage/configs', {
+                method: 'POST', 
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    uuid: u,
+                    config_data: d,
+                    domain_hosting: hosting
+                })
+            });
+            
+            const result = await response.json();
+            if (result.success) {
+                showToast('添加成功','success'); 
+                document.getElementById('addConfigData').value=''; 
+                manageQueryByUuid();
+            } else {
+                showToast(result.error || '添加失败','error');
+            }
+        } catch (error) {
+            showToast('网络错误: ' + error.message, 'error');
+        }
+    }
+    
+    async function delOne(id){ 
+        if(confirm('确认删除?')) { 
+            await fetch(\`/manage/configs/id/\${id}\`,{method:'DELETE'}); 
+            manageQueryByUuid(); 
+        } 
+    }
+    
+    async function deleteAll(){ 
+        const u=document.getElementById('queryUuidInput').value; 
+        if(confirm('确认清空所有配置?')) { 
+            await fetch(\`/manage/configs/\${u}\`,{method:'DELETE'}); 
+            manageQueryByUuid(); 
+        } 
+    }
+    
+    function copySubLink(){ 
+        navigator.clipboard.writeText(document.getElementById('subUrlLink').value)
+            .then(()=>showToast('已复制','success'))
+            .catch(()=>showToast('复制失败','error')); 
+    }
+    
+    // 初始化域名托管选择
+    document.addEventListener('DOMContentLoaded', function() {
+        const hostingSelect = document.getElementById('domainHostingSelect');
+        hostingSelect.value = 'Cloudflare';
+    });
   </script>
 </body>
 </html>
