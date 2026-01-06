@@ -53,7 +53,7 @@ function getProtocol(configStr) {
  * 记录配置访问日志
  * @param {Object} env - Worker环境变量
  * @param {string} uuid - 用户UUID
- * @param {string} queryType - 查询类型: 'clash-config'(Clash配置文件)
+ * @param {string} queryType - 查询类型: 'api-generation'(网页生成)
  * @param {string} clientIp - 客户端IP地址
  * @param {string} userAgent - 客户端User-Agent
  */
@@ -600,7 +600,7 @@ async function generateClashConfig(request, env) {
         // 记录访问日志
         const clientIp = getClientIp(request);
         const userAgent = request.headers.get('user-agent') || 'unknown';
-        await logConfigAccess(env, uuid, 'clash-config', clientIp, userAgent);
+        await logConfigAccess(env, uuid, 'api-generation', clientIp, userAgent);
 
         // 返回YAML文件
         return new Response(finalConfig, {
