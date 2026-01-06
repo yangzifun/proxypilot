@@ -558,9 +558,8 @@ async function generateClashConfig(request, env) {
             // 自定义模板URL
             templateUrl = template;
         } else {
-            // 预设模板
-            const baseUrl = 'https://raw.githubusercontent.com/yangzifun/rule/refs/heads/main/';
-            templateUrl = baseUrl + template;
+            // 预设模板 - 保持原接口不变，直接使用用户传入的文件名
+            templateUrl = getTemplateUrl(template);
         }
         
         // 获取模板
@@ -623,6 +622,36 @@ async function generateClashConfig(request, env) {
     }
 }
 
+// 根据模板名称获取对应的URL
+function getTemplateUrl(templateName) {
+    // 基础URL
+    const baseUrl = 'https://github.com/yangzifun/rule/raw/refs/heads/main/configs/';
+    
+    // 如果模板名已经是完整的文件名，直接使用
+    if (templateName.endsWith('.yaml')) {
+        return baseUrl + templateName;
+    }
+    
+    // 如果提供了简短名称，映射到完整文件名
+    const templateMappings = {
+        'default': 'config.yaml',
+        'cn': 'cn_config.yaml',
+        'full': 'full_config.yaml',
+        'geoip': 'geoip_config.yaml',
+        'global': 'global_config.yaml',
+        'lite': 'lite_config.yaml',
+        'load-balance': 'load-balance_config.yaml',
+        'stream': 'stream_config.yaml'
+    };
+    
+    if (templateMappings[templateName]) {
+        return baseUrl + templateMappings[templateName];
+    }
+    
+    // 默认返回全量模板
+    return baseUrl + 'full_config.yaml';
+}
+
 // =================================================================
 //  MAIN WORKER ROUTING AND EXPORT
 // =================================================================
@@ -674,8 +703,8 @@ body, html { margin: 0; padding: 0; min-height: 100%; background-color: #fff; fo
 .card h2 { font-size: 1.5rem; color: #3d474d; margin-top: 0; margin-bottom: 20px; text-align: center;}
 .form-group { margin-bottom: 16px; }
 .form-group label { display: block; color: #5a666d; font-weight: 500; margin-bottom: 8px; font-size: 0.9rem;}
-textarea, input[type="text"] { width: 100%; padding: 10px; border: 2px solid #89949B; border-radius: 4px; background: #fff; font-family: 'SF Mono', 'Courier New', monospace; font-size: 0.9rem; box-sizing: border-box; resize: vertical; }
-textarea:focus, input[type="text"]:focus { outline: none; border-color: #3d474d; }
+textarea, input[type="text"], select { width: 100%; padding: 10px; border: 2px solid #89949B; border-radius: 4px; background: #fff; font-family: 'SF Mono', 'Courier New', monospace; font-size: 0.9rem; box-sizing: border-box; resize: vertical; }
+textarea:focus, input[type="text"]:focus, select:focus { outline: none; border-color: #3d474d; }
 .radio-group { display: flex; flex-wrap: wrap; gap: 10px; }
 .radio-group label { padding: 6px 14px; background: #E8EBED; border: 2px solid #89949B; border-radius: 4px; color: #5a666d; font-size: 0.85rem; cursor: pointer; transition: all 0.3s; }
 .radio-group input[type="radio"] { display: none; }
@@ -796,33 +825,18 @@ const generatePageHtmlContent = `
     }
     
     /* 模板选择样式 */
-    .template-radio-group {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
+    .template-select-container {
+      margin-top: 10px;
     }
-    .template-radio-group label {
-      padding: 8px 12px;
-      background: #E8EBED;
-      border: 2px solid #89949B;
-      border-radius: 4px;
-      color: #5a666d;
-      font-size: 0.85rem;
-      cursor: pointer;
-      transition: all 0.3s;
-    }
-    .template-radio-group input[type="radio"]:checked + span {
-      background: #89949B;
-      color: white;
-    }
-    .template-radio-group label:hover {
-      background: #d1d5d8;
+    .template-select-container select {
+      width: 100%;
+      margin-bottom: 10px;
     }
     .template-description {
-      font-size: 0.8rem;
+      font-size: 0.85rem;
       color: #89949B;
-      margin-left: 10px;
-      font-style: italic;
+      margin-top: 8px;
+      line-height: 1.4;
     }
     #customTemplateInput {
       margin-top: 10px;
@@ -839,7 +853,7 @@ const generatePageHtmlContent = `
       <div class="nav-grid">
         <a href="/" class="nav-btn primary">订阅管理</a>
         <a href="https://cfst.yangzifun.org/" target="_blank" class="nav-btn">批量生成</a>
-        <a href="https://config-cfst.api.yangzifun.org/" target="_blank" class="nav-btn">配置管理</a>
+        <a href="https://config.proxypilot.yangzifun.org//" target="_blank" class="nav-btn">配置管理</a>
       </div>
 
       <div class="card">
@@ -854,7 +868,7 @@ const generatePageHtmlContent = `
         <div class="form-group">
           <input type="text" id="clashConfigUuid" placeholder="输入UUID（必须在配置管理中创建配置）">
           <div class="info-box">
-            在<a href="https://config-cfst.api.yangzifun.org/" target="_blank">配置管理</a> 页面添加和管理配置，获取UUID后在此输入。
+            在<a href="https://config.proxypilot.yangzifun.org//" target="_blank">配置管理</a> 页面添加和管理配置，获取UUID后在此输入。
           </div>
         </div>
       </div>
@@ -863,32 +877,21 @@ const generatePageHtmlContent = `
         <h2>2. 模板选择</h2>
         <div class="form-group">
           <label>选择配置文件模板</label>
-          <div class="template-radio-group">
-            <label>
-              <input type="radio" name="templateSelect" value="full_config.yaml" checked onchange="toggleTemplateOptions()">
-              <span>全量模板</span>
-              <span class="template-description">包含完整规则和策略组的完整配置</span>
-            </label>
-            <label>
-              <input type="radio" name="templateSelect" value="lite_config.yaml" onchange="toggleTemplateOptions()">
-              <span>简化模板</span>
-              <span class="template-description">轻量级配置，适合内存有限的设备</span>
-            </label>
-            <label>
-              <input type="radio" name="templateSelect" value="global_config.yaml" onchange="toggleTemplateOptions()">
-              <span>常规（出国）</span>
-              <span class="template-description">适用于一般出国访问需求</span>
-            </label>
-            <label>
-              <input type="radio" name="templateSelect" value="cn_config.yaml" onchange="toggleTemplateOptions()">
-              <span>回国</span>
-              <span class="template-description">适用于海外用户访问国内服务</span>
-            </label>
-            <label>
-              <input type="radio" name="templateSelect" value="custom" onchange="toggleTemplateOptions()">
-              <span>自定义模板</span>
-              <span class="template-description">使用自定义的模板URL</span>
-            </label>
+          <div class="template-select-container">
+            <select id="templateSelect" onchange="handleTemplateChange()">
+              <option value="full_config.yaml" selected>全量模板 (full_config.yaml)</option>
+              <option value="lite_config.yaml">轻量模板 (lite_config.yaml)</option>
+              <option value="global_config.yaml">全球上网模板 (global_config.yaml)</option>
+              <option value="cn_config.yaml">回国模板 (cn_config.yaml)</option>
+              <option value="config.yaml">默认模板 (config.yaml)</option>
+              <option value="geoip_config.yaml">IP分流模板 (geoip_config.yaml)</option>
+              <option value="load-balance_config.yaml">负载均衡模板 (load-balance_config.yaml)</option>
+              <option value="stream_config.yaml">视频优化模板 (stream_config.yaml)</option>
+              <option value="custom">自定义模板</option>
+            </select>
+            <div id="templateDescription" class="template-description">
+              包含完整规则和策略组的完整配置，适用于大多数场景。
+            </div>
           </div>
         </div>
         
@@ -902,9 +905,13 @@ const generatePageHtmlContent = `
         <div class="info-box">
           <strong>模板说明：</strong>
           <br>• <strong>全量模板</strong>：包含完整的规则集和策略组，功能最全面
-          <br>• <strong>简化模板</strong>：精简的规则和策略，适合手机或低性能设备
-          <br>• <strong>常规（出国）</strong>：针对一般出国访问优化，规则集精简
-          <br>• <strong>回国</strong>：针对海外用户访问国内服务优化
+          <br>• <strong>轻量模板</strong>：精简的规则和策略，适合手机或低性能设备
+          <br>• <strong>全球上网模板</strong>：针对全球上网需求优化
+          <br>• <strong>回国模板</strong>：针对海外用户访问国内服务优化
+          <br>• <strong>默认模板</strong>：基础配置模板
+          <br>• <strong>IP分流模板</strong>：基于IP地址进行智能分流
+          <br>• <strong>负载均衡模板</strong>：支持多节点负载均衡策略
+          <br>• <strong>视频优化模板</strong>：针对视频流媒体和直播优化
           <br><br><strong>模板库：</strong> <a href="https://github.com/yangzifun/rule" target="_blank">https://github.com/yangzifun/rule</a>
         </div>
       </div>
@@ -990,6 +997,18 @@ const generatePageHtmlContent = `
     const QR_CODE_API = "https://qrcode.api.yangzifun.org/qr";
     const toastIcons = { success: '✅', error: '❌', info: 'ℹ️' };
     let currentSubscriptionLink = '';
+    
+    // 模板描述映射
+    const templateDescriptions = {
+      'full_config.yaml': '包含完整规则和策略组的完整配置，适用于大多数场景。',
+      'lite_config.yaml': '精简的规则和策略，适合手机或低性能设备。',
+      'global_config.yaml': '针对全球上网需求优化，适用于国际访问。',
+      'cn_config.yaml': '针对海外用户访问国内服务优化。',
+      'config.yaml': '基础配置模板，适用于简单场景。',
+      'geoip_config.yaml': '基于IP地址进行智能分流，提供更精准的路由。',
+      'load-balance_config.yaml': '支持多节点负载均衡策略，提高连接稳定性。',
+      'stream_config.yaml': '针对视频流媒体和直播优化，提供更好的观看体验。'
+    };
     
     function showToast(msg, type='info') { 
       const c = document.getElementById('toast-container'); 
@@ -1081,13 +1100,47 @@ const generatePageHtmlContent = `
     }
     
     // 模板类型切换
-    function toggleTemplateOptions() {
-        const templateType = document.querySelector('input[name="templateSelect"]:checked').value;
+    function handleTemplateChange() {
+        const templateSelect = document.getElementById('templateSelect');
+        const selectedValue = templateSelect.value;
         const customTemplateInput = document.getElementById('customTemplateInput');
-        if (templateType === 'custom') {
+        const templateDescription = document.getElementById('templateDescription');
+        
+        // 显示/隐藏自定义模板输入框
+        if (selectedValue === 'custom') {
             customTemplateInput.classList.remove('hidden');
+            templateDescription.textContent = '使用自定义模板URL，请输入可公开访问的YAML配置文件URL。';
         } else {
             customTemplateInput.classList.add('hidden');
+            // 更新模板描述
+            if (templateDescriptions[selectedValue]) {
+                templateDescription.textContent = templateDescriptions[selectedValue];
+            } else {
+                templateDescription.textContent = '自定义模板配置。';
+            }
+        }
+    }
+    
+    // 获取模板参数值
+    function getTemplateParam() {
+        const templateSelect = document.getElementById('templateSelect');
+        const selectedValue = templateSelect.value;
+        
+        if (selectedValue === 'custom') {
+            const customUrl = document.getElementById('customTemplateUrl').value.trim();
+            if (!customUrl) {
+                showToast('请输入自定义模板URL', 'error');
+                return null;
+            }
+            // 验证URL格式
+            if (!customUrl.startsWith('http://') && !customUrl.startsWith('https://')) {
+                showToast('请输入有效的URL地址（以http://或https://开头）', 'error');
+                return null;
+            }
+            return customUrl;
+        } else {
+            // 对于预设模板，直接返回选中的值（如 full_config.yaml）
+            return selectedValue;
         }
     }
     
@@ -1099,24 +1152,9 @@ const generatePageHtmlContent = `
         const ipType = document.querySelector('input[name="clashIpType"]:checked').value;
         const carrier = document.querySelector('input[name="clashCarrier"]:checked').value;
         
-        // 获取模板选择
-        const templateType = document.querySelector('input[name="templateSelect"]:checked').value;
-        let template;
-        
-        if (templateType === 'custom') {
-            template = document.getElementById('customTemplateUrl').value.trim();
-            if (!template) {
-                showToast('请输入自定义模板URL', 'error');
-                return;
-            }
-            // 验证URL格式
-            if (!template.startsWith('http://') && !template.startsWith('https://')) {
-                showToast('请输入有效的URL地址（以http://或https://开头）', 'error');
-                return;
-            }
-        } else {
-            template = templateType;
-        }
+        // 获取模板参数
+        const templateParam = getTemplateParam();
+        if (templateParam === null) return;
 
         // 重置之前的链接和二维码
         const clashLinkBox = document.getElementById('clashSubscriptionLinkBox');
@@ -1139,7 +1177,7 @@ const generatePageHtmlContent = `
             const subscriptionUrl = new URL(\`\${WORKER_DOMAIN}/clash-config\`);
             subscriptionUrl.searchParams.set('uuid', uuid);
             subscriptionUrl.searchParams.set('type', addressType);
-            subscriptionUrl.searchParams.set('template', template);
+            subscriptionUrl.searchParams.set('template', templateParam);
             
             if (addressType === 'ip') {
                 subscriptionUrl.searchParams.set('ipType', ipType);
@@ -1196,10 +1234,9 @@ const generatePageHtmlContent = `
     // 页面加载时初始化
     document.addEventListener('DOMContentLoaded', () => {
         toggleAddressOptions();
-        toggleTemplateOptions();
+        handleTemplateChange();
     });
   </script>
 </body>
 </html>
-
 `;
