@@ -530,8 +530,8 @@ const managePageHtmlContent = `
       <!-- Action Buttons (Modified for Unified Style) -->
       <div class="nav-grid">
          <button class="nav-btn primary" disabled style="opacity:1;cursor:default;">管理面板</button>
-         <!-- Added 'primary' class to make the link look exactly like the main button -->
-         <a href="https://cfst.yangzifun.org" target="_blank" class="nav-btn primary">CF配置生成</a>
+         <a href="https://subs.proxypilot.yangzifun.org/" target="_blank" class="nav-btn">订阅生成</a>
+         <a href="https://cfst.yangzifun.org" target="_blank" class="nav-btn">批量生成</a>
       </div>
 
       <div class="card">

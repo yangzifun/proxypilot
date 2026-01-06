@@ -256,16 +256,17 @@ function replaceAddressesInConfigs(baseConfigsData, addressList) {
     return [...new Set(generatedConfigs)];
 }
 
-// 获取Clash配置模板
-async function fetchClashConfigTemplate() {
+// 获取Clash配置模板 - 支持自定义模板URL
+async function fetchClashConfigTemplate(templateUrl) {
     try {
-        const response = await fetch('https://raw.githubusercontent.com/yangzifun/rule/refs/heads/main/config.yaml');
+        const response = await fetch(templateUrl);
         if (!response.ok) {
-            console.warn(`无法从GitHub获取模板，尝试使用本地默认模板: ${response.status} ${response.statusText}`);
-            // Fallback to a hardcoded minimal template if GitHub is unreachable
+            console.warn(`无法从指定URL获取模板，尝试使用默认模板: ${response.status} ${response.statusText}`);
+            // Fallback to a hardcoded minimal template
             return `
-# Clash/Mihomo 配置文件 (默认模板 - GitHub模板获取失败)
+# Clash/Mihomo 配置文件 (默认模板 - 模板获取失败)
 # 生成时间: ${new Date().toISOString()}
+# 模板URL: ${templateUrl}
 
 # 节点信息
 proxies:
@@ -316,12 +317,6 @@ dns:
     - 1.1.1.1
  
 
-# 锚点配置
-rule-anchor:
-  ip: &ip {type: http, interval: 86400, behavior: ipcidr, format: mrs}
-  domain: &domain {type: http, interval: 86400, behavior: domain, format: mrs}
-  class: &class {type: http, interval: 86400, behavior: classical, format: text}
-
 # 出站策略
 proxy-groups:
   - {name: 🚀 默认代理, type: select, include-all: true, filter: "^((?!(直连)).)*$", proxies: [⚡ 自动选择, 🌐 全部节点]}
@@ -337,7 +332,7 @@ rules:
         return await response.text();
     } catch (error) {
         console.error('获取Clash模板失败:', error);
-        throw new Error('无法获取Clash配置文件模板。');
+        throw new Error(`无法从 ${templateUrl} 获取Clash配置文件模板。`);
     }
 }
 
@@ -478,6 +473,7 @@ async function generateClashConfig(request, env) {
         const addressType = url.searchParams.get('type') || 'ip';
         const ipType = url.searchParams.get('ipType') || 'all';
         const carrier = url.searchParams.get('carrier') || 'all';
+        const template = url.searchParams.get('template') || 'full_config.yaml';
         
         // 验证必要参数
         if (!uuid) {
@@ -556,39 +552,50 @@ async function generateClashConfig(request, env) {
             return jsonResponse({ error: '未能生成有效的代理节点' }, 400);
         }
         
+        // 根据template参数选择模板URL
+        let templateUrl;
+        if (template.startsWith('http://') || template.startsWith('https://')) {
+            // 自定义模板URL
+            templateUrl = template;
+        } else {
+            // 预设模板
+            const baseUrl = 'https://raw.githubusercontent.com/yangzifun/rule/refs/heads/main/';
+            templateUrl = baseUrl + template;
+        }
+        
         // 获取模板
-        const template = await fetchClashConfigTemplate();
+        const templateContent = await fetchClashConfigTemplate(templateUrl);
         
         // 解析YAML模板
-        let finalConfig = template;
+        let finalConfig = templateContent;
         
         // 找到proxies部分并替换
         const proxiesMarker = '# 节点信息\nproxies:';
-        let proxiesStartIndex = template.indexOf(proxiesMarker);
+        let proxiesStartIndex = templateContent.indexOf(proxiesMarker);
         
         if (proxiesStartIndex === -1) {
-            proxiesStartIndex = template.indexOf('\nproxies:');
+            proxiesStartIndex = templateContent.indexOf('\nproxies:');
             if (proxiesStartIndex !== -1) {
                 proxiesStartIndex++;
             }
         }
 
         if (proxiesStartIndex !== -1) {
-            const insertPosition = template.indexOf('\n', proxiesStartIndex + 'proxies:'.length);
+            const insertPosition = templateContent.indexOf('\n', proxiesStartIndex + 'proxies:'.length);
             
-            let proxiesEndIndex = template.indexOf('\n\n', insertPosition);
+            let proxiesEndIndex = templateContent.indexOf('\n\n', insertPosition);
             if (proxiesEndIndex === -1 || proxiesEndIndex < insertPosition) {
-                proxiesEndIndex = template.length;
+                proxiesEndIndex = templateContent.length;
             }
             
             const newProxiesContent = clashProxies.map(p => `  - ${JSON.stringify(p)}`).join('\n');
             
-            finalConfig = template.substring(0, insertPosition + 1) + 
+            finalConfig = templateContent.substring(0, insertPosition + 1) + 
                          newProxiesContent + 
-                         template.substring(proxiesEndIndex);
+                         templateContent.substring(proxiesEndIndex);
         } else {
             console.warn("Clash模板中未找到 'proxies:' 标记，将节点添加到文件末尾。");
-            finalConfig = template + `\n\n# ===== 生成的节点配置 =====\nproxies:\n${clashProxies.map(p => `  - ${JSON.stringify(p)}`).join('\n')}`;
+            finalConfig = templateContent + `\n\n# ===== 生成的节点配置 =====\nproxies:\n${clashProxies.map(p => `  - ${JSON.stringify(p)}`).join('\n')}`;
         }
         
         // 记录访问日志
@@ -605,7 +612,8 @@ async function generateClashConfig(request, env) {
                 'X-Generated-Date': new Date().toISOString(),
                 'X-Total-Proxies-Unique': clashProxies.length.toString(),
                 'X-Cloudflare-Configs': baseConfigsData.filter(cfg => cfg.domain_hosting === 'Cloudflare').length.toString(),
-                'X-Address-List-Count': addressList.length.toString()
+                'X-Address-List-Count': addressList.length.toString(),
+                'X-Template-Used': templateUrl
             }
         });
 
@@ -625,7 +633,6 @@ export default {
         const path = url.pathname;
         const method = request.method;
         const DOMAIN_NAME = url.origin;
-        const EXTERNAL_CONFIG_MANAGER_URL = "https://config-cfst.api.yangzifun.org/";
 
         try {
             if (method === 'GET') {
@@ -698,7 +705,7 @@ const generatePageHtmlContent = `
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" href="https://s3.yangzifun.org/logo.ico" type="image/x-icon">
-  <title>Clash/Mihomo 订阅文件生成</title>
+  <title>订阅文件生成</title>
   <style>${newGlobalStyle}</style>
   <style>
     /* 二维码样式 */
@@ -787,17 +794,52 @@ const generatePageHtmlContent = `
       border: 2px solid #89949B;
       color: #5a666d;
     }
+    
+    /* 模板选择样式 */
+    .template-radio-group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .template-radio-group label {
+      padding: 8px 12px;
+      background: #E8EBED;
+      border: 2px solid #89949B;
+      border-radius: 4px;
+      color: #5a666d;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    .template-radio-group input[type="radio"]:checked + span {
+      background: #89949B;
+      color: white;
+    }
+    .template-radio-group label:hover {
+      background: #d1d5d8;
+    }
+    .template-description {
+      font-size: 0.8rem;
+      color: #89949B;
+      margin-left: 10px;
+      font-style: italic;
+    }
+    #customTemplateInput {
+      margin-top: 10px;
+    }
   </style>
 </head>
 <body>
   <div id="toast-container"></div>
   <div class="container">
     <div class="content-group">
-      <h1 class="profile-name">Clash/Mihomo 订阅文件生成</h1>
+      <h1 class="profile-name">订阅文件生成</h1>
       <p class="profile-quote">基于优选地址和配置文件模板，一键生成完整的Clash/Mihomo订阅</p>
 
       <div class="nav-grid">
-        <a href="https://config-cfst.api.yangzifun.org/" target="_blank" class="nav-btn primary">配置管理</a>
+        <a href="/" class="nav-btn primary">订阅管理</a>
+        <a href="https://cfst.yangzifun.org/" target="_blank" class="nav-btn">批量生成</a>
+        <a href="https://config-cfst.api.yangzifun.org/" target="_blank" class="nav-btn">配置管理</a>
       </div>
 
       <div class="card">
@@ -812,13 +854,63 @@ const generatePageHtmlContent = `
         <div class="form-group">
           <input type="text" id="clashConfigUuid" placeholder="输入UUID（必须在配置管理中创建配置）">
           <div class="info-box">
-            在 <a href="https://config-cfst.api.yangzifun.org/" target="_blank">配置管理</a> 页面添加和管理配置，获取UUID后在此输入。
+            在<a href="https://config-cfst.api.yangzifun.org/" target="_blank">配置管理</a> 页面添加和管理配置，获取UUID后在此输入。
           </div>
         </div>
       </div>
 
       <div class="card">
-        <h2>2. 优选地址配置</h2>
+        <h2>2. 模板选择</h2>
+        <div class="form-group">
+          <label>选择配置文件模板</label>
+          <div class="template-radio-group">
+            <label>
+              <input type="radio" name="templateSelect" value="full_config.yaml" checked onchange="toggleTemplateOptions()">
+              <span>全量模板</span>
+              <span class="template-description">包含完整规则和策略组的完整配置</span>
+            </label>
+            <label>
+              <input type="radio" name="templateSelect" value="lite_config.yaml" onchange="toggleTemplateOptions()">
+              <span>简化模板</span>
+              <span class="template-description">轻量级配置，适合内存有限的设备</span>
+            </label>
+            <label>
+              <input type="radio" name="templateSelect" value="global_config.yaml" onchange="toggleTemplateOptions()">
+              <span>常规（出国）</span>
+              <span class="template-description">适用于一般出国访问需求</span>
+            </label>
+            <label>
+              <input type="radio" name="templateSelect" value="cn_config.yaml" onchange="toggleTemplateOptions()">
+              <span>回国</span>
+              <span class="template-description">适用于海外用户访问国内服务</span>
+            </label>
+            <label>
+              <input type="radio" name="templateSelect" value="custom" onchange="toggleTemplateOptions()">
+              <span>自定义模板</span>
+              <span class="template-description">使用自定义的模板URL</span>
+            </label>
+          </div>
+        </div>
+        
+        <div id="customTemplateInput" class="form-group hidden">
+          <input type="text" id="customTemplateUrl" placeholder="输入自定义模板URL，如: https://raw.githubusercontent.com/your-repo/config.yaml">
+          <div class="info-box">
+            请输入可公开访问的YAML配置文件的完整URL地址。
+          </div>
+        </div>
+        
+        <div class="info-box">
+          <strong>模板说明：</strong>
+          <br>• <strong>全量模板</strong>：包含完整的规则集和策略组，功能最全面
+          <br>• <strong>简化模板</strong>：精简的规则和策略，适合手机或低性能设备
+          <br>• <strong>常规（出国）</strong>：针对一般出国访问优化，规则集精简
+          <br>• <strong>回国</strong>：针对海外用户访问国内服务优化
+          <br><br><strong>模板库：</strong> <a href="https://github.com/yangzifun/rule" target="_blank">https://github.com/yangzifun/rule</a>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>3. 优选地址配置</h2>
         <div class="form-group">
           <label>地址类型</label>
           <div class="radio-group">
@@ -853,7 +945,7 @@ const generatePageHtmlContent = `
       </div>
 
       <div class="card">
-        <h2>3. 生成结果</h2>
+        <h2>4. 生成结果</h2>
         <div class="form-group">
           <button id="generateClashBtn" class="nav-btn primary" style="width:100%; padding: 12px;" onclick="generateClashConfig()">生成Clash订阅文件</button>
         </div>
@@ -882,7 +974,7 @@ const generatePageHtmlContent = `
         </div>
         
         <div class="info-box">
-          配置文件基于 <a href="https://raw.githubusercontent.com/yangzifun/rule/refs/heads/main/config.yaml" target="_blank">此模板</a> 生成，包含完整的规则和策略组。
+          配置文件基于您选择的模板生成，包含完整的规则和策略组。
           <br>生成的订阅链接可直接在Clash/Mihomo客户端中使用。
         </div>
       </div>
@@ -988,6 +1080,17 @@ const generatePageHtmlContent = `
         }
     }
     
+    // 模板类型切换
+    function toggleTemplateOptions() {
+        const templateType = document.querySelector('input[name="templateSelect"]:checked').value;
+        const customTemplateInput = document.getElementById('customTemplateInput');
+        if (templateType === 'custom') {
+            customTemplateInput.classList.remove('hidden');
+        } else {
+            customTemplateInput.classList.add('hidden');
+        }
+    }
+    
     // Clash配置文件生成功能
     async function generateClashConfig() {
         const btn = document.getElementById('generateClashBtn');
@@ -995,6 +1098,25 @@ const generatePageHtmlContent = `
         const addressType = document.querySelector('input[name="clashAddressType"]:checked').value;
         const ipType = document.querySelector('input[name="clashIpType"]:checked').value;
         const carrier = document.querySelector('input[name="clashCarrier"]:checked').value;
+        
+        // 获取模板选择
+        const templateType = document.querySelector('input[name="templateSelect"]:checked').value;
+        let template;
+        
+        if (templateType === 'custom') {
+            template = document.getElementById('customTemplateUrl').value.trim();
+            if (!template) {
+                showToast('请输入自定义模板URL', 'error');
+                return;
+            }
+            // 验证URL格式
+            if (!template.startsWith('http://') && !template.startsWith('https://')) {
+                showToast('请输入有效的URL地址（以http://或https://开头）', 'error');
+                return;
+            }
+        } else {
+            template = templateType;
+        }
 
         // 重置之前的链接和二维码
         const clashLinkBox = document.getElementById('clashSubscriptionLinkBox');
@@ -1017,6 +1139,7 @@ const generatePageHtmlContent = `
             const subscriptionUrl = new URL(\`\${WORKER_DOMAIN}/clash-config\`);
             subscriptionUrl.searchParams.set('uuid', uuid);
             subscriptionUrl.searchParams.set('type', addressType);
+            subscriptionUrl.searchParams.set('template', template);
             
             if (addressType === 'ip') {
                 subscriptionUrl.searchParams.set('ipType', ipType);
@@ -1070,11 +1193,13 @@ const generatePageHtmlContent = `
         navigator.clipboard.writeText(link).then(() => showToast('订阅链接已复制', 'success'));
     }
 
-    // 页面加载时初始化地址类型选择器的显示状态
+    // 页面加载时初始化
     document.addEventListener('DOMContentLoaded', () => {
         toggleAddressOptions();
+        toggleTemplateOptions();
     });
   </script>
 </body>
 </html>
+
 `;

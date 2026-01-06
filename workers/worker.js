@@ -744,8 +744,8 @@ const generatePageHtmlContent = `
 
       <div class="nav-grid">
         <a href="/" class="nav-btn primary">批量生成</a>
-        <a href="https://config.proxypilot.yangzifun.org/" target="_blank" class="nav-btn">配置管理</a>
         <a href="https://subs.proxypilot.yangzifun.org/" target="_blank" class="nav-btn">订阅生成</a>
+        <a href="https://config.proxypilot.yangzifun.org/" target="_blank" class="nav-btn">配置管理</a>
       </div>
 
       <div class="card">
