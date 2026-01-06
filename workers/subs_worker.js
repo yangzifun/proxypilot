@@ -42,9 +42,6 @@ function getProtocol(configStr) {
     if (configStr.startsWith('vmess://')) return 'vmess';
     if (configStr.startsWith('vless://')) return 'vless';
     if (configStr.startsWith('trojan://')) return 'trojan';
-    // Clash/Mihomo 配置文件直接提供，不需要协议前缀，但在某些地方需要判断
-    if (configStr.includes('type: ss')) return 'ss';
-    // Add other protocols if needed, e.g., hysteria2, tuic etc.
     return 'unknown';
 }
 
@@ -56,7 +53,7 @@ function getProtocol(configStr) {
  * 记录配置访问日志
  * @param {Object} env - Worker环境变量
  * @param {string} uuid - 用户UUID
- * @param {string} queryType - 查询类型: 'subscription'(订阅) 或 'api-generation'(网页生成) 或 'clash-config'
+ * @param {string} queryType - 查询类型: 'clash-config'(Clash配置文件)
  * @param {string} clientIp - 客户端IP地址
  * @param {string} userAgent - 客户端User-Agent
  */
@@ -101,47 +98,6 @@ function getClientIp(request) {
     return 'unknown';
 }
 
-/**
- * 获取访问统计
- * @param {Object} env - Worker环境变量
- * @param {string} uuid - UUID（可选，不提供则查询所有）
- * @param {Object} options - 查询选项
- * @returns {Promise<Object>} 统计结果
- */
-async function getAccessStats(env, uuid = null, options = {}) {
-    try {
-        const db = env.DB;
-        if (!db) throw new Error("D1数据库未绑定。");
-        
-        let query = 'SELECT uuid, query_type, COUNT(*) as count, DATE(created_at) as date FROM config_access_logs WHERE 1=1';
-        const params = [];
-        
-        if (uuid) {
-            query += ' AND uuid = ?';
-            params.push(uuid);
-        }
-        
-        // 时间范围过滤
-        if (options.startDate) {
-            query += ' AND created_at >= ?';
-            params.push(options.startDate);
-        }
-        
-        if (options.endDate) {
-            query += ' AND created_at <= ?';
-            params.push(options.endDate);
-        }
-        
-        query += ' GROUP BY uuid, query_type, DATE(created_at) ORDER BY date DESC, count DESC';
-        
-        const { results } = await db.prepare(query).bind(...params).all();
-        return { success: true, data: results };
-    } catch (e) {
-        console.error("获取访问统计失败:", e.message);
-        return { success: false, error: e.message };
-    }
-}
-
 // =================================================================
 //  SECTION 1: Data Fetching (STRICTLY READ ONLY)
 // =================================================================
@@ -151,7 +107,7 @@ async function fetchIpsFromDB(ipType, carrierType, env) {
     const db = env.DB;
     if (!db) throw new Error("D1 数据库未绑定。");
 
-    let query = 'SELECT DISTINCT ip FROM cfips WHERE 1=1'; // 增加 DISTINCT
+    let query = 'SELECT DISTINCT ip FROM cfips WHERE 1=1';
     const params = [];
 
     if (ipType.toLowerCase() !== 'all') {
@@ -162,7 +118,7 @@ async function fetchIpsFromDB(ipType, carrierType, env) {
         query += ' AND carrier = ?';
         params.push(carrierType.toUpperCase());
     }
-    query += ' ORDER BY ip'; // 增加排序以确保一致性
+    query += ' ORDER BY ip';
 
     const { results } = await db.prepare(query).bind(...params).all();
     return results;
@@ -173,7 +129,7 @@ async function fetchDomainsFromDB(env) {
     const db = env.DB;
     if (!db) throw new Error("D1 数据库未绑定。");
     try {
-        const { results } = await db.prepare('SELECT DISTINCT domain FROM cf_domains ORDER BY domain').all(); // 增加 DISTINCT
+        const { results } = await db.prepare('SELECT DISTINCT domain FROM cf_domains ORDER BY domain').all();
         return results;
     } catch (e) {
         console.error("Fetching domains failed:", e.message);
@@ -181,56 +137,25 @@ async function fetchDomainsFromDB(env) {
     }
 }
 
-// 统一的批量获取接口
-async function handleGetBatchAddresses(url, env) {
-    const type = url.searchParams.get('type') || 'ip'; 
-
-    try {
-        if (type === 'domain') {
-            const domainData = await fetchDomainsFromDB(env);
-            if (domainData.length === 0) {
-                return new Response("Database is empty (no domains found).", { status: 404 });
-            }
-            const listText = domainData.map(item => item.domain).join('\n');
-            return new Response(listText, { headers: { 'Content-Type': 'text/plain;charset=UTF-8' } });
-        } else {
-            // IP 逻辑
-            const ipType = url.searchParams.get('ipType') || 'all';
-            const carrier = url.searchParams.get('carrier') || 'all';
-            const ipData = await fetchIpsFromDB(ipType, carrier, env);
-            
-            if (ipData.length === 0) {
-                return new Response(`No IPs found in DB for ipType=${ipType} and carrier=${carrier}.`, { status: 404 });
-            }
-            const listText = ipData.map(item => item.ip).join('\n');
-            return new Response(listText, { headers: { 'Content-Type': 'text/plain;charset=UTF-8' } });
-        }
-
-    } catch (e) {
-        console.error("Error in /batch-ip handler:", e.message);
-        return new Response("Internal Error: " + e.message, { status: 500 });
-    }
-}
-
 // =================================================================
-//  SECTION 2: Config Generation Logic
+//  SECTION 2.5: Clash/Mihomo Config Generation
 // =================================================================
 
-// 读取基础配置 (SELECT) - 修改：增加域名托管字段查询
+// 读取基础配置 (SELECT)
 async function fetchConfigsByUuidFromDB(uuid, env) {
     const db = env.DB;
     if (!db) return [];
     try {
         const stmt = db.prepare('SELECT id, config_data, protocol, remark, domain_hosting FROM configs WHERE uuid = ? ORDER BY id ASC');
         const { results } = await stmt.bind(uuid).all();
-        return results;  // 返回完整对象，包含domain_hosting字段
+        return results;
     } catch (e) {
         console.error(`Error fetching configs for UUID ${uuid}:`, e.message);
         return [];
     }
 }
 
-// 核心替换逻辑 - 修改：确保所有原配置都被输出，但只有Cloudflare配置进行优选替换
+// 核心替换逻辑 - 确保所有原配置都被输出，但只有Cloudflare配置进行优选替换
 function replaceAddressesInConfigs(baseConfigsData, addressList) {
     let generatedConfigs = [];
     const addressExtractionRegex = /@(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|\[[0-9a-fA-F:\.]+\]|(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,})(?::\d+)?(?:[\/?#]|$)/;
@@ -238,9 +163,8 @@ function replaceAddressesInConfigs(baseConfigsData, addressList) {
 
     for (const configObj of baseConfigsData) {
         const baseConfig = configObj.config_data;
-        const domainHosting = configObj.domain_hosting || 'Cloudflare'; // 默认为Cloudflare
+        const domainHosting = configObj.domain_hosting || 'Cloudflare';
         const configId = configObj.id || 0;
-        const remark = configObj.remark || '';
         
         let configType = getProtocol(baseConfig);
         let processedBaseConfig;
@@ -253,7 +177,7 @@ function replaceAddressesInConfigs(baseConfigsData, addressList) {
         if (domainHosting !== 'Cloudflare') {
             // 非Cloudflare配置只输出原配置，不进行优选替换
             console.log(`配置ID ${configId} 的域名托管属性为"${domainHosting}"，只输出原配置，不进行优选替换`);
-            continue;  // 跳过优选替换循环
+            continue;
         }
         
         // 只处理 vmess, vless, trojan 协议
@@ -327,179 +251,10 @@ function replaceAddressesInConfigs(baseConfigsData, addressList) {
             }
         }
     }
-    return generatedConfigs;
-}
-
-// 手动 or UUID 生成 (POST) - 已增加生成订阅节点配置去重
-async function generateConfigs(request, env) {
-    try {
-        const body = await request.json();
-        const addressListText = body.addressList || body.ipList;
-        const { baseConfigUuid, baseConfig: baseConfigFromRequest } = body;
-        
-        let baseConfigsData = [];
-
-        if (baseConfigUuid) {
-            const configsFromDb = await fetchConfigsByUuidFromDB(baseConfigUuid, env);
-            if (configsFromDb.length === 0) {
-                return jsonResponse({ error: `未找到 UUID 为 "${baseConfigUuid}" 的任何基础配置。` }, 404);
-            }
-            baseConfigsData = configsFromDb;
-            
-            // 统计域名托管类型
-            const hostingStats = {};
-            configsFromDb.forEach(cfg => {
-                const hosting = cfg.domain_hosting || 'Cloudflare';
-                hostingStats[hosting] = (hostingStats[hosting] || 0) + 1;
-            });
-            console.log(`UUID ${baseConfigUuid} 域名托管统计:`, hostingStats);
-            
-        } else if (baseConfigFromRequest) {
-            // 手动粘贴的配置没有domain_hosting信息，全部按照Cloudflare处理（进行优选替换）
-            const configLines = baseConfigFromRequest.split('\n').map(s => s.trim()).filter(Boolean);
-            if (configLines.length === 0) return jsonResponse({ error: "基础配置不能为空。" }, 400);
-            
-            baseConfigsData = configLines.map((config_data, index) => ({
-                id: index,
-                config_data,
-                protocol: getProtocol(config_data),
-                remark: null,
-                domain_hosting: 'Cloudflare' // 手动粘贴的配置默认为Cloudflare，进行优选替换
-            }));
-        } else {
-            return jsonResponse({ error: "必须提供基础配置或UUID。" }, 400);
-        }
-
-        if (!addressListText || addressListText.trim() === '') {
-            return jsonResponse({ error: "优选列表不能为空。" }, 400);
-        }
-
-        const addressList = addressListText.split('\n').map(a => a.trim()).filter(a => a.length > 0);
-        const generatedConfigs = replaceAddressesInConfigs(baseConfigsData, addressList);
-        
-        // --- 增加生成订阅节点配置去重 ---
-        const uniqueGeneratedConfigs = [...new Set(generatedConfigs)];
-        // --- 去重结束 ---
-
-        // 统计生成结果
-        const totalConfigs = baseConfigsData.length;
-        const cloudflareConfigs = baseConfigsData.filter(cfg => cfg.domain_hosting === 'Cloudflare').length;
-        const otherHostingCount = totalConfigs - cloudflareConfigs;
-        
-        // 计算成功条数（排除错误消息）
-        const successCount = uniqueGeneratedConfigs.filter(c => !c.startsWith('[错误]')).length;
-        const errorCount = uniqueGeneratedConfigs.filter(c => c.startsWith('[错误]')).length; // 错误信息也应该被去重
-
-        // 计算预期输出条数（仅为参考，实际输出已去重）
-        const expectedNonCloudflare = otherHostingCount; 
-        const expectedCloudflare = cloudflareConfigs * (addressList.length + 1); 
-        const expectedTotal = expectedNonCloudflare + expectedCloudflare;
-        
-        let message = `生成完成！成功 ${successCount} 条 (去重后)，预期生成 ${expectedTotal} 条`;
-        if (errorCount > 0) message += `，失败 ${errorCount} 条`;
-        
-        // 添加域名托管过滤信息
-        if (otherHostingCount > 0) {
-            message += ` (注：其中有 ${otherHostingCount} 个非Cloudflare配置只输出原配置，${cloudflareConfigs} 个Cloudflare配置进行了优选替换)`;
-        }
-        
-        // 如果使用UUID生成，记录访问日志
-        if (baseConfigUuid) {
-            const clientIp = getClientIp(request);
-            const userAgent = request.headers.get('user-agent') || 'unknown';
-            await logConfigAccess(env, baseConfigUuid, 'api-generation', clientIp, userAgent);
-        }
-        
-        return jsonResponse({ 
-            configs: uniqueGeneratedConfigs, // 返回去重后的配置
-            message: message,
-            stats: {
-                total_configs_in_db: totalConfigs,
-                cloudflare_configs_in_db: cloudflareConfigs,
-                other_hosting_configs_in_db: otherHostingCount,
-                address_list_count: addressList.length,
-                expected_output_before_dedupe: expectedTotal,
-                actual_unique_output_success: successCount,
-                actual_unique_output_errors: errorCount
-            }
-        });
-    } catch (e) {
-        console.error("生成配置出错:", e.message);
-        return jsonResponse({ error: "内部错误: " + e.message }, 500);
-    }
-}
-
-// 订阅链接生成配置 (GET) - 已增加生成订阅节点配置去重
-async function handleGetBatchConfigs(uuid, urlParams, env, request) {
-    if (!uuid) return jsonResponse({ error: 'UUID Required' }, 400);
-
-    const baseConfigsData = await fetchConfigsByUuidFromDB(uuid, env);
-    if (baseConfigsData.length === 0) return jsonResponse({ error: `UUID Not Found` }, 404);
     
-    // 统计数据
-    const totalConfigs = baseConfigsData.length;
-    const cloudflareConfigs = baseConfigsData.filter(cfg => cfg.domain_hosting === 'Cloudflare').length;
-    const otherConfigs = totalConfigs - cloudflareConfigs;
-    
-    console.log(`订阅UUID ${uuid}: 总配置数${totalConfigs}, Cloudflare配置${cloudflareConfigs}, 其他域名托管配置${otherConfigs}`);
-
-    const type = urlParams.get('type') || 'ip';
-    let addressList = [];
-
-    try {
-        if (type === 'domain') {
-            const domains = await fetchDomainsFromDB(env); // 已经去重
-            addressList = domains.map(d => d.domain);
-        } else {
-            // IP
-            const ipType = urlParams.get('ipType') || 'all';
-            const carrier = urlParams.get('carrier') || 'all';
-            const ips = await fetchIpsFromDB(ipType, carrier, env); // 已经去重
-            addressList = ips.map(i => i.ip);
-        }
-    } catch (e) {
-        return jsonResponse({ error: "DB Error: " + e.message }, 500);
-    }
-
-    if (addressList.length === 0) {
-        return jsonResponse({ error: `No valid addresses found for type=${type}` }, 404);
-    }
-
-    const generatedConfigs = replaceAddressesInConfigs(baseConfigsData, addressList);
-    
-    // --- 增加生成订阅节点配置去重 ---
-    const uniqueGeneratedConfigs = [...new Set(generatedConfigs)];
-    // --- 去重结束 ---
-
-    const filteredConfigs = uniqueGeneratedConfigs.filter(c => !c.startsWith('[错误]'));
-
-    if (filteredConfigs.length === 0) {
-        return new Response("Generation failed. No valid unique configs after deduplication.", { status: 400 });
-    }
-
-    const body = btoa(filteredConfigs.join('\n'));
-
-    // 记录订阅访问日志
-    const clientIp = getClientIp(request);
-    const userAgent = request.headers.get('user-agent') || 'unknown';
-    await logConfigAccess(env, uuid, 'subscription', clientIp, userAgent);
-
-    return new Response(body, {
-        status: 200,
-        headers: {
-            'Content-Type': 'text/plain;charset=UTF-8',
-            'Subscription-User-Info': 'upload=0; download=0; total=10737418240000; expire=2524608000',
-            'Profile-Update-Interval': '24',
-            // 添加域名托管过滤信息头
-            'X-Domain-Hosting-Filter': `Cloudflare=${cloudflareConfigs}, Other=${otherConfigs}`,
-            'X-Total-Proxies-Unique': filteredConfigs.length.toString()
-        },
-    });
+    // 去重生成的配置
+    return [...new Set(generatedConfigs)];
 }
-
-// =================================================================
-//  SECTION 2.5: Clash/Mihomo Config Generation
-// =================================================================
 
 // 获取Clash配置模板
 async function fetchClashConfigTemplate() {
@@ -567,7 +322,7 @@ rule-anchor:
   domain: &domain {type: http, interval: 86400, behavior: domain, format: mrs}
   class: &class {type: http, interval: 86400, behavior: classical, format: text}
 
-# 出站策略 (示例，可能需要根据你的实际模板进行调整)
+# 出站策略
 proxy-groups:
   - {name: 🚀 默认代理, type: select, include-all: true, filter: "^((?!(直连)).)*$", proxies: [⚡ 自动选择, 🌐 全部节点]}
   - {name: ⚡ 自动选择, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连)).)*$"}
@@ -597,7 +352,7 @@ function convertToClashFormat(configStr) {
             const vmessObj = JSON.parse(b64_to_utf8(encodedJson));
             
             const clashConfig = {
-                name: vmessObj.ps || vmessObj.remark || `VMess-${vmessObj.add}-${vmessObj.port}`, // 更具体的默认名称
+                name: vmessObj.ps || vmessObj.remark || `VMess-${vmessObj.add}-${vmessObj.port}`,
                 type: 'vmess',
                 server: vmessObj.add,
                 port: parseInt(vmessObj.port) || 443,
@@ -605,26 +360,26 @@ function convertToClashFormat(configStr) {
                 alterId: vmessObj.aid || 0,
                 cipher: vmessObj.scy || 'auto',
                 tls: vmessObj.tls === 'tls',
-                'skip-cert-verify': true // Clash属性名
+                'skip-cert-verify': true
             };
             
             // 处理网络类型
             if (vmessObj.net === 'ws') {
                 clashConfig.network = 'ws';
-                clashConfig['ws-opts'] = { // Clash属性名
+                clashConfig['ws-opts'] = {
                     path: vmessObj.path || '/',
                     headers: vmessObj.host ? { Host: vmessObj.host } : {}
                 };
             } else if (vmessObj.net === 'h2') {
                 clashConfig.network = 'h2';
-                clashConfig['h2-opts'] = { // Mihomo/Clash Premium
+                clashConfig['h2-opts'] = {
                     path: vmessObj.path || '/',
                     host: vmessObj.host ? [vmessObj.host] : []
                 };
             } else if (vmessObj.net === 'grpc') {
                 clashConfig.network = 'grpc';
-                clashConfig['grpc-opts'] = { // Mihomo/Clash Premium
-                    'grpc-service-name': vmessObj.path || '' // Clash属性名
+                clashConfig['grpc-opts'] = {
+                    'grpc-service-name': vmessObj.path || ''
                 };
             }
             
@@ -648,11 +403,11 @@ function convertToClashFormat(configStr) {
                 port: parseInt(url.port) || 443,
                 password: url.username,
                 sni: url.searchParams.get('sni') || url.hostname,
-                'skip-cert-verify': true // Clash属性名
+                'skip-cert-verify': true
             };
             
             // 处理网络类型
-            const typeParam = url.searchParams.get('type') || ''; // 'ws' for websocket
+            const typeParam = url.searchParams.get('type') || '';
             if (typeParam === 'ws') {
                 clashConfig.network = 'ws';
                 const path = url.searchParams.get('path') || '/';
@@ -684,11 +439,11 @@ function convertToClashFormat(configStr) {
                 port: parseInt(url.port) || 443,
                 uuid: url.username,
                 tls: true,
-                'skip-cert-verify': true // Clash属性名
+                'skip-cert-verify': true
             };
             
             // 处理流设置
-            const typeParam = url.searchParams.get('type') || ''; // 'ws' for websocket, 'grpc'
+            const typeParam = url.searchParams.get('type') || '';
             if (typeParam === 'ws') {
                 clashConfig.network = 'ws';
                 const path = url.searchParams.get('path') || '/';
@@ -704,43 +459,11 @@ function convertToClashFormat(configStr) {
                      'grpc-service-name': url.searchParams.get('serviceName') || ''
                  };
             }
-            // mihomo might support xtls, reality etc. Need to parse more params if desired.
             
             return clashConfig;
         } catch (error) {
             console.error('转换VLESS配置失败:', error, configStr);
             return null;
-        }
-    }
-    
-    // 处理Shadowsocks配置
-    // 注意：ss:// 链接通常包含加密方式和密码，这里做简化处理。
-    // 更复杂的SS链接可能需要解析插件 (plugin) 信息。
-    if (configStr.startsWith('ss://')) {
-        try {
-            // Regex to capture base64-encoded userinfo and hostname:port
-            const ssRegex = /ss:\/\/((?:[a-zA-Z0-9+\/]{4})*(?:[a-zA-Z0-9+\/]{2}==|[a-zA-Z0-9+\/]{3}=)?)@([^:/]+):(\d+)(?:#(.+))?/;
-            const match = configStr.match(ssRegex);
-
-            if (match) {
-                const [_, userinfoBase64, server, port, nameEncoded] = match;
-                const userinfo = b64_to_utf8(userinfoBase64); // "method:password"
-                const [cipher, password] = userinfo.split(':', 2);
-                const name = nameEncoded ? decodeURIComponent(nameEncoded) : `SS-${server}-${port}`;
-
-                return {
-                    name: name,
-                    type: 'ss',
-                    server: server,
-                    port: parseInt(port),
-                    cipher: cipher || 'aes-256-gcm', // Default to a common one if not specified in userinfo
-                    password: password
-                };
-            } else {
-                 console.warn('SS链接格式不符合预期:', configStr);
-            }
-        } catch (error) {
-            console.error('转换SS配置失败:', error, configStr);
         }
     }
     
@@ -783,9 +506,7 @@ async function generateClashConfig(request, env) {
 
         // 生成节点配置 (原始链接字符串形式)
         const generatedRawConfigs = replaceAddressesInConfigs(baseConfigsData, addressList);
-        // 对原始链接字符串去重
-        const uniqueRawConfigs = [...new Set(generatedRawConfigs)];
-        const validRawConfigs = uniqueRawConfigs.filter(c => !c.startsWith('[错误]'));
+        const validRawConfigs = generatedRawConfigs.filter(c => !c.startsWith('[错误]'));
         
         if (validRawConfigs.length === 0) {
             return jsonResponse({ error: '未能生成有效的节点配置' }, 400);
@@ -794,23 +515,20 @@ async function generateClashConfig(request, env) {
         // 转换为Clash格式
         let clashProxies = [];
         
-        // 添加直连节点 (通常直连无需去重，但为了代码统一性，在最终去重时会处理)
+        // 添加直连节点
         clashProxies.push({name: '直连', type: 'direct'});
         
         // 转换每个配置
         for (const config of validRawConfigs) {
-            const clashConfig = convertToClashFormat(config); // index is not strictly needed for unique naming
+            const clashConfig = convertToClashFormat(config);
             if (clashConfig) {
                 clashProxies.push(clashConfig);
             }
         }
 
         // --- 增加 Clash 节点配置对象去重 ---
-        // 使用Map进行去重，键是每个代理配置的稳定JSON字符串，值是代理对象本身
-        // 确保 'name' 字段是唯一的，因为Clash需要唯一的名称
         const uniqueClashProxiesMap = new Map();
         for (const proxy of clashProxies) {
-            // 对代理对象进行排序，以确保 JSON.stringify 结果一致，便于比较
             const stableString = JSON.stringify(proxy, Object.keys(proxy).sort());
             if (!uniqueClashProxiesMap.has(stableString)) {
                 uniqueClashProxiesMap.set(stableString, proxy);
@@ -834,8 +552,7 @@ async function generateClashConfig(request, env) {
         }
         // --- 去重结束 ---
 
-
-        if (clashProxies.length <= 1 && clashProxies[0].name === '直连') { // 只有直连节点
+        if (clashProxies.length <= 1 && clashProxies[0].name === '直连') {
             return jsonResponse({ error: '未能生成有效的代理节点' }, 400);
         }
         
@@ -850,33 +567,26 @@ async function generateClashConfig(request, env) {
         let proxiesStartIndex = template.indexOf(proxiesMarker);
         
         if (proxiesStartIndex === -1) {
-            // 如果找不到准确的标记，尝试找到 'proxies:' 这一行
             proxiesStartIndex = template.indexOf('\nproxies:');
             if (proxiesStartIndex !== -1) {
-                proxiesStartIndex++; // 移动到 'proxies:' 行的开头
+                proxiesStartIndex++;
             }
         }
 
         if (proxiesStartIndex !== -1) {
-            // 计算代理列表应该插入的位置（在 'proxies:' 行的下一行）
             const insertPosition = template.indexOf('\n', proxiesStartIndex + 'proxies:'.length);
             
-            // 找到 proxies 部分结束的位置，通常是下一个顶级键或者文件末尾
-            // 简单的方法是找到两个换行符的空行，或者下一个非注释的顶级键
             let proxiesEndIndex = template.indexOf('\n\n', insertPosition);
             if (proxiesEndIndex === -1 || proxiesEndIndex < insertPosition) {
-                proxiesEndIndex = template.length; // 如果没有空行，就到文件末尾
+                proxiesEndIndex = template.length;
             }
             
-            // 构建新的proxies部分
             const newProxiesContent = clashProxies.map(p => `  - ${JSON.stringify(p)}`).join('\n');
             
-            // 替换/插入proxies部分
             finalConfig = template.substring(0, insertPosition + 1) + 
                          newProxiesContent + 
                          template.substring(proxiesEndIndex);
         } else {
-            // 如果模板中完全没有 'proxies:' 这一段，则在文件末尾添加
             console.warn("Clash模板中未找到 'proxies:' 标记，将节点添加到文件末尾。");
             finalConfig = template + `\n\n# ===== 生成的节点配置 =====\nproxies:\n${clashProxies.map(p => `  - ${JSON.stringify(p)}`).join('\n')}`;
         }
@@ -906,77 +616,6 @@ async function generateClashConfig(request, env) {
 }
 
 // =================================================================
-//  ADMIN API (用于后台管理统计)
-// =================================================================
-
-/**
- * 处理访问统计API请求
- */
-async function handleAccessStats(request, env, url) {
-    const uuid = url.searchParams.get('uuid');
-    const startDate = url.searchParams.get('start_date');
-    const endDate = url.searchParams.get('end_date');
-    
-    const options = {};
-    if (startDate) options.startDate = startDate;
-    if (endDate) options.endDate = endDate;
-    
-    const stats = await getAccessStats(env, uuid, options);
-    
-    if (!stats.success) {
-        return jsonResponse({ error: `获取统计失败: ${stats.error}` }, 500);
-    }
-    
-    // 计算汇总统计
-    const summary = {
-        total_requests: stats.data.reduce((sum, item) => sum + item.count, 0),
-        unique_uuids: [...new Set(stats.data.map(item => item.uuid))].length,
-        subscription_requests: stats.data
-            .filter(item => item.query_type === 'subscription')
-            .reduce((sum, item) => sum + item.count, 0),
-        api_generation_requests: stats.data
-            .filter(item => item.query_type === 'api-generation')
-            .reduce((sum, item) => sum + item.count, 0)
-    };
-    
-    // 按日期统计
-    const dailyStats = {};
-    stats.data.forEach(item => {
-        if (!dailyStats[item.date]) {
-            dailyStats[item.date] = {
-                total: 0,
-                subscription: 0,
-                api_generation: 0,
-                uuids: new Set()
-            };
-        }
-        dailyStats[item.date].total += item.count;
-        dailyStats[item.date].uuids.add(item.uuid);
-        
-        if (item.query_type === 'subscription') {
-            dailyStats[item.date].subscription += item.count;
-        } else if (item.query_type === 'api-generation') {
-            dailyStats[item.date].api_generation += item.count;
-        }
-    });
-    
-    // 转换为数组格式便于前端显示
-    const dailyStatsArray = Object.entries(dailyStats).map(([date, data]) => ({
-        date,
-        total: data.total,
-        subscription: data.subscription,
-        api_generation: data.api_generation,
-        unique_uuids: data.uuids.size
-    })).sort((a, b) => new Date(b.date) - new Date(a.date)); // 按日期降序
-    
-    return jsonResponse({
-        summary,
-        daily_stats: dailyStatsArray,
-        raw_data: stats.data
-    });
-}
-
-// =================================================================
 //  MAIN WORKER ROUTING AND EXPORT
 // =================================================================
 
@@ -988,80 +627,23 @@ export default {
         const DOMAIN_NAME = url.origin;
         const EXTERNAL_CONFIG_MANAGER_URL = "https://config-cfst.api.yangzifun.org/";
 
-        const batchUUID = new URLPattern({ pathname: '/batch-configs/:uuid' });
-
         try {
             if (method === 'GET') {
                 if (path === '/') {
                     return new Response(generatePageHtmlContent.replace(/YOUR_WORKER_DOMAIN_PATH/g, DOMAIN_NAME), { headers: { 'Content-Type': 'text/html;charset=UTF-8' } });
                 }
                 
-                // Redirect to Manager (External)
-                if (path === '/manage') {
-                    return Response.redirect(EXTERNAL_CONFIG_MANAGER_URL, 302);
-                }
-
-                // API: Get List Text
-                if (path === '/batch-ip') {
-                    return await handleGetBatchAddresses(url, env);
-                }
-
-                // API: Subscription
-                const batchMatch = batchUUID.exec(url);
-                if (batchMatch) {
-                    return await handleGetBatchConfigs(batchMatch.pathname.groups.uuid, url.searchParams, env, request);
-                }
-
-                // API: Frontend Fetch (Strictly DB)
-                if (path === '/fetch-addresses') {
-                    const type = url.searchParams.get('type') || 'ip';
-                    if (type === 'domain') {
-                        const domains = await fetchDomainsFromDB(env);
-                        return jsonResponse({ list: domains.map(d => d.domain), message: `获取到 ${domains.length} 个域名` });
-                    } else {
-                        // IP Logic: Force DB read, ignore any 'source=api' params
-                        const ips = await fetchIpsFromDB(
-                            url.searchParams.get('ipType') || 'all',
-                            url.searchParams.get('carrierType') || 'all',
-                            env
-                        );
-                        return jsonResponse({ list: ips.map(i => i.ip), message: `获取到 ${ips.length} 个IP` }); 
-                    }
-                }
-                // Legacy API
-                if (path === '/fetch-ips') {
-                     const ips = await fetchIpsFromDB(url.searchParams.get('ipType') || 'all', url.searchParams.get('carrierType') || 'all', env);
-                     return jsonResponse({ ips: ips.map(i => i.ip), message: `Success` });
-                }
-                
-                // Admin API: 访问统计 (可添加认证机制)
-                if (path === '/admin/stats') {
-                    // 这里可以添加认证逻辑，例如检查API密钥
-                    // const apiKey = url.searchParams.get('api_key');
-                    // if (apiKey !== env.ADMIN_API_KEY) {
-                    //     return jsonResponse({ error: 'Unauthorized' }, 401);
-                    // }
-                    return await handleAccessStats(request, env, url);
-                }
-                
-                // ===== 新增：Clash配置文件生成接口 =====
+                // ===== 仅保留：Clash配置文件生成接口 =====
                 if (path === '/clash-config') {
                     return await generateClashConfig(request, env);
                 }
-            }
-
-            if (method === 'POST') {
-                if (path === '/generate') return generateConfigs(request, env);
             }
 
             return new Response('404 Not Found', { status: 404 });
         } catch (err) {
             return new Response("Internal Error: " + err.message, { status: 500 });
         }
-    },
-    
-    // [SECURITY] No scheduled() function is exported here.
-    // This prevents Cloudflare from triggering any automatic Cron Triggers.
+    }
 };
 
 // =================================================================
@@ -1116,7 +698,7 @@ const generatePageHtmlContent = `
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" href="https://s3.yangzifun.org/logo.ico" type="image/x-icon">
-  <title>代理订阅生成</title>
+  <title>Clash/Mihomo 订阅文件生成</title>
   <style>${newGlobalStyle}</style>
   <style>
     /* 二维码样式 */
@@ -1161,117 +743,65 @@ const generatePageHtmlContent = `
       margin-top: 8px;
     }
     
-    /* Clash配置生成样式 */
-    .clash-config-section {
-      margin-top: 20px;
-      padding: 20px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      border-radius: 12px;
-      color: white;
-      text-align: center;
-    }
-    .clash-config-title {
-      font-size: 1.5rem;
-      margin-bottom: 15px;
-      font-weight: bold;
-    }
-    .clash-config-description {
-      font-size: 0.95rem;
-      margin-bottom: 20px;
-      opacity: 0.9;
-    }
-    .clash-config-params {
+    /* 参数选择器样式 */
+    .config-params {
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
       justify-content: center;
       margin-bottom: 20px;
     }
-    .clash-config-params select {
+    .config-params select {
       padding: 8px 12px;
       border-radius: 6px;
-      border: 2px solid rgba(255,255,255,0.3);
-      background: rgba(255,255,255,0.1);
-      color: white;
+      border: 2px solid #89949B;
+      background: #fff;
+      color: #5a666d;
       font-size: 0.9rem;
       min-width: 120px;
     }
-    .clash-config-params select option {
-      background: #3d474d;
-      color: white;
-    }
-    .clash-btn {
-      background: white;
-      color: #667eea;
-      border: none;
-      padding: 12px 24px;
-      border-radius: 6px;
-      font-weight: bold;
-      font-size: 1rem;
-      cursor: pointer;
-      transition: all 0.3s;
-    }
-    .clash-btn:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 12px rgba(0,0,0,0.2);
-    }
-    .clash-btn.loading {
-      opacity: 0.7;
-      cursor: not-allowed;
-    }
-    /* 新增的Clash订阅链接和二维码样式 */
-    #clashSubscriptionLinkBox {
-        margin-top: 15px;
-        background: rgba(255,255,255,0.1);
-        border: 1px solid rgba(255,255,255,0.3);
-        border-radius: 8px;
-        padding: 10px 15px;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        word-break: break-all;
-    }
-    #clashGeneratedLink {
-        flex-grow: 1;
-        background: rgba(255,255,255,0.1);
-        border: 1px solid rgba(255,255,255,0.3);
-        color: white;
-    }
-    #clashQrCodeContainer {
-      margin-top: 16px;
-      text-align: center;
-      padding: 16px;
-      background: rgba(255,255,255,0.1); /* Adjusted to match section style */
-      border: 1px solid rgba(255,255,255,0.3); /* Adjusted to match section style */
+    
+    /* 订阅链接区域 */
+    .subscription-link-box {
+      margin-top: 15px;
+      background: #f8f9fa;
+      border: 1px solid #E8EBED;
       border-radius: 8px;
+      padding: 15px;
     }
-    #clashQrCodeImage {
-      max-width: 200px;
-      height: auto;
-      border: 1px solid rgba(255,255,255,0.3); /* Adjusted to match section style */
-      border-radius: 4px;
-      margin: 10px 0;
+    .subscription-link-box label {
+      display: block;
+      color: #5a666d;
+      font-weight: 500;
+      margin-bottom: 8px;
+      font-size: 0.9rem;
     }
-    #clashQrCodeContainer .qr-code-label, #clashQrCodeContainer .qr-code-info {
-        color: white; /* Ensure text is visible on dark background */
+    .link-input-container {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
     }
-    /* End New Clash subscription styles */
+    .link-input-container input {
+      flex-grow: 1;
+      background: #fff;
+      border: 2px solid #89949B;
+      color: #5a666d;
+    }
   </style>
 </head>
 <body>
   <div id="toast-container"></div>
   <div class="container">
     <div class="content-group">
-      <h1 class="profile-name">代理配置批量生成</h1>
-      <p class="profile-quote">支持 IP 优选与域名优选的批量替换工具</p>
+      <h1 class="profile-name">Clash/Mihomo 订阅文件生成</h1>
+      <p class="profile-quote">基于优选地址和配置文件模板，一键生成完整的Clash/Mihomo订阅</p>
 
       <div class="nav-grid">
-        <a href="/" class="nav-btn primary">批量生成</a>
-        <a href="https://config.proxypilot.yangzifun.org/" target="_blank" class="nav-btn">配置管理</a>
+        <a href="https://config-cfst.api.yangzifun.org/" target="_blank" class="nav-btn primary">配置管理</a>
       </div>
 
       <div class="card">
-        <h2>1. 基础配置</h2>
+        <h2>1. 配置信息</h2>
         <div class="form-group">
           <div class="info-box">
             <strong>注意：</strong> 所有配置都会输出原配置。
@@ -1279,27 +809,21 @@ const generatePageHtmlContent = `
             <br>其他域名托管配置（如阿里ESA、腾讯Edgeone、AWS Cloudfront、Gcore、Fastly等）只输出原配置，不进行优选替换。
           </div>
         </div>
-        <div class="form-group radio-group">
-            <label><input type="radio" name="genConfigSource" value="manual" checked><span>手动粘贴</span></label>
-            <label><input type="radio" name="genConfigSource" value="uuid"><span>从UUID获取</span></label>
-        </div>
-        <div id="genManualConfigInput" class="form-group">
-            <textarea id="genBaseConfigInput" placeholder="在此粘贴一个或多个基础配置，每行一个。" rows="6"></textarea>
-        </div>
-        <div id="genUuidConfigInput" class="form-group hidden">
-            <input type="text" id="genBaseConfigUuidInput" placeholder="输入已存储的UUID，如 my-configs">
-            <div class="info-box">在 <a href="https://config-cfst.api.yangzifun.org/" target="_blank">配置管理</a> 页面添加和管理UUID。
-            <br>所有配置都会输出原配置，只有域名托管属性为"Cloudflare"的配置会进行优选替换。</div>
+        <div class="form-group">
+          <input type="text" id="clashConfigUuid" placeholder="输入UUID（必须在配置管理中创建配置）">
+          <div class="info-box">
+            在 <a href="https://config-cfst.api.yangzifun.org/" target="_blank">配置管理</a> 页面添加和管理配置，获取UUID后在此输入。
+          </div>
         </div>
       </div>
 
       <div class="card">
-        <h2>2. 优选列表 (IP/域名)</h2>
+        <h2>2. 优选地址配置</h2>
         <div class="form-group">
           <label>地址类型</label>
           <div class="radio-group">
-            <label><input type="radio" name="genAddressType" value="ip" checked onchange="toggleAddressOptions()"><span>IP 地址</span></label>
-            <label><input type="radio" name="genAddressType" value="domain" onchange="toggleAddressOptions()"><span>优选域名</span></label>
+            <label><input type="radio" name="clashAddressType" value="ip" checked onchange="toggleAddressOptions()"><span>IP 地址</span></label>
+            <label><input type="radio" name="clashAddressType" value="domain" onchange="toggleAddressOptions()"><span>优选域名</span></label>
           </div>
         </div>
 
@@ -1307,121 +831,59 @@ const generatePageHtmlContent = `
             <div class="form-group">
               <label>IP 类型</label>
               <div class="radio-group">
-                <label><input type="radio" name="genIpType" value="all" checked><span>全部</span></label>
-                <label><input type="radio" name="genIpType" value="v4"><span>仅IPv4</span></label>
-                <label><input type="radio" name="genIpType" value="v6"><span>仅IPv6</span></label>
+                <label><input type="radio" name="clashIpType" value="all" checked><span>全部</span></label>
+                <label><input type="radio" name="clashIpType" value="v4"><span>仅IPv4</span></label>
+                <label><input type="radio" name="clashIpType" value="v6"><span>仅IPv6</span></label>
               </div>
             </div>
             <div class="form-group">
               <label>运营商</label>
               <div class="radio-group">
-                <label><input type="radio" name="genCarrierType" value="all" checked><span>全部</span></label>
-                <label><input type="radio" name="genCarrierType" value="CM"><span>移动</span></label>
-                <label><input type="radio" name="genCarrierType" value="CU"><span>联通</span></label>
-                <label><input type="radio" name="genCarrierType" value="CT"><span>电信</span></label>
+                <label><input type="radio" name="clashCarrier" value="all" checked><span>全部</span></label>
+                <label><input type="radio" name="clashCarrier" value="CM"><span>移动</span></label>
+                <label><input type="radio" name="clashCarrier" value="CU"><span>联通</span></label>
+                <label><input type="radio" name="clashCarrier" value="CT"><span>电信</span></label>
               </div>
             </div>
         </div>
 
         <div id="domainInfoBox" class="info-box hidden">
-           将使用数据库中存储的 Cloudflare 优选域名列表进行替换。
+          将使用数据库中存储的 Cloudflare 优选域名列表进行替换。
         </div>
-
-        <button id="genFetchBtn" class="nav-btn" style="width:100%; margin-bottom: 16px;" onclick="genFetchAddresses()">获取优选列表</button>
-        
-        <div id="ipSubscriptionLinkBox" class="form-group hidden" style="display:none; gap:10px;">
-            <input type="text" id="ipSubscriptionLink" readonly style="margin-bottom:0; color:#5a666d; background-color: #f8f9fa;">
-            <button class="nav-btn" onclick="copyIpSubscriptionLink()" style="white-space: nowrap;">复制</button>
-        </div>
-
-        <textarea id="genAddressListInput" placeholder="点击上方按钮获取，或在此手动粘贴 IP 或 域名 列表..." rows="6"></textarea>
       </div>
 
       <div class="card">
         <h2>3. 生成结果</h2>
-        <div id="generatedLinkBox" class="form-group hidden" style="display:none; gap:10px;">
-          <label style="align-self:center; white-space:nowrap; margin-bottom:0; margin-right:5px;">订阅:</label>
-          <input type="text" id="generatedConfigLink" readonly style="margin-bottom:0; color:#5a666d; background-color: #f8f9fa;">
-          <button class="nav-btn" onclick="copyGeneratedLink()" style="white-space: nowrap;">复制</button>
-        </div>
-        <textarea id="genResultTextarea" readonly placeholder="点击下方"生成配置"按钮..." rows="8"></textarea>
-        
-        <!-- 二维码区域 -->
-        <div id="qrCodeContainer" class="hidden">
-          <label class="qr-code-label">订阅链接二维码</label>
-          <div id="qrCodeImageContainer">
-            <img id="qrCodeImage" src="" alt="订阅链接二维码">
-          </div>
-          <div class="qr-code-buttons">
-            <button class="nav-btn" onclick="downloadQRCode()">下载二维码</button>
-            <button class="nav-btn" onclick="shareQRCode()">分享二维码</button>
-            <button class="nav-btn" onclick="refreshQRCode()">刷新</button>
-          </div>
-          <div class="qr-code-info">
-            扫描二维码即可导入订阅配置。二维码内容为上方订阅链接。
-          </div>
-        </div>
-      </div>
-
-      <button id="genGenerateButton" class="nav-btn primary" style="width:100%; padding: 12px;" onclick="genGenerateConfigs()">生成配置</button>
-      <button id="copyResultButton" class="nav-btn" style="width:100%; margin-top: 10px;" onclick="copyResults()">复制结果 (Base64)</button>
-      
-      <!-- ===== 新增：Clash配置文件生成区域 ===== -->
-      <div class="clash-config-section">
-        <h2 class="clash-config-title">🚀 一键生成 Clash/Mihomo 订阅文件</h2>
-        <p class="clash-config-description">使用模板和优选地址，生成可直接使用的配置文件</p>
-        
         <div class="form-group">
-          <input type="text" id="clashConfigUuid" placeholder="输入UUID（必须已在配置管理中创建）" style="width: 100%; max-width: 300px; margin-bottom: 15px;">
-          <div class="info-box" style="background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.3);">
-            <strong>说明：</strong> 使用你的UUID，基于优选地址和模板生成完整配置文件
+          <button id="generateClashBtn" class="nav-btn primary" style="width:100%; padding: 12px;" onclick="generateClashConfig()">生成Clash订阅文件</button>
+        </div>
+        
+        <div class="subscription-link-box hidden" id="clashSubscriptionLinkBox">
+          <label>订阅链接</label>
+          <div class="link-input-container">
+            <input type="text" id="clashGeneratedLink" readonly>
+            <button class="nav-btn" onclick="copyClashGeneratedLink()">复制</button>
+          </div>
+          
+          <div id="qrCodeContainer" class="hidden">
+            <label class="qr-code-label">订阅链接二维码</label>
+            <div id="qrCodeImageContainer">
+              <img id="qrCodeImage" src="" alt="订阅链接二维码">
+            </div>
+            <div class="qr-code-buttons">
+              <button class="nav-btn" onclick="downloadQRCode()">下载二维码</button>
+              <button class="nav-btn" onclick="shareQRCode()">分享</button>
+              <button class="nav-btn" onclick="refreshQRCode()">刷新</button>
+            </div>
+            <div class="qr-code-info">
+              扫描二维码即可导入Clash配置文件到客户端。二维码内容为上方订阅链接。
+            </div>
           </div>
         </div>
         
-        <div class="clash-config-params">
-          <select id="clashAddressType">
-            <option value="ip">IP地址</option>
-            <option value="domain">域名</option>
-          </select>
-          <select id="clashIpType">
-            <option value="all">全部IP</option>
-            <option value="v4">仅IPv4</option>
-            <option value="v6">仅IPv6</option>
-          </select>
-          <select id="clashCarrier">
-            <option value="all">全部运营商</option>
-            <option value="CM">移动</option>
-            <option value="CU">联通</option>
-            <option value="CT">电信</option>
-          </select>
-        </div>
-        
-        <button id="generateClashBtn" class="clash-btn" onclick="generateClashConfig()">生成Clash配置文件</button>
-        
-        <!-- Clash订阅链接及二维码区域 -->
-        <div id="clashSubscriptionLinkBox" class="form-group hidden" style="display:none;">
-            <label style="align-self:center; white-space:nowrap; margin-bottom:0; margin-right:5px; color:white;">订阅链接:</label>
-            <input type="text" id="clashGeneratedLink" readonly style="margin-bottom:0; color:#5a666d; background-color: #f8f9fa;">
-            <button class="nav-btn" onclick="copyClashGeneratedLink()" style="white-space: nowrap;">复制</button>
-        </div>
-        <div id="clashQrCodeContainer" class="hidden">
-          <label class="qr-code-label">订阅链接二维码</label>
-          <div id="clashQrCodeImageContainer">
-            <img id="clashQrCodeImage" src="" alt="Clash订阅链接二维码">
-          </div>
-          <div class="qr-code-buttons">
-            <button class="nav-btn" onclick="downloadClashQRCode()">下载二维码</button>
-            <button class="nav-btn" onclick="shareClashQRCode()">分享二维码</button>
-            <button class="nav-btn" onclick="refreshClashQRCode()">刷新</button>
-          </div>
-          <div class="qr-code-info">
-            扫描二维码即可导入Clash配置文件。二维码内容为上方订阅链接。
-          </div>
-        </div>
-        <!-- End Clash订阅链接及二维码区域 -->
-
-        <div class="info-box" style="margin-top: 15px; background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.3);">
-          配置文件基于 <a href="https://raw.githubusercontent.com/yangzifun/rule/refs/heads/main/config.yaml" target="_blank" style="color: white; font-weight: bold;">此模板</a> 生成，包含完整的规则和策略组
+        <div class="info-box">
+          配置文件基于 <a href="https://raw.githubusercontent.com/yangzifun/rule/refs/heads/main/config.yaml" target="_blank">此模板</a> 生成，包含完整的规则和策略组。
+          <br>生成的订阅链接可直接在Clash/Mihomo客户端中使用。
         </div>
       </div>
 
@@ -1435,8 +897,7 @@ const generatePageHtmlContent = `
     const WORKER_DOMAIN = "YOUR_WORKER_DOMAIN_PATH";
     const QR_CODE_API = "https://qrcode.api.yangzifun.org/qr";
     const toastIcons = { success: '✅', error: '❌', info: 'ℹ️' };
-    let currentSubscriptionLink = ''; // For raw proxy subscription
-    let currentClashSubscriptionLink = ''; // For Clash config subscription
+    let currentSubscriptionLink = '';
     
     function showToast(msg, type='info') { 
       const c = document.getElementById('toast-container'); 
@@ -1457,9 +918,7 @@ const generatePageHtmlContent = `
       } 
     }
     
-    // ===========================================
-    // 通用订阅链接二维码相关函数 (用于 raw proxy list)
-    // ===========================================
+    // 二维码相关函数
     function generateQRCode(subscriptionLink) {
       if (!subscriptionLink) return;
       
@@ -1484,7 +943,7 @@ const generatePageHtmlContent = `
       const qrCodeImage = document.getElementById('qrCodeImage');
       const link = document.createElement('a');
       link.href = qrCodeImage.src;
-      link.download = 'subscription-qrcode.png';
+      link.download = 'clash-subscription-qrcode.png';
       link.click();
       showToast('二维码已下载', 'success');
     }
@@ -1493,8 +952,8 @@ const generatePageHtmlContent = `
       if (!currentSubscriptionLink) { showToast('没有可用的订阅链接', 'error'); return; }
       if (navigator.share) {
         navigator.share({
-          title: '代理订阅配置',
-          text: '扫描二维码导入代理配置',
+          title: 'Clash代理配置',
+          text: '扫描二维码导入Clash配置文件',
           url: currentSubscriptionLink,
         })
         .then(() => showToast('分享成功', 'success'))
@@ -1514,73 +973,10 @@ const generatePageHtmlContent = `
       generateQRCode(currentSubscriptionLink);
       showToast('二维码已刷新', 'info');
     }
-    // ===========================================
-    // END 通用订阅链接二维码相关函数
-    // ===========================================
-
-    // ===========================================
-    // Clash 配置订阅链接二维码相关函数
-    // ===========================================
-    function generateClashQRCode(subscriptionLink) {
-      if (!subscriptionLink) return;
-      
-      currentClashSubscriptionLink = subscriptionLink;
-      const qrCodeContainer = document.getElementById('clashQrCodeContainer');
-      const qrCodeImage = document.getElementById('clashQrCodeImage');
-      
-      const encodedUrl = encodeURIComponent(subscriptionLink);
-      const qrCodeUrl = \`\${QR_CODE_API}?text=\${encodedUrl}&cellSize=4&margin=0&errorCorrectionLevel=L&typeNumber=0\`;
-      
-      qrCodeImage.src = qrCodeUrl;
-      qrCodeImage.alt = \`Clash订阅链接二维码: \${subscriptionLink.substring(0, 50)}...\`;
-      
-      qrCodeContainer.classList.remove('hidden');
-      
-      qrCodeImage.onload = function() { showToast('Clash二维码生成成功', 'success'); };
-      qrCodeImage.onerror = function() { showToast('Clash二维码生成失败，请重试', 'error'); };
-    }
-
-    function downloadClashQRCode() {
-      if (!currentClashSubscriptionLink) { showToast('没有可用的Clash订阅链接', 'error'); return; }
-      const qrCodeImage = document.getElementById('clashQrCodeImage');
-      const link = document.createElement('a');
-      link.href = qrCodeImage.src;
-      link.download = 'clash-subscription-qrcode.png';
-      link.click();
-      showToast('Clash二维码已下载', 'success');
-    }
-
-    function shareClashQRCode() {
-      if (!currentClashSubscriptionLink) { showToast('没有可用的Clash订阅链接', 'error'); return; }
-      if (navigator.share) {
-        navigator.share({
-          title: 'Clash代理配置',
-          text: '扫描二维码导入Clash配置文件',
-          url: currentClashSubscriptionLink,
-        })
-        .then(() => showToast('分享Clash链接成功', 'success'))
-        .catch(error => {
-          console.error('分享Clash链接失败:', error);
-          navigator.clipboard.writeText(currentClashSubscriptionLink)
-            .then(() => showToast('分享失败，已复制Clash链接到剪贴板', 'info'));
-        });
-      } else {
-        navigator.clipboard.writeText(currentClashSubscriptionLink)
-          .then(() => showToast('Clash链接已复制到剪贴板', 'success'));
-      }
-    }
-
-    function refreshClashQRCode() {
-      if (!currentClashSubscriptionLink) { showToast('没有可用的Clash订阅链接', 'error'); return; }
-      generateClashQRCode(currentClashSubscriptionLink);
-      showToast('Clash二维码已刷新', 'info');
-    }
-    // ===========================================
-    // END Clash 配置订阅链接二维码相关函数
-    // ===========================================
     
+    // 地址类型切换
     function toggleAddressOptions() {
-        const type = document.querySelector('input[name="genAddressType"]:checked').value;
+        const type = document.querySelector('input[name="clashAddressType"]:checked').value;
         const ipContainer = document.getElementById('ipOptionsContainer');
         const domainBox = document.getElementById('domainInfoBox');
         if (type === 'domain') {
@@ -1591,184 +987,23 @@ const generatePageHtmlContent = `
             domainBox.classList.add('hidden');
         }
     }
-
-    // Tab switching for Config Source
-    const sourceRadios = document.querySelectorAll('input[name="genConfigSource"]');
-    sourceRadios.forEach(r => r.addEventListener('change', (e) => {
-        if(e.target.value === 'uuid') {
-            document.getElementById('genManualConfigInput').classList.add('hidden');
-            document.getElementById('genUuidConfigInput').classList.remove('hidden');
-        } else {
-            document.getElementById('genManualConfigInput').classList.remove('hidden');
-            document.getElementById('genUuidConfigInput').classList.add('hidden');
-        }
-    }));
-
-    async function genFetchAddresses() {
-        const btn = document.getElementById('genFetchBtn');
-        const textarea = document.getElementById('genAddressListInput');
-        const subBox = document.getElementById('ipSubscriptionLinkBox');
-        const subInput = document.getElementById('ipSubscriptionLink');
-        
-        // Reset sub box
-        subBox.style.display = 'none';
-        subBox.classList.add('hidden');
-
-        setButtonLoading(btn, true, '');
-        
-        try {
-            const addrType = document.querySelector('input[name="genAddressType"]:checked').value;
-            let url = \`\${WORKER_DOMAIN}/fetch-addresses?type=\${addrType}\`;
-            
-            if (addrType === 'ip') {
-                const ipType = document.querySelector('input[name="genIpType"]:checked').value;
-                const carrier = document.querySelector('input[name="genCarrierType"]:checked').value;
-                url += \`&ipType=\${ipType}&carrierType=\${carrier}&source=database\`; // Always database
-                
-                // Show subscription link logic
-                const subUrl = \`\${WORKER_DOMAIN}/batch-ip?type=ip&ipType=\${ipType}&carrier=\${carrier}\`;
-                subInput.value = subUrl;
-                subBox.style.display = 'flex';
-                subBox.classList.remove('hidden');
-
-            } else {
-                // Domain subscription link
-                 const subUrl = \`\${WORKER_DOMAIN}/batch-ip?type=domain\`;
-                 subInput.value = subUrl;
-                 subBox.style.display = 'flex';
-                 subBox.classList.remove('hidden');
-            }
-
-            const res = await fetch(url);
-            const data = await res.json();
-            
-            if (data.error) throw new Error(data.error);
-            
-            if (data.list && Array.isArray(data.list)) {
-                textarea.value = data.list.join('\\n');
-                showToast(data.message || \`获取成功: \${data.list.length} 条\`, 'success');
-            } else {
-                throw new Error("返回数据格式错误");
-            }
-        } catch (e) {
-            showToast(e.message, 'error');
-            textarea.value = "";
-        } finally {
-            setButtonLoading(btn, false, '获取优选列表');
-        }
-    }
-
-    async function genGenerateConfigs() {
-        const btn = document.getElementById('genGenerateButton');
-        const resultArea = document.getElementById('genResultTextarea');
-        const linkBox = document.getElementById('generatedLinkBox');
-        const linkInput = document.getElementById('generatedConfigLink');
-        const qrCodeContainer = document.getElementById('qrCodeContainer');
-
-        // Reset
-        linkBox.style.display = 'none';
-        linkBox.classList.add('hidden');
-        qrCodeContainer.classList.add('hidden');
-
-        setButtonLoading(btn, true, '');
-
-        try {
-            const configSource = document.querySelector('input[name="genConfigSource"]:checked').value;
-            const addressList = document.getElementById('genAddressListInput').value;
-            
-            let payload = { addressList };
-
-            if (configSource === 'uuid') {
-                const uuid = document.getElementById('genBaseConfigUuidInput').value.trim();
-                if(!uuid) throw new Error("请输入 UUID");
-                payload.baseConfigUuid = uuid;
-                
-                // Construct subscription link for UUID mode
-                const addrType = document.querySelector('input[name="genAddressType"]:checked').value;
-                let linkParams = \`type=\${addrType}\`;
-                if(addrType === 'ip') {
-                    const ipType = document.querySelector('input[name="genIpType"]:checked').value;
-                    const carrier = document.querySelector('input[name="genCarrierType"]:checked').value;
-                    linkParams += \`&ipType=\${ipType}&carrier=\${carrier}\`;
-                }
-                const subLink = \`\${WORKER_DOMAIN}/batch-configs/\${uuid}?\${linkParams}\`;
-                linkInput.value = subLink;
-                linkBox.style.display = 'flex';
-                linkBox.classList.remove('hidden');
-                
-                // 生成二维码
-                generateQRCode(subLink);
-
-            } else {
-                const manualConfig = document.getElementById('genBaseConfigInput').value.trim();
-                if(!manualConfig) throw new Error("请输入基础配置");
-                payload.baseConfig = manualConfig;
-                
-                // 手动模式不生成二维码，因为没有订阅链接
-                showToast('手动模式不支持二维码生成，请使用UUID模式获取订阅链接', 'info');
-            }
-
-            const res = await fetch(\`\${WORKER_DOMAIN}/generate\`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            const data = await res.json();
-
-            if (data.error) throw new Error(data.error);
-
-            if (data.configs && Array.isArray(data.configs)) {
-                resultArea.value = data.configs.join('\\n');
-                showToast(data.message || "生成成功", 'success');
-                
-                // 显示统计信息
-                if (data.stats) {
-                    console.log("生成统计:", data.stats);
-                }
-            }
-        } catch (e) {
-            showToast(e.message, 'error');
-        } finally {
-            setButtonLoading(btn, false, '生成配置');
-        }
-    }
-
-    function copyResults() {
-        const content = document.getElementById('genResultTextarea').value;
-        if (!content) return showToast('没有可复制的内容', 'error');
-        const b64 = btoa(unescape(encodeURIComponent(content))); // utf-8 safe b64
-        navigator.clipboard.writeText(b64).then(() => showToast('已复制 Base64 编码结果', 'success'));
-    }
     
-    function copyGeneratedLink() {
-        const link = document.getElementById('generatedConfigLink').value;
-        if(!link) return;
-        navigator.clipboard.writeText(link).then(() => showToast('订阅链接已复制', 'success'));
-    }
-
-    function copyIpSubscriptionLink() {
-        const link = document.getElementById('ipSubscriptionLink').value;
-        if(!link) return;
-        navigator.clipboard.writeText(link).then(() => showToast('列表地址已复制', 'success'));
-    }
-    
-    // ===== 新增：Clash配置文件生成功能 =====
+    // Clash配置文件生成功能
     async function generateClashConfig() {
         const btn = document.getElementById('generateClashBtn');
         const uuid = document.getElementById('clashConfigUuid').value.trim();
-        const addressType = document.getElementById('clashAddressType').value;
-        const ipType = document.getElementById('clashIpType').value;
-        const carrier = document.getElementById('clashCarrier').value;
+        const addressType = document.querySelector('input[name="clashAddressType"]:checked').value;
+        const ipType = document.querySelector('input[name="clashIpType"]:checked').value;
+        const carrier = document.querySelector('input[name="clashCarrier"]:checked').value;
 
-        // Reset previous link/QR
+        // 重置之前的链接和二维码
         const clashLinkBox = document.getElementById('clashSubscriptionLinkBox');
         const clashLinkInput = document.getElementById('clashGeneratedLink');
-        const clashQrContainer = document.getElementById('clashQrCodeContainer');
-        clashLinkBox.style.display = 'none';
+        const qrCodeContainer = document.getElementById('qrCodeContainer');
         clashLinkBox.classList.add('hidden');
-        clashQrContainer.classList.add('hidden');
-        clashLinkInput.value = ''; // Clear previous value
-        currentClashSubscriptionLink = ''; // Clear stored link
+        qrCodeContainer.classList.add('hidden');
+        clashLinkInput.value = '';
+        currentSubscriptionLink = '';
 
         if (!uuid) {
             showToast('请输入UUID', 'error');
@@ -1791,20 +1026,19 @@ const generatePageHtmlContent = `
             // 使用构建的URL作为订阅链接
             const clashSubscriptionLink = subscriptionUrl.toString();
             
-            // 尝试获取文件内容（不下载，仅用于确认URL可用性或预加载）
-            // 实际上，Clash客户端会直接访问这个URL，这里可以跳过直接下载
-            // 但为了给用户一个"下载成功"的即时反馈，我们仍然触发一次下载
-            const response = await fetch(subscriptionUrl); // 这里依然触发一次Worker的/clash-config接口
+            // 触发文件下载
+            const response = await fetch(subscriptionUrl);
             
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
                 throw new Error(errorData.error || \`生成失败: \${response.status}\`);
             }
             
-            // 创建下载链接 (保留原有下载功能)
+            // 创建下载链接
             const blob = await response.blob();
             const downloadUrl = URL.createObjectURL(blob);
             
+            // 触发下载
             const a = document.createElement('a');
             a.href = downloadUrl;
             a.download = \`clash-config-\${uuid}-\${new Date().toISOString().split('T')[0]}.yaml\`;
@@ -1813,48 +1047,32 @@ const generatePageHtmlContent = `
             document.body.removeChild(a);
             URL.revokeObjectURL(downloadUrl);
             
-            showToast('Clash配置文件生成成功，已开始下载', 'success');
+            showToast('Clash订阅文件生成成功，已开始下载', 'success');
 
-            // 显示Clash订阅链接
+            // 显示订阅链接
             clashLinkInput.value = clashSubscriptionLink;
-            clashLinkBox.style.display = 'flex';
             clashLinkBox.classList.remove('hidden');
             
-            // 生成Clash订阅链接的二维码
-            generateClashQRCode(clashSubscriptionLink);
+            // 生成二维码
+            generateQRCode(clashSubscriptionLink);
             
         } catch (error) {
             console.error('生成Clash配置失败:', error);
             showToast(\`生成失败: \${error.message}\`, 'error');
         } finally {
-            setButtonLoading(btn, false, '生成Clash配置文件');
+            setButtonLoading(btn, false, '生成Clash订阅文件');
         }
     }
 
     function copyClashGeneratedLink() {
         const link = document.getElementById('clashGeneratedLink').value;
         if(!link) return;
-        navigator.clipboard.writeText(link).then(() => showToast('Clash订阅链接已复制', 'success'));
+        navigator.clipboard.writeText(link).then(() => showToast('订阅链接已复制', 'success'));
     }
-    
-    // 监听地址类型变化，更新IP类型选择框的显示
-    document.getElementById('clashAddressType').addEventListener('change', function() {
-        const ipTypeSelect = document.getElementById('clashIpType');
-        const carrierSelect = document.getElementById('clashCarrier');
-        if (this.value === 'ip') {
-            ipTypeSelect.style.display = 'inline-block'; // 保持水平布局
-            carrierSelect.style.display = 'inline-block'; // 保持水平布局
-        } else {
-            ipTypeSelect.style.display = 'none';
-            carrierSelect.style.display = 'none';
-        }
-    });
 
-    // 页面加载时初始化IP/域名选择器的显示状态
+    // 页面加载时初始化地址类型选择器的显示状态
     document.addEventListener('DOMContentLoaded', () => {
         toggleAddressOptions();
-        // 确保Clash配置生成部分的IP/运营商选择器初始状态正确
-        document.getElementById('clashAddressType').dispatchEvent(new Event('change'));
     });
   </script>
 </body>
