@@ -597,10 +597,18 @@ async function generateClashConfig(request, env) {
             finalConfig = templateContent + `\n\n# ===== 生成的节点配置 =====\nproxies:\n${clashProxies.map(p => `  - ${JSON.stringify(p)}`).join('\n')}`;
         }
         
-        // 记录访问日志
+        // 记录访问日志 - 根据referer判断是网页生成还是订阅获取
         const clientIp = getClientIp(request);
         const userAgent = request.headers.get('user-agent') || 'unknown';
-        await logConfigAccess(env, uuid, 'api-generation', clientIp, userAgent);
+        
+        // 判断请求来源：如果有referer并且referer包含当前域，则认为是网页生成
+        // 否则认为是客户端订阅
+        const referer = request.headers.get('referer');
+        const isWebPageGeneration = referer && referer.includes(url.origin);
+        const queryType = isWebPageGeneration ? 'api-generation' : 'subscription';
+        
+        await logConfigAccess(env, uuid, queryType, clientIp, userAgent);
+        console.log(`记录${isWebPageGeneration ? '网页生成' : '订阅获取'}访问: uuid=${uuid}, clientIp=${clientIp}`);
 
         // 返回YAML文件
         return new Response(finalConfig, {
