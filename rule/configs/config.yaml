@@ -101,11 +101,11 @@ rule-anchor:
 proxy-groups:
   # --- 1. 默认代理 (总开关) ---
   # 兜底使用的代理组，如果下方具体服务没命中，则默认走这里
-  - {name: 🚀 默认代理, type: select, include-all: true, filter: "^((?!(直连)).)*$", proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动, 🌐 全部节点]}
+  - {name: 🚀 默认代理, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动, 🌐 全部节点]}
   
   # --- 2. AI 服务 (对 IP 纯净度要求极高) ---
   - {name: 🤖 OpenAI, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]} # 严禁香港
-  - {name: ✨ Gemini, type: select, include-all: true, filter: "(?i)洛杉矶|弗吉尼亚|东京|新加坡|台湾|德国", proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
+  - {name: ✨ Gemini, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
   - {name: 🧠 Claude, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇩🇪 德国自动]}
   - {name: 🌌 常用 AI, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}  # 聚合其他 AI 规则
   
@@ -121,7 +121,7 @@ proxy-groups:
   - {name: 🎬 YouTube, type: select, include-all: true, filter: "(?i)香港|东京|洛杉矶|弗吉尼亚|新加坡|台湾|德国", proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
   - {name: 🎥 Netflix, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
   - {name: 🎞️ Disney+, type: select, proxies: [🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
-  - {name: 🎵 TikTok, type: select, include-all: true, filter: "(?i)日本|JP|美国|US|新加坡|SG|台湾|TW|德国|DE", proxies: [🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
+  - {name: 🎵 TikTok, type: select,  proxies: [🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
   - {name: 📺 更多流媒体, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇺🇸 美国自动]} # Prime Video, Viu, TVB, 动画疯等
   - {name: 🎧 Spotify, type: select, proxies: [🚀 默认代理, ⚡ 自动选择, 🎯 直连]} # 建议首选直连或默认代理
   
@@ -140,7 +140,7 @@ proxy-groups:
   - {name: 🇨🇳 中国大陆, type: select, proxies: [🎯 直连, 🇨🇳 中国自动, 🚀 默认代理, 🇭🇰 香港自动]}  # 中国大陆地区域名及IP
 
   # --- 7. 基础工具 ---
-  - {name: 🔍 Google, type: select, include-all: true, filter: "(?i)香港|东京|洛杉矶|弗吉尼亚|新加坡|台湾|德国", proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
+  - {name: 🔍 Google, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
   - {name: 🚀 Speedtest, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择]}
   - {name: 💳 PayPal, type: select, proxies: [⚡ 自动选择, 🇺🇸 美国自动, 🇭🇰 香港自动, 🇩🇪 德国自动, 🎯 直连]} # 建议固定一个地区防止风控
   - {name: 🚫 广告拦截, type: select, proxies: [REJECT, DIRECT]}
@@ -171,6 +171,7 @@ rules:
 # 1. 拦截与私有网络
   - RULE-SET,category-ads-all,🚫 广告拦截
   - RULE-SET,private_domain,🎯 直连
+  - RULE-SET,custom_direct,🎯 直连
   - GEOIP,LAN,🎯 直连
 # 2. AI 规则
   - RULE-SET,openai,🤖 OpenAI
@@ -240,6 +241,7 @@ rule-providers:
   private_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs"}
   proxylite: { <<: *class, url: "https://github.com/yangzifun/proxypilot/raw/refs/heads/main/rule/proxy.list"}
   category-ads-all: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ads-all.mrs"}
+  custom_direct: { <<: *class, url: "https://github.com/yangzifun/proxypilot/raw/refs/heads/main/rule/direct.list"}
 
   # AI 规则
   openai: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/openai.mrs" }
