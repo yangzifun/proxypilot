@@ -191,15 +191,15 @@ CREATE INDEX IF NOT EXISTS idx_config_templates_is_default ON config_templates(i
 CREATE INDEX IF NOT EXISTS idx_config_templates_created ON config_templates(created_at);
 
 -- 初始化一些默认模板 (基于现有的硬编码映射)
-INSERT OR IGNORE INTO config_templates (name, url, description, is_default) VALUES 
-('full_config.yaml', 'https://github.com/yangzifun/rule/raw/refs/heads/main/configs/full_config.yaml', '全量模板 - 包含完整规则和策略组的完整配置，适用于大多数场景', 1),
-('lite_config.yaml', 'https://github.com/yangzifun/rule/raw/refs/heads/main/configs/lite_config.yaml', '轻量模板 - 精简的规则和策略，适合手机或低性能设备', 0),
-('global_config.yaml', 'https://github.com/yangzifun/rule/raw/refs/heads/main/configs/global_config.yaml', '全球上网模板 - 针对全球上网需求优化，适用于国际访问', 0),
-('cn_config.yaml', 'https://github.com/yangzifun/rule/raw/refs/heads/main/configs/cn_config.yaml', '回国模板 - 针对海外用户访问国内服务优化', 0),
-('config.yaml', 'https://github.com/yangzifun/rule/raw/refs/heads/main/configs/config.yaml', '默认模板 - 基础配置模板，适用于简单场景', 0),
-('geoip_config.yaml', 'https://github.com/yangzifun/rule/raw/refs/heads/main/configs/geoip_config.yaml', 'IP分流模板 - 基于IP地址进行智能分流，提供更精准的路由', 0),
-('load-balance_config.yaml', 'https://github.com/yangzifun/rule/raw/refs/heads/main/configs/load-balance_config.yaml', '负载均衡模板 - 支持多节点负载均衡策略，提高连接稳定性', 0),
-('stream_config.yaml', 'https://github.com/yangzifun/rule/raw/refs/heads/main/configs/stream_config.yaml', '视频优化模板 - 针对视频流媒体和直播优化，提供更好的观看体验', 0);
+INSERT OR IGNORE INTO config_templates (name, url, description, is_default) VALUES
+('full_config.yaml', 'https://github.com/yangzifun/proxypilot/raw/refs/heads/main/rule/configs/full_config.yaml', '全量模板 - 包含完整规则和策略组的完整配置，适用于大多数场景', 1),
+('lite_config.yaml', 'https://github.com/yangzifun/proxypilot/raw/refs/heads/main/rule/configs/lite_config.yaml', '轻量模板 - 精简的规则和策略，适合手机或低性能设备', 0),
+('global_config.yaml', 'https://github.com/yangzifun/proxypilot/raw/refs/heads/main/rule/configs/global_config.yaml', '全球上网模板 - 针对全球上网需求优化，适用于国际访问', 0),
+('cn_config.yaml', 'https://github.com/yangzifun/proxypilot/raw/refs/heads/main/rule/configs/cn_config.yaml', '回国模板 - 针对海外用户访问国内服务优化', 0),
+('config.yaml', 'https://github.com/yangzifun/proxypilot/raw/refs/heads/main/rule/configs/config.yaml', '默认模板 - 基础配置模板，适用于简单场景', 0),
+('geoip_config.yaml', 'https://github.com/yangzifun/proxypilot/raw/refs/heads/main/rule/configs/geoip_config.yaml', 'IP分流模板 - 基于IP地址进行智能分流，提供更精准的路由', 0),
+('load-balance_config.yaml', 'https://github.com/yangzifun/proxypilot/raw/refs/heads/main/rule/configs/load-balance_config.yaml', '负载均衡模板 - 支持多节点负载均衡策略，提高连接稳定性', 0),
+('stream_config.yaml', 'https://github.com/yangzifun/proxypilot/raw/refs/heads/main/rule/configs/stream_config.yaml', '视频优化模板 - 针对视频流媒体和直播优化，提供更好的观看体验', 0);
 
 -- ========================================================
 -- 11. 简单查询验证
