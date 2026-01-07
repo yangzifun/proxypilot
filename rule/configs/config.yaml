@@ -238,7 +238,7 @@ rules:
 rule-providers:
   # 基础与系统
   private_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs"}
-  proxylite: { <<: *class, url: "https://raw.githubusercontent.com/yangzifun/rule/refs/heads/main/proxy.list"}
+  proxylite: { <<: *class, url: "https://github.com/yangzifun/proxypilot/raw/refs/heads/main/rule/proxy.list"}
   category-ads-all: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ads-all.mrs"}
 
   # AI 规则
