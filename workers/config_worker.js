@@ -1,13 +1,11 @@
 /* =================================================================
- * Cloudflare Worker: All-in-One Proxy Tool (Strict Read-Only Version)
- * =================================================================
- * [SECURITY NOTE]:
- * This version allows NO IP updates (Auto or Manual).
- * It ONLY reads existing data from the D1 Database.
+ *  Cloudflare Worker: Config Manager + External Link + Analytics + Domain Hosting
+ *  功能：配置存储、编辑、订阅管理，包含跳转至配置生成的按钮和统计分析
+ *  新增：域名托管属性（Cloudflare、阿里ESA、腾讯Edgeone、AWS Cloudfront、Gcore、Fastly、CacheFly、LightCDN、Vercel、Netlify、无）
  * ================================================================= */
 
 // =================================================================
-//  GLOBAL UTILITIES
+//  GLOBAL UTILITIES (后端工具函数)
 // =================================================================
 
 function utf8_to_b64(str) {
@@ -23,8 +21,7 @@ function b64_to_utf8(str) {
             return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
         }).join(''));
     } catch (e) {
-        console.error("Base64 decoding error:", e);
-        throw new Error("无效的 Base64 字符串，无法解码 VMess 配置。");
+        throw new Error("无效的 Base64 字符串");
     }
 }
 
@@ -33,133 +30,46 @@ function jsonResponse(data, status = 200) {
         status: status,
         headers: {
             'Content-Type': 'application/json;charset=UTF-8',
+            'Access-Control-Allow-Origin': '*'
         },
     });
 }
 
 function getProtocol(configStr) {
     if (!configStr || typeof configStr !== 'string') return 'unknown';
-
-    // 检查各种协议前缀
-    const protocolPatterns = [
-        { prefix: 'vmess://', type: 'vmess' },
-        { prefix: 'vless://', type: 'vless' },
-        { prefix: 'trojan://', type: 'trojan' },
-        { prefix: 'ss://', type: 'shadowsocks' },
-        { prefix: 'hysteria2://', type: 'hysteria2' },
-        { prefix: 'tuic://', type: 'tuic' },
-        { prefix: 'anytls://', type: 'anytls' },
-        { prefix: 'any-reality://', type: 'any-reality' },
-        { prefix: 'anyreality://', type: 'any-reality' },
-        { prefix: 'reality://', type: 'reality' }
-    ];
-
-    for (const pattern of protocolPatterns) {
-        if (configStr.toLowerCase().startsWith(pattern.prefix)) {
-            return pattern.type;
-        }
-    }
-
+    if (configStr.startsWith('vmess://')) return 'vmess';
+    if (configStr.startsWith('vless://')) return 'vless';
+    if (configStr.startsWith('trojan://')) return 'trojan';
+    if (configStr.startsWith('hysteria2://')) return 'hysteria2';
+    if (configStr.startsWith('tuic://')) return 'tuic';
+    if (configStr.startsWith('anytls://')) return 'anytls';
+    if (configStr.startsWith('socks5://')) return 'socks5';
+    if (configStr.startsWith('any-reality://')) return 'any-reality';
+    if (configStr.startsWith('ss://')) return 'ss';
     return 'unknown';
 }
 
-// =================================================================
-//  SECTION 0: Access Logging
-// =================================================================
-
-/**
- * 记录配置访问日志
- * @param {Object} env - Worker环境变量
- * @param {string} uuid - 用户UUID
- * @param {string} queryType - 查询类型: 'api-generation'(网页生成)
- * @param {string} clientIp - 客户端IP地址
- * @param {string} userAgent - 客户端User-Agent
- */
-async function logConfigAccess(env, uuid, queryType, clientIp, userAgent) {
+function extractRemarkFromConfig(configStr, protocol) {
     try {
-        const db = env.DB;
-        if (!db) {
-            console.error("D1数据库未绑定，无法记录访问日志");
-            return;
+        if (protocol === 'vmess') {
+            const vmessObj = JSON.parse(b64_to_utf8(configStr.substring(8)));
+            return vmessObj.ps || vmessObj.remark || null;
+        } else if (protocol === 'vless' || protocol === 'trojan' ||
+            protocol === 'hysteria2' || protocol === 'tuic' ||
+            protocol === 'anytls' || protocol === 'socks5' ||
+            protocol === 'any-reality' || protocol === 'ss') {
+            const url = new URL(configStr);
+            if (url.hash) return decodeURIComponent(url.hash.substring(1));
         }
-
-        const stmt = db.prepare(
-            'INSERT INTO config_access_logs (uuid, query_type, client_ip, user_agent) VALUES (?, ?, ?, ?)'
-        );
-
-        await stmt.bind(uuid, queryType, clientIp || 'unknown', userAgent || 'unknown').run();
-        console.log(`成功记录访问日志: uuid=${uuid}, type=${queryType}`);
-    } catch (e) {
-        console.error("记录访问日志失败:", e.message);
-        // 不中断主流程，仅记录错误
-    }
-}
-
-/**
- * 获取客户端IP地址 (支持Cloudflare Worker)
- * @param {Request} request - HTTP请求对象
- * @returns {string} 客户端IP地址
- */
-function getClientIp(request) {
-    // Cloudflare Workers可以通过cf-connecting-ip头获取真实IP
-    const cfIp = request.headers.get('cf-connecting-ip');
-    if (cfIp) return cfIp;
-
-    // 回退到X-Forwarded-For
-    const forwardedFor = request.headers.get('x-forwarded-for');
-    if (forwardedFor) {
-        // 取第一个IP（原始客户端IP）
-        return forwardedFor.split(',')[0].trim();
-    }
-
-    // 最终回退方案
-    return 'unknown';
+    } catch (e) { }
+    return null;
 }
 
 // =================================================================
-//  SECTION 1: Data Fetching (STRICTLY READ ONLY)
+//  DATABASE LOGIC (数据库操作)
 // =================================================================
 
-// 获取 IP (仅读取 SELECT) - 已增加 DISTINCT 去重
-async function fetchIpsFromDB(ipType, carrierType, env) {
-    const db = env.DB;
-    if (!db) throw new Error("D1 数据库未绑定。");
-
-    let query = 'SELECT DISTINCT ip FROM cfips WHERE 1=1';
-    const params = [];
-
-    if (ipType.toLowerCase() !== 'all') {
-        query += ' AND ip_type = ?';
-        params.push(ipType.toLowerCase());
-    }
-    if (carrierType.toLowerCase() !== 'all') {
-        query += ' AND carrier = ?';
-        params.push(carrierType.toUpperCase());
-    }
-    query += ' ORDER BY ip';
-
-    const { results } = await db.prepare(query).bind(...params).all();
-    return results;
-}
-
-// 获取域名 (仅读取 SELECT) - 已增加 DISTINCT 去重
-async function fetchDomainsFromDB(env) {
-    const db = env.DB;
-    if (!db) throw new Error("D1 数据库未绑定。");
-    try {
-        const { results } = await db.prepare('SELECT DISTINCT domain FROM cf_domains ORDER BY domain').all();
-        return results;
-    } catch (e) {
-        console.error("Fetching domains failed:", e.message);
-        return [];
-    }
-}
-
-// =================================================================
-//  SECTION 2.5: Clash/Mihomo Config Generation
-// =================================================================
-
-// 读取基础配置 (SELECT)
+// 获取配置列表
 async function fetchConfigsByUuidFromDB(uuid, env) {
     const db = env.DB;
     if (!db) return [];
@@ -167,765 +77,193 @@ async function fetchConfigsByUuidFromDB(uuid, env) {
         const stmt = db.prepare('SELECT id, config_data, protocol, remark, domain_hosting FROM configs WHERE uuid = ? ORDER BY id ASC');
         const { results } = await stmt.bind(uuid).all();
         return results;
+    } catch (e) { return []; }
+}
+
+// 获取UUID访问统计（新增函数）
+async function fetchUuidAccessStatsFromDB(uuid, env, days = 30) {
+    const db = env.DB;
+    if (!db) return { success: false, error: "数据库未连接" };
+
+    try {
+        // 检查是否存在访问日志表
+        const tableCheck = await db.prepare(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='config_access_logs'"
+        ).first();
+
+        if (!tableCheck) {
+            return {
+                success: false,
+                error: "访问日志表不存在，请确保已升级到v2.0+版本"
+            };
+        }
+
+        // 获取总访问统计
+        const totalStats = await db.prepare(`
+            SELECT
+                COUNT(*) as total_access,
+                SUM(CASE WHEN query_type = 'subscription' THEN 1 ELSE 0 END) as subscription_count,
+                SUM(CASE WHEN query_type = 'api-generation' THEN 1 ELSE 0 END) as apigen_count,
+                MIN(created_at) as first_access,
+                MAX(created_at) as last_access
+            FROM config_access_logs
+            WHERE uuid = ?
+        `).bind(uuid).first();
+
+        // 获取今日访问统计
+        const today = new Date().toISOString().split('T')[0];
+        const todayStats = await db.prepare(`
+            SELECT
+                COUNT(*) as today_total,
+                SUM(CASE WHEN query_type = 'subscription' THEN 1 ELSE 0 END) as today_subscription,
+                SUM(CASE WHEN query_type = 'api-generation' THEN 1 ELSE 0 END) as today_apigen
+            FROM config_access_logs
+            WHERE uuid = ? AND DATE(created_at) = ?
+        `).bind(uuid, today).first();
+
+        // 获取按日统计（最近指定天数）
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - days);
+        const startDateStr = startDate.toISOString().split('T')[0];
+
+        const dailyStats = await db.prepare(`
+            SELECT
+                DATE(created_at) as date,
+                COUNT(*) as total,
+                SUM(CASE WHEN query_type = 'subscription' THEN 1 ELSE 0 END) as subscription,
+                SUM(CASE WHEN query_type = 'api-generation' THEN 1 ELSE 0 END) as api_generation
+            FROM config_access_logs
+            WHERE uuid = ? AND DATE(created_at) >= ?
+            GROUP BY DATE(created_at)
+            ORDER BY date ASC
+        `).bind(uuid, startDateStr).all();
+
+        // 获取最近50条访问记录
+        const recentLogs = await db.prepare(`
+            SELECT
+                uuid, query_type, client_ip, user_agent, created_at
+            FROM config_access_logs
+            WHERE uuid = ?
+            ORDER BY created_at DESC
+                LIMIT 50
+        `).bind(uuid).all();
+
+        return {
+            success: true,
+            uuid: uuid,
+            total_access: totalStats?.total_access || 0,
+            subscription_count: totalStats?.subscription_count || 0,
+            apigen_count: totalStats?.apigen_count || 0,
+            first_access: totalStats?.first_access,
+            last_access: totalStats?.last_access,
+            today_total: todayStats?.today_total || 0,
+            today_subscription: todayStats?.today_subscription || 0,
+            today_apigen: todayStats?.today_apigen || 0,
+            daily_stats: dailyStats?.results || [],
+            recent_logs: recentLogs?.results || []
+        };
+
     } catch (e) {
-        console.error(`Error fetching configs for UUID ${uuid}:`, e.message);
-        return [];
+        console.error("获取UUID访问统计失败:", e.message);
+        return {
+            success: false,
+            error: "数据库查询失败: " + e.message
+        };
     }
 }
 
-// 增强的地址提取正则表达式，支持更多协议格式
-const addressExtractionRegex = /(?:@|:\/\/)(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|\[[0-9a-fA-F:\.]+\]|(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,})(?::\d+)?(?:[\/?#]|$)/;
-
-// 核心替换逻辑 - 确保所有原配置都被输出，但只有Cloudflare配置进行优选替换
-function replaceAddressesInConfigs(baseConfigsData, addressList) {
-    let generatedConfigs = [];
-    const validAddressRegex = /^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|\[[0-9a-fA-F:\.]+\]|(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,})$/;
-
-    for (const configObj of baseConfigsData) {
-        const baseConfig = configObj.config_data;
-        const domainHosting = configObj.domain_hosting || 'Cloudflare';
-        const configId = configObj.id || 0;
-
-        let configType = getProtocol(baseConfig);
-        let processedBaseConfig;
-        const pushError = (msg) => generatedConfigs.push(`[错误] ${msg}`);
-
-        // 首先，无论域名属性是什么，先输出原配置
-        generatedConfigs.push(baseConfig);
-
-        // 检查域名托管属性，只有Cloudflare的配置才进行优选替换
-        if (domainHosting !== 'Cloudflare') {
-            // 非Cloudflare配置只输出原配置，不进行优选替换
-            console.log(`配置ID ${configId} 的域名托管属性为"${domainHosting}"，只输出原配置，不进行优选替换`);
-            continue;
-        }
-
-        // 处理 vmess, vless, trojan 协议
-        if (configType === 'trojan' || configType === 'vless' ||
-            configType === 'shadowsocks' || configType === 'hysteria2' ||
-            configType === 'tuic' || configType === 'anytls' ||
-            configType === 'any-reality' || configType === 'reality') {
-
-            const addressMatch = baseConfig.match(addressExtractionRegex);
-            if (!addressMatch) {
-                pushError(`${configType}配置中未找到地址，已跳过。`);
-                continue;
-            }
-            processedBaseConfig = baseConfig;
-        } else if (configType === 'vmess') {
-            const encodedJson = baseConfig.substring('vmess://'.length);
-            try {
-                let vmessObj = JSON.parse(b64_to_utf8(encodedJson));
-                if (!vmessObj.add) {
-                    pushError(`VMess配置中未找到 "add" 字段，已跳过。`);
-                    continue;
-                }
-                processedBaseConfig = vmessObj;
-            } catch (e) {
-                pushError(`VMess配置解码失败，已跳过。`);
-                continue;
-            }
-        } else {
-            pushError(`不支持的类型: ${configType}，已跳过。`);
-            continue;
-        }
-
-        // 对Cloudflare配置进行优选替换
-        for (const newAddr of addressList) {
-            if (!validAddressRegex.test(newAddr) && !newAddr.includes(':')) {
-                // simple validation
-            }
-            const cleanAddrForName = newAddr.replace(/[\[\]]/g, '');
-
-            // 处理IPv6地址格式
-            let formattedAddr = newAddr;
-            if (newAddr.includes(':') && !newAddr.startsWith('[') && !newAddr.endsWith(']')) {
-                formattedAddr = `[${newAddr}]`;
-            }
-
-            if (configType === 'trojan' || configType === 'vless' ||
-                configType === 'shadowsocks' || configType === 'hysteria2' ||
-                configType === 'tuic' || configType === 'anytls' ||
-                configType === 'any-reality' || configType === 'reality') {
-
-                try {
-                    const url = new URL(processedBaseConfig);
-                    const originalName = url.hash ? decodeURIComponent(url.hash.substring(1)) : `${configType}-node`;
-                    const newName = `${originalName}-${cleanAddrForName}`;
-                    url.hash = encodeURIComponent(newName);
-                    url.hostname = formattedAddr;
-
-                    // 如果是IPv6，需要调整URL格式
-                    const newUrlString = url.toString();
-                    generatedConfigs.push(newUrlString);
-                } catch (e) {
-                    pushError(`处理 ${configType} 出错: ${e.message}`);
-                }
-            } else if (configType === 'vmess') {
-                const tempVmessObj = JSON.parse(JSON.stringify(processedBaseConfig));
-                const originalName = tempVmessObj.ps || tempVmessObj.remark || 'vmess-node';
-                tempVmessObj.ps = `${originalName}-${cleanAddrForName}`;
-
-                // 处理IPv6地址格式
-                let formattedAddr = newAddr;
-                if (newAddr.includes(':') && !newAddr.startsWith('[') && !newAddr.endsWith(']')) {
-                    formattedAddr = `[${newAddr}]`;
-                }
-                tempVmessObj.add = formattedAddr;
-                if (tempVmessObj.remark) delete tempVmessObj.remark;
-
-                try {
-                    generatedConfigs.push(`vmess://${utf8_to_b64(JSON.stringify(tempVmessObj))}`);
-                } catch (e) {
-                    pushError(`VMess编码失败: ${e.message}`);
-                }
-            }
-        }
-    }
-
-    // 去重生成的配置
-    return [...new Set(generatedConfigs)];
-}
-
-// 获取Clash配置模板 - 仅从数据库或自定义URL获取
-async function fetchClashConfigTemplate(templateUrl) {
-    try {
-        const response = await fetch(templateUrl);
-        if (!response.ok) {
-            console.error(`无法从URL获取模板: ${response.status} ${response.statusText}`);
-            throw new Error(`无法从 ${templateUrl} 获取Clash配置文件模板。`);
-        }
-        return await response.text();
-    } catch (error) {
-        console.error('获取Clash模板失败:', error);
-        throw new Error(`无法从 ${templateUrl} 获取Clash配置文件模板: ${error.message}`);
-    }
-}
-
-// 将单个协议配置转换为Clash格式 - 增强版本，支持更多协议
-function convertToClashFormat(configStr) {
-    const protocol = getProtocol(configStr);
-
-    // 处理VMess配置
-    if (protocol === 'vmess') {
-        try {
-            const encodedJson = configStr.substring('vmess://'.length);
-            const vmessObj = JSON.parse(b64_to_utf8(encodedJson));
-
-            const clashConfig = {
-                name: vmessObj.ps || vmessObj.remark || `VMess-${vmessObj.add}-${vmessObj.port}`,
-                type: 'vmess',
-                server: vmessObj.add,
-                port: parseInt(vmessObj.port) || 443,
-                uuid: vmessObj.id,
-                alterId: vmessObj.aid || 0,
-                cipher: vmessObj.scy || 'auto',
-                tls: vmessObj.tls === 'tls',
-                'skip-cert-verify': true
-            };
-
-            // 处理网络类型
-            if (vmessObj.net === 'ws') {
-                clashConfig.network = 'ws';
-                clashConfig['ws-opts'] = {
-                    path: vmessObj.path || '/',
-                    headers: vmessObj.host ? { Host: vmessObj.host } : {}
-                };
-            } else if (vmessObj.net === 'h2') {
-                clashConfig.network = 'h2';
-                clashConfig['h2-opts'] = {
-                    path: vmessObj.path || '/',
-                    host: vmessObj.host ? [vmessObj.host] : []
-                };
-            } else if (vmessObj.net === 'grpc') {
-                clashConfig.network = 'grpc';
-                clashConfig['grpc-opts'] = {
-                    'grpc-service-name': vmessObj.path || ''
-                };
-            }
-
-            return clashConfig;
-        } catch (error) {
-            console.error('转换VMess配置失败:', error, configStr);
-            return null;
-        }
-    }
-
-    // 处理Trojan配置
-    if (protocol === 'trojan') {
-        try {
-            const url = new URL(configStr);
-            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `Trojan-${url.hostname}-${url.port}`;
-
-            const clashConfig = {
-                name: name,
-                type: 'trojan',
-                server: url.hostname,
-                port: parseInt(url.port) || 443,
-                password: url.username,
-                sni: url.searchParams.get('sni') || url.hostname,
-                'skip-cert-verify': true
-            };
-
-            // 处理网络类型
-            const typeParam = url.searchParams.get('type') || '';
-            if (typeParam === 'ws') {
-                clashConfig.network = 'ws';
-                const path = url.searchParams.get('path') || '/';
-                const host = url.searchParams.get('host');
-
-                clashConfig['ws-opts'] = {
-                    path: path,
-                    headers: host ? { Host: host } : {}
-                };
-            } else if (typeParam === 'grpc') {
-                clashConfig.network = 'grpc';
-                clashConfig['grpc-opts'] = {
-                    'grpc-service-name': url.searchParams.get('serviceName') || ''
-                };
-            }
-
-            return clashConfig;
-        } catch (error) {
-            console.error('转换Trojan配置失败:', error, configStr);
-            return null;
-        }
-    }
-
-    // 处理VLESS配置（Mihomo支持）
-    if (protocol === 'vless') {
-        try {
-            const url = new URL(configStr);
-            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `VLESS-${url.hostname}-${url.port}`;
-
-            const clashConfig = {
-                name: name,
-                type: 'vless',
-                server: url.hostname,
-                port: parseInt(url.port) || 443,
-                uuid: url.username,
-                tls: true,
-                'skip-cert-verify': true
-            };
-
-            // 处理流设置
-            const typeParam = url.searchParams.get('type') || '';
-            if (typeParam === 'ws') {
-                clashConfig.network = 'ws';
-                const path = url.searchParams.get('path') || '/';
-                const host = url.searchParams.get('host');
-
-                clashConfig['ws-opts'] = {
-                    path: path,
-                    headers: host ? { Host: host } : {}
-                };
-            } else if (typeParam === 'grpc') {
-                clashConfig.network = 'grpc';
-                clashConfig['grpc-opts'] = {
-                    'grpc-service-name': url.searchParams.get('serviceName') || ''
-                };
-            } else if (typeParam === 'h2') {
-                clashConfig.network = 'h2';
-                const path = url.searchParams.get('path') || '/';
-                const host = url.searchParams.get('host');
-
-                clashConfig['h2-opts'] = {
-                    path: path,
-                    host: host ? [host] : []
-                };
-            }
-
-            return clashConfig;
-        } catch (error) {
-            console.error('转换VLESS配置失败:', error, configStr);
-            return null;
-        }
-    }
-
-    // 处理Shadowsocks配置
-    if (protocol === 'shadowsocks') {
-        try {
-            const url = new URL(configStr);
-            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `SS-${url.hostname}-${url.port}`;
-
-            // 解析密码和方法
-            let password = '';
-            let method = 'aes-256-gcm';
-
-            // SS协议格式: ss://method:password@host:port
-            const userInfo = atob(url.username).split(':');
-            if (userInfo.length >= 2) {
-                method = userInfo[0];
-                password = userInfo.slice(1).join(':');
-            }
-
-            const clashConfig = {
-                name: name,
-                type: 'ss',
-                server: url.hostname,
-                port: parseInt(url.port) || 8388,
-                password: password,
-                cipher: method,
-                'udp-over-tcp': true
-            };
-
-            // 检查是否有插件参数
-            const pluginParam = url.searchParams.get('plugin');
-            if (pluginParam) {
-                clashConfig.plugin = pluginParam;
-                const pluginOpts = url.searchParams.get('plugin-opts');
-                if (pluginOpts) {
-                    clashConfig['plugin-opts'] = pluginOpts;
-                }
-            }
-
-            return clashConfig;
-        } catch (error) {
-            console.error('转换Shadowsocks配置失败:', error, configStr);
-            return null;
-        }
-    }
-
-    // 处理Hysteria2配置
-    if (protocol === 'hysteria2') {
-        try {
-            const url = new URL(configStr);
-            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `Hysteria2-${url.hostname}-${url.port}`;
-
-            const clashConfig = {
-                name: name,
-                type: 'hysteria2',
-                server: url.hostname,
-                port: parseInt(url.port) || 443,
-                password: url.username,
-                sni: url.searchParams.get('sni') || url.hostname,
-                'skip-cert-verify': true
-            };
-
-            // 处理其他参数
-            const alpnParam = url.searchParams.get('alpn');
-            if (alpnParam) {
-                clashConfig.alpn = alpnParam.split(',');
-            }
-
-            const obfsParam = url.searchParams.get('obfs');
-            if (obfsParam) {
-                clashConfig.obfs = obfsParam;
-                const obfsPassword = url.searchParams.get('obfs-password');
-                if (obfsPassword) {
-                    clashConfig['obfs-password'] = obfsPassword;
-                }
-            }
-
-            const downMbps = url.searchParams.get('downspeed');
-            const upMbps = url.searchParams.get('upspeed');
-            if (downMbps) {
-                clashConfig.down = downMbps;
-            }
-            if (upMbps) {
-                clashConfig.up = upMbps;
-            }
-
-            return clashConfig;
-        } catch (error) {
-            console.error('转换Hysteria2配置失败:', error, configStr);
-            return null;
-        }
-    }
-
-    // 处理Tuic配置
-    if (protocol === 'tuic') {
-        try {
-            const url = new URL(configStr);
-            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `Tuic-${url.hostname}-${url.port}`;
-
-            const clashConfig = {
-                name: name,
-                type: 'tuic',
-                server: url.hostname,
-                port: parseInt(url.port) || 443,
-                uuid: url.username,
-                password: url.password || '',
-                sni: url.searchParams.get('sni') || url.hostname,
-                'skip-cert-verify': true
-            };
-
-            // 处理其他参数
-            const alpnParam = url.searchParams.get('alpn');
-            if (alpnParam) {
-                clashConfig.alpn = alpnParam.split(',');
-            }
-
-            const disableSni = url.searchParams.get('disable-sni');
-            if (disableSni === 'true') {
-                delete clashConfig.sni;
-            }
-
-            const congestionControl = url.searchParams.get('congestion-controller');
-            if (congestionControl) {
-                clashConfig['congestion-controller'] = congestionControl;
-            }
-
-            const udpRelayMode = url.searchParams.get('udp-relay-mode');
-            if (udpRelayMode) {
-                clashConfig['udp-relay-mode'] = udpRelayMode;
-            }
-
-            return clashConfig;
-        } catch (error) {
-            console.error('转换Tuic配置失败:', error, configStr);
-            return null;
-        }
-    }
-
-    // 处理AnyTLS配置（通常基于VLESS/Xray）
-    if (protocol === 'anytls') {
-        try {
-            const url = new URL(configStr);
-            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `AnyTLS-${url.hostname}-${url.port}`;
-
-            // 根据特征判断具体协议类型
-            let type = 'vless'; // 默认VLESS
-            let uuid = url.username;
-            // let password = ''; // password is not typically used for VLESS, removed as it's unused
-
-            // 检查是否有特定参数
-            // const flowParam = url.searchParams.get('flow'); // unused in clash config
-            // const securityParam = url.searchParams.get('security'); // unused in clash config
-
-            const clashConfig = {
-                name: name,
-                type: type,
-                server: url.hostname,
-                port: parseInt(url.port) || 443,
-                uuid: uuid,
-                tls: true,
-                'skip-cert-verify': true
-            };
-
-            // 处理流设置
-            const typeParam = url.searchParams.get('type') || '';
-            if (typeParam === 'ws') {
-                clashConfig.network = 'ws';
-                const path = url.searchParams.get('path') || '/';
-                const host = url.searchParams.get('host');
-
-                clashConfig['ws-opts'] = {
-                    path: path,
-                    headers: host ? { Host: host } : {}
-                };
-            } else if (typeParam === 'grpc') {
-                clashConfig.network = 'grpc';
-                clashConfig['grpc-opts'] = {
-                    'grpc-service-name': url.searchParams.get('serviceName') || ''
-                };
-            }
-
-            // 处理SNI
-            const sniParam = url.searchParams.get('sni') || url.searchParams.get('host');
-            if (sniParam) {
-                clashConfig.sni = sniParam;
-            }
-
-            // 处理ALPN
-            const alpnParam = url.searchParams.get('alpn');
-            if (alpnParam) {
-                clashConfig.alpn = alpnParam.split(',');
-            }
-
-            return clashConfig;
-        } catch (error) {
-            console.error('转换AnyTLS配置失败:', error, configStr);
-            return null;
-        }
-    }
-
-    // 处理Reality/Any-reality配置
-    if (protocol === 'any-reality' || protocol === 'reality') {
-        try {
-            const url = new URL(configStr);
-            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `Reality-${url.hostname}-${url.port}`;
-
-            // 默认使用VLESS作为底层协议
-            const clashConfig = {
-                name: name,
-                type: 'vless',
-                server: url.hostname,
-                port: parseInt(url.port) || 443,
-                uuid: url.username,
-                'skip-cert-verify': true,
-                'client-fingerprint': 'chrome' // FIX: Added quotes around client-fingerprint
-            };
-
-            // Reality特定参数
-            const realityConfig = {
-                type: 'reality',
-                'server-name': url.searchParams.get('sni') || url.hostname,
-                'public-key': url.searchParams.get('pbk') || '',
-                'short-id': url.searchParams.get('sid') || ''
-            };
-
-            // 合并配置
-            Object.assign(clashConfig, realityConfig);
-
-            // 处理流设置
-            const typeParam = url.searchParams.get('type') || '';
-            if (typeParam === 'grpc') {
-                clashConfig.network = 'grpc';
-                clashConfig['grpc-opts'] = {
-                    'grpc-service-name': url.searchParams.get('serviceName') || ''
-                };
-            } else if (typeParam === 'tcp') {
-                clashConfig.network = 'tcp';
-            }
-
-            // 处理指纹
-            const fpParam = url.searchParams.get('fp');
-            if (fpParam) {
-                clashConfig['client-fingerprint'] = fpParam;
-            }
-
-            return clashConfig;
-        } catch (error) {
-            console.error('转换Reality配置失败:', error, configStr);
-            return null;
-        }
-    }
-
-    return null;
-}
-
-// 生成完整的Clash配置文件 - 已增加 Clash 节点配置去重
-async function generateClashConfig(request, env) {
-    try {
-        const url = new URL(request.url);
-        const uuid = url.searchParams.get('uuid');
-        const addressType = url.searchParams.get('type') || 'ip';
-        const ipType = url.searchParams.get('ipType') || 'all';
-        const carrier = url.searchParams.get('carrier') || 'all';
-        const template = url.searchParams.get('template') || '';
-
-        // 验证必要参数
-        if (!uuid) {
-            return jsonResponse({ error: '缺少必要参数: uuid' }, 400);
-        }
-
-        if (!template) {
-            return jsonResponse({ error: '缺少必要参数: template' }, 400);
-        }
-
-        // 获取基础配置
-        const baseConfigsData = await fetchConfigsByUuidFromDB(uuid, env);
-        if (baseConfigsData.length === 0) {
-            return jsonResponse({ error: `未找到 UUID 为 "${uuid}" 的配置` }, 404);
-        }
-
-        // 获取优选地址列表
-        let addressList = [];
-        if (addressType === 'domain') {
-            const domains = await fetchDomainsFromDB(env); // 已经去重
-            addressList = domains.map(d => d.domain);
-        } else {
-            const ips = await fetchIpsFromDB(ipType, carrier, env); // 已经去重
-            addressList = ips.map(i => i.ip);
-        }
-
-        if (addressList.length === 0) {
-            return jsonResponse({ error: `未找到优选地址列表` }, 404);
-        }
-
-        // 生成节点配置 (原始链接字符串形式)
-        const generatedRawConfigs = replaceAddressesInConfigs(baseConfigsData, addressList);
-        const validRawConfigs = generatedRawConfigs.filter(c => !c.startsWith('[错误]'));
-
-        if (validRawConfigs.length === 0) {
-            return jsonResponse({ error: '未能生成有效的节点配置' }, 400);
-        }
-
-        // 转换为Clash格式
-        let clashProxies = [];
-
-        // 添加直连节点
-        clashProxies.push({name: '直连', type: 'direct'});
-
-        // 转换每个配置
-        for (const config of validRawConfigs) {
-            const clashConfig = convertToClashFormat(config);
-            if (clashConfig) {
-                clashProxies.push(clashConfig);
-            }
-        }
-
-        // --- 增加 Clash 节点配置对象去重 ---
-        const uniqueClashProxiesMap = new Map();
-        for (const proxy of clashProxies) {
-            const stableString = JSON.stringify(proxy, Object.keys(proxy).sort());
-            if (!uniqueClashProxiesMap.has(stableString)) {
-                uniqueClashProxiesMap.set(stableString, proxy);
-            } else {
-                console.log("检测到重复的Clash代理配置，已跳过:", proxy.name);
-            }
-        }
-        clashProxies = [...uniqueClashProxiesMap.values()];
-
-        // 重新分配名称，确保所有代理的名称都是唯一的
-        const existingNames = new Set();
-        for (let i = 0; i < clashProxies.length; i++) {
-            let baseName = clashProxies[i].name;
-            let currentName = baseName;
-            let counter = 1;
-            while (existingNames.has(currentName)) {
-                currentName = `${baseName}-${counter++}`;
-            }
-            clashProxies[i].name = currentName;
-            existingNames.add(currentName);
-        }
-        // --- 去重结束 ---
-
-        if (clashProxies.length <= 1 && clashProxies[0].name === '直连') {
-            return jsonResponse({ error: '未能生成有效的代理节点' }, 400);
-        }
-
-        // 根据template参数选择模板URL
-        let templateUrl;
-        if (template.startsWith('http://') || template.startsWith('https://')) {
-            // 自定义模板URL
-            templateUrl = template;
-        } else {
-            // 从数据库中获取模板
-            const dbTemplate = await fetchTemplateFromDB(env, template);
-            if (!dbTemplate) {
-                return jsonResponse({ error: `未在数据库中找到模板 "${template}"` }, 404);
-            }
-            templateUrl = dbTemplate.url;
-        }
-
-        // 获取模板
-        const templateContent = await fetchClashConfigTemplate(templateUrl);
-
-        // 解析YAML模板
-        let finalConfig = templateContent;
-
-        // 找到proxies部分并替换
-        const proxiesMarker = '# 节点信息\nproxies:';
-        let proxiesStartIndex = templateContent.indexOf(proxiesMarker);
-
-        if (proxiesStartIndex === -1) {
-            proxiesStartIndex = templateContent.indexOf('\nproxies:');
-            if (proxiesStartIndex !== -1) {
-                proxiesStartIndex++;
-            }
-        }
-
-        if (proxiesStartIndex !== -1) {
-            const insertPosition = templateContent.indexOf('\n', proxiesStartIndex + 'proxies:'.length);
-
-            let proxiesEndIndex = templateContent.indexOf('\n\n', insertPosition);
-            if (proxiesEndIndex === -1 || proxiesEndIndex < insertPosition) {
-                proxiesEndIndex = templateContent.length;
-            }
-
-            const newProxiesContent = clashProxies.map(p => `  - ${JSON.stringify(p)}`).join('\n');
-
-            finalConfig = templateContent.substring(0, insertPosition + 1) +
-                newProxiesContent +
-                templateContent.substring(proxiesEndIndex);
-        } else {
-            console.warn("Clash模板中未找到 'proxies:' 标记，将节点添加到文件末尾。");
-            finalConfig = templateContent + `\n\n# ===== 生成的节点配置 =====\nproxies:\n${clashProxies.map(p => `  - ${JSON.stringify(p)}`).join('\n')}`;
-        }
-
-        // 记录访问日志 - 根据referer判断是网页生成还是订阅获取
-        const clientIp = getClientIp(request);
-        const userAgent = request.headers.get('user-agent') || 'unknown';
-
-        // 判断请求来源：如果有referer并且referer包含当前域，则认为是网页生成
-        // 否则认为是客户端订阅
-        const referer = request.headers.get('referer');
-        const isWebPageGeneration = referer && referer.includes(url.origin);
-        const queryType = isWebPageGeneration ? 'api-generation' : 'subscription';
-
-        await logConfigAccess(env, uuid, queryType, clientIp, userAgent);
-        console.log(`记录${isWebPageGeneration ? '网页生成' : '订阅获取'}访问: uuid=${uuid}, clientIp=${clientIp}`);
-
-        // 统计支持的协议类型
-        const protocolStats = {};
-        clashProxies.forEach(proxy => {
-            if (proxy.type !== 'direct') {
-                protocolStats[proxy.type] = (protocolStats[proxy.type] || 0) + 1;
-            }
-        });
-
-        // 返回YAML文件
-        return new Response(finalConfig, {
-            status: 200,
-            headers: {
-                'Content-Type': 'text/yaml;charset=UTF-8',
-                'Content-Disposition': `attachment; filename="clash-config-${uuid}-${new Date().toISOString().split('T')[0]}.yaml"`,
-                'X-Generated-Date': new Date().toISOString(),
-                'X-Total-Proxies-Unique': clashProxies.length.toString(),
-                'X-Cloudflare-Configs': baseConfigsData.filter(cfg => cfg.domain_hosting === 'Cloudflare').length.toString(),
-                'X-Address-List-Count': addressList.length.toString(),
-                'X-Template-Used': templateUrl,
-                'X-Supported-Protocols': Object.keys(protocolStats).join(','),
-                'X-Protocol-Counts': Object.entries(protocolStats).map(([k, v]) => `${k}:${v}`).join(',')
-            }
-        });
-
-    } catch (error) {
-        console.error('生成Clash配置出错:', error);
-        return jsonResponse({ error: `内部错误: ${error.message}` }, 500);
-    }
-}
-
-// 从数据库获取模板URL - 修改为只从数据库读取
-async function fetchTemplateFromDB(env, templateName) {
-    try {
-        const db = env.DB;
-        if (!db) {
-            throw new Error("D1数据库未绑定，无法获取模板");
-        }
-
-        // 获取模板及其描述信息
-        const template = await db.prepare(
-            'SELECT name, url, description FROM config_templates WHERE name = ?'
-        ).bind(templateName).first();
-
-        if (template && template.url) {
-            console.log(`从数据库找到模板: ${template.name} -> ${template.url}`);
-            return template;
-        }
-
-        // 数据库中未找到模板，返回null
-        console.log(`数据库中未找到模板: ${templateName}`);
-        return null;
-    } catch (e) {
-        console.error(`从数据库获取模板失败: ${e.message}`);
-        throw new Error(`无法从数据库获取模板: ${e.message}`);
-    }
-}
-
-// 从数据库获取所有模板列表
-async function fetchAllTemplatesFromDB(env) {
-    try {
-        const db = env.DB;
-        if (!db) {
-            throw new Error("D1数据库未绑定，无法获取模板列表");
-        }
-
-        const { results } = await db.prepare(
-            'SELECT name, url, description, is_default FROM config_templates ORDER BY is_default DESC, name ASC'
-        ).all();
-
-        return results;
-    } catch (e) {
-        console.error(`从数据库获取模板列表失败: ${e.message}`);
-        throw new Error(`无法从数据库获取模板列表: ${e.message}`);
-    }
+// 订阅输出 (Raw Base64)
+async function handleRawSubscription(uuid, env) {
+    if (!uuid) return jsonResponse({ error: 'UUID Required' }, 400);
+    const configs = await fetchConfigsByUuidFromDB(uuid, env);
+    if (!configs || configs.length === 0) return new Response("UUID Not Found or Empty", { status: 404 });
+
+    const configList = configs.map(c => c.config_data);
+    return new Response(btoa(configList.join('\n')), {
+        status: 200,
+        headers: {
+            'Content-Type': 'text/plain;charset=UTF-8',
+            'Subscription-User-Info': 'upload=0; download=0; total=10737418240000; expire=2524608000'
+        },
+    });
 }
 
 // =================================================================
-//  MAIN WORKER ROUTING AND EXPORT
+//  API HANDLERS (接口逻辑)
+// =================================================================
+
+async function handleAddConfig(request, env) {
+    let body;
+    try { body = await request.json(); } catch (e) { return jsonResponse({ error: '无效 JSON' }, 400); }
+    const { uuid, config_data, domain_hosting = 'Cloudflare' } = body;
+    if (!uuid || !config_data) return jsonResponse({ error: '字段缺失' }, 400);
+
+    // 验证域名托管参数 - 已扩展列表
+    const validDomainHostings = [
+        'Cloudflare', '阿里ESA', '腾讯Edgeone', 'AWS Cloudfront',
+        'Gcore', 'Fastly', 'CacheFly', 'LightCDN', 'Vercel', 'Netlify',
+        '无', '其他'
+    ];
+    const hostingValue = validDomainHostings.includes(domain_hosting) ? domain_hosting : 'Cloudflare';
+
+    const lines = config_data.split('\n').map(l => l.trim()).filter(Boolean);
+    const stmts = [];
+    for (const line of lines) {
+        const p = getProtocol(line);
+        if (p === 'unknown') continue;
+        const remark = extractRemarkFromConfig(line, p);
+        stmts.push(env.DB.prepare('INSERT INTO configs (uuid, config_data, protocol, remark, domain_hosting, created_at, updated_at) VALUES (?,?,?,?,?,?,?) ON CONFLICT(uuid,config_data) DO NOTHING').bind(uuid, line, p, remark, hostingValue, Date.now(), Date.now()));
+    }
+    if (stmts.length === 0) return jsonResponse({ error: '无有效配置' }, 400);
+    await env.DB.batch(stmts);
+    return jsonResponse({ success: true });
+}
+
+async function handleUpdateConfig(request, env) {
+    let body;
+    try { body = await request.json(); } catch (e) { return jsonResponse({ error: '无效JSON' }, 400); }
+    const { id, config_data, domain_hosting = 'Cloudflare' } = body;
+
+    const protocol = getProtocol(config_data);
+    if(protocol === 'unknown') return jsonResponse({ error: '不支持的配置格式' }, 400);
+    const remark = extractRemarkFromConfig(config_data, protocol);
+
+    // 验证域名托管参数 - 已扩展列表
+    const validDomainHostings = [
+        'Cloudflare', '阿里ESA', '腾讯Edgeone', 'AWS Cloudfront',
+        'Gcore', 'Fastly', 'CacheFly', 'LightCDN', 'Vercel', 'Netlify',
+        '无', '其他'
+    ];
+    const hostingValue = validDomainHostings.includes(domain_hosting) ? domain_hosting : 'Cloudflare';
+
+    try {
+        const res = await env.DB.prepare('UPDATE configs SET config_data = ?, protocol = ?, remark = ?, domain_hosting = ?, updated_at = ? WHERE id = ?')
+            .bind(config_data, protocol, remark, hostingValue, Date.now(), id).run();
+        return res.changes > 0 ? jsonResponse({ success: true, message: 'Updated' }) : jsonResponse({ error: '未变更' }, 404);
+    } catch(e) { return jsonResponse({ error: e.message }, 500); }
+}
+
+async function handleGetConfigs(uuid, env) {
+    const results = await fetchConfigsByUuidFromDB(uuid, env);
+    return jsonResponse({ uuid, configs: results });
+}
+
+// 新增：获取UUID访问统计API
+async function handleGetUuidStats(uuid, env) {
+    if (!uuid) return jsonResponse({ error: 'UUID Required' }, 400);
+
+    const stats = await fetchUuidAccessStatsFromDB(uuid, env, 30);
+    return jsonResponse(stats);
+}
+
+async function handleDelete(type, value, env) {
+    const sql = type === 'uuid' ? 'DELETE FROM configs WHERE uuid = ?' : 'DELETE FROM configs WHERE id = ?';
+    await env.DB.prepare(sql).bind(value).run();
+    return jsonResponse({ success: true });
+}
+
+// =================================================================
+//  MAIN ROUTER
 // =================================================================
 
 export default {
@@ -935,47 +273,60 @@ export default {
         const method = request.method;
         const DOMAIN_NAME = url.origin;
 
+        const manageUUID = new URLPattern({ pathname: '/manage/configs/:uuid' });
+        const manageID = new URLPattern({ pathname: '/manage/configs/id/:id' });
+        const subUUID = new URLPattern({ pathname: '/sub/:uuid' });
+        const uuidStats = new URLPattern({ pathname: '/manage/stats/:uuid' });
+
         try {
             if (method === 'GET') {
-                if (path === '/') {
-                    return new Response(generatePageHtmlContent.replace(/YOUR_WORKER_DOMAIN_PATH/g, DOMAIN_NAME), { headers: { 'Content-Type': 'text/html;charset=UTF-8' } });
-                }
+                if (path === '/') return new Response(managePageHtmlContent.replace(/YOUR_WORKER_DOMAIN_PATH/g, DOMAIN_NAME), { headers: { 'Content-Type': 'text/html;charset=UTF-8' } });
 
-                // ===== 新增：获取模板列表接口 =====
-                if (path === '/api/templates') {
-                    try {
-                        const templates = await fetchAllTemplatesFromDB(env);
-                        return jsonResponse(templates);
-                    } catch (error) {
-                        return jsonResponse({ error: `获取模板列表失败: ${error.message}` }, 500);
-                    }
-                }
+                const subMatch = subUUID.exec(url);
+                if (subMatch) return await handleRawSubscription(subMatch.pathname.groups.uuid, env);
 
-                // ===== 仅保留：Clash配置文件生成接口 =====
-                if (path === '/clash-config') {
-                    return await generateClashConfig(request, env);
+                const uuidMatch = manageUUID.exec(url);
+                if (uuidMatch) return await handleGetConfigs(uuidMatch.pathname.groups.uuid, env);
+
+                // 新增：处理UUID统计请求
+                const statsMatch = uuidStats.exec(url);
+                if (statsMatch) {
+                    const urlObj = new URL(request.url);
+                    const days = urlObj.searchParams.get('days') || 30;
+                    const stats = await fetchUuidAccessStatsFromDB(statsMatch.pathname.groups.uuid, env, parseInt(days));
+                    return jsonResponse(stats);
                 }
+            }
+
+            if (method === 'POST' && path === '/manage/configs') return await handleAddConfig(request, env);
+            if (method === 'PUT' && path === '/manage/configs') return await handleUpdateConfig(request, env);
+
+            if (method === 'DELETE') {
+                const idMatch = manageID.exec(url);
+                if (idMatch) return await handleDelete('id', idMatch.pathname.groups.id, env);
+                const uuidMatch = manageUUID.exec(url);
+                if (uuidMatch) return await handleDelete('uuid', uuidMatch.pathname.groups.uuid, env);
             }
 
             return new Response('404 Not Found', { status: 404 });
         } catch (err) {
-            return new Response("Internal Error: " + err.message, { status: 500 });
+            return new Response("Error: " + err.message, { status: 500 });
         }
     }
 };
 
 // =================================================================
-//  SECTION 4: FRONTEND CONTENT
+//  FRONTEND CONTENT (Updated with Link and Analytics and Domain Hosting)
 // =================================================================
 
 const newGlobalStyle = `
-html { font-size: 87.5%; }
-body, html { margin: 0; padding: 0; min-height: 100%; background-color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+html { font-size: 87.5%; } body, html { margin: 0; padding: 0; min-height: 100%; background-color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
 .container { width: 100%; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 40px 20px; box-sizing: border-box; }
-.content-group { width: 100%; max-width: 700px; text-align: center; z-index: 10; box-sizing: border-box; }
+.content-group { width: 100%; max-width: 1000px; text-align: center; z-index: 10; box-sizing: border-box; }
 .profile-name { font-size: 2.2rem; color: #3d474d; margin-bottom: 10px; font-weight: bold;}
 .profile-quote { color: #89949B; margin-bottom: 27px; min-height: 1.2em; }
 .nav-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 27px; }
+/* Modified nav-btn for unified A-tag behavior */
 .nav-btn { display: inline-flex; align-items: center; justify-content: center; padding: 8px 16px; text-align: center; background: #E8EBED; border: 2px solid #89949B; border-radius: 4px; color: #5a666d; text-decoration: none !important; font-weight: 500; font-size: 0.95rem; line-height: 1.2; transition: all 0.3s; white-space: nowrap; cursor: pointer; box-sizing: border-box; }
 .nav-btn:hover:not(:disabled) { background: #89949B; color: white; }
 .nav-btn:disabled { opacity: 0.6; cursor: not-allowed;}
@@ -985,686 +336,771 @@ body, html { margin: 0; padding: 0; min-height: 100%; background-color: #fff; fo
 .card h2 { font-size: 1.5rem; color: #3d474d; margin-top: 0; margin-bottom: 20px; text-align: center;}
 .form-group { margin-bottom: 16px; }
 .form-group label { display: block; color: #5a666d; font-weight: 500; margin-bottom: 8px; font-size: 0.9rem;}
-textarea, input[type="text"], select { width: 100%; padding: 10px; border: 2px solid #89949B; border-radius: 4px; background: #fff; font-family: 'SF Mono', 'Courier New', monospace; font-size: 0.9rem; box-sizing: border-box; resize: vertical; }
-textarea:focus, input[type="text"]:focus, select:focus { outline: none; border-color: #3d474d; }
-.radio-group { display: flex; flex-wrap: wrap; gap: 10px; }
-.radio-group label { padding: 6px 14px; background: #E8EBED; border: 2px solid #89949B; border-radius: 4px; color: #5a666d; font-size: 0.85rem; cursor: pointer; transition: all 0.3s; }
-.radio-group input[type="radio"] { display: none; }
-.radio-group input[type="radio"]:checked + span { background: #89949B; color: white; }
-.radio-group label:hover { background: #d1d5d8; }
-.radio-group input[type="radio"]:checked + span:hover { background: #89949B; color: white; }
+textarea, input[type="text"], input[type="number"], select { width: 100%; padding: 10px; border: 2px solid #89949B; border-radius: 4px; background: #fff; font-family: 'SF Mono', 'Courier New', monospace; font-size: 0.9rem; box-sizing: border-box; resize: vertical; margin-bottom: 5px;}
+textarea:focus, input:focus, select:focus { outline: none; border-color: #3d474d; }
 .info-box { background-color: #e8ebed; color: #5a666d; border-left: 4px solid #89949B; padding: 12px 16px; border-radius: 4px; font-size: 0.85rem; text-align: left; line-height: 1.5; margin: 16px 0; }
-.info-box a { color: #3d474d; font-weight: bold; text-decoration: none; word-break: break-all; }
-.info-box a:hover { text-decoration: underline; }
 .footer { margin-top: 40px; text-align: center; color: #89949B; font-size: 0.8rem; }
-.footer a { color: #89949B; text-decoration: none; }
-.footer a:hover { text-decoration: underline; }
+.footer a { color: #5a666d; text-decoration: none; }
 .hidden { display: none; }
 #toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 10px; }
 .toast { display: flex; align-items: center; padding: 12px 18px; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); font-weight: 500; font-size: 0.9rem; border: 2px solid #89949B; background: #fff; color: #3d474d; opacity: 0; transform: translateX(100%); animation: slideIn 0.5s forwards, fadeOut 0.5s 4.5s forwards; }
 @keyframes slideIn { to { opacity: 1; transform: translateX(0); } }
 @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; transform: translateX(100%); } }
-.loader { width: 16px; height: 16px; border: 2px solid white; border-bottom-color: transparent; border-radius: 50%; display: inline-block; box-sizing: border-box; animation: rotation 1s linear infinite; margin-right: 8px; }
-@keyframes rotation { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-@media (max-width: 768px) { html { font-size: 100%; } .container { padding: 20px 15px; justify-content: flex-start; } .profile-name { font-size: 1.8rem; } .profile-quote { font-size: 0.95rem; margin-bottom: 20px; } .card { padding: 20px 15px; margin-bottom: 20px; } .card h2 { font-size: 1.3rem; } .nav-btn { padding: 9px 12px; font-size: 0.9rem; } }
+
+/* Table & Modal Specific */
+.table-container { overflow-x: auto; border: 2px solid #89949B; border-radius: 4px; background: #fff; margin-top:20px;}
+table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+th, td { padding: 10px 14px; text-align: left; border-bottom: 2px solid #E8EBED; white-space: nowrap; }
+th { font-weight: bold; color: #3d474d; background-color: #f0f2f5; }
+.config-data-cell { white-space: normal; word-break: break-all; max-width: 200px; font-size: 0.8rem; color: #666; }
+.actions-cell button { margin-right: 5px; padding: 4px 8px; font-size: 0.8rem; }
+.domain-hosting-cell { font-size: 0.85rem; font-weight: 500; }
+
+/* Domain Hosting Badges - 扩展样式 */
+.hosting-badge { 
+    display: inline-block; 
+    padding: 2px 8px; 
+    border-radius: 12px; 
+    font-size: 0.75rem; 
+    font-weight: 500; 
+    line-height: 1.4;
+}
+.hosting-cloudflare { background: #F6821F; color: #fff; border: 1px solid #F6821F; }
+.hosting-aliyun { background: #FE6A00; color: #fff; border: 1px solid #FE6A00; }
+.hosting-tencent { background: #4A86FF; color: #fff; border: 1px solid #4A86FF; }
+.hosting-aws { background: #232B37; color: #fff; border: 1px solid #232B37; }
+.hosting-gcore { background: #FF4C00; color: #fff; border: 1px solid #FF4C00; }
+.hosting-fastly { background: #F7272C; color: #fff; border: 1px solid #F7272C; }
+.hosting-cachefly { background: #391376; color: #fff; border: 1px solid #391376; }
+.hosting-lightcdn { background: #F78B2C; color: #fff; border: 1px solid #F78B2C; }
+.hosting-vercel { background: #000; color: #fff; border: 1px solid #000; }
+.hosting-netlify { background: #05B7B5; color: #fff; border: 1px solid #05B7B5; }
+.hosting-none { background: #f8f9fa; color: #6c757d; border: 1px solid #6c757d; }
+.hosting-other { background: #f0f0f0; color: #666; border: 1px solid #666; }
+
+/* Modal Styles */
+.modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 100; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+.modal-overlay.open { opacity: 1; pointer-events: auto; }
+.modal { background: #fff; width: 90%; max-width: 600px; max-height: 90vh; overflow-y: auto; border-radius: 8px; padding: 25px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); transform: translateY(-20px); transition: transform 0.3s; }
+.modal-overlay.open .modal { transform: translateY(0); }
+.modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 2px solid #E8EBED; padding-bottom: 10px; }
+.modal-title { font-size: 1.25rem; font-weight: bold; color: #3d474d; }
+.modal-close { cursor: pointer; font-size: 1.5rem; color: #89949B; line-height: 1; }
+.modal-body { text-align: left; }
+.edit-field { margin-bottom: 12px; }
+.edit-field label { font-size: 0.85rem; color: #89949B; margin-bottom: 4px; display: block; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+
+/* Statistics Styles */
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
+.stat-box { background: #f0f4f8; padding: 15px; border-radius: 4px; border-left: 4px solid #3b82f6; text-align: center; }
+.stat-num { font-size: 1.8rem; color: #1e40af; font-weight: bold; display: block; }
+.stat-label { font-size: 0.85rem; color: #4b5563; margin-top: 5px; }
+.stat-sub { font-size: 0.75rem; color: #6b7280; margin-top: 3px; }
+.chart-container { position: relative; width: 100%; height: 300px; margin: 20px 0; }
+.chart-controls { display: flex; gap: 10px; margin-bottom: 15px; align-items: center; }
+.chart-controls select { padding: 6px 12px; border: 2px solid #89949B; border-radius: 4px; background: #fff; font-size: 0.9rem; }
+.chart-controls button { padding: 6px 12px; background: #e8ebed; border: 2px solid #89949B; border-radius: 4px; color: #5a666d; cursor: pointer; transition: all 0.2s; font-size: 0.9rem; }
+.chart-controls button:hover { background: #89949B; color: white; }
+.chart-controls button.active { background: #5a666d; color: white; border-color: #5a666d; }
+.access-detail-table { width: 100%; font-size: 0.85rem; border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; }
+.access-detail-table th { background: #f8fafc; font-weight: 600; padding: 8px 10px; }
+.access-detail-table td { padding: 8px 10px; border-top: 1px solid #e5e7eb; }
+.type-badge { display: inline-block; padding: 2px 6px; border-radius: 10px; font-size: 0.75rem; font-weight: 500; }
+.type-subscription { background: #dbeafe; color: #1e40af; }
+.type-apigen { background: #d1fae5; color: #065f46; }
+.access-log-container { max-height: 200px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 4px; padding: 10px; margin-top: 10px; }
+.access-log-item { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #f3f4f6; font-size: 0.85rem; }
+.access-log-item:last-child { border-bottom: none; }
+.timestamp { color: #6b7280; font-family: monospace; }
+.log-type { font-weight: 500; }
+
+/* Enhanced Select Styles */
+.hosting-select { 
+    padding: 10px 12px; 
+    border: 2px solid #89949B; 
+    border-radius: 4px; 
+    background-color: #fff;
+    font-size: 0.9rem;
+    color: #5a666d;
+    font-family: 'SF Mono', 'Courier New', monospace;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M2.5 4.5L6 8L9.5 4.5' stroke='%235a666d' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 12px;
+    padding-right: 32px;
+}
+.hosting-select:hover { 
+    border-color: #5a666d; 
+    background-color: #f8f9fa;
+}
+.hosting-select:focus { 
+    outline: none; 
+    border-color: #3d474d; 
+    box-shadow: 0 0 0 3px rgba(93, 105, 109, 0.1);
+}
+.hosting-select:disabled { 
+    opacity: 0.6; 
+    cursor: not-allowed;
+    background-color: #f0f2f5;
+}
+.hosting-option { 
+    padding: 10px 12px; 
+    font-size: 0.9rem;
+    font-family: 'SF Mono', 'Courier New', monospace;
+}
+.hosting-option:hover {
+    background-color: #f0f2f5;
+}
 `;
 
-const generatePageHtmlContent = `
+const managePageHtmlContent = `
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
   <link rel="icon" href="https://s3.yangzifun.org/logo.ico" type="image/x-icon">
-  <title>订阅文件生成</title>
+  <title>代理配置管理器</title>
   <style>${newGlobalStyle}</style>
-  <style>
-    /* 二维码样式 */
-    #qrCodeContainer {
-      margin-top: 16px;
-      text-align: center;
-      padding: 16px;
-      background: #f8f9fa;
-      border: 1px solid #E8EBED;
-      border-radius: 8px;
-    }
-    #qrCodeContainer.hidden {
-      display: none;
-    }
-    #qrCodeImage {
-      max-width: 200px;
-      height: auto;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      margin: 10px 0;
-    }
-    .qr-code-label {
-      display: block;
-      color: #5a666d;
-      font-weight: 500;
-      margin-bottom: 8px;
-      font-size: 0.9rem;
-    }
-    .qr-code-buttons {
-      display: flex;
-      gap: 8px;
-      justify-content: center;
-      margin-top: 12px;
-    }
-    .qr-code-buttons .nav-btn {
-      font-size: 0.85rem;
-      padding: 6px 12px;
-    }
-    .qr-code-info {
-      font-size: 0.8rem;
-      color: #89949B;
-      margin-top: 8px;
-    }
-    
-    /* 参数选择器样式 */
-    .config-params {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      justify-content: center;
-      margin-bottom: 20px;
-    }
-    .config-params select {
-      padding: 8px 12px;
-      border-radius: 6px;
-      border: 2px solid #89949B;
-      background: #fff;
-      color: #5a666d;
-      font-size: 0.9rem;
-      min-width: 120px;
-    }
-    
-    /* 订阅链接区域 */
-    .subscription-link-box {
-      margin-top: 15px;
-      background: #f8f9fa;
-      border: 1px solid #E8EBED;
-      border-radius: 8px;
-      padding: 15px;
-    }
-    .subscription-link-box label {
-      display: block;
-      color: #5a666d;
-      font-weight: 500;
-      margin-bottom: 8px;
-      font-size: 0.9rem;
-    }
-    .link-input-container {
-      display: flex;
-      gap: 10px;
-      margin-bottom: 15px;
-    }
-    .link-input-container input {
-      flex-grow: 1;
-      background: #fff;
-      border: 2px solid #89949B;
-      color: #5a666d;
-    }
-    
-    /* 模板选择样式 */
-    .template-select-container {
-      margin-top: 10px;
-    }
-    .template-select-container select {
-      width: 100%;
-      margin-bottom: 10px;
-    }
-    .template-description {
-      font-size: 0.85rem;
-      color: #89949B;
-      margin-top: 8px;
-      line-height: 1.4;
-    }
-    #customTemplateInput {
-      margin-top: 10px;
-    }
-    
-    /* 加载状态 */
-    .loading-state {
-      text-align: center;
-      padding: 20px;
-      color: #89949B;
-    }
-    .loading-state .loader {
-      width: 32px;
-      height: 32px;
-      border: 3px solid #89949B;
-      border-bottom-color: transparent;
-      margin-bottom: 10px;
-    }
-    
-    /* 协议支持说明 */
-    .protocol-support {
-      margin-top: 20px;
-      padding: 15px;
-      background: #f0f7ff;
-      border: 1px solid #cce5ff;
-      border-radius: 8px;
-    }
-    .protocol-support h3 {
-      margin-top: 0;
-      color: #0066cc;
-      font-size: 1.1rem;
-    }
-    .protocol-list {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin-top: 10px;
-    }
-    .protocol-badge {
-      display: inline-block;
-      padding: 4px 10px;
-      background: #e6f2ff;
-      border: 1px solid #99ccff;
-      border-radius: 4px;
-      font-size: 0.8rem;
-      color: #0066cc;
-      font-weight: 500;
-    }
-    .protocol-badge.new {
-      background: #fff0e6;
-      border-color: #ffcc99;
-      color: #ff6600;
-    }
-  </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
   <div id="toast-container"></div>
+  
+  <!-- Editor Modal -->
+  <div id="editModalOverlay" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">编辑配置 (Editor)</span>
+        <span class="modal-close" onclick="closeEditModal()">&times;</span>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="edit-id"><input type="hidden" id="edit-protocol">
+        <div class="grid-3">
+            <div class="edit-field"><label>别名 (Remarks)</label><input type="text" id="edit-ps"></div>
+            <div class="edit-field"><label>端口 (Port)</label><input type="number" id="edit-port"></div>
+            <div class="edit-field"><label>域名托管 (Hosting)</label>
+                <select id="edit-domain-hosting" class="hosting-select">
+                    <option value="Cloudflare" class="hosting-option">Cloudflare</option>
+                    <option value="阿里ESA" class="hosting-option">阿里ESA</option>
+                    <option value="腾讯Edgeone" class="hosting-option">腾讯Edgeone</option>
+                    <option value="AWS Cloudfront" class="hosting-option">AWS Cloudfront</option>
+                    <option value="Gcore" class="hosting-option">Gcore</option>
+                    <option value="Fastly" class="hosting-option">Fastly</option>
+                    <option value="CacheFly" class="hosting-option">CacheFly</option>
+                    <option value="LightCDN" class="hosting-option">LightCDN</option>
+                    <option value="Vercel" class="hosting-option">Vercel</option>
+                    <option value="Netlify" class="hosting-option">Netlify</option>
+                    <option value="无" class="hosting-option">无</option>
+                    <option value="其他" class="hosting-option">其他</option>
+                </select>
+            </div>
+        </div>
+        <div class="edit-field"><label>地址 (Address)</label><input type="text" id="edit-add"></div>
+        <div class="edit-field"><label>UUID / Password</label><input type="text" id="edit-id-uuid"></div>
+        <div class="grid-2">
+            <div class="edit-field"><label>传输 (Net)</label><select id="edit-net"><option value="tcp">TCP</option><option value="ws">WebSocket</option><option value="grpc">gRPC</option></select></div>
+            <div class="edit-field"><label>伪装 (Type)</label><input type="text" id="edit-type" placeholder="none"></div>
+        </div>
+        <div class="grid-2">
+            <div class="edit-field"><label>伪装域名 (Host)</label><input type="text" id="edit-host"></div>
+            <div class="edit-field"><label>路径 (Path)</label><input type="text" id="edit-path"></div>
+        </div>
+        <div class="grid-2">
+             <div class="edit-field"><label>TLS</label><select id="edit-tls"><option value="">关闭</option><option value="tls">开启 TLS</option></select></div>
+             <div class="edit-field"><label>SNI</label><input type="text" id="edit-sni"></div>
+        </div>
+        <div style="margin-top: 20px; text-align: right;">
+            <button class="nav-btn" onclick="closeEditModal()">取消</button>
+            <button class="nav-btn primary" onclick="saveEditedConfig()">保存修改</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="container">
     <div class="content-group">
-      <h1 class="profile-name">订阅文件生成</h1>
-      <p class="profile-quote">基于优选地址和配置文件模板，一键生成完整的Clash/Mihomo订阅</p>
-
+      <h1 class="profile-name">配置管理器</h1>
+      <p class="profile-quote">节点存储与订阅管理</p>
+      
+      <!-- Action Buttons (Modified for Unified Style) -->
       <div class="nav-grid">
-        <a href="/" class="nav-btn primary">订阅管理</a>
-        <a href="https://cfst.yangzifun.org/" target="_blank" class="nav-btn">批量生成</a>
-        <a href="https://config.proxypilot.yangzifun.org//" target="_blank" class="nav-btn">配置管理</a>
+         <button class="nav-btn primary" disabled style="opacity:1;cursor:default;">管理面板</button>
+         <a href="https://subs.proxypilot.yangzifun.org/" target="_blank" class="nav-btn">订阅生成</a>
+         <a href="https://cfst.yangzifun.org" target="_blank" class="nav-btn">批量生成</a>
       </div>
 
       <div class="card">
-        <h2>1. 配置信息</h2>
+        <h2>1. 检索订阅</h2>
+        <div class="form-group" style="display:flex; gap:10px;">
+           <input type="text" id="queryUuidInput" placeholder="请输入您的 UUID" style="margin-bottom:0;">
+           <button id="queryBtn" class="nav-btn primary" onclick="manageQueryByUuid()">查询</button>
+        </div>
+        
+        <!-- Modified Subscription Link Area: Now uses input field for unified style -->
+        <div id="subLinkDisplay" class="form-group hidden" style="display:none; gap:10px; margin-top:10px;">
+           <input type="text" id="subUrlLink" readonly style="margin-bottom:0; color:#5a666d; background-color: #f8f9fa;">
+           <button class="nav-btn" onclick="copySubLink()" style="white-space: nowrap;">复制</button>
+        </div>
+      </div>
+
+      <div id="resultCard" class="card hidden">
+        <h2>2. 配置列表</h2>
+        <div style="text-align:right; margin-bottom:10px;">
+           <button class="nav-btn" style="background:#d44; color:#fff; border-color:#d44;" onclick="deleteAll()">删除本组所有</button>
+        </div>
+        <div id="queryResultsContainer"></div>
+      </div>
+
+      <div id="statsCard" class="card hidden">
+        <h2>3. 访问统计</h2>
+        <div class="chart-controls">
+          <select id="statsDays" class="hosting-select" onchange="loadUuidStats()">
+            <option value="7" class="hosting-option">最近7天</option>
+            <option value="14" class="hosting-option">最近14天</option>
+            <option value="30" selected class="hosting-option">最近30天</option>
+            <option value="60" class="hosting-option">最近60天</option>
+          </select>
+          <button class="nav-btn active" onclick="loadUuidStats()">刷新</button>
+          <button class="nav-btn" onclick="switchChartType('total')" id="chartTotalBtn">总访问</button>
+          <button class="nav-btn" onclick="switchChartType('split')" id="chartSplitBtn">分类统计</button>
+        </div>
+        
+        <div id="statsSummary" class="stat-grid"></div>
+        
+        <div class="chart-container">
+          <canvas id="statsChart"></canvas>
+        </div>
+        
+        <div style="margin-top: 20px;">
+          <h3 style="font-size: 1.1rem; margin: 0 0 10px 0;">最近访问记录</h3>
+          <div id="recentLogs" class="access-log-container">
+            <div style="text-align: center; padding: 20px; color: #6b7280;">加载中...</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="addCard" class="card hidden">
+        <h2>4. 添加新节点</h2>
         <div class="form-group">
+          <label>域名托管服务 (Domain Hosting)</label>
+          <select id="domainHostingSelect" class="hosting-select">
+            <option value="Cloudflare" selected>Cloudflare</option>
+            <option value="阿里ESA">阿里ESA</option>
+            <option value="腾讯Edgeone">腾讯Edgeone</option>
+            <option value="AWS Cloudfront">AWS Cloudfront</option>
+            <option value="Gcore">Gcore</option>
+            <option value="Fastly">Fastly</option>
+            <option value="CacheFly">CacheFly</option>
+            <option value="LightCDN">LightCDN</option>
+            <option value="Vercel">Vercel</option>
+            <option value="Netlify">Netlify</option>
+            <option value="无">无</option>
+            <option value="其他">其他</option>
+          </select>
           <div class="info-box">
-            <strong>注意：</strong> 所有配置都会输出原配置。
-            <br>域名托管属性为"Cloudflare"的配置会进行优选替换（每条原配置 + 优选地址数条新配置）。
-            <br>其他域名托管配置（如阿里ESA、腾讯Edgeone、AWS Cloudfront、Gcore、Fastly等）只输出原配置，不进行优选替换。
+            <strong>说明：</strong> 选择此配置使用的域名托管服务。这有助于管理和分类不同CDN厂商的配置。
+            <br>新增选项：Gcore, Fastly, CacheFly, LightCDN, Vercel, Netlify，"无"表示不使用域名托管。
           </div>
         </div>
         <div class="form-group">
-          <input type="text" id="clashConfigUuid" placeholder="输入UUID（必须在配置管理中创建配置）">
-          <div class="info-box">
-            在<a href="https://config.proxypilot.yangzifun.org//" target="_blank">配置管理</a> 页面添加和管理配置，获取UUID后在此输入。
-          </div>
+          <label>配置数据 (可批量添加)</label>
+          <textarea id="addConfigData" placeholder="支持批量添加：
+vmess://...
+vless://...
+trojan://..." rows="4"></textarea>
         </div>
-        
-        <div class="protocol-support">
-          <h3>支持的协议类型</h3>
-          <div class="protocol-list">
-            <span class="protocol-badge">VMess</span>
-            <span class="protocol-badge">VLESS</span>
-            <span class="protocol-badge">Trojan</span>
-            <span class="protocol-badge">Shadowsocks</span>
-            <span class="protocol-badge new">Hysteria2</span>
-            <span class="protocol-badge new">Tuic</span>
-            <span class="protocol-badge new">AnyTLS</span>
-            <span class="protocol-badge new">Any-reality</span>
-            <span class="protocol-badge new">Reality</span>
-          </div>
-          <p style="margin-top: 10px; font-size: 0.85rem; color: #666;">
-            现在支持更多现代协议，包括高速传输协议和最新的加密技术。
-          </p>
-        </div>
+        <button onclick="manageAddConfig()" class="nav-btn primary" style="width:100%">添加到当前 UUID</button>
       </div>
 
-      <div class="card">
-        <h2>2. 模板选择</h2>
-        <div class="form-group">
-          <label>选择配置文件模板</label>
-          <div class="template-select-container">
-            <select id="templateSelect" onchange="handleTemplateChange()">
-              <option value="">正在加载模板...</option>
-            </select>
-            <div id="templateDescription" class="template-description">
-              请从下拉列表中选择一个配置文件模板
-            </div>
-          </div>
-        </div>
-        
-        <div id="customTemplateInput" class="form-group hidden">
-          <input type="text" id="customTemplateUrl" placeholder="输入自定义模板URL，如: https://raw.githubusercontent.com/your-repo/config.yaml">
-          <div class="info-box">
-            请输入可公开访问的YAML配置文件的完整URL地址。
-          </div>
-        </div>
-        
-        <div id="templateLoading" class="loading-state hidden">
-          <div class="loader"></div>
-          <p>正在加载模板列表...</p>
-        </div>
-        
-        <div id="templateError" class="info-box hidden">
-          无法加载模板列表，请稍后重试。
-        </div>
-        
-        <div id="templateInfoBox" class="info-box">
-          <strong>模板说明：</strong>
-          <br>• 所有模板均从数据库读取
-          <br>• 模板包含完整的规则和策略组配置
-          <br>• 选择不同的模板可以获得不同的分流规则和优化策略
-          <br><br><strong>注意：</strong>如果数据库中没有配置模板，将无法生成配置文件。
-        </div>
-      </div>
-
-      <div class="card">
-        <h2>3. 优选地址配置</h2>
-        <div class="form-group">
-          <label>地址类型</label>
-          <div class="radio-group">
-            <label><input type="radio" name="clashAddressType" value="ip" checked onchange="toggleAddressOptions()"><span>IP 地址</span></label>
-            <label><input type="radio" name="clashAddressType" value="domain" onchange="toggleAddressOptions()"><span>优选域名</span></label>
-          </div>
-        </div>
-
-        <div id="ipOptionsContainer">
-            <div class="form-group">
-              <label>IP 类型</label>
-              <div class="radio-group">
-                <label><input type="radio" name="clashIpType" value="all" checked><span>全部</span></label>
-                <label><input type="radio" name="clashIpType" value="v4"><span>仅IPv4</span></label>
-                <label><input type="radio" name="clashIpType" value="v6"><span>仅IPv6</span></label>
-              </div>
-            </div>
-            <div class="form-group">
-              <label>运营商</label>
-              <div class="radio-group">
-                <label><input type="radio" name="clashCarrier" value="all" checked><span>全部</span></label>
-                <label><input type="radio" name="clashCarrier" value="CM"><span>移动</span></label>
-                <label><input type="radio" name="clashCarrier" value="CU"><span>联通</span></label>
-                <label><input type="radio" name="clashCarrier" value="CT"><span>电信</span></label>
-              </div>
-            </div>
-        </div>
-
-        <div id="domainInfoBox" class="info-box hidden">
-          将使用数据库中存储的 Cloudflare 优选域名列表进行替换。
-        </div>
-      </div>
-
-      <div class="card">
-        <h2>4. 生成结果</h2>
-        <div class="form-group">
-          <button id="generateClashBtn" class="nav-btn primary" style="width:100%; padding: 12px;" onclick="generateClashConfig()" disabled>生成Clash订阅文件</button>
-        </div>
-        
-        <div class="subscription-link-box hidden" id="clashSubscriptionLinkBox">
-          <label>订阅链接</label>
-          <div class="link-input-container">
-            <input type="text" id="clashGeneratedLink" readonly>
-            <button class="nav-btn" onclick="copyClashGeneratedLink()">复制</button>
-          </div>
-          
-          <div id="qrCodeContainer" class="hidden">
-            <label class="qr-code-label">订阅链接二维码</label>
-            <div id="qrCodeImageContainer">
-              <img id="qrCodeImage" src="" alt="订阅链接二维码">
-            </div>
-            <div class="qr-code-buttons">
-              <button class="nav-btn" onclick="downloadQRCode()">下载二维码</button>
-              <button class="nav-btn" onclick="shareQRCode()">分享</button>
-              <button class="nav-btn" onclick="refreshQRCode()">刷新</button>
-            </div>
-            <div class="qr-code-info">
-              扫描二维码即可导入Clash配置文件到客户端。二维码内容为上方订阅链接。
-            </div>
-          </div>
-        </div>
-        
-        <div class="info-box">
-          <strong>新特性：</strong> 现在支持更多现代协议，包括Hysteria2、Tuic、AnyTLS、Any-reality等。
-          <br>配置文件基于您选择的模板生成，包含完整的规则和策略组。
-          <br>生成的订阅链接可直接在Clash/Mihomo客户端中使用。
-        </div>
-      </div>
-
-      <footer class="footer">
-         <p>Powered by <a href="https://www.yangzifun.org">YZFN</a> | <a href="https://www.yangzifun.org/security.html">安全声明</a></p>
-      </footer>
+      <footer class="footer"><p>Powered by <a href="https://www.yangzihome.space">YZFN</a> | <a href="https://www.yangzihome.space/security.html">安全声明</a></p></footer>
     </div>
   </div>
 
   <script>
     const WORKER_DOMAIN = "YOUR_WORKER_DOMAIN_PATH";
-    const QR_CODE_API = "https://qrcode.api.yangzifun.org/qr";
     const toastIcons = { success: '✅', error: '❌', info: 'ℹ️' };
-    let currentSubscriptionLink = '';
-    let templatesList = [];
+    let currentUuid = '';
+    let statsChart = null;
+    let currentChartType = 'split';
     
-    function showToast(msg, type='info') { 
-      const c = document.getElementById('toast-container'); 
-      const t = document.createElement('div'); 
-      t.className = 'toast'; 
-      t.innerHTML = \`<span>\${toastIcons[type]} \${msg}</span>\`; 
-      c.appendChild(t); 
-      setTimeout(()=>t.remove(), 5000); 
+    // 域名托管服务样式映射 - 已扩展
+    const hostingStyleMap = {
+      'Cloudflare': 'hosting-cloudflare',
+      '阿里ESA': 'hosting-aliyun',
+      '腾讯Edgeone': 'hosting-tencent',
+      'AWS Cloudfront': 'hosting-aws',
+      'Gcore': 'hosting-gcore',
+      'Fastly': 'hosting-fastly',
+      'CacheFly': 'hosting-cachefly',
+      'LightCDN': 'hosting-lightcdn',
+      'Vercel': 'hosting-vercel',
+      'Netlify': 'hosting-netlify',
+      '无': 'hosting-none',
+      '其他': 'hosting-other'
+    };
+    
+    function showToast(m,t='info'){const c=document.getElementById('toast-container');const x=document.createElement('div');x.className='toast';x.innerHTML=\`<span>\${toastIcons[t]} \${m}</span>\`;c.appendChild(x);setTimeout(()=>x.remove(),4000)}
+    function setButtonLoading(b,l,t){if(l){b.ds=b.innerHTML;b.disabled=true;b.innerHTML='...'}else{b.disabled=false;if(b.ds)b.innerHTML=b.ds}}
+
+    /* Parser */
+    function b64DecodeUnicode(str) { return decodeURIComponent(atob(str).split('').map(c=>'%'+('00'+c.charCodeAt(0).toString(16)).slice(-2)).join('')); }
+    function b64EncodeUnicode(str) { return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g,(m,p1)=>String.fromCharCode(parseInt(p1,16)))); }
+
+    /* Date Formatting */
+    function formatDate(dateStr) {
+      if (!dateStr) return '';
+      const date = new Date(dateStr);
+      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+      const day = date.getDate().toString().padStart(2, '0');
+      return \`\${month}/\${day}\`;
     }
     
-    function setButtonLoading(btn, ld, txt) { 
-      if(ld){ 
-        btn.disabled=true; 
-        btn.innerHTML='<span class="loader"></span>处理中...'; 
-      } else { 
-        btn.disabled=false; 
-        btn.innerHTML=txt; 
-      } 
+    function formatDateTime(dateStr) {
+      if (!dateStr) return '';
+      const date = new Date(dateStr);
+      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+      const day = date.getDate().toString().padStart(2, '0');
+      const hours = date.getHours().toString().padStart(2, '0');
+      const minutes = date.getMinutes().toString().padStart(2, '0');
+      return \`\${month}/\${day} \${hours}:\${minutes}\`;
+    }
+
+    /* Modal Logic */
+    function openEditModal(config) {
+        document.getElementById('edit-id').value = config.id;
+        let p = 'unknown'; const l = config.config_data;
+        if(l.startsWith('vmess://')) p='vmess'; 
+        else if(l.startsWith('vless://')) p='vless'; 
+        else if(l.startsWith('trojan://')) p='trojan';
+        else if(l.startsWith('hysteria2://')) p='hysteria2';
+        else if(l.startsWith('tuic://')) p='tuic';
+        else if(l.startsWith('anytls://')) p='anytls';
+        else if(l.startsWith('socks5://')) p='socks5';
+        else if(l.startsWith('any-reality://')) p='any-reality';
+        else if(l.startsWith('ss://')) p='ss';
+        
+        document.getElementById('edit-protocol').value = p;
+        ['ps','add','port','id-uuid','net','type','host','path','tls','sni'].forEach(k=>document.getElementById('edit-'+k).value='');
+        
+        // 设置域名托管下拉框
+        const hostingSelect = document.getElementById('edit-domain-hosting');
+        hostingSelect.value = config.domain_hosting || 'Cloudflare';
+        
+        try {
+            if (p === 'vmess') {
+                const c = JSON.parse(b64DecodeUnicode(l.substring(8)));
+                document.getElementById('edit-ps').value = c.ps||''; document.getElementById('edit-add').value = c.add||''; document.getElementById('edit-port').value = c.port||''; document.getElementById('edit-id-uuid').value = c.id||''; document.getElementById('edit-net').value = c.net||'tcp'; document.getElementById('edit-type').value = c.type||''; document.getElementById('edit-host').value = c.host||''; document.getElementById('edit-path').value = c.path||''; document.getElementById('edit-tls').value = c.tls||''; document.getElementById('edit-sni').value = c.sni||'';
+            } else if (p === 'vless' || p === 'trojan' || 
+                      p === 'hysteria2' || p === 'tuic' ||
+                      p === 'anytls' || p === 'socks5' ||
+                      p === 'any-reality' || p === 'ss') {
+                const u = new URL(l);
+                document.getElementById('edit-ps').value = u.hash?decodeURIComponent(u.hash.substring(1)):''; 
+                document.getElementById('edit-add').value = u.hostname; 
+                document.getElementById('edit-port').value = u.port; 
+                document.getElementById('edit-id-uuid').value = u.username; 
+                document.getElementById('edit-net').value = u.searchParams.get('type')||'tcp'; 
+                document.getElementById('edit-type').value = u.searchParams.get('headerType')||''; 
+                document.getElementById('edit-host').value = u.searchParams.get('host')||''; 
+                document.getElementById('edit-path').value = u.searchParams.get('path')||u.searchParams.get('serviceName')||''; 
+                document.getElementById('edit-tls').value = u.searchParams.get('security')==='tls'?'tls':''; 
+                document.getElementById('edit-sni').value = u.searchParams.get('sni')||'';
+            }
+        } catch(e) { alert('解析失败'); return; }
+        document.getElementById('editModalOverlay').classList.add('open');
     }
     
-    // 二维码相关函数
-    function generateQRCode(subscriptionLink) {
-      if (!subscriptionLink) return;
-      
-      currentSubscriptionLink = subscriptionLink;
-      const qrCodeContainer = document.getElementById('qrCodeContainer');
-      const qrCodeImage = document.getElementById('qrCodeImage');
-      
-      const encodedUrl = encodeURIComponent(subscriptionLink);
-      const qrCodeUrl = \`\${QR_CODE_API}?text=\${encodedUrl}&cellSize=4&margin=0&errorCorrectionLevel=L&typeNumber=0\`;
-      
-      qrCodeImage.src = qrCodeUrl;
-      qrCodeImage.alt = \`订阅链接二维码: \${subscriptionLink.substring(0, 50)}...\`;
-      
-      qrCodeContainer.classList.remove('hidden');
-      
-      qrCodeImage.onload = function() { showToast('二维码生成成功', 'success'); };
-      qrCodeImage.onerror = function() { showToast('二维码生成失败，请重试', 'error'); };
-    }
+    function closeEditModal() { document.getElementById('editModalOverlay').classList.remove('open'); }
     
-    function downloadQRCode() {
-      if (!currentSubscriptionLink) { showToast('没有可用的订阅链接', 'error'); return; }
-      const qrCodeImage = document.getElementById('qrCodeImage');
-      const link = document.createElement('a');
-      link.href = qrCodeImage.src;
-      link.download = 'clash-subscription-qrcode.png';
-      link.click();
-      showToast('二维码已下载', 'success');
+    async function saveEditedConfig() {
+        const id = document.getElementById('edit-id').value;
+        const proto = document.getElementById('edit-protocol').value;
+        const ps = document.getElementById('edit-ps').value;
+        const add = document.getElementById('edit-add').value;
+        const port = document.getElementById('edit-port').value;
+        const uuid = document.getElementById('edit-id-uuid').value;
+        const net = document.getElementById('edit-net').value;
+        const type = document.getElementById('edit-type').value;
+        const host = document.getElementById('edit-host').value;
+        const path = document.getElementById('edit-path').value;
+        const tls = document.getElementById('edit-tls').value;
+        const sni = document.getElementById('edit-sni').value;
+        const domainHosting = document.getElementById('edit-domain-hosting').value;
+        
+        let nL = '';
+        if (proto === 'vmess') {
+            nL = 'vmess://' + b64EncodeUnicode(JSON.stringify({
+                v: "2", ps, add, port, id: uuid, aid: "0", scy: "auto",
+                net, type, host, path, tls, sni
+            }));
+        } else if (proto === 'vless' || proto === 'trojan' || 
+                  proto === 'hysteria2' || proto === 'tuic' ||
+                  proto === 'anytls' || proto === 'socks5' ||
+                  proto === 'any-reality' || proto === 'ss') {
+            let u = new URL(proto + '://' + uuid + '@' + add + ':' + port);
+            if (net !== 'tcp') u.searchParams.set('type', net);
+            if (type) u.searchParams.set('headerType', type);
+            if (tls === 'tls') {
+                u.searchParams.set('security', 'tls');
+                if (sni) u.searchParams.set('sni', sni);
+            }
+            if (host) u.searchParams.set('host', host);
+            if (path) {
+                if (net === 'grpc') u.searchParams.set('serviceName', path);
+                else u.searchParams.set('path', path);
+            }
+            u.hash = encodeURIComponent(ps);
+            nL = u.toString();
+        }
+        
+        const b = document.querySelector('.modal .primary');
+        const o = b.innerHTML;
+        setButtonLoading(b, true);
+        try {
+            const r = await fetch('/manage/configs', {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    id, 
+                    config_data: nL,
+                    domain_hosting: domainHosting
+                })
+            });
+            const result = await r.json();
+            if (result.success) {
+                showToast('保存成功', 'success');
+                closeEditModal();
+                manageQueryByUuid();
+            }
+        } catch (e) {
+            showToast(e.message, 'error');
+        } finally {
+            setButtonLoading(b, false, o);
+        }
     }
-    
-    function shareQRCode() {
-      if (!currentSubscriptionLink) { showToast('没有可用的订阅链接', 'error'); return; }
-      if (navigator.share) {
-        navigator.share({
-          title: 'Clash代理配置',
-          text: '扫描二维码导入Clash配置文件',
-          url: currentSubscriptionLink,
-        })
-        .then(() => showToast('分享成功', 'success'))
-        .catch(error => {
-          console.error('分享失败:', error);
-          navigator.clipboard.writeText(currentSubscriptionLink)
-            .then(() => showToast('分享失败，已复制链接到剪贴板', 'info'));
-        });
-      } else {
-        navigator.clipboard.writeText(currentSubscriptionLink)
-          .then(() => showToast('链接已复制到剪贴板', 'success'));
+
+    /* Statistics Functions */
+    async function loadUuidStats() {
+      if (!currentUuid) return;
+      
+      const days = document.getElementById('statsDays').value;
+      try {
+        const response = await fetch(\`/manage/stats/\${currentUuid}?days=\${days}\`);
+        const data = await response.json();
+        
+        if (data.success) {
+          displayStatsSummary(data);
+          renderStatsChart(data.daily_stats);
+          displayRecentLogs(data.recent_logs);
+          updateChartButtons();
+        } else {
+          showToast(data.error || '无法加载统计数据', 'error');
+          document.getElementById('statsSummary').innerHTML = \`
+            <div style="text-align: center; padding: 20px; color: #6b7280;">
+              <p>\${data.error || '无统计信息'}</p>
+              <p><small>请确保已升级到v2.0+版本并启用访问日志记录</small></p>
+            </div>
+          \`;
+        }
+      } catch (error) {
+        showToast('获取统计失败: ' + error.message, 'error');
       }
     }
     
-    function refreshQRCode() {
-      if (!currentSubscriptionLink) { showToast('没有可用的订阅链接', 'error'); return; }
-      generateQRCode(currentSubscriptionLink);
-      showToast('二维码已刷新', 'info');
+    function displayStatsSummary(stats) {
+      const container = document.getElementById('statsSummary');
+      
+      const subscriptionPercent = stats.total_access > 0 ? 
+        Math.round(stats.subscription_count / stats.total_access * 100) : 0;
+      const apigenPercent = stats.total_access > 0 ? 
+        Math.round(stats.apigen_count / stats.total_access * 100) : 0;
+      
+      container.innerHTML = \`
+        <div class="stat-box">
+          <span class="stat-num">\${stats.total_access}</span>
+          <span class="stat-label">总访问次数</span>
+          <span class="stat-sub">首次: \${stats.first_access ? formatDate(stats.first_access) : '从未'}</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-num">\${stats.today_total}</span>
+          <span class="stat-label">今日访问</span>
+          <span class="stat-sub">订阅:\${stats.today_subscription} | 网页:\${stats.today_apigen}</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-num">\${stats.subscription_count}</span>
+          <span class="stat-label">订阅访问</span>
+          <span class="stat-sub">占比 \${subscriptionPercent}%</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-num">\${stats.apigen_count}</span>
+          <span class="stat-label">网页生成</span>
+          <span class="stat-sub">占比 \${apigenPercent}%</span>
+        </div>
+      \`;
     }
     
-    // 地址类型切换
-    function toggleAddressOptions() {
-        const type = document.querySelector('input[name="clashAddressType"]:checked').value;
-        const ipContainer = document.getElementById('ipOptionsContainer');
-        const domainBox = document.getElementById('domainInfoBox');
-        if (type === 'domain') {
-            ipContainer.classList.add('hidden');
-            domainBox.classList.remove('hidden');
-        } else {
-            ipContainer.classList.remove('hidden');
-            domainBox.classList.add('hidden');
+    function renderStatsChart(dailyStats) {
+      const ctx = document.getElementById('statsChart').getContext('2d');
+      
+      // 处理数据
+      const dates = dailyStats.map(item => formatDate(item.date));
+      const totals = dailyStats.map(item => item.total);
+      const subscriptions = dailyStats.map(item => item.subscription);
+      const apigens = dailyStats.map(item => item.api_generation);
+      
+      // 销毁现有图表
+      if (statsChart) {
+        statsChart.destroy();
+      }
+      
+      // 创建新图表
+      let datasets = [];
+      
+      switch (currentChartType) {
+        case 'total':
+          datasets = [{
+            label: '总访问量',
+            data: totals,
+            borderColor: '#3b82f6',
+            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+            borderWidth: 2,
+            fill: true,
+            tension: 0.4
+          }];
+          break;
+          
+        case 'split':
+          datasets = [
+            {
+              label: '订阅访问',
+              data: subscriptions,
+              borderColor: '#10b981',
+              backgroundColor: 'rgba(16, 185, 129, 0.1)',
+              borderWidth: 2,
+              fill: true,
+              tension: 0.4
+            },
+            {
+              label: '网页生成',
+              data: apigens,
+              borderColor: '#f59e0b',
+              backgroundColor: 'rgba(245, 158, 11, 0.1)',
+              borderWidth: 2,
+              fill: true,
+              tension: 0.4
+            }
+          ];
+          break;
+      }
+      
+      statsChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: dates,
+          datasets: datasets
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'top',
+            },
+            title: {
+              display: true,
+              text: \`UUID: \${currentUuid.substring(0, 8)}... 访问趋势\`
+            },
+            tooltip: {
+              mode: 'index',
+              intersect: false
+            }
+          },
+          scales: {
+            x: {
+              grid: {
+                display: false
+              },
+              title: {
+                display: true,
+                text: '日期'
+              }
+            },
+            y: {
+              beginAtZero: true,
+              ticks: {
+                precision: 0
+              },
+              title: {
+                display: true,
+                text: '访问次数'
+              }
+            }
+          },
+          interaction: {
+            intersect: false,
+            mode: 'index'
+          }
         }
+      });
     }
     
-    // 模板类型切换
-    function handleTemplateChange() {
-        const templateSelect = document.getElementById('templateSelect');
-        const selectedValue = templateSelect.value;
-        const customTemplateInput = document.getElementById('customTemplateInput');
-        const templateDescription = document.getElementById('templateDescription');
-        const templateInfoBox = document.getElementById('templateInfoBox');
+    function displayRecentLogs(logs) {
+      const container = document.getElementById('recentLogs');
+      
+      if (!logs || logs.length === 0) {
+        container.innerHTML = '<div style="text-align: center; padding: 20px; color: #6b7280;">暂无访问记录</div>';
+        return;
+      }
+      
+      let html = '';
+      logs.forEach(log => {
+        const typeClass = log.query_type === 'subscription' ? 'type-subscription' : 'type-apigen';
+        const typeText = log.query_type === 'subscription' ? '订阅' : '网页';
+        const userAgentShort = log.user_agent ? 
+          (log.user_agent.length > 30 ? log.user_agent.substring(0, 30) + '...' : log.user_agent) : 
+          '未知';
         
-        if (selectedValue === 'custom') {
-            customTemplateInput.classList.remove('hidden');
-            templateDescription.textContent = '使用自定义模板URL，请输入可公开访问的YAML配置文件URL。';
-            templateInfoBox.classList.add('hidden');
-        } else if (selectedValue === '') {
-            customTemplateInput.classList.add('hidden');
-            templateDescription.textContent = '请从下拉列表中选择一个配置文件模板';
-        } else {
-            customTemplateInput.classList.add('hidden');
-            // 从缓存的模板列表中查找描述
-            const template = templatesList.find(t => t.name === selectedValue);
-            if (template && template.description) {
-                templateDescription.textContent = template.description;
-            } else {
-                templateDescription.textContent = '数据库模板配置。';
-            }
-        }
+        html += \`
+          <div class="access-log-item">
+            <div>
+              <span class="timestamp">\${formatDateTime(log.created_at)}</span>
+              <span class="log-type \${typeClass}">\${typeText}</span>
+            </div>
+            <div style="color: #6b7280; font-size: 0.8rem;" title="\${log.user_agent || '未知'}">
+              \${userAgentShort}
+            </div>
+          </div>
+        \`;
+      });
+      
+      container.innerHTML = html;
     }
     
-    // 获取模板参数值
-    function getTemplateParam() {
-        const templateSelect = document.getElementById('templateSelect');
-        const selectedValue = templateSelect.value;
-        
-        if (selectedValue === 'custom') {
-            const customUrl = document.getElementById('customTemplateUrl').value.trim();
-            if (!customUrl) {
-                showToast('请输入自定义模板URL', 'error');
-                return null;
-            }
-            // 验证URL格式
-            if (!customUrl.startsWith('http://') && !customUrl.startsWith('https://')) {
-                showToast('请输入有效的URL地址（以http://或https://开头）', 'error');
-                return null;
-            }
-            return customUrl;
-        } else if (!selectedValue) {
-            showToast('请选择一个模板', 'error');
-            return null;
-        } else {
-            return selectedValue;
-        }
+    function switchChartType(type) {
+      currentChartType = type;
+      updateChartButtons();
+      loadUuidStats(); // 重新加载图表
     }
     
-    // 从服务器加载模板列表
-    async function loadTemplates() {
-        const templateSelect = document.getElementById('templateSelect');
-        const templateLoading = document.getElementById('templateLoading');
-        const templateError = document.getElementById('templateError');
-        const generateClashBtn = document.getElementById('generateClashBtn');
+    function updateChartButtons() {
+      document.getElementById('chartTotalBtn').classList.toggle('active', currentChartType === 'total');
+      document.getElementById('chartSplitBtn').classList.toggle('active', currentChartType === 'split');
+    }
+
+    /* Main Interaction */
+    async function manageQueryByUuid(){
+        const b=document.getElementById('queryBtn'); setButtonLoading(b,true);
+        const u=document.getElementById('queryUuidInput').value.trim();
+        if(!u){ showToast('请输入 UUID','error'); setButtonLoading(b,false,b.innerHTML); return;}
         
-        templateSelect.disabled = true;
-        templateLoading.classList.remove('hidden');
-        templateError.classList.add('hidden');
-        generateClashBtn.disabled = true;
+        currentUuid = u;
         
-        try {
-            const response = await fetch(\`\${WORKER_DOMAIN}/api/templates\`);
-            
-            if (!response.ok) {
-                throw new Error(\`加载失败: \${response.status}\`);
-            }
-            
-            const templates = await response.json();
-            templatesList = templates;
-            
-            // 清空选择框
-            templateSelect.innerHTML = '';
-            
-            // 添加自定义模板选项
-            const customOption = document.createElement('option');
-            customOption.value = 'custom';
-            customOption.textContent = '自定义模板';
-            templateSelect.appendChild(customOption);
-            
-            // 添加数据库中的模板选项
-            if (templates.length === 0) {
-                const noTemplateOption = document.createElement('option');
-                noTemplateOption.value = '';
-                noTemplateOption.textContent = '数据库中没有可用模板';
-                templateSelect.appendChild(noTemplateOption);
-                showToast('数据库中没有配置模板', 'error');
-            } else {
-                // 查找默认模板
-                const defaultTemplate = templates.find(t => t.is_default === 1);
-                
-                templates.forEach(template => {
-                    const option = document.createElement('option');
-                    option.value = template.name;
-                    option.textContent = template.name;
-                    if (defaultTemplate && template.name === defaultTemplate.name) {
-                        option.selected = true;
-                    }
-                    templateSelect.appendChild(option);
+        // Show sections
+        document.getElementById('resultCard').classList.remove('hidden');
+        document.getElementById('statsCard').classList.remove('hidden');
+        document.getElementById('addCard').classList.remove('hidden');
+        const l=\`\${WORKER_DOMAIN}/sub/\${u}\`; 
+        // Modified: Set value to input instead of href/innerText
+        const input = document.getElementById('subUrlLink');
+        input.value = l; 
+        document.getElementById('subLinkDisplay').style.display = 'flex';
+        document.getElementById('subLinkDisplay').classList.remove('hidden');
+
+        try{
+            const r=await fetch(\`/manage/configs/\${u}\`);
+            const c=document.getElementById('queryResultsContainer');
+            if(r.status===404){ c.innerHTML='<p style="padding:20px;text-align:center;color:#89949B">未找到配置，请直接添加。</p>'; }
+            else {
+                const d=await r.json();
+                let h='<div class="table-container"><table><thead><tr><th>备注</th><th>协议</th><th>域名托管</th><th>配置</th><th>操作</th></tr></thead><tbody>';
+                d.configs.forEach(Row=>{
+                    const sc = JSON.stringify(Row).replace(/"/g, '&quot;');
+                    const hosting = Row.domain_hosting || 'Cloudflare';
+                    const hostingClass = hostingStyleMap[hosting] || 'hosting-other';
+                    h+=\`<tr>
+                        <td>\${Row.remark||'-'}</td>
+                        <td>\${Row.protocol}</td>
+                        <td class="domain-hosting-cell"><span class="hosting-badge \${hostingClass}">\${hosting}</span></td>
+                        <td class="config-data-cell">\${Row.config_data.substring(0,40)}...</td>
+                        <td class="actions-cell">
+                            <button class="nav-btn" data-config="\${sc}" onclick="openEditModal(JSON.parse(this.dataset.config))">编辑</button>
+                            <button class="nav-btn" style="background:#d44;color:#fff;border-color:#d44" onclick="delOne(\${Row.id})">删除</button>
+                        </td>
+                    </tr>\`;
                 });
-                
-                // 如果没有设置默认模板，选择第一个
-                if (!defaultTemplate && templates.length > 0) {
-                    templateSelect.value = templates[0].name;
-                }
-                
-                // 更新模板描述
-                const selectedValue = templateSelect.value;
-                const selectedTemplate = templates.find(t => t.name === selectedValue);
-                const templateDescription = document.getElementById('templateDescription');
-                if (selectedTemplate && selectedTemplate.description) {
-                    templateDescription.textContent = selectedTemplate.description;
-                }
-                
-                // 启用生成按钮
-                generateClashBtn.disabled = false;
+                h+='</tbody></table></div>'; c.innerHTML=h;
             }
             
-            showToast('模板列表加载成功', 'success');
-        } catch (error) {
-            console.error('加载模板失败:', error);
-            templateError.classList.remove('hidden');
-            showToast(\`加载模板失败: \${error.message}\`, 'error');
+            // 加载统计信息
+            await loadUuidStats();
             
-            // 添加错误选项
-            templateSelect.innerHTML = '';
-            const errorOption = document.createElement('option');
-            errorOption.value = '';
-            errorOption.textContent = '加载模板失败';
-            templateSelect.appendChild(errorOption);
-        } finally {
-            templateLoading.classList.add('hidden');
-            templateSelect.disabled = false;
-            handleTemplateChange();
-        }
+        } catch(e){ showToast(e.message,'error'); } finally{ setButtonLoading(b,false,b.innerHTML); }
     }
     
-    // Clash配置文件生成功能
-    async function generateClashConfig() {
-        const btn = document.getElementById('generateClashBtn');
-        const uuid = document.getElementById('clashConfigUuid').value.trim();
-        const addressType = document.querySelector('input[name="clashAddressType"]:checked').value;
-        const ipType = document.querySelector('input[name="clashIpType"]:checked').value;
-        const carrier = document.querySelector('input[name="clashCarrier"]:checked').value;
+    async function manageAddConfig(){
+        const u=document.getElementById('queryUuidInput').value; 
+        const d=document.getElementById('addConfigData').value;
+        const hosting = document.getElementById('domainHostingSelect').value;
         
-        // 获取模板参数
-        const templateParam = getTemplateParam();
-        if (templateParam === null) return;
-
-        // 重置之前的链接和二维码
-        const clashLinkBox = document.getElementById('clashSubscriptionLinkBox');
-        const clashLinkInput = document.getElementById('clashGeneratedLink');
-        const qrCodeContainer = document.getElementById('qrCodeContainer');
-        clashLinkBox.classList.add('hidden');
-        qrCodeContainer.classList.add('hidden');
-        clashLinkInput.value = '';
-        currentSubscriptionLink = '';
-
-        if (!uuid) {
-            showToast('请输入UUID', 'error');
+        if(!u||!d) {
+            showToast('UUID或配置为空','error');
             return;
         }
         
-        setButtonLoading(btn, true, '正在生成...');
-        
         try {
-            // 构建请求URL，此URL用于Clash客户端订阅
-            const subscriptionUrl = new URL(\`\${WORKER_DOMAIN}/clash-config\`);
-            subscriptionUrl.searchParams.set('uuid', uuid);
-            subscriptionUrl.searchParams.set('type', addressType);
-            subscriptionUrl.searchParams.set('template', templateParam);
+            const response = await fetch('/manage/configs', {
+                method: 'POST', 
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    uuid: u,
+                    config_data: d,
+                    domain_hosting: hosting
+                })
+            });
             
-            if (addressType === 'ip') {
-                subscriptionUrl.searchParams.set('ipType', ipType);
-                subscriptionUrl.searchParams.set('carrier', carrier);
+            const result = await response.json();
+            if (result.success) {
+                showToast('添加成功','success'); 
+                document.getElementById('addConfigData').value=''; 
+                manageQueryByUuid();
+            } else {
+                showToast(result.error || '添加失败','error');
             }
-            
-            // 使用构建的URL作为订阅链接
-            const clashSubscriptionLink = subscriptionUrl.toString();
-            
-            // 触发文件下载
-            const response = await fetch(subscriptionUrl);
-            
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.error || \`生成失败: \${response.status}\`);
-            }
-            
-            // 创建下载链接
-            const blob = await response.blob();
-            const downloadUrl = URL.createObjectURL(blob);
-            
-            // 触发下载
-            const a = document.createElement('a');
-            a.href = downloadUrl;
-            a.download = \`clash-config-\${uuid}-\${new Date().toISOString().split('T')[0]}.yaml\`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(downloadUrl);
-            
-            showToast('Clash订阅文件生成成功，已开始下载', 'success');
-
-            // 显示订阅链接
-            clashLinkInput.value = clashSubscriptionLink;
-            clashLinkBox.classList.remove('hidden');
-            
-            // 生成二维码
-            generateQRCode(clashSubscriptionLink);
-            
         } catch (error) {
-            console.error('生成Clash配置失败:', error);
-            showToast(\`生成失败: \${error.message}\`, 'error');
-        } finally {
-            setButtonLoading(btn, false, '生成Clash订阅文件');
+            showToast('网络错误: ' + error.message, 'error');
         }
     }
-
-    function copyClashGeneratedLink() {
-        const link = document.getElementById('clashGeneratedLink').value;
-        if(!link) return;
-        navigator.clipboard.writeText(link).then(() => showToast('订阅链接已复制', 'success'));
+    
+    async function delOne(id){ 
+        if(confirm('确认删除?')) { 
+            await fetch(\`/manage/configs/id/\${id}\`,{method:'DELETE'}); 
+            manageQueryByUuid(); 
+        } 
     }
-
-    // 页面加载时初始化
-    document.addEventListener('DOMContentLoaded', () => {
-        toggleAddressOptions();
-        loadTemplates();
+    
+    async function deleteAll(){ 
+        const u=document.getElementById('queryUuidInput').value; 
+        if(confirm('确认清空所有配置?')) { 
+            await fetch(\`/manage/configs/\${u}\`,{method:'DELETE'}); 
+            manageQueryByUuid(); 
+        } 
+    }
+    
+    function copySubLink(){ 
+        navigator.clipboard.writeText(document.getElementById('subUrlLink').value)
+            .then(()=>showToast('已复制','success'))
+            .catch(()=>showToast('复制失败','error')); 
+    }
+    
+    // 初始化域名托管选择
+    document.addEventListener('DOMContentLoaded', function() {
+        const hostingSelect = document.getElementById('domainHostingSelect');
+        hostingSelect.value = 'Cloudflare';
     });
   </script>
 </body>

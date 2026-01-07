@@ -40,29 +40,23 @@ function jsonResponse(data, status = 200) {
 function getProtocol(configStr) {
     if (!configStr || typeof configStr !== 'string') return 'unknown';
 
+    // 检查各种协议前缀
     const protocolPatterns = [
-        { pattern: /^vmess:\/\//, name: 'vmess' },
-        { pattern: /^vless:\/\//, name: 'vless' },
-        { pattern: /^trojan:\/\//, name: 'trojan' },
-        { pattern: /^ss:\/\//, name: 'shadowsocks' },
-        { pattern: /^ssr:\/\//, name: 'shadowsocksr' },
-        { pattern: /^hysteria:\/\//, name: 'hysteria' },
-        { pattern: /^hysteria2:\/\//, name: 'hysteria2' },
-        { pattern: /^tuic:\/\//, name: 'tuic' },
-        { pattern: /^juicity:\/\//, name: 'juicity' },
-        { pattern: /^wireguard:\/\//, name: 'wireguard' },
-        { pattern: /^socks:\/\//, name: 'socks' },
-        { pattern: /^http:\/\//, name: 'http' },
-        { pattern: /^naive:\/\//, name: 'naiveproxy' },
-        { pattern: /^shadowsocks:\/\//, name: 'shadowsocks' },
-        { pattern: /^direct:\/\//, name: 'direct' },
-        { pattern: /^shadowtls:\/\//, name: 'shadowtls' },
-        { pattern: /^anytls:\/\//, name: 'anytls' }
+        { prefix: 'vmess://', type: 'vmess' },
+        { prefix: 'vless://', type: 'vless' },
+        { prefix: 'trojan://', type: 'trojan' },
+        { prefix: 'ss://', type: 'shadowsocks' },
+        { prefix: 'hysteria2://', type: 'hysteria2' },
+        { prefix: 'tuic://', type: 'tuic' },
+        { prefix: 'anytls://', type: 'anytls' },
+        { prefix: 'any-reality://', type: 'any-reality' },
+        { prefix: 'anyreality://', type: 'any-reality' },
+        { prefix: 'reality://', type: 'reality' }
     ];
 
-    for (const proto of protocolPatterns) {
-        if (proto.pattern.test(configStr)) {
-            return proto.name;
+    for (const pattern of protocolPatterns) {
+        if (configStr.toLowerCase().startsWith(pattern.prefix)) {
+            return pattern.type;
         }
     }
 
@@ -179,10 +173,12 @@ async function fetchConfigsByUuidFromDB(uuid, env) {
     }
 }
 
+// 增强的地址提取正则表达式，支持更多协议格式
+const addressExtractionRegex = /(?:@|:\/\/)(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|\[[0-9a-fA-F:\.]+\]|(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,})(?::\d+)?(?:[\/?#]|$)/;
+
 // 核心替换逻辑 - 确保所有原配置都被输出，但只有Cloudflare配置进行优选替换
 function replaceAddressesInConfigs(baseConfigsData, addressList) {
     let generatedConfigs = [];
-    const addressExtractionRegex = /@(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|\[[0-9a-fA-F:\.]+\]|(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,})(?::\d+)?(?:[\/?#]|$)/;
     const validAddressRegex = /^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|\[[0-9a-fA-F:\.]+\]|(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,})$/;
 
     for (const configObj of baseConfigsData) {
@@ -204,8 +200,12 @@ function replaceAddressesInConfigs(baseConfigsData, addressList) {
             continue;
         }
 
-        // 只处理需要进行地址替换的协议
-        if (['trojan', 'vless', 'vmess', 'shadowsocks', 'http', 'socks', 'hysteria', 'hysteria2'].includes(configType)) {
+        // 处理 vmess, vless, trojan 协议
+        if (configType === 'trojan' || configType === 'vless' ||
+            configType === 'shadowsocks' || configType === 'hysteria2' ||
+            configType === 'tuic' || configType === 'anytls' ||
+            configType === 'any-reality' || configType === 'reality') {
+
             const addressMatch = baseConfig.match(addressExtractionRegex);
             if (!addressMatch) {
                 pushError(`${configType}配置中未找到地址，已跳过。`);
@@ -225,24 +225,8 @@ function replaceAddressesInConfigs(baseConfigsData, addressList) {
                 pushError(`VMess配置解码失败，已跳过。`);
                 continue;
             }
-        } else if (configType === 'tuic') {
-            // TUIC协议特殊处理
-            const addressMatch = baseConfig.match(addressExtractionRegex);
-            if (!addressMatch) {
-                pushError(`TUIC配置中未找到地址，已跳过。`);
-                continue;
-            }
-            processedBaseConfig = baseConfig;
-        } else if (configType === 'juicity') {
-            // Juicity协议特殊处理
-            const addressMatch = baseConfig.match(addressExtractionRegex);
-            if (!addressMatch) {
-                pushError(`Juicity配置中未找到地址，已跳过。`);
-                continue;
-            }
-            processedBaseConfig = baseConfig;
         } else {
-            // 其他协议不进行地址替换
+            pushError(`不支持的类型: ${configType}，已跳过。`);
             continue;
         }
 
@@ -259,14 +243,21 @@ function replaceAddressesInConfigs(baseConfigsData, addressList) {
                 formattedAddr = `[${newAddr}]`;
             }
 
-            if (['trojan', 'vless', 'shadowsocks', 'http', 'socks', 'hysteria', 'hysteria2', 'tuic', 'juicity'].includes(configType)) {
+            if (configType === 'trojan' || configType === 'vless' ||
+                configType === 'shadowsocks' || configType === 'hysteria2' ||
+                configType === 'tuic' || configType === 'anytls' ||
+                configType === 'any-reality' || configType === 'reality') {
+
                 try {
                     const url = new URL(processedBaseConfig);
                     const originalName = url.hash ? decodeURIComponent(url.hash.substring(1)) : `${configType}-node`;
                     const newName = `${originalName}-${cleanAddrForName}`;
                     url.hash = encodeURIComponent(newName);
                     url.hostname = formattedAddr;
-                    generatedConfigs.push(url.toString());
+
+                    // 如果是IPv6，需要调整URL格式
+                    const newUrlString = url.toString();
+                    generatedConfigs.push(newUrlString);
                 } catch (e) {
                     pushError(`处理 ${configType} 出错: ${e.message}`);
                 }
@@ -311,7 +302,7 @@ async function fetchClashConfigTemplate(templateUrl) {
     }
 }
 
-// 将单个协议配置转换为Clash格式
+// 将单个协议配置转换为Clash格式 - 增强版本，支持更多协议
 function convertToClashFormat(configStr) {
     const protocol = getProtocol(configStr);
 
@@ -350,14 +341,6 @@ function convertToClashFormat(configStr) {
                 clashConfig.network = 'grpc';
                 clashConfig['grpc-opts'] = {
                     'grpc-service-name': vmessObj.path || ''
-                };
-            } else if (vmessObj.net === 'tcp') {
-                clashConfig.network = 'tcp';
-            } else if (vmessObj.net === 'httpupgrade') {
-                clashConfig.network = 'http';
-                clashConfig['http-opts'] = {
-                    path: vmessObj.path || '/',
-                    headers: vmessObj.host ? { Host: vmessObj.host } : {}
                 };
             }
 
@@ -400,23 +383,6 @@ function convertToClashFormat(configStr) {
                 clashConfig['grpc-opts'] = {
                     'grpc-service-name': url.searchParams.get('serviceName') || ''
                 };
-            } else if (typeParam === 'httpupgrade') {
-                clashConfig.network = 'http';
-                clashConfig['http-opts'] = {
-                    path: url.searchParams.get('path') || '/',
-                    headers: {}
-                };
-                if (url.searchParams.get('host')) {
-                    clashConfig['http-opts'].headers.Host = url.searchParams.get('host');
-                }
-            } else if (typeParam === 'h2') {
-                clashConfig.network = 'h2';
-                clashConfig['h2-opts'] = {
-                    path: url.searchParams.get('path') || '/',
-                    host: url.searchParams.get('host') ? [url.searchParams.get('host')] : []
-                };
-            } else if (typeParam === 'tcp') {
-                clashConfig.network = 'tcp';
             }
 
             return clashConfig;
@@ -438,12 +404,9 @@ function convertToClashFormat(configStr) {
                 server: url.hostname,
                 port: parseInt(url.port) || 443,
                 uuid: url.username,
+                tls: true,
                 'skip-cert-verify': true
             };
-
-            // 处理TLS
-            const tlsParam = url.searchParams.get('security') || '';
-            clashConfig.tls = tlsParam === 'tls' || tlsParam === 'xtls' || tlsParam === 'reality';
 
             // 处理流设置
             const typeParam = url.searchParams.get('type') || '';
@@ -461,30 +424,14 @@ function convertToClashFormat(configStr) {
                 clashConfig['grpc-opts'] = {
                     'grpc-service-name': url.searchParams.get('serviceName') || ''
                 };
-            } else if (typeParam === 'httpupgrade') {
-                clashConfig.network = 'http';
-                clashConfig['http-opts'] = {
-                    path: url.searchParams.get('path') || '/',
-                    headers: {}
-                };
-                if (url.searchParams.get('host')) {
-                    clashConfig['http-opts'].headers.Host = url.searchParams.get('host');
-                }
             } else if (typeParam === 'h2') {
                 clashConfig.network = 'h2';
-                clashConfig['h2-opts'] = {
-                    path: url.searchParams.get('path') || '/',
-                    host: url.searchParams.get('host') ? [url.searchParams.get('host')] : []
-                };
-            } else if (typeParam === 'tcp') {
-                clashConfig.network = 'tcp';
-            }
+                const path = url.searchParams.get('path') || '/';
+                const host = url.searchParams.get('host');
 
-            // 处理REALITY
-            if (tlsParam === 'reality') {
-                clashConfig.reality = {
-                    publicKey: url.searchParams.get('pbk') || '',
-                    shortId: url.searchParams.get('sid') || ''
+                clashConfig['h2-opts'] = {
+                    path: path,
+                    host: host ? [host] : []
                 };
             }
 
@@ -499,83 +446,42 @@ function convertToClashFormat(configStr) {
     if (protocol === 'shadowsocks') {
         try {
             const url = new URL(configStr);
-            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `Shadowsocks-${url.hostname}-${url.port}`;
+            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `SS-${url.hostname}-${url.port}`;
 
-            // 解析加密方法和密码
-            const methodPassword = atob(url.username);
-            const separatorIndex = methodPassword.indexOf(':');
-            const method = methodPassword.substring(0, separatorIndex);
-            const password = methodPassword.substring(separatorIndex + 1);
+            // 解析密码和方法
+            let password = '';
+            let method = 'aes-256-gcm';
+
+            // SS协议格式: ss://method:password@host:port
+            const userInfo = atob(url.username).split(':');
+            if (userInfo.length >= 2) {
+                method = userInfo[0];
+                password = userInfo.slice(1).join(':');
+            }
 
             const clashConfig = {
                 name: name,
                 type: 'ss',
                 server: url.hostname,
-                port: parseInt(url.port) || 443,
+                port: parseInt(url.port) || 8388,
+                password: password,
                 cipher: method,
-                password: password
+                'udp-over-tcp': true
             };
 
-            // 处理插件参数
+            // 检查是否有插件参数
             const pluginParam = url.searchParams.get('plugin');
             if (pluginParam) {
-                const pluginParams = new URLSearchParams(pluginParam);
-                const pluginName = pluginParams.get('obfs');
-                if (pluginName === 'simple-obfs') {
-                    clashConfig.plugin = 'obfs';
-                    clashConfig['plugin-opts'] = {
-                        mode: pluginParams.get('obfs') || 'http',
-                        host: pluginParams.get('obfs-host') || ''
-                    };
+                clashConfig.plugin = pluginParam;
+                const pluginOpts = url.searchParams.get('plugin-opts');
+                if (pluginOpts) {
+                    clashConfig['plugin-opts'] = pluginOpts;
                 }
             }
 
             return clashConfig;
         } catch (error) {
             console.error('转换Shadowsocks配置失败:', error, configStr);
-            return null;
-        }
-    }
-
-    // 处理Hysteria配置
-    if (protocol === 'hysteria') {
-        try {
-            const url = new URL(configStr);
-            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `Hysteria-${url.hostname}-${url.port}`;
-
-            const clashConfig = {
-                name: name,
-                type: 'hysteria',
-                server: url.hostname,
-                port: parseInt(url.port) || 443,
-                protocol: url.searchParams.get('protocol') || 'udp',
-                'skip-cert-verify': true
-            };
-
-            // 解析认证信息
-            if (url.username) {
-                clashConfig.auth = url.username;
-            }
-
-            // 处理其他参数
-            const obfsParam = url.searchParams.get('obfs');
-            if (obfsParam) {
-                clashConfig.obfs = obfsParam;
-            }
-
-            const upmbpsParam = url.searchParams.get('upmbps');
-            if (upmbpsParam) {
-                clashConfig.up = upmbpsParam;
-            }
-
-            const downmbpsParam = url.searchParams.get('downmbps');
-            if (downmbpsParam) {
-                clashConfig.down = downmbpsParam;
-            }
-
-            return clashConfig;
-        } catch (error) {
-            console.error('转换Hysteria配置失败:', error, configStr);
             return null;
         }
     }
@@ -592,28 +498,32 @@ function convertToClashFormat(configStr) {
                 server: url.hostname,
                 port: parseInt(url.port) || 443,
                 password: url.username,
+                sni: url.searchParams.get('sni') || url.hostname,
                 'skip-cert-verify': true
             };
 
             // 处理其他参数
+            const alpnParam = url.searchParams.get('alpn');
+            if (alpnParam) {
+                clashConfig.alpn = alpnParam.split(',');
+            }
+
             const obfsParam = url.searchParams.get('obfs');
             if (obfsParam) {
                 clashConfig.obfs = obfsParam;
+                const obfsPassword = url.searchParams.get('obfs-password');
+                if (obfsPassword) {
+                    clashConfig['obfs-password'] = obfsPassword;
+                }
             }
 
-            const obfsPasswordParam = url.searchParams.get('obfs-password');
-            if (obfsPasswordParam) {
-                clashConfig['obfs-password'] = obfsPasswordParam;
+            const downMbps = url.searchParams.get('downspeed');
+            const upMbps = url.searchParams.get('upspeed');
+            if (downMbps) {
+                clashConfig.down = downMbps;
             }
-
-            const upmbpsParam = url.searchParams.get('upmbps');
-            if (upmbpsParam) {
-                clashConfig.up = upmbpsParam;
-            }
-
-            const downmbpsParam = url.searchParams.get('downmbps');
-            if (downmbpsParam) {
-                clashConfig.down = downmbpsParam;
+            if (upMbps) {
+                clashConfig.up = upMbps;
             }
 
             return clashConfig;
@@ -623,11 +533,11 @@ function convertToClashFormat(configStr) {
         }
     }
 
-    // 处理TUIC配置
+    // 处理Tuic配置
     if (protocol === 'tuic') {
         try {
             const url = new URL(configStr);
-            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `TUIC-${url.hostname}-${url.port}`;
+            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `Tuic-${url.hostname}-${url.port}`;
 
             const clashConfig = {
                 name: name,
@@ -635,254 +545,92 @@ function convertToClashFormat(configStr) {
                 server: url.hostname,
                 port: parseInt(url.port) || 443,
                 uuid: url.username,
-                password: url.searchParams.get('password') || '',
-                'skip-cert-verify': true
-            };
-
-            // 处理TUIC V5参数
-            const versionParam = url.searchParams.get('version');
-            if (versionParam === '5') {
-                clashConfig.version = 5;
-            }
-
-            const congestionControlParam = url.searchParams.get('congestion_control');
-            if (congestionControlParam) {
-                clashConfig['congestion-controller'] = congestionControlParam;
-            }
-
-            const udpRelayModeParam = url.searchParams.get('udp_relay_mode');
-            if (udpRelayModeParam) {
-                clashConfig['udp-relay-mode'] = udpRelayModeParam;
-            }
-
-            return clashConfig;
-        } catch (error) {
-            console.error('转换TUIC配置失败:', error, configStr);
-            return null;
-        }
-    }
-
-    // 处理Juicity配置
-    if (protocol === 'juicity') {
-        try {
-            const url = new URL(configStr);
-            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `Juicity-${url.hostname}-${url.port}`;
-
-            const clashConfig = {
-                name: name,
-                type: 'juicity',
-                server: url.hostname,
-                port: parseInt(url.port) || 443,
-                uuid: url.username,
-                password: url.searchParams.get('password') || '',
+                password: url.password || '',
+                sni: url.searchParams.get('sni') || url.hostname,
                 'skip-cert-verify': true
             };
 
             // 处理其他参数
-            const congestionControlParam = url.searchParams.get('congestion_control');
-            if (congestionControlParam) {
-                clashConfig['congestion-controller'] = congestionControlParam;
+            const alpnParam = url.searchParams.get('alpn');
+            if (alpnParam) {
+                clashConfig.alpn = alpnParam.split(',');
+            }
+
+            const disableSni = url.searchParams.get('disable-sni');
+            if (disableSni === 'true') {
+                delete clashConfig.sni;
+            }
+
+            const congestionControl = url.searchParams.get('congestion-controller');
+            if (congestionControl) {
+                clashConfig['congestion-controller'] = congestionControl;
+            }
+
+            const udpRelayMode = url.searchParams.get('udp-relay-mode');
+            if (udpRelayMode) {
+                clashConfig['udp-relay-mode'] = udpRelayMode;
             }
 
             return clashConfig;
         } catch (error) {
-            console.error('转换Juicity配置失败:', error, configStr);
+            console.error('转换Tuic配置失败:', error, configStr);
             return null;
         }
     }
 
-    // 处理WireGuard配置
-    if (protocol === 'wireguard') {
-        try {
-            const url = new URL(configStr);
-            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `WireGuard-${url.hostname}-${url.port}`;
-
-            const clashConfig = {
-                name: name,
-                type: 'wireguard',
-                server: url.hostname,
-                port: parseInt(url.port) || 443,
-                'private-key': url.searchParams.get('private_key') || '',
-                'public-key': url.searchParams.get('public_key') || '',
-                'pre-shared-key': url.searchParams.get('preshared_key') || '',
-                'reserved': url.searchParams.get('reserved') ? url.searchParams.get('reserved').split(',').map(Number) : []
-            };
-
-            // 处理MTU
-            const mtuParam = url.searchParams.get('mtu');
-            if (mtuParam) {
-                clashConfig.mtu = parseInt(mtuParam);
-            }
-
-            // 处理DNS
-            const dnsParam = url.searchParams.get('dns');
-            if (dnsParam) {
-                clashConfig.dns = dnsParam.split(',');
-            }
-
-            // 处理AllowedIPs
-            const allowedIPsParam = url.searchParams.get('allowed_ips');
-            if (allowedIPsParam) {
-                clashConfig['allowed-ips'] = allowedIPsParam.split(',');
-            }
-
-            return clashConfig;
-        } catch (error) {
-            console.error('转换WireGuard配置失败:', error, configStr);
-            return null;
-        }
-    }
-
-    // 处理SOCKS配置
-    if (protocol === 'socks') {
-        try {
-            const url = new URL(configStr);
-            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `SOCKS5-${url.hostname}-${url.port}`;
-
-            const clashConfig = {
-                name: name,
-                type: 'socks5',
-                server: url.hostname,
-                port: parseInt(url.port) || 1080,
-                username: url.username || '',
-                password: url.password || '',
-                tls: url.protocol === 'socks5-tls:',
-                'skip-cert-verify': true
-            };
-
-            return clashConfig;
-        } catch (error) {
-            console.error('转换SOCKS配置失败:', error, configStr);
-            return null;
-        }
-    }
-
-    // 处理HTTP配置
-    if (protocol === 'http') {
-        try {
-            const url = new URL(configStr);
-            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `HTTP-${url.hostname}-${url.port}`;
-
-            const clashConfig = {
-                name: name,
-                type: 'http',
-                server: url.hostname,
-                port: parseInt(url.port) || 80,
-                username: url.username || '',
-                password: url.password || '',
-                tls: url.protocol === 'https:',
-                'skip-cert-verify': true
-            };
-
-            return clashConfig;
-        } catch (error) {
-            console.error('转换HTTP配置失败:', error, configStr);
-            return null;
-        }
-    }
-
-    // 处理NaiveProxy配置
-    if (protocol === 'naiveproxy') {
-        try {
-            const url = new URL(configStr);
-            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `Naive-${url.hostname}-${url.port}`;
-
-            const clashConfig = {
-                name: name,
-                type: 'naive',
-                server: url.hostname,
-                port: parseInt(url.port) || 443,
-                username: url.username || '',
-                password: url.password || '',
-                'skip-cert-verify': true
-            };
-
-            // 处理额外参数
-            const extraOptsParam = url.searchParams.get('extra_opts');
-            if (extraOptsParam) {
-                try {
-                    const extraOpts = JSON.parse(extraOptsParam);
-                    if (extraOpts.disable_padding) {
-                        clashConfig['disable-padding'] = extraOpts.disable_padding;
-                    }
-                    if (extraOpts.padding_length) {
-                        clashConfig['padding-length'] = extraOpts.padding_length;
-                    }
-                } catch (e) {
-                    console.warn('解析NaiveProxy额外参数失败:', e);
-                }
-            }
-
-            return clashConfig;
-        } catch (error) {
-            console.error('转换NaiveProxy配置失败:', error, configStr);
-            return null;
-        }
-    }
-
-    // 处理ShadowTLS配置
-    if (protocol === 'shadowtls') {
-        try {
-            const url = new URL(configStr);
-            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `ShadowTLS-${url.hostname}-${url.port}`;
-
-            const clashConfig = {
-                name: name,
-                type: 'shadowtls',
-                server: url.hostname,
-                port: parseInt(url.port) || 443,
-                password: url.username,
-                'skip-cert-verify': true,
-                version: url.searchParams.get('version') || '3'
-            };
-
-            // 处理主机参数
-            const hostParam = url.searchParams.get('host');
-            if (hostParam) {
-                clashConfig.host = hostParam;
-            }
-
-            return clashConfig;
-        } catch (error) {
-            console.error('转换ShadowTLS配置失败:', error, configStr);
-            return null;
-        }
-    }
-
-    // 处理Direct配置
-    if (protocol === 'direct') {
-        return {
-            name: 'Direct',
-            type: 'direct'
-        };
-    }
-
-    // 处理AnyTLS配置
+    // 处理AnyTLS配置（通常基于VLESS/Xray）
     if (protocol === 'anytls') {
         try {
             const url = new URL(configStr);
             const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `AnyTLS-${url.hostname}-${url.port}`;
 
+            // 根据特征判断具体协议类型
+            let type = 'vless'; // 默认VLESS
+            let uuid = url.username;
+            // let password = ''; // password is not typically used for VLESS, removed as it's unused
+
+            // 检查是否有特定参数
+            // const flowParam = url.searchParams.get('flow'); // unused in clash config
+            // const securityParam = url.searchParams.get('security'); // unused in clash config
+
             const clashConfig = {
                 name: name,
-                type: 'anytls',
+                type: type,
                 server: url.hostname,
                 port: parseInt(url.port) || 443,
+                uuid: uuid,
+                tls: true,
                 'skip-cert-verify': true
             };
 
-            // 处理协议参数
-            const protocolParam = url.searchParams.get('protocol');
-            if (protocolParam) {
-                clashConfig.protocol = protocolParam;
+            // 处理流设置
+            const typeParam = url.searchParams.get('type') || '';
+            if (typeParam === 'ws') {
+                clashConfig.network = 'ws';
+                const path = url.searchParams.get('path') || '/';
+                const host = url.searchParams.get('host');
+
+                clashConfig['ws-opts'] = {
+                    path: path,
+                    headers: host ? { Host: host } : {}
+                };
+            } else if (typeParam === 'grpc') {
+                clashConfig.network = 'grpc';
+                clashConfig['grpc-opts'] = {
+                    'grpc-service-name': url.searchParams.get('serviceName') || ''
+                };
             }
 
-            // 处理认证参数
-            if (url.username) {
-                clashConfig.username = url.username;
+            // 处理SNI
+            const sniParam = url.searchParams.get('sni') || url.searchParams.get('host');
+            if (sniParam) {
+                clashConfig.sni = sniParam;
             }
-            if (url.password) {
-                clashConfig.password = url.password;
+
+            // 处理ALPN
+            const alpnParam = url.searchParams.get('alpn');
+            if (alpnParam) {
+                clashConfig.alpn = alpnParam.split(',');
             }
 
             return clashConfig;
@@ -892,45 +640,54 @@ function convertToClashFormat(configStr) {
         }
     }
 
-    // 处理ShadowsocksR配置
-    if (protocol === 'shadowsocksr') {
+    // 处理Reality/Any-reality配置
+    if (protocol === 'any-reality' || protocol === 'reality') {
         try {
-            // SSR配置格式复杂，通常包含多个base64编码的参数
             const url = new URL(configStr);
-            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `SSR-${url.hostname}-${url.port}`;
+            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `Reality-${url.hostname}-${url.port}`;
 
-            // SSR配置通常格式为: ssr://base64(server:port:protocol:method:obfs:base64(password))/?obfsparam=...&protoparam=...&remarks=...
-            const decoded = atob(url.hostname);
-            const parts = decoded.split(':');
-
-            if (parts.length < 6) {
-                console.error('SSR配置格式不正确');
-                return null;
-            }
-
-            const server = parts[0];
-            const port = parseInt(parts[1]);
-            const protocol = parts[2];
-            const method = parts[3];
-            const obfs = parts[4];
-            const password = atob(parts[5]);
-
+            // 默认使用VLESS作为底层协议
             const clashConfig = {
                 name: name,
-                type: 'ssr',
-                server: server,
-                port: port,
-                cipher: method,
-                password: password,
-                protocol: protocol,
-                'protocol-param': url.searchParams.get('protoparam') ? atob(url.searchParams.get('protoparam')) : '',
-                obfs: obfs,
-                'obfs-param': url.searchParams.get('obfsparam') ? atob(url.searchParams.get('obfsparam')) : ''
+                type: 'vless',
+                server: url.hostname,
+                port: parseInt(url.port) || 443,
+                uuid: url.username,
+                'skip-cert-verify': true,
+                'client-fingerprint': 'chrome' // FIX: Added quotes around client-fingerprint
             };
+
+            // Reality特定参数
+            const realityConfig = {
+                type: 'reality',
+                'server-name': url.searchParams.get('sni') || url.hostname,
+                'public-key': url.searchParams.get('pbk') || '',
+                'short-id': url.searchParams.get('sid') || ''
+            };
+
+            // 合并配置
+            Object.assign(clashConfig, realityConfig);
+
+            // 处理流设置
+            const typeParam = url.searchParams.get('type') || '';
+            if (typeParam === 'grpc') {
+                clashConfig.network = 'grpc';
+                clashConfig['grpc-opts'] = {
+                    'grpc-service-name': url.searchParams.get('serviceName') || ''
+                };
+            } else if (typeParam === 'tcp') {
+                clashConfig.network = 'tcp';
+            }
+
+            // 处理指纹
+            const fpParam = url.searchParams.get('fp');
+            if (fpParam) {
+                clashConfig['client-fingerprint'] = fpParam;
+            }
 
             return clashConfig;
         } catch (error) {
-            console.error('转换ShadowsocksR配置失败:', error, configStr);
+            console.error('转换Reality配置失败:', error, configStr);
             return null;
         }
     }
@@ -1091,6 +848,14 @@ async function generateClashConfig(request, env) {
         await logConfigAccess(env, uuid, queryType, clientIp, userAgent);
         console.log(`记录${isWebPageGeneration ? '网页生成' : '订阅获取'}访问: uuid=${uuid}, clientIp=${clientIp}`);
 
+        // 统计支持的协议类型
+        const protocolStats = {};
+        clashProxies.forEach(proxy => {
+            if (proxy.type !== 'direct') {
+                protocolStats[proxy.type] = (protocolStats[proxy.type] || 0) + 1;
+            }
+        });
+
         // 返回YAML文件
         return new Response(finalConfig, {
             status: 200,
@@ -1101,7 +866,9 @@ async function generateClashConfig(request, env) {
                 'X-Total-Proxies-Unique': clashProxies.length.toString(),
                 'X-Cloudflare-Configs': baseConfigsData.filter(cfg => cfg.domain_hosting === 'Cloudflare').length.toString(),
                 'X-Address-List-Count': addressList.length.toString(),
-                'X-Template-Used': templateUrl
+                'X-Template-Used': templateUrl,
+                'X-Supported-Protocols': Object.keys(protocolStats).join(','),
+                'X-Protocol-Counts': Object.entries(protocolStats).map(([k, v]) => `${k}:${v}`).join(',')
             }
         });
 
@@ -1374,24 +1141,36 @@ const generatePageHtmlContent = `
     /* 协议支持说明 */
     .protocol-support {
       margin-top: 20px;
-      background: #f8f9fa;
-      border: 1px solid #E8EBED;
-      border-radius: 8px;
       padding: 15px;
+      background: #f0f7ff;
+      border: 1px solid #cce5ff;
+      border-radius: 8px;
+    }
+    .protocol-support h3 {
+      margin-top: 0;
+      color: #0066cc;
+      font-size: 1.1rem;
     }
     .protocol-list {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      display: flex;
+      flex-wrap: wrap;
       gap: 10px;
       margin-top: 10px;
     }
-    .protocol-item {
-      padding: 8px 12px;
-      background: #E8EBED;
+    .protocol-badge {
+      display: inline-block;
+      padding: 4px 10px;
+      background: #e6f2ff;
+      border: 1px solid #99ccff;
       border-radius: 4px;
-      font-size: 0.85rem;
-      color: #5a666d;
-      text-align: center;
+      font-size: 0.8rem;
+      color: #0066cc;
+      font-weight: 500;
+    }
+    .protocol-badge.new {
+      background: #fff0e6;
+      border-color: #ffcc99;
+      color: #ff6600;
     }
   </style>
 </head>
@@ -1405,7 +1184,7 @@ const generatePageHtmlContent = `
       <div class="nav-grid">
         <a href="/" class="nav-btn primary">订阅管理</a>
         <a href="https://cfst.yangzifun.org/" target="_blank" class="nav-btn">批量生成</a>
-        <a href="https://config.proxypilot.yangzifun.org//" target="_blank" class="nav-btn">配置管理</a>
+        <a href="https://config.proxypilot.yangzifun.org/" target="_blank" class="nav-btn">配置管理</a>
       </div>
 
       <div class="card">
@@ -1420,8 +1199,26 @@ const generatePageHtmlContent = `
         <div class="form-group">
           <input type="text" id="clashConfigUuid" placeholder="输入UUID（必须在配置管理中创建配置）">
           <div class="info-box">
-            在<a href="https://config.proxypilot.yangzifun.org//" target="_blank">配置管理</a> 页面添加和管理配置，获取UUID后在此输入。
+            在<a href="https://config.proxypilot.yangzifun.org/" target="_blank">配置管理</a> 页面添加和管理配置，获取UUID后在此输入。
           </div>
+        </div>
+        
+        <div class="protocol-support">
+          <h3>支持的协议类型</h3>
+          <div class="protocol-list">
+            <span class="protocol-badge">VMess</span>
+            <span class="protocol-badge">VLESS</span>
+            <span class="protocol-badge">Trojan</span>
+            <span class="protocol-badge">Shadowsocks</span>
+            <span class="protocol-badge new">Hysteria2</span>
+            <span class="protocol-badge new">Tuic</span>
+            <span class="protocol-badge new">AnyTLS</span>
+            <span class="protocol-badge new">Any-reality</span>
+            <span class="protocol-badge new">Reality</span>
+          </div>
+          <p style="margin-top: 10px; font-size: 0.85rem; color: #666;">
+            现在支持更多现代协议，包括高速传输协议和最新的加密技术。
+          </p>
         </div>
       </div>
 
@@ -1529,44 +1326,9 @@ const generatePageHtmlContent = `
         </div>
         
         <div class="info-box">
-          配置文件基于您选择的模板生成，包含完整的规则和策略组。
+          <strong>新特性：</strong> 现在支持更多现代协议，包括Hysteria2、Tuic、AnyTLS、Any-reality等。
+          <br>配置文件基于您选择的模板生成，包含完整的规则和策略组。
           <br>生成的订阅链接可直接在Clash/Mihomo客户端中使用。
-        </div>
-        
-        <div class="protocol-support">
-          <h3 style="margin-top: 0; color: #3d474d;">支持协议</h3>
-          <div class="protocol-list">
-            <div class="protocol-item">SOCKS5</div>
-            <div class="protocol-item">HTTP/HTTPS</div>
-            <div class="protocol-item">TUIC</div>
-            <div class="protocol-item">TUIC V5</div>
-            <div class="protocol-item">Juicity</div>
-            <div class="protocol-item">WireGuard</div>
-            <div class="protocol-item">Hysteria</div>
-            <div class="protocol-item">Hysteria2</div>
-            <div class="protocol-item">VLESS+TCP</div>
-            <div class="protocol-item">VLESS+WS</div>
-            <div class="protocol-item">VLESS+gRPC</div>
-            <div class="protocol-item">VLESS+HTTP</div>
-            <div class="protocol-item">VLESS+REALITY</div>
-            <div class="protocol-item">Trojan+TCP</div>
-            <div class="protocol-item">Trojan+WS</div>
-            <div class="protocol-item">Trojan+gRPC</div>
-            <div class="protocol-item">Trojan+HTTP</div>
-            <div class="protocol-item">VMess+TCP</div>
-            <div class="protocol-item">VMess+WS</div>
-            <div class="protocol-item">VMess+gRPC</div>
-            <div class="protocol-item">VMess+HTTP</div>
-            <div class="protocol-item">ShadowTLS V3</div>
-            <div class="protocol-item">NaiveProxy</div>
-            <div class="protocol-item">Shadowsocks</div>
-            <div class="protocol-item">ShadowsocksR</div>
-            <div class="protocol-item">Direct</div>
-            <div class="protocol-item">AnyTLS</div>
-          </div>
-          <p style="margin-top: 10px; font-size: 0.85rem; color: #89949B; text-align: center;">
-            支持超过30种协议和变种，满足各种使用场景
-          </p>
         </div>
       </div>
 
@@ -1907,5 +1669,4 @@ const generatePageHtmlContent = `
   </script>
 </body>
 </html>
-
 `;

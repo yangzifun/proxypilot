@@ -2,25 +2,27 @@
 
 ![JavaScript](https://img.shields.io/badge/JavaScript-ES6+-yellow?logo=javascript&logoColor=white) ![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white)![D1 Database](https://img.shields.io/badge/Cloudflare-D1-0052CC?logo=cloudflare&logoColor=white)  ![MIT License](https://img.shields.io/badge/License-MIT-green.svg) ![Node.js](https://img.shields.io/badge/Node.js-18+-339933?logo=node.js&logoColor=white)  ![Chart.js](https://img.shields.io/badge/Chart.js-4.0+-FF6384?logo=chart.js&logoColor=white) ![Version](https://img.shields.io/badge/Version−3.0-blue.svg)
 
-这是一个运行在 Cloudflare Worker 上的多功能代理工具，结合 Cloudflare D1 数据库，提供**IP优选**和**域名优选**的批量替换功能。系统采用三 Worker 架构，分别处理优选生成、配置管理和系统管理，实现功能解耦和独立部署。
+这是一个运行在 Cloudflare Worker 上的多功能代理工具，结合 Cloudflare D1 数据库，提供**IP优选**和**域名优选**的批量替换功能。系统采用四 Worker 架构，分别处理优选生成、配置管理、系统管理和订阅文件生成，实现功能解耦和独立部署。
 
 ## 📦 系统组成
 
-**系统由3个核心Worker组成**：
+**系统由4个核心Worker组成**：
 
 - **`worker.js`** - 优选生成器：处理 IP/域名优选、订阅生成、批量配置替换、访问日志记录
 - **`config_worker.js`** - 配置管理器：提供配置 CRUD 操作、订阅接口、配置编辑功能、UUID访问统计
 - **`mg_worker.js`** - 管理后台：JWT 认证、域名/IP/UUID 管理、系统统计、手动 IP 更新、订阅访问统计分析（已集成IP更新功能）
+- **`subs_worker.js`** - 订阅文件生成器：专门处理Clash/Mihomo订阅文件生成，支持多种配置文件模板和二维码功能
 
 ## ✨ 主要特性
 
-### 1. **三 Worker 微服务架构**
+### 1. **四 Worker 微服务架构**
 
-该系统采用三 Worker 架构，各司其职：
+该系统采用四 Worker 架构，各司其职：
 
 *   **`worker.js`** - 优选生成器：处理 IP/域名优选、订阅生成、批量配置替换、访问日志记录
 *   **`config_worker.js`** - 配置管理器：提供配置 CRUD 操作、订阅接口、配置编辑功能，包含外部配置生成器链接和UUID访问统计
 *   **`mg_worker.js`** - 管理后台：JWT 认证、域名/IP/UUID 管理、系统统计、IP更新功能、订阅访问统计分析（已合并IP更新功能）
+*   **`subs_worker.js`** - 订阅文件生成器：专门处理Clash/Mihomo订阅文件生成，支持多种配置文件模板和二维码功能
 
 ### 2. **域名托管属性管理 [v2.2.0更新]**
 
@@ -161,15 +163,16 @@
 
 
 
-### 3. 创建三个Worker并绑定D1
+### 3. 创建四个Worker并绑定D1
 
-创建三个Worker并绑定到同一个D1数据库：
+创建四个Worker并绑定到同一个D1数据库：
 
 | Worker名称     | 绑定文件           | 数据库绑定变量 | 建议路由/域名                   |
 | -------------- | ------------------ | -------------- | ------------------------------- |
 | `proxy-main`   | `worker.js`        | `DB`           | `cfst.yangzifun.org*`       |
 | `proxy-config` | `config_worker.js` | `DB`           | `config.proxypilot.yangzifun.org` |
 | `proxy-mg`     | `mg_worker.js`     | `DB`           | `mg.proxypilot.yangzifun.org`         |
+| `proxy-subs`   | `subs_worker.js`   | `DB`           | `subs.proxypilot.yangzifun.org`         |
 
 绑定步骤：
 
@@ -528,10 +531,22 @@ graph TD
 
 ### v3.0 (最新)
 
+-   **新增第四个Worker**：新增`subs_worker.js`作为订阅文件生成器，专门处理Clash/Mihomo订阅文件生成
+    -   支持多种现代协议：Hysteria2、Tuic、AnyTLS、Any-reality、Reality等
+    -   提供模板选择功能，支持8种不同的Clash配置模板
+    -   添加二维码生成功能，方便移动设备扫码添加配置
+    -   支持自定义配置参数修改和订阅文件下载
+-   **协议支持扩展**：在原有协议基础上，新增对现代协议的支持
+    -   Hysteria2、Tuic、AnyTLS、Any-reality、Reality等
+    -   兼容现有配置管理架构，无缝集成到系统中
+-   **新增数据库表**：添加`config_templates`表用于存储Clash配置模板
+    -   包含8个预定义模板：全量、轻量、全球上网、回国、默认、IP分流、负载均衡、视频优化
+    -   支持模板选择功能，用户可根据需求选择不同的配置策略
+-   **四Worker架构**：系统架构从三Worker升级为四Worker架构，实现更清晰的功能划分
 -   **合并IP更新功能**：将原ip-worker.js的功能完整合并到mg_worker.js中，简化部署架构
     -   移除独立的ip-worker.js文件，减少Worker数量
     -   mg_worker.js现在直接处理IP更新任务，无需代理调用
-    -   更新readme.md文档，反映新的三Worker架构
+    -   更新readme.md文档，反映新的四Worker架构
 -   **接口优化**：mg_worker.js的`/api/ips/update`接口现在是直接执行IP更新，不再代理调用外部Worker
 
 ### v2.3.0
