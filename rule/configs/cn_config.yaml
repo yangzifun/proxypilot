@@ -1,0 +1,165 @@
+# 生成时间: 2026-01-06
+# 模板类型: 回国模板
+
+# ==========================================================
+# 节点信息
+# ==========================================================
+proxies:
+  - {name: 直连, type: direct}
+
+# ==========================================================
+# 全局配置 
+# ==========================================================
+port: 7890
+socks-port: 7891
+redir-port: 7892
+mixed-port: 7893
+tproxy-port: 7894
+allow-lan: true
+bind-address: "*"
+ipv6: false
+unified-delay: true
+tcp-concurrent: true
+log-level: warning
+find-process-mode: 'off'
+global-client-fingerprint: chrome
+keep-alive-idle: 600
+keep-alive-interval: 15
+disable-keep-alive: false
+profile:
+  store-selected: true
+  store-fake-ip: true
+
+
+# ==========================================================
+# 嗅探
+# ==========================================================
+sniffer:
+  enable: true
+  sniff:
+    HTTP:
+      ports: [80, 8080-8880]
+      override-destination: true
+    TLS:
+      ports: [443, 8443]
+    QUIC:
+      ports: [443, 8443]
+  force-domain:
+    - "+.v2ex.com"
+  skip-domain:
+    - "+.baidu.com"
+
+# ==========================================================
+# 入站  
+# ==========================================================
+tun:
+  enable: true
+  stack: mixed
+  dns-hijack: ["any:53", "tcp://any:53"]
+  auto-route: true
+  auto-redirect: true
+  auto-detect-interface: true
+
+# ==========================================================
+# DNS模块
+# ==========================================================
+dns:
+  enable: true
+  listen: 0.0.0.0:1053
+  enhanced-mode: fake-ip
+  nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+  fallback:
+    - 1.1.1.1
+    - 8.8.8.8
+ 
+# ==========================================================
+# 锚点配置
+# ==========================================================
+rule-anchor:
+  ip: &ip {type: http, interval: 86400, behavior: ipcidr, format: mrs}
+  domain: &domain {type: http, interval: 86400, behavior: domain, format: mrs}
+
+# ==========================================================
+# 出站策略 (Proxy Groups) - 增加地区分组
+# ==========================================================
+proxy-groups:
+  # 总开关：你可以手动切换地区或选全自动
+  - {name: 🇨🇳 回国核心, type: select, proxies: [⚡ 自动选择, 🏙️ 上海自动, 🏛️ 北京自动, 🌆 深圳自动, 🇭🇰 香港自动, 🎯 直连]}
+
+  # 影音娱乐
+  - {name: 📺 大陆影音, type: select, proxies: [⚡ 自动选择, 🏙️ 上海自动, 🏛️ 北京自动, 🌆 深圳自动, 🇭🇰 香港自动, 🎯 直连]}
+
+  # 游戏加速
+  - {name: 🎮 国服游戏, type: select, proxies: [⚡ 自动选择, 🏙️ 上海自动, 🏛️ 北京自动, 🌆 深圳自动, 🇭🇰 香港自动, 🎯 直连]}
+
+  # 漏网之鱼
+  - {name: 🐟 漏网之鱼, type: select, proxies: [⚡ 自动选择, 🏙️ 上海自动, 🏛️ 北京自动, 🌆 深圳自动, 🇭🇰 香港自动, 🎯 直连]}
+
+  # 广告拦截
+  - {name: 🚫 广告拦截, type: select, proxies: [REJECT, DIRECT]}
+
+  # --- 地区自动选优策略 ---
+  - {name: ⚡ 自动选择, type: url-test, include-all: true, filter: "(?i)上海|北京|深圳|广州|杭州|江苏|浙江|中国|CN|China", url: "http://www.gstatic.com/generate_204", interval: 300}
+  
+  - {name: 🏙️ 上海自动, type: url-test, include-all: true, filter: "(?i)上海|SH|Shanghai", url: "http://www.gstatic.com/generate_204", interval: 300}
+  
+  - {name: 🏛️ 北京自动, type: url-test, include-all: true, filter: "(?i)北京|BJ|Beijing", url: "http://www.gstatic.com/generate_204", interval: 300}
+  
+  - {name: 🌆 深圳自动, type: url-test, include-all: true, filter: "(?i)深圳|SZ|Shenzhen", url: "http://www.gstatic.com/generate_204", interval: 300}
+  
+  - {name: 🇭🇰 香港自动, type: url-test, include-all: true, filter: "(?i)香港|HK|HongKong", url: "https://www.google.com/generate_204", interval: 300}
+
+  - {name: 🎯 直连, type: select, proxies: [DIRECT]}
+
+# ==========================================================
+# 规则匹配 (Rules)
+# ==========================================================
+rules:
+  - RULE-SET,category-ads-all,🚫 广告拦截
+
+  # 影音分流
+  - RULE-SET,bilibili_domain,📺 大陆影音
+  - RULE-SET,iqiyi_domain,📺 大陆影音
+  - RULE-SET,tencent_video,📺 大陆影音
+  - RULE-SET,netease_music,📺 大陆影音
+  - RULE-SET,youku_domain,📺 大陆影音
+
+  # 社交与支付 (回国节点)
+  - RULE-SET,wechat_domain,🇨🇳 回国核心
+  - RULE-SET,alipay_domain,🇨🇳 回国核心
+  - RULE-SET,weibo_domain,🇨🇳 回国核心
+
+  # 游戏分流
+  - RULE-SET,games_cn,🎮 国服游戏
+
+  # 兜底大陆流量
+  - RULE-SET,cn_domain,🇨🇳 回国核心
+  - RULE-SET,cn_ip,🇨🇳 回国核心,no-resolve
+
+  # 海外流量直连
+  - GEOIP,LAN,🎯 直连
+  - RULE-SET,google_domain,🎯 直连
+  - RULE-SET,youtube_domain,🎯 直连
+  
+  - MATCH,🐟 漏网之鱼
+
+# ==========================================================
+# 规则源
+# ==========================================================
+rule-providers:
+  category-ads-all: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ads-all.mrs"}
+  bilibili_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/bilibili.mrs"}
+  iqiyi_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/iqiyi.mrs"}
+  youku_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/youku.mrs"}
+  tencent_video: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/tencent.mrs"}
+  netease_music: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/netease.mrs"}
+  wechat_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/wechat.mrs"}
+  alipay_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/alipay.mrs"}
+  weibo_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/weibo.mrs"}
+  cn_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs"}
+  google_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/google.mrs"}
+  youtube_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/youtube.mrs"}
+  cn_ip: { <<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs"}
+  games_cn: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-games@cn.mrs"}

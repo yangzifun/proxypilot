@@ -39,9 +39,33 @@ function jsonResponse(data, status = 200) {
 
 function getProtocol(configStr) {
     if (!configStr || typeof configStr !== 'string') return 'unknown';
-    if (configStr.startsWith('vmess://')) return 'vmess';
-    if (configStr.startsWith('vless://')) return 'vless';
-    if (configStr.startsWith('trojan://')) return 'trojan';
+
+    const protocolPatterns = [
+        { pattern: /^vmess:\/\//, name: 'vmess' },
+        { pattern: /^vless:\/\//, name: 'vless' },
+        { pattern: /^trojan:\/\//, name: 'trojan' },
+        { pattern: /^ss:\/\//, name: 'shadowsocks' },
+        { pattern: /^ssr:\/\//, name: 'shadowsocksr' },
+        { pattern: /^hysteria:\/\//, name: 'hysteria' },
+        { pattern: /^hysteria2:\/\//, name: 'hysteria2' },
+        { pattern: /^tuic:\/\//, name: 'tuic' },
+        { pattern: /^juicity:\/\//, name: 'juicity' },
+        { pattern: /^wireguard:\/\//, name: 'wireguard' },
+        { pattern: /^socks:\/\//, name: 'socks' },
+        { pattern: /^http:\/\//, name: 'http' },
+        { pattern: /^naive:\/\//, name: 'naiveproxy' },
+        { pattern: /^shadowsocks:\/\//, name: 'shadowsocks' },
+        { pattern: /^direct:\/\//, name: 'direct' },
+        { pattern: /^shadowtls:\/\//, name: 'shadowtls' },
+        { pattern: /^anytls:\/\//, name: 'anytls' }
+    ];
+
+    for (const proto of protocolPatterns) {
+        if (proto.pattern.test(configStr)) {
+            return proto.name;
+        }
+    }
+
     return 'unknown';
 }
 
@@ -64,11 +88,11 @@ async function logConfigAccess(env, uuid, queryType, clientIp, userAgent) {
             console.error("D1数据库未绑定，无法记录访问日志");
             return;
         }
-        
+
         const stmt = db.prepare(
             'INSERT INTO config_access_logs (uuid, query_type, client_ip, user_agent) VALUES (?, ?, ?, ?)'
         );
-        
+
         await stmt.bind(uuid, queryType, clientIp || 'unknown', userAgent || 'unknown').run();
         console.log(`成功记录访问日志: uuid=${uuid}, type=${queryType}`);
     } catch (e) {
@@ -86,14 +110,14 @@ function getClientIp(request) {
     // Cloudflare Workers可以通过cf-connecting-ip头获取真实IP
     const cfIp = request.headers.get('cf-connecting-ip');
     if (cfIp) return cfIp;
-    
+
     // 回退到X-Forwarded-For
     const forwardedFor = request.headers.get('x-forwarded-for');
     if (forwardedFor) {
         // 取第一个IP（原始客户端IP）
         return forwardedFor.split(',')[0].trim();
     }
-    
+
     // 最终回退方案
     return 'unknown';
 }
@@ -165,26 +189,26 @@ function replaceAddressesInConfigs(baseConfigsData, addressList) {
         const baseConfig = configObj.config_data;
         const domainHosting = configObj.domain_hosting || 'Cloudflare';
         const configId = configObj.id || 0;
-        
+
         let configType = getProtocol(baseConfig);
         let processedBaseConfig;
         const pushError = (msg) => generatedConfigs.push(`[错误] ${msg}`);
 
         // 首先，无论域名属性是什么，先输出原配置
         generatedConfigs.push(baseConfig);
-        
+
         // 检查域名托管属性，只有Cloudflare的配置才进行优选替换
         if (domainHosting !== 'Cloudflare') {
             // 非Cloudflare配置只输出原配置，不进行优选替换
             console.log(`配置ID ${configId} 的域名托管属性为"${domainHosting}"，只输出原配置，不进行优选替换`);
             continue;
         }
-        
-        // 只处理 vmess, vless, trojan 协议
-        if (configType === 'trojan' || configType === 'vless') {
+
+        // 只处理需要进行地址替换的协议
+        if (['trojan', 'vless', 'vmess', 'shadowsocks', 'http', 'socks', 'hysteria', 'hysteria2'].includes(configType)) {
             const addressMatch = baseConfig.match(addressExtractionRegex);
             if (!addressMatch) {
-                pushError(`配置中未找到地址，已跳过。`);
+                pushError(`${configType}配置中未找到地址，已跳过。`);
                 continue;
             }
             processedBaseConfig = baseConfig;
@@ -201,8 +225,24 @@ function replaceAddressesInConfigs(baseConfigsData, addressList) {
                 pushError(`VMess配置解码失败，已跳过。`);
                 continue;
             }
+        } else if (configType === 'tuic') {
+            // TUIC协议特殊处理
+            const addressMatch = baseConfig.match(addressExtractionRegex);
+            if (!addressMatch) {
+                pushError(`TUIC配置中未找到地址，已跳过。`);
+                continue;
+            }
+            processedBaseConfig = baseConfig;
+        } else if (configType === 'juicity') {
+            // Juicity协议特殊处理
+            const addressMatch = baseConfig.match(addressExtractionRegex);
+            if (!addressMatch) {
+                pushError(`Juicity配置中未找到地址，已跳过。`);
+                continue;
+            }
+            processedBaseConfig = baseConfig;
         } else {
-            pushError(`不支持的类型: ${configType}，已跳过。`);
+            // 其他协议不进行地址替换
             continue;
         }
 
@@ -212,20 +252,20 @@ function replaceAddressesInConfigs(baseConfigsData, addressList) {
                 // simple validation
             }
             const cleanAddrForName = newAddr.replace(/[\[\]]/g, '');
-            
+
             // 处理IPv6地址格式
             let formattedAddr = newAddr;
             if (newAddr.includes(':') && !newAddr.startsWith('[') && !newAddr.endsWith(']')) {
                 formattedAddr = `[${newAddr}]`;
             }
 
-            if (configType === 'trojan' || configType === 'vless') {
+            if (['trojan', 'vless', 'shadowsocks', 'http', 'socks', 'hysteria', 'hysteria2', 'tuic', 'juicity'].includes(configType)) {
                 try {
                     const url = new URL(processedBaseConfig);
                     const originalName = url.hash ? decodeURIComponent(url.hash.substring(1)) : `${configType}-node`;
                     const newName = `${originalName}-${cleanAddrForName}`;
                     url.hash = encodeURIComponent(newName);
-                    url.hostname = formattedAddr; 
+                    url.hostname = formattedAddr;
                     generatedConfigs.push(url.toString());
                 } catch (e) {
                     pushError(`处理 ${configType} 出错: ${e.message}`);
@@ -234,13 +274,13 @@ function replaceAddressesInConfigs(baseConfigsData, addressList) {
                 const tempVmessObj = JSON.parse(JSON.stringify(processedBaseConfig));
                 const originalName = tempVmessObj.ps || tempVmessObj.remark || 'vmess-node';
                 tempVmessObj.ps = `${originalName}-${cleanAddrForName}`;
-                
+
                 // 处理IPv6地址格式
                 let formattedAddr = newAddr;
                 if (newAddr.includes(':') && !newAddr.startsWith('[') && !newAddr.endsWith(']')) {
                     formattedAddr = `[${newAddr}]`;
                 }
-                tempVmessObj.add = formattedAddr; 
+                tempVmessObj.add = formattedAddr;
                 if (tempVmessObj.remark) delete tempVmessObj.remark;
 
                 try {
@@ -251,101 +291,36 @@ function replaceAddressesInConfigs(baseConfigsData, addressList) {
             }
         }
     }
-    
+
     // 去重生成的配置
     return [...new Set(generatedConfigs)];
 }
 
-// 获取Clash配置模板 - 支持自定义模板URL
+// 获取Clash配置模板 - 仅从数据库或自定义URL获取
 async function fetchClashConfigTemplate(templateUrl) {
     try {
         const response = await fetch(templateUrl);
         if (!response.ok) {
-            console.warn(`无法从指定URL获取模板，尝试使用默认模板: ${response.status} ${response.statusText}`);
-            // Fallback to a hardcoded minimal template
-            return `
-# Clash/Mihomo 配置文件 (默认模板 - 模板获取失败)
-# 生成时间: ${new Date().toISOString()}
-# 模板URL: ${templateUrl}
-
-# 节点信息
-proxies:
-  - {name: 直连, type: direct}
-
-# 全局配置 
-port: 7890
-socks-port: 7891
-redir-port: 7892
-mixed-port: 7893
-tproxy-port: 7894
-allow-lan: true
-bind-address: "*"
-ipv6: false
-unified-delay: true
-tcp-concurrent: true
-log-level: warning
-find-process-mode: 'off'
-global-client-fingerprint: chrome
-keep-alive-idle: 600
-keep-alive-interval: 15
-disable-keep-alive: false
-profile:
-  store-selected: true
-  store-fake-ip: true
-
-# DNS模块
-dns:
-  enable: true
-  listen: 0.0.0.0:1053
-  ipv6: false
-  respect-rules: true
-  fake-ip-range: 28.0.0.1/8
-  fake-ip-filter-mode: blacklist
-  fake-ip-filter:
-    - "rule-set:private_domain,cn_domain"
-    - "+.msftconnecttest.com"
-    - "+.msftncsi.com"
-    - "time.*.com"
-    - "+.market.xiaomi.com"
-  default-nameserver:
-   - 223.5.5.5
-  proxy-server-nameserver:
-    - https://doh.yangzifun.org/dns-query
-    - https://doh.pub/dns-query
-  nameserver:
-    - 8.8.8.8
-    - 1.1.1.1
- 
-
-# 出站策略
-proxy-groups:
-  - {name: 🚀 默认代理, type: select, include-all: true, filter: "^((?!(直连)).)*$", proxies: [⚡ 自动选择, 🌐 全部节点]}
-  - {name: ⚡ 自动选择, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连)).)*$"}
-  - {name: 🌐 全部节点, type: select, include-all: true}
-  - {name: 🎯 直连, type: select, proxies: [DIRECT, 🚀 默认代理]}
-
-# 规则匹配
-rules:
-  - MATCH,🚀 默认代理
-`;
+            console.error(`无法从URL获取模板: ${response.status} ${response.statusText}`);
+            throw new Error(`无法从 ${templateUrl} 获取Clash配置文件模板。`);
         }
         return await response.text();
     } catch (error) {
         console.error('获取Clash模板失败:', error);
-        throw new Error(`无法从 ${templateUrl} 获取Clash配置文件模板。`);
+        throw new Error(`无法从 ${templateUrl} 获取Clash配置文件模板: ${error.message}`);
     }
 }
 
 // 将单个协议配置转换为Clash格式
 function convertToClashFormat(configStr) {
     const protocol = getProtocol(configStr);
-    
+
     // 处理VMess配置
     if (protocol === 'vmess') {
         try {
             const encodedJson = configStr.substring('vmess://'.length);
             const vmessObj = JSON.parse(b64_to_utf8(encodedJson));
-            
+
             const clashConfig = {
                 name: vmessObj.ps || vmessObj.remark || `VMess-${vmessObj.add}-${vmessObj.port}`,
                 type: 'vmess',
@@ -357,7 +332,7 @@ function convertToClashFormat(configStr) {
                 tls: vmessObj.tls === 'tls',
                 'skip-cert-verify': true
             };
-            
+
             // 处理网络类型
             if (vmessObj.net === 'ws') {
                 clashConfig.network = 'ws';
@@ -376,21 +351,29 @@ function convertToClashFormat(configStr) {
                 clashConfig['grpc-opts'] = {
                     'grpc-service-name': vmessObj.path || ''
                 };
+            } else if (vmessObj.net === 'tcp') {
+                clashConfig.network = 'tcp';
+            } else if (vmessObj.net === 'httpupgrade') {
+                clashConfig.network = 'http';
+                clashConfig['http-opts'] = {
+                    path: vmessObj.path || '/',
+                    headers: vmessObj.host ? { Host: vmessObj.host } : {}
+                };
             }
-            
+
             return clashConfig;
         } catch (error) {
             console.error('转换VMess配置失败:', error, configStr);
             return null;
         }
     }
-    
+
     // 处理Trojan配置
     if (protocol === 'trojan') {
         try {
             const url = new URL(configStr);
             const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `Trojan-${url.hostname}-${url.port}`;
-            
+
             const clashConfig = {
                 name: name,
                 type: 'trojan',
@@ -400,68 +383,558 @@ function convertToClashFormat(configStr) {
                 sni: url.searchParams.get('sni') || url.hostname,
                 'skip-cert-verify': true
             };
-            
+
             // 处理网络类型
             const typeParam = url.searchParams.get('type') || '';
             if (typeParam === 'ws') {
                 clashConfig.network = 'ws';
                 const path = url.searchParams.get('path') || '/';
                 const host = url.searchParams.get('host');
-                
+
                 clashConfig['ws-opts'] = {
                     path: path,
                     headers: host ? { Host: host } : {}
                 };
+            } else if (typeParam === 'grpc') {
+                clashConfig.network = 'grpc';
+                clashConfig['grpc-opts'] = {
+                    'grpc-service-name': url.searchParams.get('serviceName') || ''
+                };
+            } else if (typeParam === 'httpupgrade') {
+                clashConfig.network = 'http';
+                clashConfig['http-opts'] = {
+                    path: url.searchParams.get('path') || '/',
+                    headers: {}
+                };
+                if (url.searchParams.get('host')) {
+                    clashConfig['http-opts'].headers.Host = url.searchParams.get('host');
+                }
+            } else if (typeParam === 'h2') {
+                clashConfig.network = 'h2';
+                clashConfig['h2-opts'] = {
+                    path: url.searchParams.get('path') || '/',
+                    host: url.searchParams.get('host') ? [url.searchParams.get('host')] : []
+                };
+            } else if (typeParam === 'tcp') {
+                clashConfig.network = 'tcp';
             }
-            
+
             return clashConfig;
         } catch (error) {
             console.error('转换Trojan配置失败:', error, configStr);
             return null;
         }
     }
-    
+
     // 处理VLESS配置（Mihomo支持）
     if (protocol === 'vless') {
         try {
             const url = new URL(configStr);
             const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `VLESS-${url.hostname}-${url.port}`;
-            
+
             const clashConfig = {
                 name: name,
                 type: 'vless',
                 server: url.hostname,
                 port: parseInt(url.port) || 443,
                 uuid: url.username,
-                tls: true,
                 'skip-cert-verify': true
             };
-            
+
+            // 处理TLS
+            const tlsParam = url.searchParams.get('security') || '';
+            clashConfig.tls = tlsParam === 'tls' || tlsParam === 'xtls' || tlsParam === 'reality';
+
             // 处理流设置
             const typeParam = url.searchParams.get('type') || '';
             if (typeParam === 'ws') {
                 clashConfig.network = 'ws';
                 const path = url.searchParams.get('path') || '/';
                 const host = url.searchParams.get('host');
-                
+
                 clashConfig['ws-opts'] = {
                     path: path,
                     headers: host ? { Host: host } : {}
                 };
             } else if (typeParam === 'grpc') {
-                 clashConfig.network = 'grpc';
-                 clashConfig['grpc-opts'] = {
-                     'grpc-service-name': url.searchParams.get('serviceName') || ''
-                 };
+                clashConfig.network = 'grpc';
+                clashConfig['grpc-opts'] = {
+                    'grpc-service-name': url.searchParams.get('serviceName') || ''
+                };
+            } else if (typeParam === 'httpupgrade') {
+                clashConfig.network = 'http';
+                clashConfig['http-opts'] = {
+                    path: url.searchParams.get('path') || '/',
+                    headers: {}
+                };
+                if (url.searchParams.get('host')) {
+                    clashConfig['http-opts'].headers.Host = url.searchParams.get('host');
+                }
+            } else if (typeParam === 'h2') {
+                clashConfig.network = 'h2';
+                clashConfig['h2-opts'] = {
+                    path: url.searchParams.get('path') || '/',
+                    host: url.searchParams.get('host') ? [url.searchParams.get('host')] : []
+                };
+            } else if (typeParam === 'tcp') {
+                clashConfig.network = 'tcp';
             }
-            
+
+            // 处理REALITY
+            if (tlsParam === 'reality') {
+                clashConfig.reality = {
+                    publicKey: url.searchParams.get('pbk') || '',
+                    shortId: url.searchParams.get('sid') || ''
+                };
+            }
+
             return clashConfig;
         } catch (error) {
             console.error('转换VLESS配置失败:', error, configStr);
             return null;
         }
     }
-    
+
+    // 处理Shadowsocks配置
+    if (protocol === 'shadowsocks') {
+        try {
+            const url = new URL(configStr);
+            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `Shadowsocks-${url.hostname}-${url.port}`;
+
+            // 解析加密方法和密码
+            const methodPassword = atob(url.username);
+            const separatorIndex = methodPassword.indexOf(':');
+            const method = methodPassword.substring(0, separatorIndex);
+            const password = methodPassword.substring(separatorIndex + 1);
+
+            const clashConfig = {
+                name: name,
+                type: 'ss',
+                server: url.hostname,
+                port: parseInt(url.port) || 443,
+                cipher: method,
+                password: password
+            };
+
+            // 处理插件参数
+            const pluginParam = url.searchParams.get('plugin');
+            if (pluginParam) {
+                const pluginParams = new URLSearchParams(pluginParam);
+                const pluginName = pluginParams.get('obfs');
+                if (pluginName === 'simple-obfs') {
+                    clashConfig.plugin = 'obfs';
+                    clashConfig['plugin-opts'] = {
+                        mode: pluginParams.get('obfs') || 'http',
+                        host: pluginParams.get('obfs-host') || ''
+                    };
+                }
+            }
+
+            return clashConfig;
+        } catch (error) {
+            console.error('转换Shadowsocks配置失败:', error, configStr);
+            return null;
+        }
+    }
+
+    // 处理Hysteria配置
+    if (protocol === 'hysteria') {
+        try {
+            const url = new URL(configStr);
+            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `Hysteria-${url.hostname}-${url.port}`;
+
+            const clashConfig = {
+                name: name,
+                type: 'hysteria',
+                server: url.hostname,
+                port: parseInt(url.port) || 443,
+                protocol: url.searchParams.get('protocol') || 'udp',
+                'skip-cert-verify': true
+            };
+
+            // 解析认证信息
+            if (url.username) {
+                clashConfig.auth = url.username;
+            }
+
+            // 处理其他参数
+            const obfsParam = url.searchParams.get('obfs');
+            if (obfsParam) {
+                clashConfig.obfs = obfsParam;
+            }
+
+            const upmbpsParam = url.searchParams.get('upmbps');
+            if (upmbpsParam) {
+                clashConfig.up = upmbpsParam;
+            }
+
+            const downmbpsParam = url.searchParams.get('downmbps');
+            if (downmbpsParam) {
+                clashConfig.down = downmbpsParam;
+            }
+
+            return clashConfig;
+        } catch (error) {
+            console.error('转换Hysteria配置失败:', error, configStr);
+            return null;
+        }
+    }
+
+    // 处理Hysteria2配置
+    if (protocol === 'hysteria2') {
+        try {
+            const url = new URL(configStr);
+            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `Hysteria2-${url.hostname}-${url.port}`;
+
+            const clashConfig = {
+                name: name,
+                type: 'hysteria2',
+                server: url.hostname,
+                port: parseInt(url.port) || 443,
+                password: url.username,
+                'skip-cert-verify': true
+            };
+
+            // 处理其他参数
+            const obfsParam = url.searchParams.get('obfs');
+            if (obfsParam) {
+                clashConfig.obfs = obfsParam;
+            }
+
+            const obfsPasswordParam = url.searchParams.get('obfs-password');
+            if (obfsPasswordParam) {
+                clashConfig['obfs-password'] = obfsPasswordParam;
+            }
+
+            const upmbpsParam = url.searchParams.get('upmbps');
+            if (upmbpsParam) {
+                clashConfig.up = upmbpsParam;
+            }
+
+            const downmbpsParam = url.searchParams.get('downmbps');
+            if (downmbpsParam) {
+                clashConfig.down = downmbpsParam;
+            }
+
+            return clashConfig;
+        } catch (error) {
+            console.error('转换Hysteria2配置失败:', error, configStr);
+            return null;
+        }
+    }
+
+    // 处理TUIC配置
+    if (protocol === 'tuic') {
+        try {
+            const url = new URL(configStr);
+            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `TUIC-${url.hostname}-${url.port}`;
+
+            const clashConfig = {
+                name: name,
+                type: 'tuic',
+                server: url.hostname,
+                port: parseInt(url.port) || 443,
+                uuid: url.username,
+                password: url.searchParams.get('password') || '',
+                'skip-cert-verify': true
+            };
+
+            // 处理TUIC V5参数
+            const versionParam = url.searchParams.get('version');
+            if (versionParam === '5') {
+                clashConfig.version = 5;
+            }
+
+            const congestionControlParam = url.searchParams.get('congestion_control');
+            if (congestionControlParam) {
+                clashConfig['congestion-controller'] = congestionControlParam;
+            }
+
+            const udpRelayModeParam = url.searchParams.get('udp_relay_mode');
+            if (udpRelayModeParam) {
+                clashConfig['udp-relay-mode'] = udpRelayModeParam;
+            }
+
+            return clashConfig;
+        } catch (error) {
+            console.error('转换TUIC配置失败:', error, configStr);
+            return null;
+        }
+    }
+
+    // 处理Juicity配置
+    if (protocol === 'juicity') {
+        try {
+            const url = new URL(configStr);
+            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `Juicity-${url.hostname}-${url.port}`;
+
+            const clashConfig = {
+                name: name,
+                type: 'juicity',
+                server: url.hostname,
+                port: parseInt(url.port) || 443,
+                uuid: url.username,
+                password: url.searchParams.get('password') || '',
+                'skip-cert-verify': true
+            };
+
+            // 处理其他参数
+            const congestionControlParam = url.searchParams.get('congestion_control');
+            if (congestionControlParam) {
+                clashConfig['congestion-controller'] = congestionControlParam;
+            }
+
+            return clashConfig;
+        } catch (error) {
+            console.error('转换Juicity配置失败:', error, configStr);
+            return null;
+        }
+    }
+
+    // 处理WireGuard配置
+    if (protocol === 'wireguard') {
+        try {
+            const url = new URL(configStr);
+            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `WireGuard-${url.hostname}-${url.port}`;
+
+            const clashConfig = {
+                name: name,
+                type: 'wireguard',
+                server: url.hostname,
+                port: parseInt(url.port) || 443,
+                'private-key': url.searchParams.get('private_key') || '',
+                'public-key': url.searchParams.get('public_key') || '',
+                'pre-shared-key': url.searchParams.get('preshared_key') || '',
+                'reserved': url.searchParams.get('reserved') ? url.searchParams.get('reserved').split(',').map(Number) : []
+            };
+
+            // 处理MTU
+            const mtuParam = url.searchParams.get('mtu');
+            if (mtuParam) {
+                clashConfig.mtu = parseInt(mtuParam);
+            }
+
+            // 处理DNS
+            const dnsParam = url.searchParams.get('dns');
+            if (dnsParam) {
+                clashConfig.dns = dnsParam.split(',');
+            }
+
+            // 处理AllowedIPs
+            const allowedIPsParam = url.searchParams.get('allowed_ips');
+            if (allowedIPsParam) {
+                clashConfig['allowed-ips'] = allowedIPsParam.split(',');
+            }
+
+            return clashConfig;
+        } catch (error) {
+            console.error('转换WireGuard配置失败:', error, configStr);
+            return null;
+        }
+    }
+
+    // 处理SOCKS配置
+    if (protocol === 'socks') {
+        try {
+            const url = new URL(configStr);
+            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `SOCKS5-${url.hostname}-${url.port}`;
+
+            const clashConfig = {
+                name: name,
+                type: 'socks5',
+                server: url.hostname,
+                port: parseInt(url.port) || 1080,
+                username: url.username || '',
+                password: url.password || '',
+                tls: url.protocol === 'socks5-tls:',
+                'skip-cert-verify': true
+            };
+
+            return clashConfig;
+        } catch (error) {
+            console.error('转换SOCKS配置失败:', error, configStr);
+            return null;
+        }
+    }
+
+    // 处理HTTP配置
+    if (protocol === 'http') {
+        try {
+            const url = new URL(configStr);
+            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `HTTP-${url.hostname}-${url.port}`;
+
+            const clashConfig = {
+                name: name,
+                type: 'http',
+                server: url.hostname,
+                port: parseInt(url.port) || 80,
+                username: url.username || '',
+                password: url.password || '',
+                tls: url.protocol === 'https:',
+                'skip-cert-verify': true
+            };
+
+            return clashConfig;
+        } catch (error) {
+            console.error('转换HTTP配置失败:', error, configStr);
+            return null;
+        }
+    }
+
+    // 处理NaiveProxy配置
+    if (protocol === 'naiveproxy') {
+        try {
+            const url = new URL(configStr);
+            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `Naive-${url.hostname}-${url.port}`;
+
+            const clashConfig = {
+                name: name,
+                type: 'naive',
+                server: url.hostname,
+                port: parseInt(url.port) || 443,
+                username: url.username || '',
+                password: url.password || '',
+                'skip-cert-verify': true
+            };
+
+            // 处理额外参数
+            const extraOptsParam = url.searchParams.get('extra_opts');
+            if (extraOptsParam) {
+                try {
+                    const extraOpts = JSON.parse(extraOptsParam);
+                    if (extraOpts.disable_padding) {
+                        clashConfig['disable-padding'] = extraOpts.disable_padding;
+                    }
+                    if (extraOpts.padding_length) {
+                        clashConfig['padding-length'] = extraOpts.padding_length;
+                    }
+                } catch (e) {
+                    console.warn('解析NaiveProxy额外参数失败:', e);
+                }
+            }
+
+            return clashConfig;
+        } catch (error) {
+            console.error('转换NaiveProxy配置失败:', error, configStr);
+            return null;
+        }
+    }
+
+    // 处理ShadowTLS配置
+    if (protocol === 'shadowtls') {
+        try {
+            const url = new URL(configStr);
+            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `ShadowTLS-${url.hostname}-${url.port}`;
+
+            const clashConfig = {
+                name: name,
+                type: 'shadowtls',
+                server: url.hostname,
+                port: parseInt(url.port) || 443,
+                password: url.username,
+                'skip-cert-verify': true,
+                version: url.searchParams.get('version') || '3'
+            };
+
+            // 处理主机参数
+            const hostParam = url.searchParams.get('host');
+            if (hostParam) {
+                clashConfig.host = hostParam;
+            }
+
+            return clashConfig;
+        } catch (error) {
+            console.error('转换ShadowTLS配置失败:', error, configStr);
+            return null;
+        }
+    }
+
+    // 处理Direct配置
+    if (protocol === 'direct') {
+        return {
+            name: 'Direct',
+            type: 'direct'
+        };
+    }
+
+    // 处理AnyTLS配置
+    if (protocol === 'anytls') {
+        try {
+            const url = new URL(configStr);
+            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `AnyTLS-${url.hostname}-${url.port}`;
+
+            const clashConfig = {
+                name: name,
+                type: 'anytls',
+                server: url.hostname,
+                port: parseInt(url.port) || 443,
+                'skip-cert-verify': true
+            };
+
+            // 处理协议参数
+            const protocolParam = url.searchParams.get('protocol');
+            if (protocolParam) {
+                clashConfig.protocol = protocolParam;
+            }
+
+            // 处理认证参数
+            if (url.username) {
+                clashConfig.username = url.username;
+            }
+            if (url.password) {
+                clashConfig.password = url.password;
+            }
+
+            return clashConfig;
+        } catch (error) {
+            console.error('转换AnyTLS配置失败:', error, configStr);
+            return null;
+        }
+    }
+
+    // 处理ShadowsocksR配置
+    if (protocol === 'shadowsocksr') {
+        try {
+            // SSR配置格式复杂，通常包含多个base64编码的参数
+            const url = new URL(configStr);
+            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `SSR-${url.hostname}-${url.port}`;
+
+            // SSR配置通常格式为: ssr://base64(server:port:protocol:method:obfs:base64(password))/?obfsparam=...&protoparam=...&remarks=...
+            const decoded = atob(url.hostname);
+            const parts = decoded.split(':');
+
+            if (parts.length < 6) {
+                console.error('SSR配置格式不正确');
+                return null;
+            }
+
+            const server = parts[0];
+            const port = parseInt(parts[1]);
+            const protocol = parts[2];
+            const method = parts[3];
+            const obfs = parts[4];
+            const password = atob(parts[5]);
+
+            const clashConfig = {
+                name: name,
+                type: 'ssr',
+                server: server,
+                port: port,
+                cipher: method,
+                password: password,
+                protocol: protocol,
+                'protocol-param': url.searchParams.get('protoparam') ? atob(url.searchParams.get('protoparam')) : '',
+                obfs: obfs,
+                'obfs-param': url.searchParams.get('obfsparam') ? atob(url.searchParams.get('obfsparam')) : ''
+            };
+
+            return clashConfig;
+        } catch (error) {
+            console.error('转换ShadowsocksR配置失败:', error, configStr);
+            return null;
+        }
+    }
+
     return null;
 }
 
@@ -473,11 +946,15 @@ async function generateClashConfig(request, env) {
         const addressType = url.searchParams.get('type') || 'ip';
         const ipType = url.searchParams.get('ipType') || 'all';
         const carrier = url.searchParams.get('carrier') || 'all';
-        const template = url.searchParams.get('template') || 'full_config.yaml';
-        
+        const template = url.searchParams.get('template') || '';
+
         // 验证必要参数
         if (!uuid) {
             return jsonResponse({ error: '缺少必要参数: uuid' }, 400);
+        }
+
+        if (!template) {
+            return jsonResponse({ error: '缺少必要参数: template' }, 400);
         }
 
         // 获取基础配置
@@ -503,17 +980,17 @@ async function generateClashConfig(request, env) {
         // 生成节点配置 (原始链接字符串形式)
         const generatedRawConfigs = replaceAddressesInConfigs(baseConfigsData, addressList);
         const validRawConfigs = generatedRawConfigs.filter(c => !c.startsWith('[错误]'));
-        
+
         if (validRawConfigs.length === 0) {
             return jsonResponse({ error: '未能生成有效的节点配置' }, 400);
         }
 
         // 转换为Clash格式
         let clashProxies = [];
-        
+
         // 添加直连节点
         clashProxies.push({name: '直连', type: 'direct'});
-        
+
         // 转换每个配置
         for (const config of validRawConfigs) {
             const clashConfig = convertToClashFormat(config);
@@ -551,27 +1028,31 @@ async function generateClashConfig(request, env) {
         if (clashProxies.length <= 1 && clashProxies[0].name === '直连') {
             return jsonResponse({ error: '未能生成有效的代理节点' }, 400);
         }
-        
+
         // 根据template参数选择模板URL
         let templateUrl;
         if (template.startsWith('http://') || template.startsWith('https://')) {
             // 自定义模板URL
             templateUrl = template;
         } else {
-            // 预设模板 - 保持原接口不变，直接使用用户传入的文件名
-            templateUrl = getTemplateUrl(template);
+            // 从数据库中获取模板
+            const dbTemplate = await fetchTemplateFromDB(env, template);
+            if (!dbTemplate) {
+                return jsonResponse({ error: `未在数据库中找到模板 "${template}"` }, 404);
+            }
+            templateUrl = dbTemplate.url;
         }
-        
+
         // 获取模板
         const templateContent = await fetchClashConfigTemplate(templateUrl);
-        
+
         // 解析YAML模板
         let finalConfig = templateContent;
-        
+
         // 找到proxies部分并替换
         const proxiesMarker = '# 节点信息\nproxies:';
         let proxiesStartIndex = templateContent.indexOf(proxiesMarker);
-        
+
         if (proxiesStartIndex === -1) {
             proxiesStartIndex = templateContent.indexOf('\nproxies:');
             if (proxiesStartIndex !== -1) {
@@ -581,32 +1062,32 @@ async function generateClashConfig(request, env) {
 
         if (proxiesStartIndex !== -1) {
             const insertPosition = templateContent.indexOf('\n', proxiesStartIndex + 'proxies:'.length);
-            
+
             let proxiesEndIndex = templateContent.indexOf('\n\n', insertPosition);
             if (proxiesEndIndex === -1 || proxiesEndIndex < insertPosition) {
                 proxiesEndIndex = templateContent.length;
             }
-            
+
             const newProxiesContent = clashProxies.map(p => `  - ${JSON.stringify(p)}`).join('\n');
-            
-            finalConfig = templateContent.substring(0, insertPosition + 1) + 
-                         newProxiesContent + 
-                         templateContent.substring(proxiesEndIndex);
+
+            finalConfig = templateContent.substring(0, insertPosition + 1) +
+                newProxiesContent +
+                templateContent.substring(proxiesEndIndex);
         } else {
             console.warn("Clash模板中未找到 'proxies:' 标记，将节点添加到文件末尾。");
             finalConfig = templateContent + `\n\n# ===== 生成的节点配置 =====\nproxies:\n${clashProxies.map(p => `  - ${JSON.stringify(p)}`).join('\n')}`;
         }
-        
+
         // 记录访问日志 - 根据referer判断是网页生成还是订阅获取
         const clientIp = getClientIp(request);
         const userAgent = request.headers.get('user-agent') || 'unknown';
-        
+
         // 判断请求来源：如果有referer并且referer包含当前域，则认为是网页生成
         // 否则认为是客户端订阅
         const referer = request.headers.get('referer');
         const isWebPageGeneration = referer && referer.includes(url.origin);
         const queryType = isWebPageGeneration ? 'api-generation' : 'subscription';
-        
+
         await logConfigAccess(env, uuid, queryType, clientIp, userAgent);
         console.log(`记录${isWebPageGeneration ? '网页生成' : '订阅获取'}访问: uuid=${uuid}, clientIp=${clientIp}`);
 
@@ -630,34 +1111,50 @@ async function generateClashConfig(request, env) {
     }
 }
 
-// 根据模板名称获取对应的URL
-function getTemplateUrl(templateName) {
-    // 基础URL
-    const baseUrl = 'https://github.com/yangzifun/rule/raw/refs/heads/main/configs/';
-    
-    // 如果模板名已经是完整的文件名，直接使用
-    if (templateName.endsWith('.yaml')) {
-        return baseUrl + templateName;
+// 从数据库获取模板URL - 修改为只从数据库读取
+async function fetchTemplateFromDB(env, templateName) {
+    try {
+        const db = env.DB;
+        if (!db) {
+            throw new Error("D1数据库未绑定，无法获取模板");
+        }
+
+        // 获取模板及其描述信息
+        const template = await db.prepare(
+            'SELECT name, url, description FROM config_templates WHERE name = ?'
+        ).bind(templateName).first();
+
+        if (template && template.url) {
+            console.log(`从数据库找到模板: ${template.name} -> ${template.url}`);
+            return template;
+        }
+
+        // 数据库中未找到模板，返回null
+        console.log(`数据库中未找到模板: ${templateName}`);
+        return null;
+    } catch (e) {
+        console.error(`从数据库获取模板失败: ${e.message}`);
+        throw new Error(`无法从数据库获取模板: ${e.message}`);
     }
-    
-    // 如果提供了简短名称，映射到完整文件名
-    const templateMappings = {
-        'default': 'config.yaml',
-        'cn': 'cn_config.yaml',
-        'full': 'full_config.yaml',
-        'geoip': 'geoip_config.yaml',
-        'global': 'global_config.yaml',
-        'lite': 'lite_config.yaml',
-        'load-balance': 'load-balance_config.yaml',
-        'stream': 'stream_config.yaml'
-    };
-    
-    if (templateMappings[templateName]) {
-        return baseUrl + templateMappings[templateName];
+}
+
+// 从数据库获取所有模板列表
+async function fetchAllTemplatesFromDB(env) {
+    try {
+        const db = env.DB;
+        if (!db) {
+            throw new Error("D1数据库未绑定，无法获取模板列表");
+        }
+
+        const { results } = await db.prepare(
+            'SELECT name, url, description, is_default FROM config_templates ORDER BY is_default DESC, name ASC'
+        ).all();
+
+        return results;
+    } catch (e) {
+        console.error(`从数据库获取模板列表失败: ${e.message}`);
+        throw new Error(`无法从数据库获取模板列表: ${e.message}`);
     }
-    
-    // 默认返回全量模板
-    return baseUrl + 'full_config.yaml';
 }
 
 // =================================================================
@@ -676,7 +1173,17 @@ export default {
                 if (path === '/') {
                     return new Response(generatePageHtmlContent.replace(/YOUR_WORKER_DOMAIN_PATH/g, DOMAIN_NAME), { headers: { 'Content-Type': 'text/html;charset=UTF-8' } });
                 }
-                
+
+                // ===== 新增：获取模板列表接口 =====
+                if (path === '/api/templates') {
+                    try {
+                        const templates = await fetchAllTemplatesFromDB(env);
+                        return jsonResponse(templates);
+                    } catch (error) {
+                        return jsonResponse({ error: `获取模板列表失败: ${error.message}` }, 500);
+                    }
+                }
+
                 // ===== 仅保留：Clash配置文件生成接口 =====
                 if (path === '/clash-config') {
                     return await generateClashConfig(request, env);
@@ -849,6 +1356,43 @@ const generatePageHtmlContent = `
     #customTemplateInput {
       margin-top: 10px;
     }
+    
+    /* 加载状态 */
+    .loading-state {
+      text-align: center;
+      padding: 20px;
+      color: #89949B;
+    }
+    .loading-state .loader {
+      width: 32px;
+      height: 32px;
+      border: 3px solid #89949B;
+      border-bottom-color: transparent;
+      margin-bottom: 10px;
+    }
+    
+    /* 协议支持说明 */
+    .protocol-support {
+      margin-top: 20px;
+      background: #f8f9fa;
+      border: 1px solid #E8EBED;
+      border-radius: 8px;
+      padding: 15px;
+    }
+    .protocol-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .protocol-item {
+      padding: 8px 12px;
+      background: #E8EBED;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      color: #5a666d;
+      text-align: center;
+    }
   </style>
 </head>
 <body>
@@ -887,18 +1431,10 @@ const generatePageHtmlContent = `
           <label>选择配置文件模板</label>
           <div class="template-select-container">
             <select id="templateSelect" onchange="handleTemplateChange()">
-              <option value="full_config.yaml" selected>全量模板 (full_config.yaml)</option>
-              <option value="lite_config.yaml">轻量模板 (lite_config.yaml)</option>
-              <option value="global_config.yaml">全球上网模板 (global_config.yaml)</option>
-              <option value="cn_config.yaml">回国模板 (cn_config.yaml)</option>
-              <option value="config.yaml">默认模板 (config.yaml)</option>
-              <option value="geoip_config.yaml">IP分流模板 (geoip_config.yaml)</option>
-              <option value="load-balance_config.yaml">负载均衡模板 (load-balance_config.yaml)</option>
-              <option value="stream_config.yaml">视频优化模板 (stream_config.yaml)</option>
-              <option value="custom">自定义模板</option>
+              <option value="">正在加载模板...</option>
             </select>
             <div id="templateDescription" class="template-description">
-              包含完整规则和策略组的完整配置，适用于大多数场景。
+              请从下拉列表中选择一个配置文件模板
             </div>
           </div>
         </div>
@@ -910,17 +1446,21 @@ const generatePageHtmlContent = `
           </div>
         </div>
         
-        <div class="info-box">
+        <div id="templateLoading" class="loading-state hidden">
+          <div class="loader"></div>
+          <p>正在加载模板列表...</p>
+        </div>
+        
+        <div id="templateError" class="info-box hidden">
+          无法加载模板列表，请稍后重试。
+        </div>
+        
+        <div id="templateInfoBox" class="info-box">
           <strong>模板说明：</strong>
-          <br>• <strong>全量模板</strong>：包含完整的规则集和策略组，功能最全面
-          <br>• <strong>轻量模板</strong>：精简的规则和策略，适合手机或低性能设备
-          <br>• <strong>全球上网模板</strong>：针对全球上网需求优化
-          <br>• <strong>回国模板</strong>：针对海外用户访问国内服务优化
-          <br>• <strong>默认模板</strong>：基础配置模板
-          <br>• <strong>IP分流模板</strong>：基于IP地址进行智能分流
-          <br>• <strong>负载均衡模板</strong>：支持多节点负载均衡策略
-          <br>• <strong>视频优化模板</strong>：针对视频流媒体和直播优化
-          <br><br><strong>模板库：</strong> <a href="https://github.com/yangzifun/rule" target="_blank">https://github.com/yangzifun/rule</a>
+          <br>• 所有模板均从数据库读取
+          <br>• 模板包含完整的规则和策略组配置
+          <br>• 选择不同的模板可以获得不同的分流规则和优化策略
+          <br><br><strong>注意：</strong>如果数据库中没有配置模板，将无法生成配置文件。
         </div>
       </div>
 
@@ -962,7 +1502,7 @@ const generatePageHtmlContent = `
       <div class="card">
         <h2>4. 生成结果</h2>
         <div class="form-group">
-          <button id="generateClashBtn" class="nav-btn primary" style="width:100%; padding: 12px;" onclick="generateClashConfig()">生成Clash订阅文件</button>
+          <button id="generateClashBtn" class="nav-btn primary" style="width:100%; padding: 12px;" onclick="generateClashConfig()" disabled>生成Clash订阅文件</button>
         </div>
         
         <div class="subscription-link-box hidden" id="clashSubscriptionLinkBox">
@@ -992,6 +1532,42 @@ const generatePageHtmlContent = `
           配置文件基于您选择的模板生成，包含完整的规则和策略组。
           <br>生成的订阅链接可直接在Clash/Mihomo客户端中使用。
         </div>
+        
+        <div class="protocol-support">
+          <h3 style="margin-top: 0; color: #3d474d;">支持协议</h3>
+          <div class="protocol-list">
+            <div class="protocol-item">SOCKS5</div>
+            <div class="protocol-item">HTTP/HTTPS</div>
+            <div class="protocol-item">TUIC</div>
+            <div class="protocol-item">TUIC V5</div>
+            <div class="protocol-item">Juicity</div>
+            <div class="protocol-item">WireGuard</div>
+            <div class="protocol-item">Hysteria</div>
+            <div class="protocol-item">Hysteria2</div>
+            <div class="protocol-item">VLESS+TCP</div>
+            <div class="protocol-item">VLESS+WS</div>
+            <div class="protocol-item">VLESS+gRPC</div>
+            <div class="protocol-item">VLESS+HTTP</div>
+            <div class="protocol-item">VLESS+REALITY</div>
+            <div class="protocol-item">Trojan+TCP</div>
+            <div class="protocol-item">Trojan+WS</div>
+            <div class="protocol-item">Trojan+gRPC</div>
+            <div class="protocol-item">Trojan+HTTP</div>
+            <div class="protocol-item">VMess+TCP</div>
+            <div class="protocol-item">VMess+WS</div>
+            <div class="protocol-item">VMess+gRPC</div>
+            <div class="protocol-item">VMess+HTTP</div>
+            <div class="protocol-item">ShadowTLS V3</div>
+            <div class="protocol-item">NaiveProxy</div>
+            <div class="protocol-item">Shadowsocks</div>
+            <div class="protocol-item">ShadowsocksR</div>
+            <div class="protocol-item">Direct</div>
+            <div class="protocol-item">AnyTLS</div>
+          </div>
+          <p style="margin-top: 10px; font-size: 0.85rem; color: #89949B; text-align: center;">
+            支持超过30种协议和变种，满足各种使用场景
+          </p>
+        </div>
       </div>
 
       <footer class="footer">
@@ -1005,18 +1581,7 @@ const generatePageHtmlContent = `
     const QR_CODE_API = "https://qrcode.api.yangzifun.org/qr";
     const toastIcons = { success: '✅', error: '❌', info: 'ℹ️' };
     let currentSubscriptionLink = '';
-    
-    // 模板描述映射
-    const templateDescriptions = {
-      'full_config.yaml': '包含完整规则和策略组的完整配置，适用于大多数场景。',
-      'lite_config.yaml': '精简的规则和策略，适合手机或低性能设备。',
-      'global_config.yaml': '针对全球上网需求优化，适用于国际访问。',
-      'cn_config.yaml': '针对海外用户访问国内服务优化。',
-      'config.yaml': '基础配置模板，适用于简单场景。',
-      'geoip_config.yaml': '基于IP地址进行智能分流，提供更精准的路由。',
-      'load-balance_config.yaml': '支持多节点负载均衡策略，提高连接稳定性。',
-      'stream_config.yaml': '针对视频流媒体和直播优化，提供更好的观看体验。'
-    };
+    let templatesList = [];
     
     function showToast(msg, type='info') { 
       const c = document.getElementById('toast-container'); 
@@ -1113,18 +1678,23 @@ const generatePageHtmlContent = `
         const selectedValue = templateSelect.value;
         const customTemplateInput = document.getElementById('customTemplateInput');
         const templateDescription = document.getElementById('templateDescription');
+        const templateInfoBox = document.getElementById('templateInfoBox');
         
-        // 显示/隐藏自定义模板输入框
         if (selectedValue === 'custom') {
             customTemplateInput.classList.remove('hidden');
             templateDescription.textContent = '使用自定义模板URL，请输入可公开访问的YAML配置文件URL。';
+            templateInfoBox.classList.add('hidden');
+        } else if (selectedValue === '') {
+            customTemplateInput.classList.add('hidden');
+            templateDescription.textContent = '请从下拉列表中选择一个配置文件模板';
         } else {
             customTemplateInput.classList.add('hidden');
-            // 更新模板描述
-            if (templateDescriptions[selectedValue]) {
-                templateDescription.textContent = templateDescriptions[selectedValue];
+            // 从缓存的模板列表中查找描述
+            const template = templatesList.find(t => t.name === selectedValue);
+            if (template && template.description) {
+                templateDescription.textContent = template.description;
             } else {
-                templateDescription.textContent = '自定义模板配置。';
+                templateDescription.textContent = '数据库模板配置。';
             }
         }
     }
@@ -1146,9 +1716,99 @@ const generatePageHtmlContent = `
                 return null;
             }
             return customUrl;
+        } else if (!selectedValue) {
+            showToast('请选择一个模板', 'error');
+            return null;
         } else {
-            // 对于预设模板，直接返回选中的值（如 full_config.yaml）
             return selectedValue;
+        }
+    }
+    
+    // 从服务器加载模板列表
+    async function loadTemplates() {
+        const templateSelect = document.getElementById('templateSelect');
+        const templateLoading = document.getElementById('templateLoading');
+        const templateError = document.getElementById('templateError');
+        const generateClashBtn = document.getElementById('generateClashBtn');
+        
+        templateSelect.disabled = true;
+        templateLoading.classList.remove('hidden');
+        templateError.classList.add('hidden');
+        generateClashBtn.disabled = true;
+        
+        try {
+            const response = await fetch(\`\${WORKER_DOMAIN}/api/templates\`);
+            
+            if (!response.ok) {
+                throw new Error(\`加载失败: \${response.status}\`);
+            }
+            
+            const templates = await response.json();
+            templatesList = templates;
+            
+            // 清空选择框
+            templateSelect.innerHTML = '';
+            
+            // 添加自定义模板选项
+            const customOption = document.createElement('option');
+            customOption.value = 'custom';
+            customOption.textContent = '自定义模板';
+            templateSelect.appendChild(customOption);
+            
+            // 添加数据库中的模板选项
+            if (templates.length === 0) {
+                const noTemplateOption = document.createElement('option');
+                noTemplateOption.value = '';
+                noTemplateOption.textContent = '数据库中没有可用模板';
+                templateSelect.appendChild(noTemplateOption);
+                showToast('数据库中没有配置模板', 'error');
+            } else {
+                // 查找默认模板
+                const defaultTemplate = templates.find(t => t.is_default === 1);
+                
+                templates.forEach(template => {
+                    const option = document.createElement('option');
+                    option.value = template.name;
+                    option.textContent = template.name;
+                    if (defaultTemplate && template.name === defaultTemplate.name) {
+                        option.selected = true;
+                    }
+                    templateSelect.appendChild(option);
+                });
+                
+                // 如果没有设置默认模板，选择第一个
+                if (!defaultTemplate && templates.length > 0) {
+                    templateSelect.value = templates[0].name;
+                }
+                
+                // 更新模板描述
+                const selectedValue = templateSelect.value;
+                const selectedTemplate = templates.find(t => t.name === selectedValue);
+                const templateDescription = document.getElementById('templateDescription');
+                if (selectedTemplate && selectedTemplate.description) {
+                    templateDescription.textContent = selectedTemplate.description;
+                }
+                
+                // 启用生成按钮
+                generateClashBtn.disabled = false;
+            }
+            
+            showToast('模板列表加载成功', 'success');
+        } catch (error) {
+            console.error('加载模板失败:', error);
+            templateError.classList.remove('hidden');
+            showToast(\`加载模板失败: \${error.message}\`, 'error');
+            
+            // 添加错误选项
+            templateSelect.innerHTML = '';
+            const errorOption = document.createElement('option');
+            errorOption.value = '';
+            errorOption.textContent = '加载模板失败';
+            templateSelect.appendChild(errorOption);
+        } finally {
+            templateLoading.classList.add('hidden');
+            templateSelect.disabled = false;
+            handleTemplateChange();
         }
     }
     
@@ -1242,9 +1902,10 @@ const generatePageHtmlContent = `
     // 页面加载时初始化
     document.addEventListener('DOMContentLoaded', () => {
         toggleAddressOptions();
-        handleTemplateChange();
+        loadTemplates();
     });
   </script>
 </body>
 </html>
+
 `;

@@ -605,6 +605,20 @@ async function initializeDatabaseSettings(env) {
         await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_access_logs_uuid ON config_access_logs (uuid);').run();
         await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_access_logs_date ON config_access_logs (created_at);').run();
 
+        // 创建 config_templates 表 (配置模板)
+        await env.DB.prepare(`
+            CREATE TABLE IF NOT EXISTS config_templates (
+                                                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                                            name TEXT UNIQUE NOT NULL,
+                                                            url TEXT NOT NULL,
+                                                            description TEXT,
+                                                            is_default INTEGER DEFAULT 0,
+                                                            created_at INTEGER DEFAULT (CAST(STRFTIME('%s', 'now') AS INT) * 1000),
+                updated_at INTEGER DEFAULT (CAST(STRFTIME('%s', 'now') AS INT) * 1000)
+                );
+        `).run();
+        await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_config_templates_is_default ON config_templates (is_default);').run();
+
         console.log('mg_worker.js: D1 database tables checked/initialized.');
 
         // 初始化默认设置（如果没有的话）
@@ -1117,6 +1131,208 @@ async function handleGetUUIDAccessDetails(req, env) {
     }
 }
 
+// =================================================================
+//  新增：模板管理API函数
+// =================================================================
+
+// 获取模板列表
+async function handleTemplates(req, env, method) {
+    try {
+        const url = new URL(req.url);
+        
+        if (method === 'GET') {
+            const page = parseInt(url.searchParams.get('page')) || 1;
+            const size = parseInt(url.searchParams.get('size')) || 10;
+            const sortField = url.searchParams.get('sort') || 'created_at';
+            const sortOrder = (url.searchParams.get('order') || 'desc').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+            const allowedSorts = ['name', 'url', 'is_default', 'created_at', 'updated_at'];
+            const actualSort = allowedSorts.includes(sortField) ? sortField : 'created_at';
+            const offset = (page - 1) * size;
+
+            const total = await env.DB.prepare('SELECT COUNT(*) as c FROM config_templates').first('c');
+            const query = `SELECT * FROM config_templates ORDER BY ${actualSort} ${sortOrder} LIMIT ? OFFSET ?`;
+            const { results } = await env.DB.prepare(query).bind(size, offset).all();
+
+            return jsonResponse({
+                total: total || 0,
+                data: results || [],
+                page,
+                size
+            });
+        }
+
+        if (method === 'POST') {
+            const { name, url, description, is_default } = await req.json();
+            
+            if (!name || !url) {
+                return jsonResponse({ error: '模板名称和URL不能为空' }, 400);
+            }
+
+            // 如果设为默认模板，先清除其他模板的默认状态
+            if (is_default) {
+                await env.DB.prepare('UPDATE config_templates SET is_default = 0 WHERE is_default = 1').run();
+            }
+
+            await env.DB.prepare(
+                'INSERT INTO config_templates (name, url, description, is_default, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
+            ).bind(
+                name, 
+                url, 
+                description || '', 
+                is_default ? 1 : 0, 
+                Date.now(), 
+                Date.now()
+            ).run();
+
+            return jsonResponse({
+                success: true,
+                message: '模板添加成功'
+            });
+        }
+
+        return jsonResponse({ error: '不支持的请求方法' }, 405);
+    } catch (error) {
+        console.error('handleTemplates error:', error.message);
+        
+        // 处理唯一约束冲突
+        if (error.message.includes('UNIQUE constraint failed')) {
+            return jsonResponse({ error: '模板名称已存在' }, 400);
+        }
+        
+        return jsonResponse({ error: '服务器错误' }, 500);
+    }
+}
+
+// 处理单个模板操作
+async function handleTemplateById(req, env, method, id) {
+    try {
+        if (!id) {
+            return jsonResponse({ error: '模板ID不能为空' }, 400);
+        }
+
+        if (method === 'GET') {
+            const template = await env.DB.prepare(
+                'SELECT * FROM config_templates WHERE id = ?'
+            ).bind(id).first();
+
+            if (!template) {
+                return jsonResponse({ error: '模板不存在' }, 404);
+            }
+
+            return jsonResponse(template);
+        }
+
+        if (method === 'PUT') {
+            const { name, url, description, is_default } = await req.json();
+            
+            if (!name || !url) {
+                return jsonResponse({ error: '模板名称和URL不能为空' }, 400);
+            }
+
+            // 检查模板是否存在
+            const existing = await env.DB.prepare(
+                'SELECT * FROM config_templates WHERE id = ?'
+            ).bind(id).first();
+
+            if (!existing) {
+                return jsonResponse({ error: '模板不存在' }, 404);
+            }
+
+            // 如果设为默认模板，先清除其他模板的默认状态
+            if (is_default) {
+                await env.DB.prepare('UPDATE config_templates SET is_default = 0 WHERE is_default = 1').run();
+            }
+
+            await env.DB.prepare(
+                'UPDATE config_templates SET name = ?, url = ?, description = ?, is_default = ?, updated_at = ? WHERE id = ?'
+            ).bind(
+                name, 
+                url, 
+                description || '', 
+                is_default ? 1 : 0, 
+                Date.now(), 
+                id
+            ).run();
+
+            return jsonResponse({
+                success: true,
+                message: '模板更新成功'
+            });
+        }
+
+        if (method === 'DELETE') {
+            // 检查模板是否存在
+            const template = await env.DB.prepare(
+                'SELECT * FROM config_templates WHERE id = ?'
+            ).bind(id).first();
+
+            if (!template) {
+                return jsonResponse({ error: '模板不存在' }, 404);
+            }
+
+            // 不能删除默认模板（除非只剩这一个）
+            if (template.is_default === 1) {
+                const totalTemplates = await env.DB.prepare('SELECT COUNT(*) as c FROM config_templates').first('c');
+                if (totalTemplates && totalTemplates.c > 1) {
+                    return jsonResponse({ error: '不能删除默认模板，请先设置其他模板为默认' }, 400);
+                }
+            }
+
+            await env.DB.prepare('DELETE FROM config_templates WHERE id = ?').bind(id).run();
+
+            return jsonResponse({
+                success: true,
+                message: '模板删除成功'
+            });
+        }
+
+        return jsonResponse({ error: '不支持的请求方法' }, 405);
+    } catch (error) {
+        console.error('handleTemplateById error:', error.message);
+        
+        // 处理唯一约束冲突
+        if (error.message.includes('UNIQUE constraint failed')) {
+            return jsonResponse({ error: '模板名称已存在' }, 400);
+        }
+        
+        return jsonResponse({ error: '服务器错误' }, 500);
+    }
+}
+
+// 设置默认模板
+async function handleSetDefaultTemplate(req, env, id) {
+    try {
+        if (!id) {
+            return jsonResponse({ error: '模板ID不能为空' }, 400);
+        }
+
+        // 检查模板是否存在
+        const template = await env.DB.prepare(
+            'SELECT * FROM config_templates WHERE id = ?'
+        ).bind(id).first();
+
+        if (!template) {
+            return jsonResponse({ error: '模板不存在' }, 404);
+        }
+
+        // 清除其他模板的默认状态
+        await env.DB.prepare('UPDATE config_templates SET is_default = 0 WHERE is_default = 1').run();
+
+        // 设置当前模板为默认
+        await env.DB.prepare(
+            'UPDATE config_templates SET is_default = 1, updated_at = ? WHERE id = ?'
+        ).bind(Date.now(), id).run();
+
+        return jsonResponse({
+            success: true,
+            message: '默认模板设置成功'
+        });
+    } catch (error) {
+        console.error('handleSetDefaultTemplate error:', error.message);
+        return jsonResponse({ error: '服务器错误' }, 500);
+    }
+}
+
 async function handleDomains(req, env, method) {
     try {
         const url = new URL(req.url);
@@ -1415,6 +1631,26 @@ async function handleApi(req, env) {
 
         if (path === '/api/uuids' && ['GET', 'DELETE'].includes(method)) {
             return await handleUuids(req, env, method);
+        }
+
+        // ============ 新增：模板管理API ============
+        if (path === '/api/templates' && ['GET', 'POST'].includes(method)) {
+            return await handleTemplates(req, env, method);
+        }
+
+        // 处理单个模板的API (例如: /api/templates/1)
+        const templateIdMatch = path.match(/^\/api\/templates\/(\d+)(\/set-default)?$/);
+        if (templateIdMatch) {
+            const id = templateIdMatch[1];
+            const isSetDefault = templateIdMatch[2] === '/set-default';
+
+            if (isSetDefault && method === 'POST') {
+                return await handleSetDefaultTemplate(req, env, id);
+            }
+
+            if (!isSetDefault && ['GET', 'PUT', 'DELETE'].includes(method)) {
+                return await handleTemplateById(req, env, method, id);
+            }
         }
 
         return jsonResponse({ error: 'API端点不存在' }, 404);
@@ -1898,6 +2134,7 @@ const adminHtml = `
                 <button class="nav-btn" onclick="switchTab('dom', this)">优选域名</button>
                 <button class="nav-btn" onclick="switchTab('ips', this)">IP 资源池</button>
                 <button class="nav-btn" onclick="switchTab('uuids', this)">配置分组</button>
+                <button class="nav-btn" onclick="switchTab('templates', this)">配置模板</button>
                 <button class="nav-btn" onclick="switchTab('security', this)">安全中心</button>
             </div>
 
@@ -2147,6 +2384,50 @@ const adminHtml = `
                     </div>
                     
                     <div id="mfaSetupSteps" style="display:none;"></div>
+                </div>
+            </div>
+
+            <div id="templates" class="card">
+                <h2>配置模板管理</h2>
+                <div style="display:flex; gap:10px; margin-bottom:15px;">
+                    <input type="text" id="templateName" placeholder="模板名称" style="flex:2; margin:0">
+                    <input type="text" id="templateUrl" placeholder="模板URL" style="flex:3; margin:0">
+                    <input type="text" id="templateDescription" placeholder="描述 (可选)" style="flex:2; margin:0">
+                    <label style="display: flex; align-items: center; gap: 5px; margin: 0;">
+                        <input type="checkbox" id="templateIsDefault">
+                        <span style="font-size: 0.9rem; color: #5a666d;">设为默认</span>
+                    </label>
+                    <button class="nav-btn active" onclick="addTemplate()">添加模板</button>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th onclick="sortTemplate('name')">模板名称 ↕</th>
+                                <th onclick="sortTemplate('url')">URL ↕</th>
+                                <th onclick="sortTemplate('description')">描述 ↕</th>
+                                <th onclick="sortTemplate('is_default')">默认状态 ↕</th>
+                                <th onclick="sortTemplate('updated_at')">更新时间 ↕</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="templateList"></tbody>
+                    </table>
+                </div>
+                <div class="pagination-bar" id="templatePager">
+                    <div class="page-ctrl">
+                        <select class="page-size" id="templateSize" onchange="changeTemplateSize()">
+                            <option value="5">5条/页</option>
+                            <option value="10" selected>10条/页</option>
+                            <option value="20">20条/页</option>
+                            <option value="50">50条/页</option>
+                        </select>
+                    </div>
+                    <div class="page-ctrl">
+                        <button class="nav-btn small" onclick="changeTemplatePage(-1)">上一页</button>
+                        <span class="page-info" id="templatePageInfo">1 / 1</span>
+                        <button class="nav-btn small" onclick="changeTemplatePage(1)">下一页</button>
+                    </div>
                 </div>
             </div>
 
@@ -2442,6 +2723,7 @@ const adminHtml = `
             if (id === 'dom') loadDom();
             if (id === 'ips') loadIp();
             if (id === 'uuids') loadUuid();
+            if (id === 'templates') loadTemplates();
             if (id === 'security') updateSecurityTab();
         }
 
@@ -3502,6 +3784,153 @@ const adminHtml = `
             cb();
         }
 
+        // ============ 模板管理 ============
+        let templateState = { page: 1, size: 10, total: 0, sort: 'created_at', order: 'desc' };
+
+        async function loadTemplates() {
+            const q = \`templates?page=\${templateState.page}&size=\${templateState.size}&sort=\${templateState.sort}&order=\${templateState.order}\`;
+            const d = await api(q);
+            if(d && d.data) {
+                let h = '';
+                d.data.forEach(template => {
+                    const isDefault = template.is_default === 1;
+                    const defaultBadge = isDefault ? 
+                        '<span class="hosting-badge hosting-aliyun" style="background: #10b981;">默认</span>' : '';
+                    
+                    h += \`<tr>
+                        <td>\${template.name}</td>
+                        <td><span style="font-size: 0.85rem; color: #5a666d;" title="\${template.url}">\${template.url.length > 40 ? template.url.substring(0, 40) + '...' : template.url}</span></td>
+                        <td>\${template.description || '<span style="color:#ccc">无</span>'}</td>
+                        <td>\${defaultBadge}</td>
+                        <td>\${fmtDate(template.updated_at)}</td>
+                        <td>
+                            <button class="nav-btn small" onclick="editTemplate(\${template.id}, '\${template.name.replace(/'/g, "\\\\'")}', '\${template.url.replace(/'/g, "\\\\'")}', '\${template.description ? template.description.replace(/'/g, "\\\\'") : ''}', \${isDefault})">编辑</button>
+                            <button class="nav-btn danger small" onclick="deleteTemplate(\${template.id}, '\${template.name.replace(/'/g, "\\\\'")}')">删除</button>
+                            \${!isDefault ? '<button class="nav-btn active small" onclick="setDefaultTemplate(' + template.id + ')">设为默认</button>' : ''}
+                        </td>
+                    </tr>\`;
+                });
+                document.getElementById('templateList').innerHTML = h || '<tr><td colspan="6" style="text-align:center">无模板数据</td></tr>';
+                templateState.total = d.total;
+                updatePager('template', templateState);
+            }
+        }
+
+        async function addTemplate() {
+            const name = document.getElementById('templateName').value;
+            const url = document.getElementById('templateUrl').value;
+            const description = document.getElementById('templateDescription').value;
+            const isDefault = document.getElementById('templateIsDefault').checked;
+
+            if(!name || !url) {
+                toast('模板名称和URL不能为空', 'error');
+                return;
+            }
+
+            const res = await api('templates', 'POST', {
+                name, 
+                url, 
+                description, 
+                is_default: isDefault
+            });
+
+            if(res && res.success) {
+                toast('模板添加成功');
+                document.getElementById('templateName').value = '';
+                document.getElementById('templateUrl').value = '';
+                document.getElementById('templateDescription').value = '';
+                document.getElementById('templateIsDefault').checked = false;
+                templateState.page = 1;
+                loadTemplates();
+            }
+        }
+
+        function editTemplate(id, name, url, description, isDefault) {
+            // 创建编辑模态框
+            const modal = document.createElement('div');
+            modal.className = 'modal-overlay';
+            modal.style.display = 'flex';
+            modal.innerHTML = \`
+                <div class="modal">
+                    <h3 style="margin-top:0; color:#3d474d">编辑模板</h3>
+                    <input type="hidden" id="editTemplateId" value="\${id}">
+                    <div style="margin-bottom:15px;">
+                        <label style="display:block;margin-bottom:5px;font-size:0.9rem;color:#5a666d;">模板名称:</label>
+                        <input type="text" id="editTemplateName" value="\${name}">
+                        <label style="display:block;margin-bottom:5px;font-size:0.9rem;color:#5a666d;">模板URL:</label>
+                        <input type="text" id="editTemplateUrl" value="\${url}">
+                        <label style="display:block;margin-bottom:5px;font-size:0.9rem;color:#5a666d;">描述:</label>
+                        <input type="text" id="editTemplateDescription" value="\${description}">
+                        <label style="display: flex; align-items: center; gap: 5px; margin-top: 10px;">
+                            <input type="checkbox" id="editTemplateIsDefault" \${isDefault ? 'checked' : ''}>
+                            <span style="font-size: 0.9rem; color: #5a666d;">设为默认模板</span>
+                        </label>
+                    </div>
+                    <div style="display:flex; justify-content:flex-end; gap:10px;">
+                        <button class="nav-btn" onclick="this.closest('.modal-overlay').style.display='none'">取消</button>
+                        <button class="nav-btn active" onclick="updateTemplate()">保存修改</button>
+                    </div>
+                </div>
+            \`;
+            
+            document.body.appendChild(modal);
+            
+            // 点击模态框外部关闭
+            modal.addEventListener('click', function(e) {
+                if (e.target === this) {
+                    this.remove();
+                }
+            });
+        }
+
+        async function updateTemplate() {
+            const id = document.getElementById('editTemplateId').value;
+            const name = document.getElementById('editTemplateName').value;
+            const url = document.getElementById('editTemplateUrl').value;
+            const description = document.getElementById('editTemplateDescription').value;
+            const isDefault = document.getElementById('editTemplateIsDefault').checked;
+
+            if(!name || !url) {
+                toast('模板名称和URL不能为空', 'error');
+                return;
+            }
+
+            const res = await api(\`templates/\${id}\`, 'PUT', {
+                name, 
+                url, 
+                description, 
+                is_default: isDefault
+            });
+
+            if(res && res.success) {
+                toast('模板更新成功');
+                document.querySelector('#editTemplateId').closest('.modal-overlay').remove();
+                loadTemplates();
+            }
+        }
+
+        async function deleteTemplate(id, name) {
+            if(confirm(\`确认删除模板 "\${name}"?\`)) {
+                const res = await api(\`templates/\${id}\`, 'DELETE');
+                if(res && res.success) {
+                    toast('模板删除成功');
+                    loadTemplates();
+                }
+            }
+        }
+
+        async function setDefaultTemplate(id) {
+            const res = await api(\`templates/\${id}/set-default\`, 'POST');
+            if(res && res.success) {
+                toast('默认模板设置成功');
+                loadTemplates();
+            }
+        }
+
+        function changeTemplatePage(d) { changePage('template', d, templateState, loadTemplates); }
+        function changeTemplateSize() { changeSize('template', templateState, loadTemplates); }
+        function sortTemplate(f) { changeSort(f, templateState, loadTemplates); }
+
         // ============ 关闭Modal函数 ============
         function closeAllModals() {
             document.querySelectorAll('.modal-overlay').forEach(modal => {
@@ -3531,6 +3960,15 @@ const adminHtml = `
                 const currentActiveCard = document.querySelector('.card.active');
                 if (currentActiveCard && currentActiveCard.id === 'ips') {
                     saveAutoUpdateSettings();
+                }
+            }
+            
+            // Ctrl+T快速切换到模板管理
+            if (e.ctrlKey && e.key === 't') {
+                e.preventDefault();
+                const templateBtn = document.querySelector('.nav-btn[onclick*="switchTab(\'templates\'"]');
+                if (templateBtn) {
+                    switchTab('templates', templateBtn);
                 }
             }
         });

@@ -173,7 +173,36 @@ INSERT OR IGNORE INTO api_keys (key_name, api_key, secret_key, enabled, permissi
 ('default_ip_update_key', 'default_key_12345', NULL, 1, 'ip_update');
 
 -- ========================================================
--- 10. 简单查询验证
+-- 10. 配置模板表
+-- ========================================================
+CREATE TABLE IF NOT EXISTS config_templates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE NOT NULL,           -- 模板名称（唯一）
+    url TEXT NOT NULL,                   -- 模板URL
+    description TEXT,                    -- 模板描述
+    is_default INTEGER DEFAULT 0,        -- 是否默认模板 (0=否, 1=是)
+    created_at INTEGER DEFAULT (CAST(STRFTIME('%s', 'now') AS INT) * 1000),
+    updated_at INTEGER DEFAULT (CAST(STRFTIME('%s', 'now') AS INT) * 1000)
+);
+
+-- 配置模板表索引
+CREATE INDEX IF NOT EXISTS idx_config_templates_name ON config_templates(name);
+CREATE INDEX IF NOT EXISTS idx_config_templates_is_default ON config_templates(is_default);
+CREATE INDEX IF NOT EXISTS idx_config_templates_created ON config_templates(created_at);
+
+-- 初始化一些默认模板 (基于现有的硬编码映射)
+INSERT OR IGNORE INTO config_templates (name, url, description, is_default) VALUES 
+('full_config.yaml', 'https://github.com/yangzifun/rule/raw/refs/heads/main/configs/full_config.yaml', '全量模板 - 包含完整规则和策略组的完整配置，适用于大多数场景', 1),
+('lite_config.yaml', 'https://github.com/yangzifun/rule/raw/refs/heads/main/configs/lite_config.yaml', '轻量模板 - 精简的规则和策略，适合手机或低性能设备', 0),
+('global_config.yaml', 'https://github.com/yangzifun/rule/raw/refs/heads/main/configs/global_config.yaml', '全球上网模板 - 针对全球上网需求优化，适用于国际访问', 0),
+('cn_config.yaml', 'https://github.com/yangzifun/rule/raw/refs/heads/main/configs/cn_config.yaml', '回国模板 - 针对海外用户访问国内服务优化', 0),
+('config.yaml', 'https://github.com/yangzifun/rule/raw/refs/heads/main/configs/config.yaml', '默认模板 - 基础配置模板，适用于简单场景', 0),
+('geoip_config.yaml', 'https://github.com/yangzifun/rule/raw/refs/heads/main/configs/geoip_config.yaml', 'IP分流模板 - 基于IP地址进行智能分流，提供更精准的路由', 0),
+('load-balance_config.yaml', 'https://github.com/yangzifun/rule/raw/refs/heads/main/configs/load-balance_config.yaml', '负载均衡模板 - 支持多节点负载均衡策略，提高连接稳定性', 0),
+('stream_config.yaml', 'https://github.com/yangzifun/rule/raw/refs/heads/main/configs/stream_config.yaml', '视频优化模板 - 针对视频流媒体和直播优化，提供更好的观看体验', 0);
+
+-- ========================================================
+-- 11. 简单查询验证
 -- ========================================================
 
 -- 显示创建的表数量

@@ -1,0 +1,181 @@
+# 生成时间: 2026-01-06
+# 模板类型: 影视流媒体优化版 (支持多平台解锁与负载加速)
+
+
+# ==========================================================
+# 全局配置 (影视加速优化)
+# ==========================================================
+port: 7890
+socks-port: 7891
+mixed-port: 7893
+allow-lan: true
+unified-delay: true
+tcp-concurrent: true
+log-level: warning
+# 影视优化：嗅探强制开启，确保流媒体 CDN 被正确识别
+sniffer:
+  enable: true
+  sniff:
+    HTTP: {ports: [80, 8080-8880], override-destination: true}
+    TLS: {ports: [443, 8443], override-destination: true}
+    QUIC: {ports: [443, 8443], override-destination: true}
+  force-domain:
+    - "+.netflix.com"
+    - "+.nflxvideo.net"
+    - "+.disney.com"
+    - "+.googlevideo.com"
+    # 新增强制嗅探域名以优化新加入的流媒体服务
+    - "+.primevideo.com"
+    - "+.hulu.com"
+    - "+.media-content.apple.com"
+    - "+.peacocktv.com"
+    - "+.tvb.com"
+    - "+.spotify.com"
+    - "+.hbo.com" # HBO Max/Max
+    - "+.paramountplus.com"
+    - "+.discoveryplus.com"
+    - "+.abema.tv"
+    - "+.viu.com"
+    - "+.gamer.com.tw" # Bahamut
+
+# ==========================================================
+# 出站策略 (影视分流专用 - 每个服务独立一组)
+# ==========================================================
+proxy-groups:
+  # 1. 总开关
+  - {name: 🚀 默认代理, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港流媒体, 🇹🇼 台湾流媒体, 🇯🇵 日本流媒体, 🇸🇬 新加坡流媒体, 🇺🇸 美国流媒体]}
+
+  # 2. 核心影视分流 (每个服务单独一组)
+  
+  # Netflix：建议锁定一个你最常用的区域，防止 IP 频繁跳动导致被判为代理
+  - {name: 🎥 Netflix, type: select, proxies: [🇸🇬 新加坡流媒体, 🇭🇰 香港流媒体, 🇹🇼 台湾流媒体, 🇯🇵 日本流媒体, 🇺🇸 美国流媒体]}
+  
+  # YouTube：4K 视频通过负载均衡（consistent-hashing）叠加所有节点带宽，秒开神器
+  - {name: 🎬 YouTube, type: load-balance, strategy: consistent-hashing, include-all: true, filter: "(?i)香港|HK|日本|JP|新加坡|SG", url: 'http://www.gstatic.com/generate_204', interval: 300}
+
+  # Disney+：推荐新加坡或美国，版权最全
+  - {name: 🎞️ Disney+, type: select, proxies: [🇸🇬 新加坡流媒体, 🇺🇸 美国流媒体, 🇭🇰 香港流媒体, 🇯🇵 日本流媒体]}
+
+  # Amazon Prime Video：全球化服务，但区域内容有差异
+  - {name: 📺 Prime Video, type: select, proxies: [🇺🇸 美国流媒体, 🇸🇬 新加坡流媒体, 🇯🇵 日本流媒体, 🇭🇰 香港流媒体, 🚀 默认代理]}
+
+  # Apple TV+：全球化服务，内容有区域差异
+  - {name: 🍎 Apple TV+, type: select, proxies: [🇺🇸 美国流媒体, 🇭🇰 香港流媒体, 🇯🇵 日本流媒体, 🇸🇬 新加坡流媒体, ⚡ 自动选择]}
+
+  # Hulu：主要面向美国用户
+  - {name: 🟢 Hulu, type: select, proxies: [🇺🇸 美国流媒体, 🚀 默认代理]}
+
+  # Max (原HBO Max)：主要面向美国和部分欧洲拉美地区
+  - {name: 🟠 Max, type: select, proxies: [🇺🇸 美国流媒体, 🚀 默认代理]}
+
+  # Paramount+：主要面向美国及部分国际市场
+  - {name: 🔵 Paramount+, type: select, proxies: [🇺🇸 美国流媒体, 🚀 默认代理]}
+
+  # Peacock：主要面向美国用户
+  - {name: 🦚 Peacock, type: select, proxies: [🇺🇸 美国流媒体, 🚀 默认代理]}
+
+  # Discovery+：主要面向美国、欧洲及部分亚洲市场
+  - {name: 💡 Discovery+, type: select, proxies: [🇺🇸 美国流媒体, 🇸🇬 新加坡流媒体, 🚀 默认代理]}
+
+  # AbemaTV：日本独家流媒体服务
+  - {name: 🌸 AbemaTV, type: select, proxies: [🇯🇵 日本流媒体, 🚀 默认代理]}
+
+  # Viu：主要面向亚洲市场 (香港、新加坡、台湾等)
+  - {name: 🟣 Viu, type: select, proxies: [🇭🇰 香港流媒体, 🇸🇬 新加坡流媒体, 🇹🇼 台湾流媒体, 🚀 默认代理]}
+
+  # TVB：香港电视广播有限公司的流媒体服务
+  - {name: 📺 TVB, type: select, proxies: [🇭🇰 香港流媒体, 🇸🇬 新加坡流媒体, 🚀 默认代理]}
+
+  # Bahamut Anime (巴哈姆特动画疯)：主要面向台湾用户
+  - {name: 🎮 Bahamut, type: select, proxies: [🇹🇼 台湾流媒体, 🚀 默认代理]}
+
+  # Spotify：全球音乐流媒体服务
+  - {name: 🎵 Spotify, type: select, proxies: [⚡ 自动选择, 🇺🇸 美国流媒体, 🇸🇬 新加坡流媒体, 🇭🇰 香港流媒体]}
+
+  # 3. 基础工具与社交 (沿用你的配置)
+  - {name: 🤖 AI 服务, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动]}
+  - {name: 📲 Telegram, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇸🇬 新加坡自动]}
+  - {name: 🎯 直连, type: select, proxies: [DIRECT]}
+  - {name: 🐟 漏网之鱼, type: select, proxies: [🚀 默认代理, 🎯 直连]}
+
+  # 4. 底层影视测速池 (Tolerance 设为 50ms 防止视频播放中频繁跳节点)
+  - {name: 🇭🇰 香港流媒体, type: url-test, include-all: true, tolerance: 50, filter: "(?i)香港|HK|Hong Kong"}
+  - {name: 🇹🇼 台湾流媒体, type: url-test, include-all: true, tolerance: 50, filter: "(?i)台湾|TW|Taiwan"}
+  - {name: 🇯🇵 日本流媒体, type: url-test, include-all: true, tolerance: 50, filter: "(?i)日本|JP|Japan"}
+  - {name: 🇸🇬 新加坡流媒体, type: url-test, include-all: true, tolerance: 50, filter: "(?i)新加坡|SG|Singapore"}
+  - {name: 🇺🇸 美国流媒体, type: url-test, include-all: true, tolerance: 50, filter: "(?i)美国|US|USA|United States"}
+  
+  # 基础地区分组 (沿用)
+  - {name: ⚡ 自动选择, type: url-test, include-all: true, tolerance: 20}
+  - {name: 🇭🇰 香港自动, type: url-test, include-all: true, filter: "(?i)香港|HK"}
+  - {name: 🇺🇸 美国自动, type: url-test, include-all: true, filter: "(?i)美国|US"}
+  - {name: 🇯🇵 日本自动, type: url-test, include-all: true, filter: "(?i)日本|JP"}
+  - {name: 🇸🇬 新加坡自动, type: url-test, include-all: true, filter: "(?i)新加坡|SG"}
+  - {name: 🇹🇼 台湾自动, type: url-test, include-all: true, filter: "(?i)台湾|TW"}
+
+# ==========================================================
+# 规则匹配 (影视增强版 - 每个服务独立规则)
+# ==========================================================
+rules:
+  - RULE-SET,category-ads-all,REJECT
+  - RULE-SET,private_domain,🎯 直连
+
+  # 影视分流 (每个服务单独规则)
+  - RULE-SET,youtube_domain,🎬 YouTube
+  - RULE-SET,netflix_domain,🎥 Netflix
+  - RULE-SET,disney_domain,🎞️ Disney+
+  - RULE-SET,amazon_prime_domain,📺 Prime Video
+  - RULE-SET,appletv_domain,🍎 Apple TV+
+  - RULE-SET,hulu_domain,🟢 Hulu
+  - RULE-SET,hbo_domain,🟠 Max
+  - RULE-SET,paramount_domain,🔵 Paramount+
+  - RULE-SET,peacock_domain,🦚 Peacock
+  - RULE-SET,discovery_domain,💡 Discovery+
+  - RULE-SET,abema_domain,🌸 AbemaTV
+  - RULE-SET,viu_domain,🟣 Viu
+  - RULE-SET,tvb_domain,📺 TVB
+  - RULE-SET,bahamut_domain,🎮 Bahamut
+  
+  # 音乐流媒体服务
+  - RULE-SET,spotify_domain,🎵 Spotify
+  
+  # AI 与 社交
+  - RULE-SET,openai,🤖 AI 服务
+  - RULE-SET,telegram_domain,📲 Telegram
+  
+  # 国内直连
+  - RULE-SET,cn_domain,🎯 直连
+  - GEOIP,CN,🎯 直连,no-resolve
+  
+  - MATCH,🐟 漏网之鱼
+
+# ==========================================================
+# 规则源 (新增更多影视库)
+# ==========================================================
+rule-providers:
+  # 影视相关
+  youtube_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/youtube.mrs"}
+  netflix_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/netflix.mrs"}
+  disney_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/disney.mrs"}
+  hbo_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/hbo.mrs"}
+  paramount_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/paramountplus.mrs"}
+  discovery_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/discoveryplus.mrs"}
+  abema_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/abema.mrs"}
+  viu_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/viu.mrs"}
+  bahamut_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/bahamut.mrs"}
+  
+  # 新增影视服务规则源
+  amazon_prime_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/primevideo.mrs"}
+  appletv_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/apple.mrs"} # Apple TV+ 包含在 apple 规则中
+  hulu_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/hulu.mrs"}
+  peacock_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/peacock.mrs"}
+  tvb_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/tvb.mrs"}
+  
+  # 音乐流媒体服务规则源
+  spotify_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/spotify.mrs"}
+  
+  # 基础规则
+  openai: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/openai.mrs"}
+  telegram_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/telegram.mrs"}
+  cn_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs"}
+  category-ads-all: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ads-all.mrs"}
