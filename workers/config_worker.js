@@ -37,15 +37,28 @@ function jsonResponse(data, status = 200) {
 
 function getProtocol(configStr) {
     if (!configStr || typeof configStr !== 'string') return 'unknown';
-    if (configStr.startsWith('vmess://')) return 'vmess';
-    if (configStr.startsWith('vless://')) return 'vless';
-    if (configStr.startsWith('trojan://')) return 'trojan';
-    if (configStr.startsWith('hysteria2://')) return 'hysteria2';
-    if (configStr.startsWith('tuic://')) return 'tuic';
-    if (configStr.startsWith('anytls://')) return 'anytls';
-    if (configStr.startsWith('socks5://')) return 'socks5';
-    if (configStr.startsWith('any-reality://')) return 'any-reality';
-    if (configStr.startsWith('ss://')) return 'ss';
+
+    // 检查各种协议前缀
+    const protocolPatterns = [
+        { prefix: 'vmess://', type: 'vmess' },
+        { prefix: 'vless://', type: 'vless' },
+        { prefix: 'trojan://', type: 'trojan' },
+        { prefix: 'hysteria2://', type: 'hysteria2' },
+        { prefix: 'tuic://', type: 'tuic' },
+        { prefix: 'anytls://', type: 'anytls' },
+        { prefix: 'socks5://', type: 'socks5' },
+        { prefix: 'any-reality://', type: 'any-reality' },
+        { prefix: 'anyreality://', type: 'any-reality' },
+        { prefix: 'reality://', type: 'reality' },
+        { prefix: 'ss://', type: 'ss' }
+    ];
+
+    for (const pattern of protocolPatterns) {
+        if (configStr.toLowerCase().startsWith(pattern.prefix)) {
+            return pattern.type;
+        }
+    }
+
     return 'unknown';
 }
 
@@ -57,7 +70,8 @@ function extractRemarkFromConfig(configStr, protocol) {
         } else if (protocol === 'vless' || protocol === 'trojan' ||
             protocol === 'hysteria2' || protocol === 'tuic' ||
             protocol === 'anytls' || protocol === 'socks5' ||
-            protocol === 'any-reality' || protocol === 'ss') {
+            protocol === 'any-reality' || protocol === 'anyreality' ||
+            protocol === 'reality' || protocol === 'ss') {
             const url = new URL(configStr);
             if (url.hash) return decodeURIComponent(url.hash.substring(1));
         }
@@ -674,15 +688,28 @@ trojan://..." rows="4"></textarea>
     function openEditModal(config) {
         document.getElementById('edit-id').value = config.id;
         let p = 'unknown'; const l = config.config_data;
-        if(l.startsWith('vmess://')) p='vmess'; 
-        else if(l.startsWith('vless://')) p='vless'; 
-        else if(l.startsWith('trojan://')) p='trojan';
-        else if(l.startsWith('hysteria2://')) p='hysteria2';
-        else if(l.startsWith('tuic://')) p='tuic';
-        else if(l.startsWith('anytls://')) p='anytls';
-        else if(l.startsWith('socks5://')) p='socks5';
-        else if(l.startsWith('any-reality://')) p='any-reality';
-        else if(l.startsWith('ss://')) p='ss';
+        
+        // 检测协议类型
+        const protocolPatterns = [
+            { prefix: 'vmess://', type: 'vmess' },
+            { prefix: 'vless://', type: 'vless' },
+            { prefix: 'trojan://', type: 'trojan' },
+            { prefix: 'hysteria2://', type: 'hysteria2' },
+            { prefix: 'tuic://', type: 'tuic' },
+            { prefix: 'anytls://', type: 'anytls' },
+            { prefix: 'socks5://', type: 'socks5' },
+            { prefix: 'any-reality://', type: 'any-reality' },
+            { prefix: 'anyreality://', type: 'any-reality' },
+            { prefix: 'reality://', type: 'reality' },
+            { prefix: 'ss://', type: 'ss' }
+        ];
+        
+        for (const pattern of protocolPatterns) {
+            if (l.toLowerCase().startsWith(pattern.prefix)) {
+                p = pattern.type;
+                break;
+            }
+        }
         
         document.getElementById('edit-protocol').value = p;
         ['ps','add','port','id-uuid','net','type','host','path','tls','sni'].forEach(k=>document.getElementById('edit-'+k).value='');
@@ -694,11 +721,21 @@ trojan://..." rows="4"></textarea>
         try {
             if (p === 'vmess') {
                 const c = JSON.parse(b64DecodeUnicode(l.substring(8)));
-                document.getElementById('edit-ps').value = c.ps||''; document.getElementById('edit-add').value = c.add||''; document.getElementById('edit-port').value = c.port||''; document.getElementById('edit-id-uuid').value = c.id||''; document.getElementById('edit-net').value = c.net||'tcp'; document.getElementById('edit-type').value = c.type||''; document.getElementById('edit-host').value = c.host||''; document.getElementById('edit-path').value = c.path||''; document.getElementById('edit-tls').value = c.tls||''; document.getElementById('edit-sni').value = c.sni||'';
+                document.getElementById('edit-ps').value = c.ps||''; 
+                document.getElementById('edit-add').value = c.add||''; 
+                document.getElementById('edit-port').value = c.port||''; 
+                document.getElementById('edit-id-uuid').value = c.id||''; 
+                document.getElementById('edit-net').value = c.net||'tcp'; 
+                document.getElementById('edit-type').value = c.type||''; 
+                document.getElementById('edit-host').value = c.host||''; 
+                document.getElementById('edit-path').value = c.path||''; 
+                document.getElementById('edit-tls').value = c.tls||''; 
+                document.getElementById('edit-sni').value = c.sni||'';
             } else if (p === 'vless' || p === 'trojan' || 
                       p === 'hysteria2' || p === 'tuic' ||
                       p === 'anytls' || p === 'socks5' ||
-                      p === 'any-reality' || p === 'ss') {
+                      p === 'any-reality' || p === 'anyreality' ||
+                      p === 'reality' || p === 'ss') {
                 const u = new URL(l);
                 document.getElementById('edit-ps').value = u.hash?decodeURIComponent(u.hash.substring(1)):''; 
                 document.getElementById('edit-add').value = u.hostname; 
@@ -741,7 +778,8 @@ trojan://..." rows="4"></textarea>
         } else if (proto === 'vless' || proto === 'trojan' || 
                   proto === 'hysteria2' || proto === 'tuic' ||
                   proto === 'anytls' || proto === 'socks5' ||
-                  proto === 'any-reality' || proto === 'ss') {
+                  proto === 'any-reality' || proto === 'anyreality' ||
+                  proto === 'reality' || proto === 'ss') {
             let u = new URL(proto + '://' + uuid + '@' + add + ':' + port);
             if (net !== 'tcp') u.searchParams.set('type', net);
             if (type) u.searchParams.set('headerType', type);
@@ -1105,4 +1143,5 @@ trojan://..." rows="4"></textarea>
   </script>
 </body>
 </html>
+
 `;
