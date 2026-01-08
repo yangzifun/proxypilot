@@ -1677,12 +1677,13 @@ const unifiedPageHtmlContent = `
 <body>
   <!-- Configuration Management Button -->
   <div id="configManagerBtn" style="position: fixed; top: 20px; right: 20px; z-index: 1000;">
-    <button class="nav-btn primary" onclick="openConfigManagerModal()" 
+    <button id="configManagerOpenBtn" class="nav-btn primary" onclick="openConfigManagerModal()" 
             style="padding: 8px 16px; background-color: #5a666d; color: white; border: none; border-radius: 4px; cursor: pointer;">
       ⚙️ 配置管理
     </button>
     <div id="logoutBtnContainer" style="display: inline-block; margin-left: 10px;"></div>
-  </div>
+    <div id="uuidDisplayContainer" style="display: inline-block; margin-left: 10px;"></div>
+  </div> 
 
   <!-- Config Manager Modal -->
   <div id="configManagerModal" class="modal-overlay" style="display: none;">
@@ -2236,9 +2237,32 @@ trojan://..." rows="4"></textarea>
     
     function updateLogoutButton() {
       const logoutBtnContainer = document.getElementById('logoutBtnContainer');
+      const uuidDisplayContainer = document.getElementById('uuidDisplayContainer');
       logoutBtnContainer.innerHTML = '';
+      uuidDisplayContainer.innerHTML = '';
       
-      if (getUuidFromStorage()) {
+      const storedUuid = getUuidFromStorage();
+      const openBtn = document.getElementById('configManagerOpenBtn');
+      if (storedUuid) {
+        // 隐藏配置管理按钮
+        if (openBtn) openBtn.style.display = 'none';
+        
+        // 在顶部显示UUID
+        const uuidDisplay = document.createElement('div');
+        uuidDisplay.style.display = 'inline-block';
+        uuidDisplay.style.marginRight = '10px';
+        uuidDisplay.style.padding = '4px 12px';
+        uuidDisplay.style.backgroundColor = '#e8f4f8';
+        uuidDisplay.style.border = '1px solid #4a9';
+        uuidDisplay.style.borderRadius = '4px';
+        uuidDisplay.style.color = '#4a9';
+        uuidDisplay.style.fontSize = '0.85rem';
+        uuidDisplay.style.fontFamily = 'monospace';
+        uuidDisplay.innerHTML = 'UUID: ' + storedUuid;
+        uuidDisplay.title = 'UUID: ' + storedUuid;
+        uuidDisplayContainer.appendChild(uuidDisplay);
+        
+        // 创建退出按钮
         const logoutBtn = document.createElement('button');
         logoutBtn.className = 'nav-btn';
         logoutBtn.style.padding = '8px 16px';
@@ -2255,7 +2279,12 @@ trojan://..." rows="4"></textarea>
             location.reload();
           }
         };
+        
+        // 添加到容器
         logoutBtnContainer.appendChild(logoutBtn);
+      } else {
+        // 没有UUID，确保按钮可见
+        if (openBtn) openBtn.style.display = 'inline-block';
       }
     }
     
@@ -2340,7 +2369,7 @@ trojan://..." rows="4"></textarea>
       document.getElementById('manageAddCard').classList.remove('hidden');
       
       // Show subscription link
-      const subLink = \`\${WORKER_DOMAIN}/sub/\${uuid}\`;
+      const subLink = WORKER_DOMAIN + '/sub/' + uuid;
       const subInput = document.getElementById('manageSubUrlLink');
       subInput.value = subLink;
       document.getElementById('manageSubLinkDisplay').style.display = 'flex';
@@ -2348,7 +2377,7 @@ trojan://..." rows="4"></textarea>
       
       // Load configs and stats
       manageQueryByUuid();
-      showToast(\`已加载 UUID: \${uuid.substring(0, 8)}...\`, 'success');
+      showToast('已加载 UUID: ' + uuid.substring(0, 8) + '...', 'success');
     }
     
     function updateUuidInputs() {
@@ -2376,7 +2405,7 @@ trojan://..." rows="4"></textarea>
       const c = document.getElementById('toast-container'); 
       const t = document.createElement('div'); 
       t.className = 'toast'; 
-      t.innerHTML = \`<span>\${toastIcons[type]} \${msg}</span>\`; 
+      t.innerHTML = '<span>' + toastIcons[type] + ' ' + msg + '</span>'; 
       c.appendChild(t); 
       setTimeout(()=>t.remove(), 5000); 
     }
