@@ -1351,7 +1351,6 @@ export default {
         }
     }
 };
-
 // =================================================================
 //  UNIFIED FRONTEND PAGE (整合的前端页面)
 // =================================================================
@@ -1676,6 +1675,39 @@ const unifiedPageHtmlContent = `
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
+  <!-- Configuration Management Button -->
+  <div id="configManagerBtn" style="position: fixed; top: 20px; right: 20px; z-index: 1000;">
+    <button class="nav-btn primary" onclick="openConfigManagerModal()" 
+            style="padding: 8px 16px; background-color: #5a666d; color: white; border: none; border-radius: 4px; cursor: pointer;">
+      ⚙️ 配置管理
+    </button>
+    <div id="logoutBtnContainer" style="display: inline-block; margin-left: 10px;"></div>
+  </div>
+
+  <!-- Config Manager Modal -->
+  <div id="configManagerModal" class="modal-overlay" style="display: none;">
+    <div class="modal" style="max-width: 500px;">
+      <div class="modal-header">
+        <span class="modal-title">配置管理入口</span>
+        <span class="modal-close" onclick="closeConfigManagerModal()">&times;</span>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="configUuidInput">请输入您的 UUID：</label>
+          <input type="text" id="configUuidInput" placeholder="输入UUID以管理配置" style="width: 100%;">
+          <div class="info-box">
+            如果您没有 UUID，可以<a href="javascript:void(0)" onclick="generateNewUuid()" style="color: #5a666d; text-decoration: underline;">点击这里生成一个新的</a>
+            <br>UUID 将保存在您的浏览器中，方便下次使用。
+          </div>
+        </div>
+        <div style="margin-top: 20px; text-align: right;">
+          <button class="nav-btn" onclick="closeConfigManagerModal()">取消</button>
+          <button class="nav-btn primary" onclick="enterConfigManagement()">进入配置管理</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="toast-container"></div>
   
   <!-- Editor Modal -->
@@ -1737,8 +1769,8 @@ const unifiedPageHtmlContent = `
       <!-- Tab Navigation -->
       <div class="tab-nav">
         <button class="tab-btn active" onclick="switchTab('batch')">批量生成</button>
-        <button class="tab-btn" onclick="switchTab('manage')">配置管理</button>
         <button class="tab-btn" onclick="switchTab('clash')">订阅生成</button>
+        <button id="manageTabBtn" class="tab-btn hidden" onclick="switchTab('manage')">配置管理</button>
       </div>
 
       <!-- Batch Generation Tab -->
@@ -1760,7 +1792,7 @@ const unifiedPageHtmlContent = `
               <textarea id="genBaseConfigInput" placeholder="在此粘贴一个或多个基础配置，每行一个。" rows="4"></textarea>
           </div>
           <div id="genUuidConfigInput" class="form-group hidden">
-              <input type="text" id="genBaseConfigUuidInput" placeholder="输入已存储的UUID">
+              <input type="text" id="genBaseConfigUuidInput" placeholder="UUID将自动填充" style="background-color: #f8f9fa;">
               <div class="info-box">在"配置管理"标签页添加和管理UUID。
               <br>所有配置都会输出原配置，只有域名托管属性为"Cloudflare"的配置会进行优选替换。</div>
           </div>
@@ -1841,91 +1873,6 @@ const unifiedPageHtmlContent = `
         </div>
       </div>
 
-      <!-- Config Management Tab -->
-      <div id="manage-tab" class="tab-content">
-        <div class="card">
-          <h2>1. 检索订阅</h2>
-          <div class="form-group" style="display:flex; gap:10px;">
-             <input type="text" id="queryUuidInput" placeholder="请输入您的 UUID" style="margin-bottom:0;">
-             <button id="queryBtn" class="nav-btn primary" onclick="manageQueryByUuid()">查询</button>
-          </div>
-          
-          <div id="manageSubLinkDisplay" class="form-group hidden" style="display:none; gap:10px; margin-top:10px;">
-             <input type="text" id="manageSubUrlLink" readonly style="margin-bottom:0; color:#5a666d; background-color: #f8f9fa;">
-             <button class="nav-btn" onclick="copyManageSubLink()" style="white-space: nowrap;">复制</button>
-          </div>
-        </div>
-
-        <div id="manageResultCard" class="card hidden">
-          <h2>2. 配置列表</h2>
-          <div style="text-align:right; margin-bottom:10px;">
-             <button class="nav-btn" style="background:#d44; color:#fff; border-color:#d44;" onclick="deleteAll()">删除本组所有</button>
-          </div>
-          <div id="queryResultsContainer"></div>
-        </div>
-
-        <div id="manageStatsCard" class="card hidden">
-          <h2>3. 访问统计</h2>
-          <div class="chart-controls">
-            <select id="statsDays" class="hosting-select" onchange="loadUuidStats()">
-              <option value="7" class="hosting-option">最近7天</option>
-              <option value="14" class="hosting-option">最近14天</option>
-              <option value="30" selected class="hosting-option">最近30天</option>
-              <option value="60" class="hosting-option">最近60天</option>
-            </select>
-            <button class="nav-btn active" onclick="loadUuidStats()">刷新</button>
-            <button class="nav-btn" onclick="switchChartType('total')" id="chartTotalBtn">总访问</button>
-            <button class="nav-btn" onclick="switchChartType('split')" id="chartSplitBtn">分类统计</button>
-          </div>
-          
-          <div id="manageStatsSummary" class="stat-grid"></div>
-          
-          <div class="chart-container">
-            <canvas id="manageStatsChart"></canvas>
-          </div>
-          
-          <div style="margin-top: 20px;">
-            <h3 style="font-size: 1.1rem; margin: 0 0 10px 0;">最近访问记录</h3>
-            <div id="manageRecentLogs" class="access-log-container">
-              <div style="text-align: center; padding: 20px; color: #6b7280;">加载中...</div>
-            </div>
-          </div>
-        </div>
-
-        <div id="manageAddCard" class="card hidden">
-          <h2>4. 添加新节点</h2>
-          <div class="form-group">
-            <label>域名托管服务 (Domain Hosting)</label>
-            <select id="domainHostingSelect" class="hosting-select">
-              <option value="Cloudflare" selected>Cloudflare</option>
-              <option value="阿里ESA">阿里ESA</option>
-              <option value="腾讯Edgeone">腾讯Edgeone</option>
-              <option value="AWS Cloudfront">AWS Cloudfront</option>
-              <option value="Gcore">Gcore</option>
-              <option value="Fastly">Fastly</option>
-              <option value="CacheFly">CacheFly</option>
-              <option value="LightCDN">LightCDN</option>
-              <option value="Vercel">Vercel</option>
-              <option value="Netlify">Netlify</option>
-              <option value="无">无</option>
-              <option value="其他">其他</option>
-            </select>
-            <div class="info-box">
-              <strong>说明：</strong> 选择此配置使用的域名托管服务。这有助于管理和分类不同CDN厂商的配置。
-              <br>新增选项：Gcore, Fastly, CacheFly, LightCDN, Vercel, Netlify，"无"表示不使用域名托管。
-            </div>
-          </div>
-          <div class="form-group">
-            <label>配置数据 (可批量添加)</label>
-            <textarea id="addConfigData" placeholder="支持批量添加：
-vmess://...
-vless://...
-trojan://..." rows="4"></textarea>
-          </div>
-          <button onclick="manageAddConfig()" class="nav-btn primary" style="width:100%">添加到当前 UUID</button>
-        </div>
-      </div>
-
       <!-- Clash Subscription Tab -->
       <div id="clash-tab" class="tab-content">
         <div class="card">
@@ -1938,9 +1885,10 @@ trojan://..." rows="4"></textarea>
             </div>
           </div>
           <div class="form-group">
-            <input type="text" id="clashConfigUuid" placeholder="输入UUID（必须在配置管理中创建配置）">
+            <input type="text" id="clashConfigUuid" placeholder="UUID将自动填充" style="background-color: #f8f9fa;">
             <div class="info-box">
               在"配置管理"标签页添加和管理配置，获取UUID后在此输入。
+              <br>如果您已登录，UUID将自动填充。
             </div>
           </div>
           
@@ -2074,8 +2022,99 @@ trojan://..." rows="4"></textarea>
         </div>
       </div>
 
+      <!-- Config Management Tab -->
+      <div id="manage-tab" class="tab-content">
+        <div class="card">
+          <h2>1. 当前UUID</h2>
+          <div class="form-group" style="display:flex; gap:10px;">
+            <input type="text" id="queryUuidInput" placeholder="UUID将自动加载" readonly style="margin-bottom:0; background-color: #f8f9fa; flex: 1;">
+            <button id="queryBtn" class="nav-btn primary" onclick="manageQueryByUuid()">刷新配置</button>
+            <button class="nav-btn" onclick="openConfigManagerModal()" style="background:#f0ad4e; color:white; border-color:#f0ad4e;">切换UUID</button>
+          </div>
+          
+          <div id="manageSubLinkDisplay" class="form-group hidden" style="display:none; gap:10px; margin-top:10px;">
+            <input type="text" id="manageSubUrlLink" readonly style="margin-bottom:0; color:#5a666d; background-color: #f8f9fa; flex: 1;">
+            <button class="nav-btn" onclick="copyManageSubLink()" style="white-space: nowrap;">复制</button>
+          </div>
+          
+          <div class="info-box">
+            <strong>提示：</strong> UUID已自动保存。您可以在其他标签页（批量生成、订阅生成）中使用同一个UUID。
+            <br>如需切换UUID，请点击"切换UUID"按钮。
+          </div>
+        </div>
+
+        <div id="manageResultCard" class="card hidden">
+          <h2>2. 配置列表</h2>
+          <div style="text-align:right; margin-bottom:10px;">
+            <button class="nav-btn" style="background:#d44; color:#fff; border-color:#d44;" onclick="deleteAll()">删除本组所有</button>
+          </div>
+          <div id="queryResultsContainer"></div>
+        </div>
+
+        <div id="manageStatsCard" class="card hidden">
+          <h2>3. 访问统计</h2>
+          <div class="chart-controls">
+            <select id="statsDays" class="hosting-select" onchange="loadUuidStats()">
+              <option value="7" class="hosting-option">最近7天</option>
+              <option value="14" class="hosting-option">最近14天</option>
+              <option value="30" selected class="hosting-option">最近30天</option>
+              <option value="60" class="hosting-option">最近60天</option>
+            </select>
+            <button class="nav-btn active" onclick="loadUuidStats()">刷新</button>
+            <button class="nav-btn" onclick="switchChartType('total')" id="chartTotalBtn">总访问</button>
+            <button class="nav-btn" onclick="switchChartType('split')" id="chartSplitBtn">分类统计</button>
+          </div>
+          
+          <div id="manageStatsSummary" class="stat-grid"></div>
+          
+          <div class="chart-container">
+            <canvas id="manageStatsChart"></canvas>
+          </div>
+          
+          <div style="margin-top: 20px;">
+            <h3 style="font-size: 1.1rem; margin: 0 0 10px 0;">最近访问记录</h3>
+            <div id="manageRecentLogs" class="access-log-container">
+              <div style="text-align: center; padding: 20px; color: #6b7280;">加载中...</div>
+            </div>
+          </div>
+        </div>
+
+        <div id="manageAddCard" class="card hidden">
+          <h2>4. 添加新节点</h2>
+          <div class="form-group">
+            <label>域名托管服务 (Domain Hosting)</label>
+            <select id="domainHostingSelect" class="hosting-select">
+              <option value="Cloudflare" selected>Cloudflare</option>
+              <option value="阿里ESA">阿里ESA</option>
+              <option value="腾讯Edgeone">腾讯Edgeone</option>
+              <option value="AWS Cloudfront">AWS Cloudfront</option>
+              <option value="Gcore">Gcore</option>
+              <option value="Fastly">Fastly</option>
+              <option value="CacheFly">CacheFly</option>
+              <option value="LightCDN">LightCDN</option>
+              <option value="Vercel">Vercel</option>
+              <option value="Netlify">Netlify</option>
+              <option value="无">无</option>
+              <option value="其他">其他</option>
+            </select>
+            <div class="info-box">
+              <strong>说明：</strong> 选择此配置使用的域名托管服务。这有助于管理和分类不同CDN厂商的配置。
+              <br>新增选项：Gcore, Fastly, CacheFly, LightCDN, Vercel, Netlify，"无"表示不使用域名托管。
+            </div>
+          </div>
+          <div class="form-group">
+            <label>配置数据 (可批量添加)</label>
+            <textarea id="addConfigData" placeholder="支持批量添加：
+vmess://...
+vless://...
+trojan://..." rows="4"></textarea>
+          </div>
+          <button onclick="manageAddConfig()" class="nav-btn primary" style="width:100%">添加到当前 UUID</button>
+        </div>
+      </div>
+
       <footer class="footer">
-         <p>Powered by <a href="https://www.yangzifun.org">YZFN</a> | <a href="https://www.yangzifun.org/security.html">安全声明</a></p>
+        <p>Powered by <a href="https://www.yangzifun.org">YZFN</a> | <a href="https://www.yangzifun.org/security.html">安全声明</a> | <a href="https://github.com/yangzifun/proxypilot">Github</a></p>
       </footer>
     </div>
   </div>
@@ -2108,7 +2147,231 @@ trojan://..." rows="4"></textarea>
       '其他': 'hosting-other'
     };
     
+    // ============================================
+    // Local Storage Functions (本地存储功能)
+    // ============================================
+    
+    // Local storage functions for UUID persistence
+    function saveUuidToStorage(uuid) {
+      localStorage.setItem('proxy_manager_uuid', uuid);
+      localStorage.setItem('proxy_manager_last_access', Date.now().toString());
+    }
+    
+    function getUuidFromStorage() {
+      const uuid = localStorage.getItem('proxy_manager_uuid');
+      const lastAccess = localStorage.getItem('proxy_manager_last_access');
+      
+      // Check if UUID is still valid (less than 30 days old)
+      if (uuid && lastAccess) {
+        const thirtyDays = 30 * 24 * 60 * 60 * 1000; // 30 days in milliseconds
+        const now = Date.now();
+        if (now - parseInt(lastAccess) < thirtyDays) {
+          return uuid;
+        }
+      }
+      return null;
+    }
+    
+    function clearUuidFromStorage() {
+      localStorage.removeItem('proxy_manager_uuid');
+      localStorage.removeItem('proxy_manager_last_access');
+    }
+    
+    // ============================================
+    // Configuration Management Functions
+    // ============================================
+    
+    function openConfigManagerModal() {
+      document.getElementById('configManagerModal').style.display = 'flex';
+      setTimeout(() => {
+        document.getElementById('configManagerModal').classList.add('open');
+        document.getElementById('configUuidInput').focus();
+        
+        // Fill with stored UUID if available
+        const storedUuid = getUuidFromStorage();
+        if (storedUuid) {
+          document.getElementById('configUuidInput').value = storedUuid;
+        }
+      }, 10);
+    }
+    
+    function closeConfigManagerModal() {
+      document.getElementById('configManagerModal').classList.remove('open');
+      setTimeout(() => {
+        document.getElementById('configManagerModal').style.display = 'none';
+      }, 300);
+    }
+    
+    function generateNewUuid() {
+      const newUuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+      document.getElementById('configUuidInput').value = newUuid;
+      showToast('已生成新的 UUID', 'success');
+    }
+    
+    function enterConfigManagement() {
+      const uuid = document.getElementById('configUuidInput').value.trim();
+      if (!uuid) {
+        showToast('请输入 UUID', 'error');
+        return;
+      }
+      
+      closeConfigManagerModal();
+      
+      // Save UUID to storage
+      saveUuidToStorage(uuid);
+      
+      // Update logout button
+      updateLogoutButton();
+      
+      // Show manage tab button
+      document.getElementById('manageTabBtn').classList.remove('hidden');
+      
+      // Switch to manage tab
+      switchTab('manage', uuid);
+    }
+    
+    function updateLogoutButton() {
+      const logoutBtnContainer = document.getElementById('logoutBtnContainer');
+      logoutBtnContainer.innerHTML = '';
+      
+      if (getUuidFromStorage()) {
+        const logoutBtn = document.createElement('button');
+        logoutBtn.className = 'nav-btn';
+        logoutBtn.style.padding = '8px 16px';
+        logoutBtn.style.backgroundColor = '#d44';
+        logoutBtn.style.color = 'white';
+        logoutBtn.style.border = 'none';
+        logoutBtn.style.borderRadius = '4px';
+        logoutBtn.style.cursor = 'pointer';
+        logoutBtn.innerHTML = '🔓 退出';
+        logoutBtn.title = '清除保存的UUID';
+        logoutBtn.onclick = function() {
+          if (confirm('确定要清除当前保存的UUID吗？')) {
+            clearUuidFromStorage();
+            location.reload();
+          }
+        };
+        logoutBtnContainer.appendChild(logoutBtn);
+      }
+    }
+    
+    // 监听配置管理模态框的ESC键关闭
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && document.getElementById('configManagerModal').style.display === 'flex') {
+        closeConfigManagerModal();
+      }
+    });
+    
+    // ============================================
+    // Tab Switching Functions
+    // ============================================
+    
+    function switchTab(tabName, forceUuid = null) {
+      // If switching to manage tab and we have a stored UUID, use it
+      if (tabName === 'manage' && !forceUuid) {
+        const storedUuid = getUuidFromStorage();
+        if (storedUuid) {
+          forceUuid = storedUuid;
+        } else {
+          // No stored UUID, show modal
+          openConfigManagerModal();
+          return;
+        }
+      }
+      
+      // Hide all tabs
+      document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.classList.remove('active');
+      });
+      
+      // Deactivate all tab buttons
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+      });
+      
+      // Show selected tab
+      const tabElement = document.getElementById(\`\${tabName}-tab\`);
+      if (tabElement) {
+        tabElement.classList.add('active');
+      }
+      
+      // Activate selected tab button
+      const tabBtn = document.querySelector(\`.tab-btn[onclick*="\${tabName}"]\`);
+      if (tabBtn) {
+        tabBtn.classList.add('active');
+      }
+      
+      // If it's manage tab and we have a UUID, load it
+      if (tabName === 'manage' && forceUuid) {
+        setTimeout(() => {
+          loadUuidData(forceUuid);
+        }, 100);
+      }
+      
+      // Load templates if switching to clash tab
+      if (tabName === 'clash') {
+        setTimeout(() => {
+          loadTemplates();
+        }, 100);
+      }
+      
+      // Update UUID inputs if switching to batch or clash tabs
+      if (tabName === 'batch' || tabName === 'clash') {
+        setTimeout(() => {
+          updateUuidInputs();
+        }, 100);
+      }
+    }
+    
+    // New function to load UUID data
+    function loadUuidData(uuid) {
+      currentUuid = uuid;
+      
+      // Fill UUID input
+      document.getElementById('queryUuidInput').value = uuid;
+      
+      // Show manage sections
+      document.getElementById('manageResultCard').classList.remove('hidden');
+      document.getElementById('manageStatsCard').classList.remove('hidden');
+      document.getElementById('manageAddCard').classList.remove('hidden');
+      
+      // Show subscription link
+      const subLink = \`\${WORKER_DOMAIN}/sub/\${uuid}\`;
+      const subInput = document.getElementById('manageSubUrlLink');
+      subInput.value = subLink;
+      document.getElementById('manageSubLinkDisplay').style.display = 'flex';
+      document.getElementById('manageSubLinkDisplay').classList.remove('hidden');
+      
+      // Load configs and stats
+      manageQueryByUuid();
+      showToast(\`已加载 UUID: \${uuid.substring(0, 8)}...\`, 'success');
+    }
+    
+    function updateUuidInputs() {
+      const storedUuid = getUuidFromStorage();
+      if (storedUuid) {
+        // Update batch generation UUID input
+        const batchUuidInput = document.getElementById('genBaseConfigUuidInput');
+        if (batchUuidInput) {
+          batchUuidInput.value = storedUuid;
+        }
+        
+        // Update clash generation UUID input
+        const clashUuidInput = document.getElementById('clashConfigUuid');
+        if (clashUuidInput) {
+          clashUuidInput.value = storedUuid;
+        }
+      }
+    }
+    
+    // ============================================
     // Utility functions
+    // ============================================
+    
     function showToast(msg, type='info') { 
       const c = document.getElementById('toast-container'); 
       const t = document.createElement('div'); 
@@ -2153,30 +2416,6 @@ trojan://..." rows="4"></textarea>
       const hours = date.getHours().toString().padStart(2, '0');
       const minutes = date.getMinutes().toString().padStart(2, '0');
       return \`\${month}/\${day} \${hours}:\${minutes}\`;
-    }
-    
-    // Tab switching
-    function switchTab(tabName) {
-      // Hide all tabs
-      document.querySelectorAll('.tab-content').forEach(tab => {
-        tab.classList.remove('active');
-      });
-      
-      // Deactivate all tab buttons
-      document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.classList.remove('active');
-      });
-      
-      // Show selected tab
-      document.getElementById(\`\${tabName}-tab\`).classList.add('active');
-      
-      // Activate selected tab button
-      event.target.classList.add('active');
-      
-      // Load templates if switching to clash tab
-      if (tabName === 'clash') {
-        loadTemplates();
-      }
     }
     
     // ============================================
@@ -3179,7 +3418,10 @@ trojan://..." rows="4"></textarea>
       showToast('二维码已刷新', 'info');
     }
     
+    // ============================================
     // Initialize
+    // ============================================
+    
     document.addEventListener('DOMContentLoaded', function() {
       // Initialize domain hosting select
       const hostingSelect = document.getElementById('domainHostingSelect');
@@ -3199,10 +3441,34 @@ trojan://..." rows="4"></textarea>
           document.getElementById('genUuidConfigInput').classList.add('hidden');
         }
       }));
+      
+      // Check for stored UUID on page load
+      const storedUuid = getUuidFromStorage();
+      if (storedUuid) {
+        // Show manage tab button
+        document.getElementById('manageTabBtn').classList.remove('hidden');
+        
+        // Update logout button
+        updateLogoutButton();
+        
+        // Update UUID inputs
+        updateUuidInputs();
+        
+        // If current tab is manage, load the data
+        const activeTab = document.querySelector('.tab-content.active');
+        if (activeTab && activeTab.id === 'manage-tab') {
+          loadUuidData(storedUuid);
+        }
+      }
+      
+      // Load templates if clash tab is active
+      const activeTab = document.querySelector('.tab-content.active');
+      if (activeTab && activeTab.id === 'clash-tab') {
+        loadTemplates();
+      }
     });
   </script>
 </body>
 </html>
 `;
-
 

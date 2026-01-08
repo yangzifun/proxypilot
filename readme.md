@@ -1,30 +1,28 @@
 # 代理配置管理优选工具 
 
-![JavaScript](https://img.shields.io/badge/JavaScript-ES6+-yellow?logo=javascript&logoColor=white) ![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white)![D1 Database](https://img.shields.io/badge/Cloudflare-D1-0052CC?logo=cloudflare&logoColor=white)  ![MIT License](https://img.shields.io/badge/License-MIT-green.svg) ![Node.js](https://img.shields.io/badge/Node.js-18+-339933?logo=node.js&logoColor=white)  ![Chart.js](https://img.shields.io/badge/Chart.js-4.0+-FF6384?logo=chart.js&logoColor=white) ![Version](https://img.shields.io/badge/Version−4.0-blue.svg)
+![JavaScript](https://img.shields.io/badge/JavaScript-ES6+-yellow?logo=javascript&logoColor=white) ![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white)![D1 Database](https://img.shields.io/badge/Cloudflare-D1-0052CC?logo=cloudflare&logoColor=white)  ![MIT License](https://img.shields.io/badge/License-MIT-green.svg) ![Node.js](https://img.shields.io/badge/Node.js-18+-339933?logo=node.js&logoColor=white)  ![Chart.js](https://img.shields.io/badge/Chart.js-4.0+-FF6384?logo=chart.js&logoColor=white) ![Version](https://img.shields.io/badge/Version-V4.0-blue.svg)
 
-这是一个运行在 Cloudflare Worker 上的多功能代理工具，结合 Cloudflare D1 数据库，提供**IP优选**和**域名优选**的批量替换功能。系统采用三 Worker 架构，分别处理综合配置管理、系统管理和订阅文件生成，实现功能解耦和独立部署。
+这是一个运行在 Cloudflare Worker 上的多功能代理工具，结合 Cloudflare D1 数据库，提供**IP优选**和**域名优选**的批量替换功能。系统采用 Worker 架构，分别处理综合配置管理、系统管理和订阅文件生成，实现功能解耦和独立部署。
 
 ## 📦 系统组成
 
-**系统由3个核心Worker组成**：
+**系统由2个核心Worker组成（可选第三个）**：
 
-- **`worker.js`** - 综合配置管理器：处理 IP/域名优选、配置管理CRUD、订阅生成、批量配置替换、Clash配置文件生成、访问日志记录、UUID访问统计。合并了原config_worker.js和subs_worker.js的功能
-- **`mg_worker.js`** - 管理后台：JWT 认证、域名/IP/UUID 管理、模板管理、系统统计、手动 IP 更新、订阅访问统计分析（已集成IP更新功能）
-- **`config_worker.js`** - 备用配置管理器：可删除或保留作为备用
+- **`worker.js`** - 主服务（综合配置管理器与生成器）：处理 IP/域名优选、配置管理 CRUD、订阅生成、批量配置替换、Clash 配置文件生成、访问日志与统计等功能（已合并原 `config_worker.js` / `subs_worker.js` 的功能）。
+- **`mg_worker.js`** - 管理后台：JWT 认证、域名/IP/UUID 管理、模板与系统统计、IP 更新、订阅访问统计分析、管理 UI。
 
-**注：** v4.0版本进行了功能整合，将配置管理和订阅生成功能合并到worker.js中，减少了部署复杂度。
+**说明**：仓库中目前主要包含 `worker.js` 和 `mg_worker.js`；`config_worker.js` 在代码库中已移除或作为可选模块。**V4.0** 的目标是将功能一体化，简化部署与维护。
 
 ## ✨ 主要特性
 
-### 1. **三 Worker 微服务架构**
+### 1. **微服务架构（主服务 + 管理后台）**
 
-该系统采用三 Worker 架构，各司其职：
+系统目前推荐部署两类 Worker：主服务与管理后台（可选额外的实例用于冗余或历史兼容）。
 
-*   **`worker.js`** - 综合配置管理器：处理 IP/域名优选、配置管理CRUD、订阅生成、批量配置替换、Clash配置文件生成、访问日志记录、UUID访问统计。合并了原config_worker.js和subs_worker.js的功能
-*   **`mg_worker.js`** - 管理后台：JWT 认证、域名/IP/UUID 管理、模板管理、系统统计、IP更新功能、订阅访问统计分析（已合并IP更新功能）
-*   **`config_worker.js`** - 备用配置管理器：可删除或保留作为备用
+*   **`worker.js`（主服务）** - 负责综合配置管理、优选替换、订阅和 Cl ash 配置生成、批量替换、访问日志与 UUID 统计。
+*   **`mg_worker.js`（管理后台）** - 提供管理 UI、JWT 认证、域名/IP/UUID 管理、模板管理、系统统计、IP 更新任务与订阅分析。
 
-**v4.0优化**：通过功能整合，减少了部署复杂度，提高了系统效率。新版部署服务域名为：`https://proxypilot.yangzifun.org/`
+**V4.0 优化**：通过功能整合，减少部署复杂度并提升维护效率。新版部署服务域名示例：`https://proxypilot.yangzifun.org/`
 
 ### 2. **域名托管属性管理 **
 
@@ -39,7 +37,9 @@
 
 ### 3. **协议支持扩展 **
 
-*   **扩展协议支持**：在原有 VMess、VLESS、Trojan 协议基础上，增加对更多主流代理协议的支持，包括 Shadowsocks (ss)、ShadowsocksR (ssr) 等
+*   **扩展协议支持**：在原有 VMess、VLESS、Trojan 协议基础上，增加对更多主流代理协议的支持，包括 **Shadowsocks (ss)**、**Hysteria (hysteria2)**、**TUIC (tuic)**、**anytls / any-reality / reality**、**socks5** 等。
+
+    支持识别的协议前缀包括：`vmess://`, `vless://`, `trojan://`, `ss://`, `hysteria2://`, `tuic://`, `anytls://`, `any-reality://` / `anyreality://`, `reality://`, `socks5://`。
 *   **统一解析架构**：所有协议都集成到统一的解析器中，支持标准格式的协议链接
 *   **向下兼容**：原有协议配置保持完全兼容，新协议可无缝集成到配置管理系统
 
@@ -56,7 +56,7 @@
 *   按 UUID 分组管理，方便生成不同的订阅
 *   支持配置编辑功能，可修改别名、地址、端口、传输协议等参数
 *   **编辑配置即时返回 **：修改配置后，API接口会立即返回更新后的完整配置对象，前端无需重新查询即可更新界面显示
-*   提供配置生成器外部链接（"配置生成"按钮），链接到外部配置生成器（https://cfst.yangzifun.org）
+*   提供配置生成器外部链接（"配置生成"按钮），链接到外部配置生成器
 *   改进的订阅链接显示方式（使用可复制的输入框）
 *   统一的前端按钮样式
 
@@ -130,7 +130,7 @@
 
 1.  一个 **Cloudflare** 账号。
 2.  启用 **Workers** 和 **D1 Database** 功能。
-3.  至少一个自定义域名（用于部署三个Worker）。
+3.  至少一个自定义域名（用于部署主服务与管理后台）。
 
 ## 🚀 部署步骤
 
@@ -144,12 +144,15 @@
 
 | 表单名称 | 用途描述 | 使用此表单的程序 | 是否必需 | 使用状态 |
 |---------|---------|----------------|---------|----------|
-| **configs** | 存储代理配置数据，包括域名托管属性 | `worker.js`, `config_worker.js`, `mg_worker.js` | **必需** | **已使用** |
-| **config_access_logs** | 记录配置访问日志，用于统计分析 | `worker.js`, `config_worker.js`, `mg_worker.js` | **必需** | **已使用** |
+| **configs** | 存储代理配置数据，包括域名托管属性 | `worker.js`, `mg_worker.js` | **必需** | **已使用** |
+| **config_access_logs** | 记录配置访问日志，用于统计分析 | `worker.js`, `mg_worker.js` | **必需** | **已使用** |
 | **admin_users** | 存储管理员账户信息，支持 MFA 双重验证 | `mg_worker.js` | **必需** | **已使用** |
 | **cfips** | 存储优选 IP 地址，支持一个 IP 多个运营商 | `worker.js`, `mg_worker.js` | **必需** | **已使用** |
-| **cf_domains** | 存储优选域名列表 | `worker.js`, `mg_worker.js` | **必需** | **已使用** |
+| **cf_domains** | 存储优选域名列表（Cloudflare） | `worker.js`, `mg_worker.js` | **必需** | **已使用** |
+| **edgeone_domains** | 存储腾讯云 EdgeOne 的优选域名（可选） | `worker.js`, `mg_worker.js` | 可选 | **已使用（若启用）** |
+| **config_templates** | 存储 Clash/模板信息（name/url/描述） | `worker.js`, `mg_worker.js` | **推荐** | **已使用** |
 | **auto_update_settings** | 存储自动更新配置设置 | `mg_worker.js` | **必需** | **已使用** |
+| **api_keys** | 存储用于 IP 更新等接口的 API 密钥 | `mg_worker.js` | 可选 | **已使用（若启用）** |
 | **mfa_backup_codes** | 存储 MFA 备份码 | `mg_worker.js` | **必需** | **已使用** |
 
 **说明：**
@@ -157,26 +160,23 @@
 - **已使用表单**：在当前代码中有实际读写操作的表单
 - **已移除表单**：`users`, `uuids`, `system_logs`, `api_access_stats` 等未使用的表已从数据库文件中移除
 - **程序依赖关系**：
-  - `worker.js`：读取 `configs`, `cfips`, `cf_domains`，写入 `config_access_logs`
-  - `config_worker.js`：读写 `configs`，读取 `config_access_logs`
-  - `mg_worker.js`：读写 `admin_users`, `cf_domains`, `cfips`, `auto_update_settings`, `mfa_backup_codes`，读取 `configs`, `config_access_logs`
+  - `worker.js`：读取 `configs`, `cfips`, `cf_domains`, `config_templates`，写入 `config_access_logs`
+  - `mg_worker.js`：读写 `admin_users`, `cf_domains`, `edgeone_domains`, `cfips`, `auto_update_settings`, `api_keys`, `mfa_backup_codes`，读取 `configs`, `config_access_logs`
 
-要初始化数据库，请复制 `init_database.sql` 中的完整 SQL 语句到 D1 Console 中执行：
-
+要初始化数据库，请复制 `init_database.sql` 中的完整 SQL 语句到 D1 Console 中执行（文件位置：`workers/init_database.sql`，版本：v3.0.2）：
 
 
-### 3. 创建三个Worker并绑定D1
 
-创建三个Worker并绑定到同一个D1数据库：
+### 3. 部署 Workers 并绑定 D1
 
-| Worker名称     | 绑定文件           | 数据库绑定变量 | 建议路由/域名                   | 说明                           |
-| -------------- | ------------------ | -------------- | ------------------------------- | ------------------------------ |
-| `proxy-main`   | `worker.js`        | `DB`           | `cfst.yangzifun.org*`       | 主服务，包含优选生成、配置管理、订阅生成功能 |
-| `proxy-mg`     | `mg_worker.js`     | `DB`           | `mg.proxypilot.yangzifun.org`         | 管理后台，支持模板管理功能     |
-| `proxy-config` | `config_worker.js` | `DB`           | `config.proxypilot.yangzifun.org` | 可选项，备用配置管理器         |
+建议最小部署为两个 Worker，并可按需水平扩展或启用备用实例：
 
-**v4.0更新：** `worker.js` 已合并原 `config_worker.js` 和 `subs_worker.js` 的功能，现在只需部署2-3个Worker即可。
-**新版部署服务域名：** `https://proxypilot.yangzifun.org/`
+| Worker名称     | 绑定文件           | 数据库绑定变量 | 建议路由/域名                          | 说明                           |
+| -------------- | ------------------ | -------------- | -------------------------------------- | ------------------------------ |
+| `proxy-main`   | `worker.js`        | `DB`           | `proxy.yangzifun.org`（或 `cfst.yangzifun.org`） | 主服务，包含优选生成、配置管理、订阅生成功能、Clash 生成等 |
+| `proxy-mg`     | `mg_worker.js`     | `DB`           | `mg.proxy.yangzifun.org`（或 `mg.proxypilot.yangzifun.org`） | 管理后台，提供 UI、模板管理、IP 更新、统计与安全管理 |
+
+**V4.0 更新说明**：`worker.js` 已整合原 `config_worker.js` / `subs_worker.js` 的功能，默认只需部署两类 Worker 即可满足大多数场景；如果需要可额外部署备用或只读实例用于高可用。**新版部署服务域名示例：** `https://proxypilot.yangzifun.org/`
 
 绑定步骤：
 
@@ -184,7 +184,7 @@
 2.  **Variable name** 必须设置为 `DB`（区分大小写）
 3.  选择前面创建的D1数据库
 4.  **路由配置**：
-    *   在 DNS 设置中创建三条路由（示例，请替换为您的实际域名）
+    *   在 DNS 设置中创建两条或多条路由（示例，请替换为您的实际域名），至少需要一条用于主服务，一条用于管理后台。
 5.  **重要配置**：进入每个 Worker 的 **Settings** -> **Variables**：
     *   **D1 Database Bindings**：
         *   **Variable name**: `DB` (必须完全一致，注意大写)
@@ -221,7 +221,7 @@ INSERT INTO cf_domains (domain, remark, created_at) VALUES
 ### 1. 首页 (批量生成器)
 
 *   **基础配置**：
-    *   **手动粘贴**：直接将 vmess/vless/trojan/ss/ssr 等链接粘贴到文本框。
+    *   **手动粘贴**：直接将 vmess/vless/trojan/ss/hysteria2/tuic/anytls/reality/socks5 等链接粘贴到文本框。
     *   **从 UUID 获取**：输入在管理页保存的 UUID，脚本会自动拉取该组所有配置。
 *   **优选列表**：
     *   **IP 地址**：选择 IPv4/IPv6 或特定运营商。支持 HostMonit IPv4/IPv6 及 Vps789 等多个来源的 IP 数据。如果 IP 池为空，请在管理后台的 **"IP 资源池管理"** 中，点击 **"立即更新"** 按钮手动获取 IP。
@@ -230,7 +230,7 @@ INSERT INTO cf_domains (domain, remark, created_at) VALUES
 *   **访问日志**：使用UUID生成配置会自动记录访问日志，用于后台统计。
 *   **域名托管属性过滤**：只有域名托管属性为"Cloudflare"的配置会进行优选替换，非Cloudflare配置只输出原配置。
 
-### 2. 配置管理页 (`config.example.com`)
+### 2. 配置管理页
 
 *   在此页面，您可以：
     *   **管理基础配置**：添加/查询/删除节点配置
@@ -254,7 +254,7 @@ INSERT INTO cf_domains (domain, remark, created_at) VALUES
         -   **选择域名托管**：选择配置使用的CDN服务商
         -   **批量添加配置**：支持多种协议链接批量添加
 
-### 3. 管理后台 (`mg.example.com`)
+### 3. 管理后台 
 
 *   首次访问 `mg.example.com` 会跳转到 `/login` 页面。
 *   默认管理员账号：`admin`，密码：`password`。登录后请务必修改密码。
@@ -351,7 +351,7 @@ graph TD
 | 用户浏览器     | `worker.js`        | `/manage/configs/:uuid`             | 配置管理、统计查询             |
 | 用户浏览器     | `worker.js`        | `/clash-config`                     | Clash配置文件生成              |
 
-**v4.0更新：** 所有配置管理、统计查询、Clash配置生成功能都已集成到`worker.js`中。
+**V4.0更新：** 所有配置管理、统计查询、Clash配置生成功能都已集成到`worker.js`中。
 
 ## 📡 API 接口文档
 
@@ -392,12 +392,14 @@ graph TD
 | `DELETE` | `/manage/configs`             | 删除指定UUID组           | 路径参数: `/:uuid`                                           |
 | `DELETE` | `/manage/configs/id/:id`      | 删除单个配置             | -                                                            |
 | `GET`    | `/api/templates`              | 获取模板列表             | -                                                            |
-| `GET`    | `/clash-config`               | 生成Clash配置文件        | `?uuid=xxx&type=ip&ipType=v4&carrier=CT&template=template-name` |
-| `GET`    | `/sub/:uuid`                  | 原始订阅输出             | -                                                            |
+| `GET`    | `/clash-config`               | 生成Clash配置文件（基于模板，`template` 参数必填） | `?uuid=xxx&type=ip&ipType=v4&carrier=CT&template=template-name` |
+| `GET`    | `/sub/:uuid`                  | 原始订阅输出（返回 Base64 编码的节点列表） | -                                                            |
 
-**v4.0新接口：**
-- `/clash-config`：支持Clash/Mihomo配置文件生成，基于模板创建完整配置
-- `/api/templates`：获取模板列表，用于Clash配置生成
+**说明**：`/sub/:uuid` 订阅响应包含 `Subscription-User-Info` 头，用于客户端订阅流量/配额信息展示。
+
+**V4.0新接口：**
+- `/clash-config`：支持 Clash/Mihomo 配置文件生成，基于模板创建完整配置。**注意**：`template` 参数必填（可以是数据库中的模板名或一个 URL）。响应会返回 `Content-Disposition` 下载头以及若干调试头，如 `X-Template-Used`, `X-Supported-Protocols`, `X-Cloudflare-Configs` 等。
+- `/api/templates`：获取模板列表，用于 Clash 配置生成（返回 `name`, `url`, `description`, `is_default`）。
 
 **已整合的接口**：原`config_worker.js`的配置管理接口和原`subs_worker.js`的Clash生成接口
 
@@ -551,7 +553,7 @@ graph TD
 7.  **Clash配置文件生成**：基于模板生成完整的Clash/Mihomo配置文件
 8.  **模板管理**：统一管理多个配置文件模板，支持一键切换配置
 
-**v4.0新增场景：**
+**V4.0新增场景：**
 - **配置模板化部署**：通过模板管理功能，可以快速部署不同场景的Clash配置文件
 - **一体化配置管理**：所有功能集成在一个界面，简化用户操作流程
 - **服务整合**：减少部署复杂度，提高系统维护效率
