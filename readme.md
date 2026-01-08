@@ -1,28 +1,30 @@
 # 代理配置管理优选工具 
 
-![JavaScript](https://img.shields.io/badge/JavaScript-ES6+-yellow?logo=javascript&logoColor=white) ![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white)![D1 Database](https://img.shields.io/badge/Cloudflare-D1-0052CC?logo=cloudflare&logoColor=white)  ![MIT License](https://img.shields.io/badge/License-MIT-green.svg) ![Node.js](https://img.shields.io/badge/Node.js-18+-339933?logo=node.js&logoColor=white)  ![Chart.js](https://img.shields.io/badge/Chart.js-4.0+-FF6384?logo=chart.js&logoColor=white) ![Version](https://img.shields.io/badge/Version−3.0-blue.svg)
+![JavaScript](https://img.shields.io/badge/JavaScript-ES6+-yellow?logo=javascript&logoColor=white) ![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white)![D1 Database](https://img.shields.io/badge/Cloudflare-D1-0052CC?logo=cloudflare&logoColor=white)  ![MIT License](https://img.shields.io/badge/License-MIT-green.svg) ![Node.js](https://img.shields.io/badge/Node.js-18+-339933?logo=node.js&logoColor=white)  ![Chart.js](https://img.shields.io/badge/Chart.js-4.0+-FF6384?logo=chart.js&logoColor=white) ![Version](https://img.shields.io/badge/Version−4.0-blue.svg)
 
-这是一个运行在 Cloudflare Worker 上的多功能代理工具，结合 Cloudflare D1 数据库，提供**IP优选**和**域名优选**的批量替换功能。系统采用四 Worker 架构，分别处理优选生成、配置管理、系统管理和订阅文件生成，实现功能解耦和独立部署。
+这是一个运行在 Cloudflare Worker 上的多功能代理工具，结合 Cloudflare D1 数据库，提供**IP优选**和**域名优选**的批量替换功能。系统采用三 Worker 架构，分别处理综合配置管理、系统管理和订阅文件生成，实现功能解耦和独立部署。
 
 ## 📦 系统组成
 
-**系统由4个核心Worker组成**：
+**系统由3个核心Worker组成**：
 
-- **`worker.js`** - 优选生成器：处理 IP/域名优选、订阅生成、批量配置替换、访问日志记录
-- **`config_worker.js`** - 配置管理器：提供配置 CRUD 操作、订阅接口、配置编辑功能、UUID访问统计
-- **`mg_worker.js`** - 管理后台：JWT 认证、域名/IP/UUID 管理、系统统计、手动 IP 更新、订阅访问统计分析（已集成IP更新功能）
-- **`subs_worker.js`** - 订阅文件生成器：专门处理Clash/Mihomo订阅文件生成，支持多种配置文件模板和二维码功能
+- **`worker.js`** - 综合配置管理器：处理 IP/域名优选、配置管理CRUD、订阅生成、批量配置替换、Clash配置文件生成、访问日志记录、UUID访问统计。合并了原config_worker.js和subs_worker.js的功能
+- **`mg_worker.js`** - 管理后台：JWT 认证、域名/IP/UUID 管理、模板管理、系统统计、手动 IP 更新、订阅访问统计分析（已集成IP更新功能）
+- **`config_worker.js`** - 备用配置管理器：可删除或保留作为备用
+
+**注：** v4.0版本进行了功能整合，将配置管理和订阅生成功能合并到worker.js中，减少了部署复杂度。
 
 ## ✨ 主要特性
 
-### 1. **四 Worker 微服务架构**
+### 1. **三 Worker 微服务架构**
 
-该系统采用四 Worker 架构，各司其职：
+该系统采用三 Worker 架构，各司其职：
 
-*   **`worker.js`** - 优选生成器：处理 IP/域名优选、订阅生成、批量配置替换、访问日志记录
-*   **`config_worker.js`** - 配置管理器：提供配置 CRUD 操作、订阅接口、配置编辑功能，包含外部配置生成器链接和UUID访问统计
-*   **`mg_worker.js`** - 管理后台：JWT 认证、域名/IP/UUID 管理、系统统计、IP更新功能、订阅访问统计分析（已合并IP更新功能）
-*   **`subs_worker.js`** - 订阅文件生成器：专门处理Clash/Mihomo订阅文件生成，支持多种配置文件模板和二维码功能
+*   **`worker.js`** - 综合配置管理器：处理 IP/域名优选、配置管理CRUD、订阅生成、批量配置替换、Clash配置文件生成、访问日志记录、UUID访问统计。合并了原config_worker.js和subs_worker.js的功能
+*   **`mg_worker.js`** - 管理后台：JWT 认证、域名/IP/UUID 管理、模板管理、系统统计、IP更新功能、订阅访问统计分析（已合并IP更新功能）
+*   **`config_worker.js`** - 备用配置管理器：可删除或保留作为备用
+
+**v4.0优化**：通过功能整合，减少了部署复杂度，提高了系统效率。新版部署服务域名为：`https://proxypilot.yangzifun.org/`
 
 ### 2. **域名托管属性管理 **
 
@@ -163,16 +165,18 @@
 
 
 
-### 3. 创建四个Worker并绑定D1
+### 3. 创建三个Worker并绑定D1
 
-创建四个Worker并绑定到同一个D1数据库：
+创建三个Worker并绑定到同一个D1数据库：
 
-| Worker名称     | 绑定文件           | 数据库绑定变量 | 建议路由/域名                   |
-| -------------- | ------------------ | -------------- | ------------------------------- |
-| `proxy-main`   | `worker.js`        | `DB`           | `cfst.yangzifun.org*`       |
-| `proxy-config` | `config_worker.js` | `DB`           | `config.proxypilot.yangzifun.org` |
-| `proxy-mg`     | `mg_worker.js`     | `DB`           | `mg.proxypilot.yangzifun.org`         |
-| `proxy-subs`   | `subs_worker.js`   | `DB`           | `subs.proxypilot.yangzifun.org`         |
+| Worker名称     | 绑定文件           | 数据库绑定变量 | 建议路由/域名                   | 说明                           |
+| -------------- | ------------------ | -------------- | ------------------------------- | ------------------------------ |
+| `proxy-main`   | `worker.js`        | `DB`           | `cfst.yangzifun.org*`       | 主服务，包含优选生成、配置管理、订阅生成功能 |
+| `proxy-mg`     | `mg_worker.js`     | `DB`           | `mg.proxypilot.yangzifun.org`         | 管理后台，支持模板管理功能     |
+| `proxy-config` | `config_worker.js` | `DB`           | `config.proxypilot.yangzifun.org` | 可选项，备用配置管理器         |
+
+**v4.0更新：** `worker.js` 已合并原 `config_worker.js` 和 `subs_worker.js` 的功能，现在只需部署2-3个Worker即可。
+**新版部署服务域名：** `https://proxypilot.yangzifun.org/`
 
 绑定步骤：
 
@@ -281,17 +285,16 @@ INSERT INTO cf_domains (domain, remark, created_at) VALUES
 sequenceDiagram
     participant User as 用户浏览器
     participant Main as worker.js
-    participant Config as config_worker.js
     participant DB as D1 数据库
     participant Mg as mg_worker.js
-
-    User->>Config: 访问 /manage (配置管理)
-    Config->>DB: 读写配置数据
-    Config-->>User: 返回管理界面（含域名托管属性）
 
     User->>Main: 访问 / (生成器首页)
     Main->>DB: 读取优选IP/域名
     Main-->>User: 返回生成器界面
+
+    User->>Main: 访问 /manage (配置管理)
+    Main->>DB: 读写配置数据
+    Main-->>User: 返回管理界面（含域名托管属性）
 
     User->>Main: 提交生成请求
     Main->>DB: 获取基础配置（含域名托管属性）
@@ -299,14 +302,14 @@ sequenceDiagram
     Main->>DB: 记录访问日志(如使用UUID)
     Main-->>User: 返回配置（所有原配置+Cloudflare优选配置）
 
-    User->>Config: 查询UUID配置
-    Config->>DB: 获取配置列表（含域名托管属性）
-    Config->>DB: 获取访问统计
-    Config-->>User: 返回配置列表和统计图表
+    User->>Main: 查询UUID配置
+    Main->>DB: 获取配置列表（含域名托管属性）
+    Main->>DB: 获取访问统计
+    Main-->>User: 返回配置列表和统计图表
 
-    User->>Config: 编辑配置并保存
-    Config->>DB: 更新配置（包含域名托管字段）
-    Config-->>User: 立即返回更新后的配置对象
+    User->>Main: 编辑配置并保存
+    Main->>DB: 更新配置（包含域名托管字段）
+    Main-->>User: 立即返回更新后的配置对象
 
     User->>Mg: 点击"立即更新IP"
     Mg->>DB: 保存自动更新设置
@@ -315,6 +318,11 @@ sequenceDiagram
 
     Mg->>Mg: 定时任务更新IP
     Mg->>DB: 读取设置并执行IP更新
+
+    User->>Main: 生成Clash配置文件
+    Main->>Mg: 获取模板数据
+    Main->>DB: 获取节点配置
+    Main-->>User: 返回Clash配置文件
 ```
 
 ### 域名托管属性处理逻辑
@@ -335,13 +343,15 @@ graph TD
 
 | 调用方         | 被调用方           | 接口路径                            | 数据流向                       |
 | :------------- | :----------------- | :---------------------------------- | :----------------------------- |
-| `worker.js`    | `config_worker.js` | `/api/configs/:uuid`                | 拉取基础配置（含域名托管属性） |
 | `worker.js`    | `mg_worker.js`     | `/api/ips`                          | 获取优选IP                     |
 | `worker.js`    | `mg_worker.js`     | `/api/domains`                      | 获取优选域名                   |
-| `worker.js`    | `config_worker.js` | `/api/access_log`                   | 记录访问日志                   |
+| `worker.js`    | `mg_worker.js`     | `/api/templates`                    | 获取模板数据（Clash配置生成）  |
 | 用户浏览器     | `mg_worker.js`     | `/api/login` (及其他`/api`前缀接口) | 管理后台操作                   |
 | 用户浏览器     | `mg_worker.js`     | `/api/stats`                        | 全局订阅统计分析               |
-| 用户浏览器     | `config_worker.js` | `/api/stats/uuid/:uuid`             | 查询特定UUID访问统计           |
+| 用户浏览器     | `worker.js`        | `/manage/configs/:uuid`             | 配置管理、统计查询             |
+| 用户浏览器     | `worker.js`        | `/clash-config`                     | Clash配置文件生成              |
+
+**v4.0更新：** 所有配置管理、统计查询、Clash配置生成功能都已集成到`worker.js`中。
 
 ## 📡 API 接口文档
 
@@ -365,32 +375,35 @@ graph TD
 | `GET`    | `/api/stats`                | 获取系统概览及全局访问统计 | `?days=30` (默认30天)                                        |
 | `GET`    | `/api/stats/uuid-details`   | 获取指定UUID的详细访问记录 | `?uuid={uuid}&start_date=xxx&end_date=xxx`                   |
 
-### worker.js 接口：
+### worker.js 接口（综合配置管理器）：
 
-| 方法   | 路径                   | 描述                     | 参数示例                                                     |
-| :----- | :--------------------- | :----------------------- | :----------------------------------------------------------- |
-| `GET`  | `/`                    | 主生成器UI               | -                                                            |
-| `GET`  | `/fetch-addresses`     | 获取优选地址列表         | `?type=ip&ipType=v4&carrier=CT&source=database`              |
-| `GET`  | `/batch-ip`            | 获取优选列表文本         | `?type=ip&ipType=v4&carrier=CT`                              |
-| `GET`  | `/fetch-ips`           | 获取IP列表（兼容旧接口） | `?ipType=all&carrierType=all`                                |
-| `GET`  | `/batch-configs/:uuid` | 生成订阅链接（基于UUID） | `?type=ip&ipType=v4&carrier=CT`                              |
-| `POST` | `/generate`            | 手动生成配置             | `{"addressList":"1.1.1.1\n2.2.2.2", "baseConfigUuid":"xxx"}` |
+| 方法     | 路径                          | 描述                     | 参数示例                                                     |
+| :------- | :---------------------------- | :----------------------- | :----------------------------------------------------------- |
+| `GET`    | `/`                           | 主生成器UI               | -                                                            |
+| `GET`    | `/fetch-addresses`            | 获取优选地址列表         | `?type=ip&ipType=v4&carrier=CT&source=database`              |
+| `GET`    | `/batch-ip`                   | 获取优选列表文本         | `?type=ip&ipType=v4&carrier=CT`                              |
+| `GET`    | `/fetch-ips`                  | 获取IP列表（兼容旧接口） | `?ipType=all&carrierType=all`                                |
+| `GET`    | `/batch-configs/:uuid`        | 生成订阅链接（基于UUID） | `?type=ip&ipType=v4&carrier=CT`                              |
+| `POST`   | `/generate`                   | 手动生成配置             | `{"addressList":"1.1.1.1\n2.2.2.2", "baseConfigUuid":"xxx"}` |
+| `GET`    | `/manage/configs/:uuid`       | 获取UUID配置列表         | -                                                            |
+| `GET`    | `/manage/stats/:uuid`         | 获取UUID访问统计         | `?days=30` (默认30天)                                        |
+| `POST`   | `/manage/configs`             | 批量添加配置             | `{"uuid":"xxx", "config_data":"vmess://...", "domain_hosting":"Cloudflare"}` |
+| `PUT`    | `/manage/configs`             | 更新单个配置             | `{"id":123, "config_data":"vmess://...", "domain_hosting":"Cloudflare"}` |
+| `DELETE` | `/manage/configs`             | 删除指定UUID组           | 路径参数: `/:uuid`                                           |
+| `DELETE` | `/manage/configs/id/:id`      | 删除单个配置             | -                                                            |
+| `GET`    | `/api/templates`              | 获取模板列表             | -                                                            |
+| `GET`    | `/clash-config`               | 生成Clash配置文件        | `?uuid=xxx&type=ip&ipType=v4&carrier=CT&template=template-name` |
+| `GET`    | `/sub/:uuid`                  | 原始订阅输出             | -                                                            |
 
-### config_worker.js 接口：
+**v4.0新接口：**
+- `/clash-config`：支持Clash/Mihomo配置文件生成，基于模板创建完整配置
+- `/api/templates`：获取模板列表，用于Clash配置生成
 
-| 方法     | 路径                     | 描述             | 参数示例                                                     |
-| :------- | :----------------------- | :--------------- | :----------------------------------------------------------- |
-| `GET`    | `/`                      | 配置管理器UI     | -                                                            |
-| `GET`    | `/manage/configs/:uuid`  | 获取UUID配置列表 | -                                                            |
-| `GET`    | `/manage/stats/:uuid`    | 获取UUID访问统计 | `?days=30` (默认30天)                                        |
-| `POST`   | `/manage/configs`        | 批量添加配置     | `{"uuid":"xxx", "config_data":"vmess://...", "domain_hosting":"Cloudflare"}` |
-| `PUT`    | `/manage/configs`        | 更新单个配置     | `{"id":123, "config_data":"vmess://...", "domain_hosting":"Cloudflare"}` |
-| `DELETE` | `/manage/configs`        | 删除指定UUID组   | 路径参数: `/:uuid`                                           |
-| `DELETE` | `/manage/configs/id/:id` | 删除单个配置     | -                                                            |
+**已整合的接口**：原`config_worker.js`的配置管理接口和原`subs_worker.js`的Clash生成接口
 
 ### 统计接口说明
 
-#### 1. 获取UUID访问统计 (`GET /manage/stats/:uuid` by `config_worker.js`)
+#### 1. 获取UUID访问统计 (`GET /manage/stats/:uuid` by `worker.js`)
 
 返回指定UUID的详细访问统计信息，支持时间范围参数：
 
@@ -535,6 +548,13 @@ graph TD
 4.  **使用情况分析**：通过统计分析了解配置的使用情况和热度
 5.  **多协议支持**：支持多种主流代理协议的统一管理（VMess, VLESS, Trojan, Shadowsocks, ShadowsocksR等）
 6.  **多CDN厂商管理**：支持按不同CDN服务商分类管理配置
+7.  **Clash配置文件生成**：基于模板生成完整的Clash/Mihomo配置文件
+8.  **模板管理**：统一管理多个配置文件模板，支持一键切换配置
+
+**v4.0新增场景：**
+- **配置模板化部署**：通过模板管理功能，可以快速部署不同场景的Clash配置文件
+- **一体化配置管理**：所有功能集成在一个界面，简化用户操作流程
+- **服务整合**：减少部署复杂度，提高系统维护效率
 
 ## 🔧 技术栈
 
