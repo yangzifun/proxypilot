@@ -1,11 +1,12 @@
 /* =================================================================
- * Cloudflare Worker: YZFN Configuration Management with MFA (合并IP更新功能)
+ * Cloudflare Worker: YZFN Configuration Management with MFA and Template Management
  * ================================================================= */
 
 // =================================================================
 //  1. 常量定义
 // =================================================================
 const DEFAULT_JWT_SECRET = 'your-default-jwt-secret-change-this';
+const CACHE_CONTROL = 'no-cache, no-store, must-revalidate';
 
 // =================================================================
 //  2. 工具函数
@@ -46,18 +47,45 @@ async function verifyJwt(token, secret = DEFAULT_JWT_SECRET) {
 }
 
 // JSON响应
-function jsonResponse(data, status = 200) {
+function jsonResponse(data, status = 200, cacheControl = CACHE_CONTROL) {
     return new Response(JSON.stringify(data), {
         status,
         headers: {
             'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': '*',
-            'Cache-Control': 'no-cache, no-store'
+            'Cache-Control': cacheControl,
+            'X-Response-Time': Date.now().toString()
         }
     });
 }
 
-// 获取访问统计（新增函数）
+// 防抖函数
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+// 格式化日期
+function formatDate(timestamp) {
+    if (!timestamp || timestamp === 0) return '从未';
+    const date = new Date(timestamp);
+    return date.toLocaleString('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+// 获取访问统计
 async function getAccessStatsSummary(env, days = 30) {
     try {
         const db = env.DB;
@@ -126,7 +154,7 @@ async function getAccessStatsSummary(env, days = 30) {
     }
 }
 
-// 获取时间段内的UUID访问详情（新增函数）
+// 获取时间段内的UUID访问详情
 async function getUUIDAccessDetails(env, uuid, startDate, endDate) {
     try {
         const db = env.DB;
@@ -262,7 +290,7 @@ class TOTP {
 }
 
 // =================================================================
-//  4. IP获取和更新功能 (从ip_worker.js合并)
+//  4. IP获取和更新功能
 // =================================================================
 
 async function fetchIpsFromHostMonit(type = 'v4') {
@@ -340,20 +368,20 @@ async function fetchIpsFromVps789() {
 }
 
 /**
- * 关键修复：检查并自动升级数据库表结构
+ * 检查并自动升级数据库表结构
  */
 async function ensureSchema(env) {
     try {
         // 1. 确保表存在
         await env.DB.prepare(`
             CREATE TABLE IF NOT EXISTS cfips (
-                                                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                                 ip TEXT NOT NULL,
-                                                 ip_type TEXT,
-                                                 carrier TEXT,
-                                                 source TEXT,
-                                                 created_at INTEGER,
-                                                 updated_at INTEGER
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ip TEXT NOT NULL,
+                ip_type TEXT,
+                carrier TEXT,
+                source TEXT,
+                created_at INTEGER,
+                updated_at INTEGER
             )
         `).run();
 
@@ -369,9 +397,9 @@ async function ensureSchema(env) {
         // 3. 确保设置表存在
         await env.DB.prepare(`
             CREATE TABLE IF NOT EXISTS auto_update_settings (
-                                                                source TEXT PRIMARY KEY,
-                                                                enabled INTEGER,
-                                                                updated_at INTEGER
+                source TEXT PRIMARY KEY,
+                enabled INTEGER,
+                updated_at INTEGER
             )
         `).run();
 
@@ -510,104 +538,122 @@ async function initializeDatabaseSettings(env) {
         // 创建 admin_users 表
         await env.DB.prepare(`
             CREATE TABLE IF NOT EXISTS admin_users (
-                                                       id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                                       username TEXT UNIQUE NOT NULL,
-                                                       password_hash TEXT NOT NULL,
-                                                       mfa_enabled INTEGER DEFAULT 0,
-                                                       mfa_secret TEXT,
-                                                       last_mfa_login INTEGER DEFAULT 0,
-                                                       last_backup_login INTEGER DEFAULT 0,
-                                                       created_at INTEGER DEFAULT (CAST(STRFTIME('%s', 'now') AS INT) * 1000)
-                );
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                mfa_enabled INTEGER DEFAULT 0,
+                mfa_secret TEXT,
+                last_mfa_login INTEGER DEFAULT 0,
+                last_backup_login INTEGER DEFAULT 0,
+                created_at INTEGER DEFAULT (CAST(STRFTIME('%s', 'now') AS INT) * 1000)
+            );
         `).run();
 
         // 创建 mfa_backup_codes 表
         await env.DB.prepare(`
             CREATE TABLE IF NOT EXISTS mfa_backup_codes (
-                                                            id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                                            username TEXT NOT NULL,
-                                                            code TEXT UNIQUE NOT NULL,
-                                                            created_at INTEGER DEFAULT (CAST(STRFTIME('%s', 'now') AS INT) * 1000),
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL,
+                code TEXT UNIQUE NOT NULL,
+                created_at INTEGER DEFAULT (CAST(STRFTIME('%s', 'now') AS INT) * 1000),
                 used INTEGER DEFAULT 0,
                 used_at INTEGER DEFAULT 0
-                );
+            );
         `).run();
 
         // 创建 cf_domains 表 (Cloudflare域名)
         await env.DB.prepare(`
             CREATE TABLE IF NOT EXISTS cf_domains (
-                                                      id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                                      domain TEXT UNIQUE NOT NULL,
-                                                      remark TEXT,
-                                                      created_at INTEGER DEFAULT (CAST(STRFTIME('%s', 'now') AS INT) * 1000),
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                domain TEXT UNIQUE NOT NULL,
+                remark TEXT,
+                created_at INTEGER DEFAULT (CAST(STRFTIME('%s', 'now') AS INT) * 1000),
                 updated_at INTEGER DEFAULT (CAST(STRFTIME('%s', 'now') AS INT) * 1000)
-                );
+            );
         `).run();
 
         // 创建 edgeone_domains 表 (腾讯云EdgeOne域名)
         await env.DB.prepare(`
             CREATE TABLE IF NOT EXISTS edgeone_domains (
-                                                           id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                                           domain TEXT UNIQUE NOT NULL,
-                                                           remark TEXT,
-                                                           created_at INTEGER DEFAULT (CAST(STRFTIME('%s', 'now') AS INT) * 1000),
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                domain TEXT UNIQUE NOT NULL,
+                remark TEXT,
+                created_at INTEGER DEFAULT (CAST(STRFTIME('%s', 'now') AS INT) * 1000),
                 updated_at INTEGER DEFAULT (CAST(STRFTIME('%s', 'now') AS INT) * 1000)
-                );
+            );
         `).run();
 
         // 创建 configs 表
         await env.DB.prepare(`
             CREATE TABLE IF NOT EXISTS configs (
-                                                   id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                                   uuid TEXT NOT NULL,
-                                                   ip TEXT,
-                                                   domain TEXT,
-                                                   port INTEGER,
-                                                   meta TEXT,
-                                                   created_at INTEGER DEFAULT (CAST(STRFTIME('%s', 'now') AS INT) * 1000),
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                uuid TEXT NOT NULL,
+                ip TEXT,
+                domain TEXT,
+                port INTEGER,
+                meta TEXT,
+                created_at INTEGER DEFAULT (CAST(STRFTIME('%s', 'now') AS INT) * 1000),
                 updated_at INTEGER DEFAULT (CAST(STRFTIME('%s', 'now') AS INT) * 1000)
-                );
+            );
         `).run();
         await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_configs_uuid ON configs (uuid);').run();
 
-        // 创建 cfips 表 (需要确保存在，供 mg_worker.js 读取)
+        // 创建 cfips 表
         await env.DB.prepare(`
             CREATE TABLE IF NOT EXISTS cfips (
-                                                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                                 ip TEXT UNIQUE NOT NULL,
-                                                 ip_type TEXT,
-                                                 carrier TEXT,
-                                                 source TEXT,
-                                                 created_at INTEGER DEFAULT (CAST(STRFTIME('%s', 'now') AS INT) * 1000)
-                );
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ip TEXT UNIQUE NOT NULL,
+                ip_type TEXT,
+                carrier TEXT,
+                source TEXT,
+                created_at INTEGER DEFAULT (CAST(STRFTIME('%s', 'now') AS INT) * 1000)
+            );
         `).run();
 
-        // 创建 auto_update_settings 表 (需要确保存在，供 mg_worker.js 读取和写入设置)
+        // 创建 auto_update_settings 表
         await env.DB.prepare(`
             CREATE TABLE IF NOT EXISTS auto_update_settings (
-                                                                source TEXT PRIMARY KEY,
-                                                                enabled INTEGER NOT NULL,
-                                                                updated_at INTEGER DEFAULT (CAST(STRFTIME('%s', 'now') AS INT) * 1000)
-                );
+                source TEXT PRIMARY KEY,
+                enabled INTEGER NOT NULL,
+                updated_at INTEGER DEFAULT (CAST(STRFTIME('%s', 'now') AS INT) * 1000)
+            );
         `).run();
 
-        // 创建 config_access_logs (订阅访问日志) 表
+        // 创建 config_access_logs 表
         await env.DB.prepare(`
             CREATE TABLE IF NOT EXISTS config_access_logs (
-                                                              id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                                              uuid TEXT NOT NULL,
-                                                              query_type TEXT NOT NULL, -- 'subscription' or 'api-generation'
-                                                              client_ip TEXT,
-                                                              user_agent TEXT,
-                                                              created_at TEXT DEFAULT (STRFTIME('%Y-%m-%dT%H:%M:%SZ', 'now'))
-                );
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                uuid TEXT NOT NULL,
+                query_type TEXT NOT NULL,
+                client_ip TEXT,
+                user_agent TEXT,
+                created_at TEXT DEFAULT (STRFTIME('%Y-%m-%dT%H:%M:%SZ', 'now'))
+            );
         `).run();
         await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_access_logs_uuid ON config_access_logs (uuid);').run();
         await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_access_logs_date ON config_access_logs (created_at);').run();
 
+        // 创建 config_templates 表（新增）
+        await env.DB.prepare(`
+            CREATE TABLE IF NOT EXISTS config_templates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE NOT NULL,
+                url TEXT NOT NULL,
+                description TEXT,
+                is_default INTEGER DEFAULT 0,
+                created_at INTEGER DEFAULT (CAST(STRFTIME('%s', 'now') AS INT) * 1000),
+                updated_at INTEGER DEFAULT (CAST(STRFTIME('%s', 'now') AS INT) * 1000)
+            )
+        `).run();
+
+        // 创建模板表索引
+        await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_config_templates_name ON config_templates(name);').run();
+        await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_config_templates_is_default ON config_templates(is_default);').run();
+        await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_config_templates_created ON config_templates(created_at);').run();
+
         console.log('mg_worker.js: D1 database tables checked/initialized.');
 
-        // 初始化默认设置（如果没有的话）
+        // 初始化默认设置
         const defaultSettings = [
             { source: 'global_enabled', enabled: 1 },
             { source: 'hostmonit_v4', enabled: 1 },
@@ -630,6 +676,7 @@ async function initializeDatabaseSettings(env) {
 //  5. API处理函数
 // =================================================================
 
+// 登录处理
 async function handleLogin(req, env) {
     try {
         const { username, password, totp_code, step } = await req.json();
@@ -705,6 +752,7 @@ async function handleLogin(req, env) {
     }
 }
 
+// MFA初始化
 async function handleMfaInit(req, env) {
     try {
         const { username, password } = await req.json();
@@ -737,6 +785,7 @@ async function handleMfaInit(req, env) {
     }
 }
 
+// MFA首次验证
 async function handleMfaVerifyFirst(req, env) {
     try {
         const { username, totp_code, secret } = await req.json();
@@ -779,6 +828,7 @@ async function handleMfaVerifyFirst(req, env) {
     }
 }
 
+// 使用备份码登录
 async function handleMfaLoginWithBackup(req, env) {
     try {
         const { username, password, backup_code } = await req.json();
@@ -832,6 +882,7 @@ async function handleMfaLoginWithBackup(req, env) {
     }
 }
 
+// 修改密码
 async function handleChangePassword(req, env, currentUser) {
     try {
         const { oldPassword, newPassword } = await req.json();
@@ -857,6 +908,7 @@ async function handleChangePassword(req, env, currentUser) {
     }
 }
 
+// 获取MFA状态
 async function handleMfaStatus(req, env, currentUser) {
     try {
         const user = await env.DB.prepare(
@@ -878,6 +930,7 @@ async function handleMfaStatus(req, env, currentUser) {
     }
 }
 
+// 禁用MFA
 async function handleMfaDisable(req, env, currentUser) {
     try {
         const { password } = await req.json();
@@ -907,6 +960,7 @@ async function handleMfaDisable(req, env, currentUser) {
     }
 }
 
+// 重新生成备份码
 async function handleMfaRegenerateBackupCodes(req, env, currentUser) {
     try {
         const { password } = await req.json();
@@ -951,7 +1005,7 @@ async function handleMfaRegenerateBackupCodes(req, env, currentUser) {
     }
 }
 
-// 获取自动更新设置 (从 ip-worker.js 获取，但在 mg_worker.js 中读取共享数据库)
+// 获取自动更新设置
 async function handleGetAutoUpdateSettings(req, env) {
     try {
         const settings = await env.DB.prepare(
@@ -961,7 +1015,7 @@ async function handleGetAutoUpdateSettings(req, env) {
         const result = {
             global_enabled: 0,
             hostmonit_v4: 1,
-            hostmonit_v6: 0, // 默认不开启IPv6
+            hostmonit_v6: 0,
             vps789: 1,
             last_executed: 0
         };
@@ -969,7 +1023,7 @@ async function handleGetAutoUpdateSettings(req, env) {
         if (settings && settings.results) {
             settings.results.forEach(setting => {
                 if (setting.source === 'last_executed') {
-                    result.last_executed = setting.updated_at; // 只有last_executed保存的是时间戳
+                    result.last_executed = setting.updated_at;
                 } else {
                     result[setting.source] = setting.enabled;
                 }
@@ -982,7 +1036,7 @@ async function handleGetAutoUpdateSettings(req, env) {
     }
 }
 
-// 设置自动更新配置 (在 mg_worker.js 中直接写入共享数据库)
+// 设置自动更新配置
 async function handleSetAutoUpdateSettings(req, env) {
     try {
         const { global_enabled, hostmonit_v4, hostmonit_v6, vps789 } = await req.json();
@@ -1009,10 +1063,9 @@ async function handleSetAutoUpdateSettings(req, env) {
     }
 }
 
-// 直接执行IP更新 (移除外部worker调用)
+// 直接执行IP更新
 async function handleDirectIpUpdate(req, env) {
     try {
-        // 从前端获取当前开关设置
         const { global_enabled, hostmonit_v4, hostmonit_v6, vps789 } = await req.json();
 
         // 立即保存这些设置到数据库
@@ -1049,7 +1102,7 @@ async function handleDirectIpUpdate(req, env) {
     }
 }
 
-// 获取统计数据，其中包含 IP 数量和自动更新状态
+// 获取统计数据
 async function handleGetStats(req, env) {
     try {
         const url = new URL(req.url);
@@ -1057,13 +1110,14 @@ async function handleGetStats(req, env) {
 
         // 获取基础统计
         const domains = await env.DB.prepare('SELECT COUNT(*) as c FROM cf_domains').first('c');
-        const ips = await env.DB.prepare('SELECT COUNT(*) as c FROM cfips').first('c'); // 从共享数据库读取
+        const ips = await env.DB.prepare('SELECT COUNT(*) as c FROM cfips').first('c');
         const uuids = await env.DB.prepare('SELECT COUNT(DISTINCT uuid) as c FROM configs').first('c');
+        const templates = await env.DB.prepare('SELECT COUNT(*) as c FROM config_templates').first('c');
 
         const enabledSetting = await env.DB.prepare(
             'SELECT enabled FROM auto_update_settings WHERE source = ?'
         ).bind('global_enabled').first();
-        const enabled = enabledSetting?.enabled || 0; // If no setting, default to 0 for safety
+        const enabled = enabledSetting?.enabled || 0;
 
         const lastExecSetting = await env.DB.prepare(
             'SELECT updated_at FROM auto_update_settings WHERE source = ?'
@@ -1087,6 +1141,7 @@ async function handleGetStats(req, env) {
             domains: domains || 0,
             ips: ips || 0,
             uuids: uuids || 0,
+            templates: templates || 0,
             autoUpdate: enabled,
             lastExecuted: lastExec,
             access_stats: accessStats
@@ -1097,7 +1152,7 @@ async function handleGetStats(req, env) {
     }
 }
 
-// 新增API：获取单个UUID的访问详情
+// 获取单个UUID的访问详情
 async function handleGetUUIDAccessDetails(req, env) {
     try {
         const url = new URL(req.url);
@@ -1117,6 +1172,7 @@ async function handleGetUUIDAccessDetails(req, env) {
     }
 }
 
+// 域名管理
 async function handleDomains(req, env, method) {
     try {
         const url = new URL(req.url);
@@ -1146,7 +1202,7 @@ async function handleDomains(req, env, method) {
                     created_at
                 FROM edgeone_domains
                 ORDER BY ${actualSort} ${sortOrder}
-                    LIMIT ? OFFSET ?
+                LIMIT ? OFFSET ?
             `;
 
             // 获取总域名数量
@@ -1157,6 +1213,7 @@ async function handleDomains(req, env, method) {
             const { results } = await env.DB.prepare(query).bind(size, offset).all();
 
             return jsonResponse({
+                success: true,
                 total: total || 0,
                 data: results || [],
                 page,
@@ -1166,10 +1223,10 @@ async function handleDomains(req, env, method) {
 
         if (method === 'POST') {
             const { domain, remark, source } = await req.json();
-            if(!domain) return jsonResponse({error:'域名不能为空'}, 400);
+            if(!domain) return jsonResponse({success: false, error:'域名不能为空'}, 400);
 
             if (!source || (source !== 'Cloudflare' && source !== '腾讯云EdgeOne')) {
-                return jsonResponse({error:'域名来源必须为 Cloudflare 或 腾讯云EdgeOne'}, 400);
+                return jsonResponse({success: false, error:'域名来源必须为 Cloudflare 或 腾讯云EdgeOne'}, 400);
             }
 
             if (source === 'Cloudflare') {
@@ -1190,7 +1247,7 @@ async function handleDomains(req, env, method) {
 
         if (method === 'PUT') {
             const { id, domain, remark, source } = await req.json();
-            if(!id || !domain || !source) return jsonResponse({error:'ID、域名和来源不能为空'}, 400);
+            if(!id || !domain || !source) return jsonResponse({success: false, error:'ID、域名和来源不能为空'}, 400);
 
             if (source === 'Cloudflare') {
                 await env.DB.prepare(
@@ -1201,7 +1258,7 @@ async function handleDomains(req, env, method) {
                     'UPDATE edgeone_domains SET domain = ?, remark = ?, updated_at = ? WHERE id = ?'
                 ).bind(domain, remark || '', Date.now(), id).run();
             } else {
-                return jsonResponse({error:'域名来源必须为 Cloudflare 或 腾讯云EdgeOne'}, 400);
+                return jsonResponse({success: false, error:'域名来源必须为 Cloudflare 或 腾讯云EdgeOne'}, 400);
             }
 
             return jsonResponse({
@@ -1212,14 +1269,14 @@ async function handleDomains(req, env, method) {
 
         if (method === 'DELETE') {
             const { id, source } = await req.json();
-            if (!id || !source) return jsonResponse({error:'ID和来源不能为空'}, 400);
+            if (!id || !source) return jsonResponse({success: false, error:'ID和来源不能为空'}, 400);
 
             if (source === 'Cloudflare') {
                 await env.DB.prepare('DELETE FROM cf_domains WHERE id = ?').bind(id).run();
             } else if (source === '腾讯云EdgeOne') {
                 await env.DB.prepare('DELETE FROM edgeone_domains WHERE id = ?').bind(id).run();
             } else {
-                return jsonResponse({error:'域名来源必须为 Cloudflare 或 腾讯云EdgeOne'}, 400);
+                return jsonResponse({success: false, error:'域名来源必须为 Cloudflare 或 腾讯云EdgeOne'}, 400);
             }
 
             return jsonResponse({
@@ -1228,14 +1285,14 @@ async function handleDomains(req, env, method) {
             });
         }
 
-        return jsonResponse({ error: '不支持的请求方法' }, 405);
+        return jsonResponse({success: false, error: '不支持的请求方法'}, 405);
     } catch (error) {
         console.error('handleDomains error:', error.message);
-        return jsonResponse({ error: '服务器错误' }, 500);
+        return jsonResponse({success: false, error: '服务器错误'}, 500);
     }
 }
 
-// 修改handleIps函数 (只保留读取 cfips 表和删除单条 IP 的功能)
+// IP管理
 async function handleIps(req, env, method) {
     try {
         const url = new URL(req.url);
@@ -1255,6 +1312,7 @@ async function handleIps(req, env, method) {
             const { results } = await env.DB.prepare(query).bind(size, offset).all();
 
             return jsonResponse({
+                success: true,
                 total: total || 0,
                 data: results || [],
                 page,
@@ -1264,7 +1322,7 @@ async function handleIps(req, env, method) {
 
         if (method === 'DELETE') {
             const { ip } = await req.json();
-            if (!ip) return jsonResponse({error:'IP不能为空'}, 400);
+            if (!ip) return jsonResponse({success: false, error:'IP不能为空'}, 400);
 
             await env.DB.prepare('DELETE FROM cfips WHERE ip = ?').bind(ip).run();
             return jsonResponse({
@@ -1273,13 +1331,14 @@ async function handleIps(req, env, method) {
             });
         }
 
-        return jsonResponse({ error: '不支持的请求方法' }, 405);
+        return jsonResponse({success: false, error: '不支持的请求方法'}, 405);
     } catch (error) {
         console.error('handleIps error:', error.message);
-        return jsonResponse({ error: '服务器错误' }, 500);
+        return jsonResponse({success: false, error: '服务器错误'}, 500);
     }
 }
 
+// UUID管理
 async function handleUuids(req, env, method) {
     try {
         const url = new URL(req.url);
@@ -1299,6 +1358,7 @@ async function handleUuids(req, env, method) {
             const { results } = await env.DB.prepare(query).bind(size, offset).all();
 
             return jsonResponse({
+                success: true,
                 total: total || 0,
                 data: results || [],
                 page,
@@ -1308,7 +1368,7 @@ async function handleUuids(req, env, method) {
 
         if (method === 'DELETE') {
             const { uuid } = await req.json();
-            if (!uuid) return jsonResponse({error:'UUID不能为空'}, 400);
+            if (!uuid) return jsonResponse({success: false, error:'UUID不能为空'}, 400);
 
             await env.DB.prepare('DELETE FROM configs WHERE uuid = ?').bind(uuid).run();
             return jsonResponse({
@@ -1317,15 +1377,180 @@ async function handleUuids(req, env, method) {
             });
         }
 
-        return jsonResponse({ error: '不支持的请求方法' }, 405);
+        return jsonResponse({success: false, error: '不支持的请求方法'}, 405);
     } catch (error) {
         console.error('handleUuids error:', error.message);
-        return jsonResponse({ error: '服务器错误' }, 500);
+        return jsonResponse({success: false, error: '服务器错误'}, 500);
     }
 }
 
 // =================================================================
-//  6. 主API路由处理
+//  6. 模板管理API (新增)
+// =================================================================
+
+// 模板管理API
+async function handleTemplates(req, env, method) {
+    try {
+        const url = new URL(req.url);
+
+        if (method === 'GET') {
+            const page = parseInt(url.searchParams.get('page')) || 1;
+            const size = parseInt(url.searchParams.get('size')) || 10;
+            const sortField = url.searchParams.get('sort') || 'created_at';
+            const sortOrder = (url.searchParams.get('order') || 'desc').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+            
+            const allowedSorts = ['name', 'url', 'description', 'is_default', 'created_at', 'updated_at'];
+            const actualSort = allowedSorts.includes(sortField) ? sortField : 'created_at';
+            const offset = (page - 1) * size;
+
+            // 获取总模板数量
+            const totalResult = await env.DB.prepare('SELECT COUNT(*) as c FROM config_templates').first();
+            const total = totalResult ? totalResult.c : 0;
+            
+            // 获取模板数据
+            const { results } = await env.DB.prepare(
+                `SELECT * FROM config_templates ORDER BY ${actualSort} ${sortOrder} LIMIT ? OFFSET ?`
+            ).bind(size, offset).all();
+
+            return jsonResponse({
+                success: true,
+                total: total,
+                data: results || [],
+                page,
+                size
+            });
+        }
+
+        if (method === 'POST') {
+            const { name, url, description, is_default } = await req.json();
+            
+            if (!name || !url) {
+                return jsonResponse({success: false, error: '模板名称和URL不能为空'}, 400);
+            }
+
+            // 验证名称唯一性
+            const existing = await env.DB.prepare(
+                'SELECT id FROM config_templates WHERE name = ?'
+            ).bind(name).first();
+            
+            if (existing) {
+                return jsonResponse({success: false, error: '模板名称已存在'}, 400);
+            }
+
+            // URL验证
+            if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                return jsonResponse({success: false, error: 'URL必须以 http:// 或 https:// 开头'}, 400);
+            }
+
+            // 如果设置为默认模板，先取消其他默认模板
+            if (is_default === 1) {
+                await env.DB.prepare(
+                    'UPDATE config_templates SET is_default = 0 WHERE is_default = 1'
+                ).run();
+            }
+
+            const now = Date.now();
+            await env.DB.prepare(
+                'INSERT INTO config_templates (name, url, description, is_default, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
+            ).bind(name, url, description || '', is_default || 0, now, now).run();
+
+            return jsonResponse({
+                success: true,
+                message: '模板添加成功'
+            });
+        }
+
+        if (method === 'PUT') {
+            const { id, name, url, description, is_default } = await req.json();
+            
+            if (!id || !name || !url) {
+                return jsonResponse({success: false, error: 'ID、名称和URL不能为空'}, 400);
+            }
+
+            // 验证名称唯一性（排除当前记录）
+            const existing = await env.DB.prepare(
+                'SELECT id FROM config_templates WHERE name = ? AND id != ?'
+            ).bind(name, id).first();
+            
+            if (existing) {
+                return jsonResponse({success: false, error: '模板名称已存在'}, 400);
+            }
+
+            // URL验证
+            if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                return jsonResponse({success: false, error: 'URL必须以 http:// 或 https:// 开头'}, 400);
+            }
+
+            // 如果设置为默认模板，先取消其他默认模板
+            if (is_default === 1) {
+                await env.DB.prepare(
+                    'UPDATE config_templates SET is_default = 0 WHERE is_default = 1'
+                ).run();
+            }
+
+            const now = Date.now();
+            await env.DB.prepare(
+                'UPDATE config_templates SET name = ?, url = ?, description = ?, is_default = ?, updated_at = ? WHERE id = ?'
+            ).bind(name, url, description || '', is_default || 0, now, id).run();
+
+            return jsonResponse({
+                success: true,
+                message: '模板更新成功'
+            });
+        }
+
+        if (method === 'DELETE') {
+            const { id } = await req.json();
+            if (!id) return jsonResponse({success: false, error: 'ID不能为空'}, 400);
+
+            // 检查是否为默认模板
+            const template = await env.DB.prepare(
+                'SELECT is_default FROM config_templates WHERE id = ?'
+            ).bind(id).first();
+
+            if (template && template.is_default === 1) {
+                return jsonResponse({success: false, error: '不能删除默认模板，请先设置其他模板为默认'}, 400);
+            }
+
+            await env.DB.prepare('DELETE FROM config_templates WHERE id = ?').bind(id).run();
+
+            return jsonResponse({
+                success: true,
+                message: '模板删除成功'
+            });
+        }
+
+        return jsonResponse({success: false, error: '不支持的请求方法'}, 405);
+    } catch (error) {
+        console.error('handleTemplates error:', error.message);
+        return jsonResponse({success: false, error: '服务器错误: ' + error.message}, 500);
+    }
+}
+
+// 设置默认模板API
+async function handleSetDefaultTemplate(req, env) {
+    try {
+        const { id } = await req.json();
+        if (!id) return jsonResponse({success: false, error: 'ID不能为空'}, 400);
+
+        // 开始事务：先取消所有默认，再设置新的默认
+        await env.DB.batch([
+            env.DB.prepare('UPDATE config_templates SET is_default = 0 WHERE is_default = 1'),
+            env.DB.prepare('UPDATE config_templates SET is_default = 1, updated_at = ? WHERE id = ?').bind(Date.now(), id)
+        ]);
+
+        return jsonResponse({
+            success: true,
+            message: '默认模板设置成功'
+        });
+    } catch (error) {
+        console.error('handleSetDefaultTemplate error:', error.message);
+        return jsonResponse({success: false, error: '服务器错误'}, 500);
+    }
+}
+
+// =================================================================
+//  7. 主API路由处理
 // =================================================================
 
 async function handleApi(req, env) {
@@ -1395,7 +1620,7 @@ async function handleApi(req, env) {
             return await handleGetStats(req, env);
         }
 
-        // 新增API：获取UUID访问详情
+        // 获取UUID访问详情
         if (path === '/api/stats/uuid-details' && method === 'GET') {
             return await handleGetUUIDAccessDetails(req, env);
         }
@@ -1408,13 +1633,22 @@ async function handleApi(req, env) {
             return await handleIps(req, env, method);
         }
 
-        // 新的直接IP更新接口
+        // 直接IP更新接口
         if (path === '/api/ips/update' && method === 'POST') {
             return await handleDirectIpUpdate(req, env);
         }
 
         if (path === '/api/uuids' && ['GET', 'DELETE'].includes(method)) {
             return await handleUuids(req, env, method);
+        }
+
+        // 模板管理API（新增）
+        if (path === '/api/templates' && ['GET', 'POST', 'PUT', 'DELETE'].includes(method)) {
+            return await handleTemplates(req, env, method);
+        }
+
+        if (path === '/api/templates/set-default' && method === 'POST') {
+            return await handleSetDefaultTemplate(req, env);
         }
 
         return jsonResponse({ error: 'API端点不存在' }, 404);
@@ -1426,136 +1660,940 @@ async function handleApi(req, env) {
 }
 
 // =================================================================
-//  7. HTML模板 (完整，修改了 `refreshIps` 函数的 JavaScript 部分)
+//  8. HTML模板
 // =================================================================
 
 const globalCss = `
-/* 全局CSS样式 */
-html { font-size: 14px; }
-body, html { margin: 0; padding: 0; min-height: 100%; background-color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-.container { width: 100%; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 20px 20px 40px; box-sizing: border-box; }
-.content-group { width: 100%; max-width: 1000px; text-align: center; margin-top: 20px; }
-.profile-name { font-size: 2rem; color: #3d474d; margin-bottom: 5px; font-weight: bold;}
-.profile-quote { color: #89949B; margin-bottom: 10px; min-height: 1em; }
-.top-bar { width: 100%; max-width: 1000px; display: flex; justify-content: space-between; margin-bottom: 20px; align-items: center; padding: 0 5px; box-sizing: border-box; }
-.action-link { font-size: 0.9rem; color: #89949B; cursor: pointer; text-decoration: none; margin-right: 15px; transition: color 0.2s; }
-.action-link:hover { color: #5a666d; text-decoration: underline; }
-.action-link.logout { color: #e16d6d; }
-.action-link.logout:hover { color: #d32f2f; }
-.nav-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 25px; border-bottom: 1px solid #E8EBED; padding-bottom: 20px; }
-.nav-btn { display: inline-flex; align-items: center; justify-content: center; padding: 8px 16px; background: #E8EBED; border: 2px solid #89949B; border-radius: 4px; color: #5a666d; font-weight: 500; font-size: 0.95rem; cursor: pointer; transition: all 0.2s; white-space: nowrap; text-decoration: none; }
-.nav-btn:hover { background: #89949B; color: white; }
-.nav-btn.active { background-color: #5a666d; color: white; border-color: #5a666d; }
-.nav-btn.danger { border-color: #ef4444; color: #ef4444; background: #fee2e2; }
-.nav-btn.danger:hover { background: #ef4444; color: white; }
-.nav-btn.small { padding: 4px 10px; font-size: 0.85rem; }
-.card { background: #f8f9fa; border: 1px solid #E8EBED; border-radius: 8px; padding: 24px; margin-bottom: 24px; text-align: left; display: none; animation: fadeIn 0.3s ease; }
-.card.active { display: block; }
-.card h2 { font-size: 1.4rem; color: #3d474d; margin-top: 0; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid #E8EBED; }
-@keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-input[type="text"], input[type="password"], input[type="number"] { width: 100%; padding: 10px; border: 2px solid #89949B; border-radius: 4px; background: #fff; font-size: 0.9rem; box-sizing: border-box; margin-bottom: 10px; }
-input:focus { outline: none; border-color: #3d474d; }
-.table-container { overflow-x: auto; border: 2px solid #89949B; border-radius: 4px; background: #fff; }
-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid #E8EBED; white-space: nowrap; }
-th { font-weight: bold; color: #3d474d; background-color: #f0f2f5; cursor: pointer; user-select: none; }
-th:hover { background-color: #e2e6ea; }
-.pagination-bar { display: flex; justify-content: space-between; align-items: center; padding-top: 15px; font-size: 0.9rem; color: #5a666d; }
-.page-ctrl { display: flex; gap: 5px; align-items: center; }
-.page-info { margin: 0 10px; }
-select.page-size { padding: 4px; border: 1px solid #89949B; border-radius: 4px; background: #fff; }
-.footer { margin-top: auto; padding-top: 40px; color: #89949B; font-size: 0.8rem; text-align: center; width: 100%; border-top: 1px solid #f0f0f0; }
-.footer a { color: #5a666d; text-decoration: none; }
-.footer a:hover { text-decoration: underline; }
-.switch-group { display: flex; flex-wrap: wrap; gap: 20px; align-items: center; margin-bottom: 15px; background: #e8ebed; padding: 10px 15px; border-radius: 4px; }
-.switch-label { font-weight: 500; color: #5a666d; display: flex; align-items: center; gap: 8px;}
-.switch { position: relative; display: inline-block; width: 40px; height: 22px; }
-.switch input { opacity: 0; width: 0; height: 0; }
-.slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 34px; }
-.slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
-input:checked + .slider { background-color: #5a666d; }
-input:checked + .slider:before { transform: translateX(18px); }
-.auto-update-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
-.auto-update-status { font-size: 0.9rem; color: #3d474d; padding: 5px 10px; background: #e8ebed; border-radius: 4px; display: inline-flex; align-items: center; gap: 8px; }
-.status-indicator { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-.status-on { background-color: #10b981; }
-.status-off { background-color: #ef4444; }
-.status-warning { background-color: #f59e0b; }
-.mfa-status-badge { display: inline-flex; align-items: center; padding: 4px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 500; gap: 6px; }
-.mfa-active { background-color: #d1fae5; color: #065f46; }
-.mfa-inactive { background-color: #fee2e2; color: #9f1239; }
-.qr-code-container { text-align: center; margin: 20px 0; padding: 15px; background: #f9fafb; border-radius: 8px; border: 1px solid #e5e7eb; }
-.qr-instructions { font-size: 0.9rem; color: #6b7280; margin-top: 15px; line-height: 1.5; }
-.backup-codes-box { background: #f3f4f6; border: 1px dashed #d1d5db; padding: 15px; border-radius: 6px; margin: 15px 0; font-family: monospace; text-align: center; line-height: 2; }
-.backup-code { display: inline-block; margin: 5px; padding: 5px 10px; background: white; border: 1px solid #e5e7eb; border-radius: 4px; font-weight: bold; }
-.security-step { background: #f0f9ff; border: 1px solid #bae6fd; padding: 15px; border-radius: 8px; margin: 15px 0; }
-.security-step h4 { color: #0369a1; margin-top: 0; }
-.security-step ol, .security-step ul { padding-left: 20px; }
-#toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 10px; }
-.toast { padding: 12px 18px; border-radius: 4px; border: 2px solid #89949B; background: #fff; color: #3d474d; font-weight: 500; font-size: 0.9rem; box-shadow: 0 4px 12px rgba(0,0,0,0.1); animation: slideIn 0.3s forwards, fadeOut 0.5s 3.5s forwards; }
-@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-@keyframes fadeOut { to { opacity: 0; transform: translateX(100%); } }
-.modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 100; display: none; align-items: center; justify-content: center; }
-.modal { background: #fff; width: 90%; max-width: 450px; padding: 25px; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); max-height: 90vh; overflow-y: auto; }
-.stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 20px; }
-.stat-box { background: #e8ebed; padding: 20px; border-radius: 4px; text-align: center; }
-.stat-num { font-size: 2rem; color: #5a666d; font-weight: bold; display: block; }
-.stat-label { font-size: 0.85rem; color: #89949B; }
-.last-update-info { margin-top: 10px; font-size: 0.85rem; color: #3d474d; }
-.security-section { background: #f9fafb; border-left: 4px solid #3b82f6; padding: 15px; margin: 20px 0; border-radius: 0 8px 8px 0; }
-.security-section h3 { margin-top: 0; color: #1e40af; }
-.mfa-container { max-width: 600px; margin: 0 auto; }
-.secret-display { background: #1f2937; color: #fbbf24; padding: 15px; border-radius: 6px; font-family: monospace; text-align: center; margin: 15px 0; font-size: 1.1rem; letter-spacing: 1px; }
-.copy-btn { margin-left: 10px; padding: 5px 10px; background: #4b5563; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.8rem; }
-.login-box { width: 100%; max-width: 400px; padding: 40px 30px; border: 2px solid #89949B; border-radius: 8px; background: #fff; text-align: center; margin: auto; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08); }
-.login-step { display: block; }
-.totp-input-container { display: flex; gap: 10px; margin: 20px 0; }
-.totp-input { flex: 1; text-align: center; font-size: 1.5rem; letter-spacing: 10px; font-weight: bold; }
-.backup-link { display: block; margin-top: 15px; font-size: 0.9rem; color: #6b7280; text-decoration: underline; cursor: pointer; }
-.chart-container { position: relative; width: 100%; height: 400px; margin: 20px 0; }
-.chart-controls { display: flex; gap: 10px; margin-bottom: 15px; align-items: center; }
-.chart-controls select { padding: 5px 10px; border: 2px solid #89949B; border-radius: 4px; background: #fff; }
-.chart-controls button { padding: 5px 10px; background: #e8ebed; border: 2px solid #89949B; border-radius: 4px; color: #5a666d; cursor: pointer; transition: all 0.2s; }
-.chart-controls button:hover { background: #89949B; color: white; }
-.chart-controls button.active { background: #5a666d; color: white; border-color: #5a666d; }
-.access-stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
-.access-stat-box { background: #f0f4f8; padding: 15px; border-radius: 4px; border-left: 4px solid #3b82f6; }
-.access-stat-num { font-size: 1.8rem; color: #1e3a8a; font-weight: bold; display: block; }
-.access-stat-label { font-size: 0.85rem; color: #4b5563; margin-top: 5px; }
-.access-stat-sub { font-size: 0.75rem; color: #6b7280; margin-top: 3px; }
-.access-detail-table { width: 100%; font-size: 0.85rem; }
-.access-detail-table th { background: #f8fafc; font-weight: 600; }
-.access-detail-table td { padding: 8px 10px; }
-.access-detail-table .type-badge { display: inline-block; padding: 2px 6px; border-radius: 10px; font-size: 0.75rem; font-weight: 500; }
-.type-subscription { background: #dbeafe; color: #1e40af; }
-.type-apigen { background: #d1fae5; color: #065f46; }
-.popular-uuids-list { max-height: 200px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 4px; padding: 10px; }
-.popular-uuids-item { display: flex; justify-content: space-between; padding: 8px; border-bottom: 1px solid #f3f4f6; }
-.popular-uuids-item:last-child { border-bottom: none; }
-.popular-uuids-uuid { font-family: monospace; font-size: 0.85rem; }
-.popular-uuids-count { font-weight: bold; color: #1e40af; }
+/* ============ 全局基础样式 ============ */
+:root {
+    --primary-color: #5a666d;
+    --secondary-color: #89949B;
+    --success-color: #10b981;
+    --danger-color: #ef4444;
+    --warning-color: #f59e0b;
+    --info-color: #3b82f6;
+    --light-color: #f8f9fa;
+    --dark-color: #3d474d;
+    --border-color: #E8EBED;
+    --shadow-color: rgba(0,0,0,0.1);
+}
 
-/* Domain Hosting Badges - 扩展样式 */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html { 
+    font-size: 14px; 
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+body, html { 
+    margin: 0; 
+    padding: 0; 
+    min-height: 100vh; 
+    background-color: #fff; 
+    line-height: 1.5;
+    color: var(--dark-color);
+}
+
+/* ============ 容器和布局 ============ */
+.container { 
+    width: 100%; 
+    min-height: 100vh; 
+    display: flex; 
+    flex-direction: column; 
+    align-items: center; 
+    padding: 20px 20px 40px; 
+}
+
+.content-group { 
+    width: 100%; 
+    max-width: 1200px; 
+    text-align: center; 
+    margin-top: 20px; 
+}
+
+/* ============ 顶部栏 ============ */
+.top-bar { 
+    width: 100%; 
+    max-width: 1200px; 
+    display: flex; 
+    justify-content: space-between; 
+    margin-bottom: 20px; 
+    align-items: center; 
+    padding: 0 5px; 
+}
+
+/* ============ 标题和描述 ============ */
+.profile-name { 
+    font-size: 2rem; 
+    color: var(--dark-color); 
+    margin-bottom: 5px; 
+    font-weight: bold;
+}
+
+.profile-quote { 
+    color: var(--secondary-color); 
+    margin-bottom: 10px; 
+    min-height: 1em; 
+}
+
+/* ============ 操作链接 ============ */
+.action-link { 
+    font-size: 0.9rem; 
+    color: var(--secondary-color); 
+    cursor: pointer; 
+    text-decoration: none; 
+    margin-right: 15px; 
+    transition: color 0.2s; 
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.action-link:hover { 
+    color: var(--primary-color); 
+    text-decoration: underline; 
+}
+
+.action-link.logout { 
+    color: var(--danger-color); 
+}
+
+.action-link.logout:hover { 
+    color: #d32f2f; 
+}
+
+/* ============ 导航栏 ============ */
+.nav-grid { 
+    display: flex; 
+    flex-wrap: wrap; 
+    justify-content: center; 
+    gap: 8px; 
+    margin-bottom: 25px; 
+    border-bottom: 1px solid var(--border-color); 
+    padding-bottom: 20px; 
+}
+
+.nav-btn { 
+    display: inline-flex; 
+    align-items: center; 
+    justify-content: center; 
+    padding: 8px 16px; 
+    background: var(--border-color); 
+    border: 2px solid var(--secondary-color); 
+    border-radius: 4px; 
+    color: var(--primary-color); 
+    font-weight: 500; 
+    font-size: 0.95rem; 
+    cursor: pointer; 
+    transition: all 0.2s; 
+    white-space: nowrap; 
+    text-decoration: none; 
+    outline: none;
+}
+
+.nav-btn:hover { 
+    background: var(--secondary-color); 
+    color: white; 
+    border-color: var(--secondary-color);
+}
+
+.nav-btn.active { 
+    background-color: var(--primary-color); 
+    color: white; 
+    border-color: var(--primary-color); 
+}
+
+.nav-btn.danger { 
+    border-color: var(--danger-color); 
+    color: var(--danger-color); 
+    background: #fee2e2; 
+}
+
+.nav-btn.danger:hover { 
+    background: var(--danger-color); 
+    color: white; 
+}
+
+.nav-btn.small { 
+    padding: 4px 10px; 
+    font-size: 0.85rem; 
+}
+
+/* ============ 卡片 ============ */
+.card { 
+    background: var(--light-color); 
+    border: 1px solid var(--border-color); 
+    border-radius: 8px; 
+    padding: 24px; 
+    margin-bottom: 24px; 
+    text-align: left; 
+    display: none; 
+    animation: fadeIn 0.3s ease; 
+    width: 100%;
+}
+
+.card.active { 
+    display: block; 
+}
+
+.card h2 { 
+    font-size: 1.4rem; 
+    color: var(--dark-color); 
+    margin-top: 0; 
+    margin-bottom: 20px; 
+    padding-bottom: 10px; 
+    border-bottom: 2px solid var(--border-color); 
+}
+
+@keyframes fadeIn { 
+    from { opacity: 0; transform: translateY(5px); } 
+    to { opacity: 1; transform: translateY(0); } 
+}
+
+/* ============ 表单元素 ============ */
+input[type="text"], 
+input[type="password"], 
+input[type="number"], 
+input[type="email"], 
+select, 
+textarea { 
+    width: 100%; 
+    padding: 10px; 
+    border: 2px solid var(--secondary-color); 
+    border-radius: 4px; 
+    background: #fff; 
+    font-size: 0.9rem; 
+    box-sizing: border-box; 
+    margin-bottom: 10px; 
+    font-family: inherit;
+    transition: border-color 0.2s;
+}
+
+input:focus, 
+select:focus, 
+textarea:focus { 
+    outline: none; 
+    border-color: var(--primary-color); 
+}
+
+/* ============ 表格 ============ */
+.table-container { 
+    overflow-x: auto; 
+    border: 2px solid var(--secondary-color); 
+    border-radius: 4px; 
+    background: #fff; 
+    margin-bottom: 15px;
+}
+
+table { 
+    width: 100%; 
+    border-collapse: collapse; 
+    font-size: 0.9rem; 
+    min-width: 600px;
+}
+
+th, td { 
+    padding: 10px 14px; 
+    text-align: left; 
+    border-bottom: 1px solid var(--border-color); 
+}
+
+th { 
+    font-weight: 600; 
+    color: var(--dark-color); 
+    background-color: #f0f2f5; 
+    cursor: pointer; 
+    user-select: none; 
+    position: relative;
+}
+
+th:hover { 
+    background-color: #e2e6ea; 
+}
+
+th.sortable::after {
+    content: '↕';
+    margin-left: 5px;
+    opacity: 0.5;
+    font-size: 0.8em;
+}
+
+/* ============ 分页 ============ */
+.pagination-bar { 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    padding-top: 15px; 
+    font-size: 0.9rem; 
+    color: var(--primary-color); 
+}
+
+.page-ctrl { 
+    display: flex; 
+    gap: 5px; 
+    align-items: center; 
+}
+
+.page-info { 
+    margin: 0 10px; 
+    white-space: nowrap;
+}
+
+select.page-size { 
+    padding: 4px 8px; 
+    border: 1px solid var(--secondary-color); 
+    border-radius: 4px; 
+    background: #fff; 
+    font-size: 0.85rem;
+}
+
+/* ============ 页脚 ============ */
+.footer { 
+    margin-top: auto; 
+    padding-top: 40px; 
+    color: var(--secondary-color); 
+    font-size: 0.8rem; 
+    text-align: center; 
+    width: 100%; 
+    border-top: 1px solid #f0f0f0; 
+}
+
+.footer a { 
+    color: var(--primary-color); 
+    text-decoration: none; 
+}
+
+.footer a:hover { 
+    text-decoration: underline; 
+}
+
+/* ============ 开关控件 ============ */
+.switch-group { 
+    display: flex; 
+    flex-wrap: wrap; 
+    gap: 20px; 
+    align-items: center; 
+    margin-bottom: 15px; 
+    background: var(--border-color); 
+    padding: 15px; 
+    border-radius: 4px; 
+}
+
+.switch-label { 
+    font-weight: 500; 
+    color: var(--primary-color); 
+    display: flex; 
+    align-items: center; 
+    gap: 8px;
+    cursor: pointer;
+}
+
+.switch { 
+    position: relative; 
+    display: inline-block; 
+    width: 40px; 
+    height: 22px; 
+}
+
+.switch input { 
+    opacity: 0; 
+    width: 0; 
+    height: 0; 
+}
+
+.slider { 
+    position: absolute; 
+    cursor: pointer; 
+    top: 0; 
+    left: 0; 
+    right: 0; 
+    bottom: 0; 
+    background-color: #ccc; 
+    transition: .4s; 
+    border-radius: 34px; 
+}
+
+.slider:before { 
+    position: absolute; 
+    content: ""; 
+    height: 16px; 
+    width: 16px; 
+    left: 3px; 
+    bottom: 3px; 
+    background-color: white; 
+    transition: .4s; 
+    border-radius: 50%; 
+}
+
+input:checked + .slider { 
+    background-color: var(--success-color); 
+}
+
+input:checked + .slider:before { 
+    transform: translateX(18px); 
+}
+
+/* ============ 自动更新状态 ============ */
+.auto-update-header { 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    margin-bottom: 15px; 
+}
+
+.auto-update-status { 
+    font-size: 0.9rem; 
+    color: var(--dark-color); 
+    padding: 5px 10px; 
+    background: var(--border-color); 
+    border-radius: 4px; 
+    display: inline-flex; 
+    align-items: center; 
+    gap: 8px; 
+}
+
+.status-indicator { 
+    width: 8px; 
+    height: 8px; 
+    border-radius: 50%; 
+    display: inline-block; 
+}
+
+.status-on { 
+    background-color: var(--success-color); 
+}
+
+.status-off { 
+    background-color: var(--danger-color); 
+}
+
+.status-warning { 
+    background-color: var(--warning-color); 
+}
+
+/* ============ MFA相关样式 ============ */
+.mfa-status-badge { 
+    display: inline-flex; 
+    align-items: center; 
+    padding: 4px 12px; 
+    border-radius: 20px; 
+    font-size: 0.85rem; 
+    font-weight: 500; 
+    gap: 6px; 
+}
+
+.mfa-active { 
+    background-color: #d1fae5; 
+    color: #065f46; 
+}
+
+.mfa-inactive { 
+    background-color: #fee2e2; 
+    color: #9f1239; 
+}
+
+/* ============ 二维码和备份码 ============ */
+.qr-code-container { 
+    text-align: center; 
+    margin: 20px 0; 
+    padding: 15px; 
+    background: #f9fafb; 
+    border-radius: 8px; 
+    border: 1px solid #e5e7eb; 
+}
+
+.qr-instructions { 
+    font-size: 0.9rem; 
+    color: #6b7280; 
+    margin-top: 15px; 
+    line-height: 1.5; 
+}
+
+.backup-codes-box { 
+    background: #f3f4f6; 
+    border: 1px dashed #d1d5db; 
+    padding: 15px; 
+    border-radius: 6px; 
+    margin: 15px 0; 
+    font-family: monospace; 
+    text-align: center; 
+    line-height: 2; 
+}
+
+.backup-code { 
+    display: inline-block; 
+    margin: 5px; 
+    padding: 5px 10px; 
+    background: white; 
+    border: 1px solid #e5e7eb; 
+    border-radius: 4px; 
+    font-weight: bold; 
+}
+
+/* ============ 安全步骤 ============ */
+.security-step { 
+    background: #f0f9ff; 
+    border: 1px solid #bae6fd; 
+    padding: 15px; 
+    border-radius: 8px; 
+    margin: 15px 0; 
+}
+
+.security-step h4 { 
+    color: #0369a1; 
+    margin-top: 0; 
+}
+
+.security-step ol, 
+.security-step ul { 
+    padding-left: 20px; 
+}
+
+/* ============ Toast消息 ============ */
+#toast-container { 
+    position: fixed; 
+    top: 20px; 
+    right: 20px; 
+    z-index: 9999; 
+    display: flex; 
+    flex-direction: column; 
+    gap: 10px; 
+}
+
+.toast { 
+    padding: 12px 18px; 
+    border-radius: 4px; 
+    border: 2px solid var(--secondary-color); 
+    background: #fff; 
+    color: var(--dark-color); 
+    font-weight: 500; 
+    font-size: 0.9rem; 
+    box-shadow: 0 4px 12px var(--shadow-color); 
+    animation: slideIn 0.3s forwards, fadeOut 0.5s 3.5s forwards; 
+    min-width: 250px;
+    max-width: 350px;
+}
+
+@keyframes slideIn { 
+    from { transform: translateX(100%); opacity: 0; } 
+    to { transform: translateX(0); opacity: 1; } 
+}
+
+@keyframes fadeOut { 
+    to { opacity: 0; transform: translateX(100%); } 
+}
+
+/* ============ 模态框 ============ */
+.modal-overlay { 
+    position: fixed; 
+    top: 0; 
+    left: 0; 
+    width: 100%; 
+    height: 100%; 
+    background: rgba(0,0,0,0.5); 
+    z-index: 1000; 
+    display: none; 
+    align-items: center; 
+    justify-content: center; 
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.modal { 
+    background: #fff; 
+    width: 90%; 
+    max-width: 500px; 
+    padding: 25px; 
+    border-radius: 8px; 
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2); 
+    max-height: 90vh; 
+    overflow-y: auto; 
+}
+
+.modal h3 { 
+    margin-top: 0; 
+    color: var(--dark-color); 
+    margin-bottom: 15px;
+}
+
+/* ============ 统计卡片 ============ */
+.stat-grid { 
+    display: grid; 
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); 
+    gap: 15px; 
+    margin-bottom: 20px; 
+}
+
+.stat-box { 
+    background: var(--border-color); 
+    padding: 20px; 
+    border-radius: 8px; 
+    text-align: center; 
+    transition: transform 0.2s;
+}
+
+.stat-box:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px var(--shadow-color);
+}
+
+.stat-num { 
+    font-size: 2rem; 
+    color: var(--primary-color); 
+    font-weight: bold; 
+    display: block; 
+    margin-bottom: 5px;
+}
+
+.stat-label { 
+    font-size: 0.85rem; 
+    color: var(--secondary-color); 
+}
+
+.last-update-info { 
+    margin-top: 10px; 
+    font-size: 0.85rem; 
+    color: var(--dark-color); 
+    background: var(--border-color);
+    padding: 10px 15px;
+    border-radius: 4px;
+}
+
+/* ============ 安全区域 ============ */
+.security-section { 
+    background: #f9fafb; 
+    border-left: 4px solid #3b82f6; 
+    padding: 15px; 
+    margin: 20px 0; 
+    border-radius: 0 8px 8px 0; 
+}
+
+.security-section h3 { 
+    margin-top: 0; 
+    color: #1e40af; 
+}
+
+.mfa-container { 
+    max-width: 600px; 
+    margin: 0 auto; 
+}
+
+.secret-display { 
+    background: #1f2937; 
+    color: #fbbf24; 
+    padding: 15px; 
+    border-radius: 6px; 
+    font-family: monospace; 
+    text-align: center; 
+    margin: 15px 0; 
+    font-size: 1.1rem; 
+    letter-spacing: 1px; 
+    word-break: break-all;
+}
+
+.copy-btn { 
+    margin-left: 10px; 
+    padding: 5px 10px; 
+    background: #4b5563; 
+    color: white; 
+    border: none; 
+    border-radius: 4px; 
+    cursor: pointer; 
+    font-size: 0.8rem; 
+    transition: background 0.2s;
+}
+
+.copy-btn:hover { 
+    background: #374151; 
+}
+
+/* ============ 登录页面 ============ */
+.login-box { 
+    width: 100%; 
+    max-width: 400px; 
+    padding: 40px 30px; 
+    border: 2px solid var(--secondary-color); 
+    border-radius: 8px; 
+    background: #fff; 
+    text-align: center; 
+    margin: auto; 
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08); 
+}
+
+.login-step { 
+    display: block; 
+}
+
+.totp-input-container { 
+    display: flex; 
+    gap: 10px; 
+    margin: 20px 0; 
+}
+
+.totp-input { 
+    flex: 1; 
+    text-align: center; 
+    font-size: 1.5rem; 
+    letter-spacing: 10px; 
+    font-weight: bold; 
+    padding: 10px;
+}
+
+.backup-link { 
+    display: block; 
+    margin-top: 15px; 
+    font-size: 0.9rem; 
+    color: #6b7280; 
+    text-decoration: underline; 
+    cursor: pointer; 
+}
+
+/* ============ 图表 ============ */
+.chart-container { 
+    position: relative; 
+    width: 100%; 
+    height: 400px; 
+    margin: 20px 0; 
+}
+
+.chart-controls { 
+    display: flex; 
+    flex-wrap: wrap;
+    gap: 10px; 
+    margin-bottom: 15px; 
+    align-items: center; 
+}
+
+.chart-controls select { 
+    padding: 5px 10px; 
+    border: 2px solid var(--secondary-color); 
+    border-radius: 4px; 
+    background: #fff; 
+    min-width: 120px;
+}
+
+/* ============ 访问统计 ============ */
+.access-stat-grid { 
+    display: grid; 
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); 
+    gap: 15px; 
+    margin-bottom: 20px; 
+}
+
+.access-stat-box { 
+    background: #f0f4f8; 
+    padding: 15px; 
+    border-radius: 8px; 
+    border-left: 4px solid #3b82f6; 
+    transition: transform 0.2s;
+}
+
+.access-stat-box:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px var(--shadow-color);
+}
+
+.access-stat-num { 
+    font-size: 1.8rem; 
+    color: #1e3a8a; 
+    font-weight: bold; 
+    display: block; 
+}
+
+.access-stat-label { 
+    font-size: 0.85rem; 
+    color: #4b5563; 
+    margin-top: 5px; 
+}
+
+.access-stat-sub { 
+    font-size: 0.75rem; 
+    color: #6b7280; 
+    margin-top: 3px; 
+}
+
+.access-detail-table { 
+    width: 100%; 
+    font-size: 0.85rem; 
+    border-collapse: collapse;
+}
+
+.access-detail-table th { 
+    background: #f8fafc; 
+    font-weight: 600; 
+    position: sticky;
+    top: 0;
+}
+
+.access-detail-table td { 
+    padding: 8px 10px; 
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.access-detail-table .type-badge { 
+    display: inline-block; 
+    padding: 2px 6px; 
+    border-radius: 10px; 
+    font-size: 0.75rem; 
+    font-weight: 500; 
+}
+
+.type-subscription { 
+    background: #dbeafe; 
+    color: #1e40af; 
+}
+
+.type-apigen { 
+    background: #d1fae5; 
+    color: #065f46; 
+}
+
+/* ============ 热门UUID列表 ============ */
+.popular-uuids-list { 
+    max-height: 200px; 
+    overflow-y: auto; 
+    border: 1px solid #e5e7eb; 
+    border-radius: 4px; 
+    padding: 10px; 
+}
+
+.popular-uuids-item { 
+    display: flex; 
+    justify-content: space-between; 
+    padding: 8px; 
+    border-bottom: 1px solid #f3f4f6; 
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.popular-uuids-item:hover { 
+    background: #f8fafc; 
+}
+
+.popular-uuids-item:last-child { 
+    border-bottom: none; 
+}
+
+.popular-uuids-uuid { 
+    font-family: monospace; 
+    font-size: 0.85rem; 
+    word-break: break-all;
+}
+
+.popular-uuids-count { 
+    font-weight: bold; 
+    color: #1e40af; 
+}
+
+/* ============ 徽章样式 ============ */
 .hosting-badge { 
     display: inline-block; 
-    padding: 2px 8px; 
+    padding: 4px 10px; 
+    border-radius: 12px; 
+    font-size: 0.75rem; 
+    font-weight: 500; 
+    line-height: 1.4;
+    white-space: nowrap;
+}
+
+.hosting-cloudflare { 
+    background: #F6821F; 
+    color: #fff; 
+    border: 1px solid #F6821F; 
+}
+
+.hosting-tencent { 
+    background: #4A86FF; 
+    color: #fff; 
+    border: 1px solid #4A86FF; 
+}
+
+/* 模板专用徽章 */
+.template-badge { 
+    display: inline-block; 
+    padding: 4px 10px; 
     border-radius: 12px; 
     font-size: 0.75rem; 
     font-weight: 500; 
     line-height: 1.4;
 }
-.hosting-cloudflare { background: #F6821F; color: #fff; border: 1px solid #F6821F; }
-.hosting-aliyun { background: #FE6A00; color: #fff; border: 1px solid #FE6A00; }
-.hosting-tencent { background: #4A86FF; color: #fff; border: 1px solid #4A86FF; }
-.hosting-aws { background: #232B37; color: #fff; border: 1px solid #232B37; }
-.hosting-gcore { background: #FF4C00; color: #fff; border: 1px solid #FF4C00; }
-.hosting-fastly { background: #F7272C; color: #fff; border: 1px solid #F7272C; }
-.hosting-cachefly { background: #391376; color: #fff; border: 1px solid #391376; }
-.hosting-lightcdn { background: #F78B2C; color: #fff; border: 1px solid #F78B2C; }
-.hosting-vercel { background: #000; color: #fff; border: 1px solid #000; }
-.hosting-netlify { background: #05B7B5; color: #fff; border: 1px solid #05B7B5; }
-.hosting-none { background: #f8f9fa; color: #6c757d; border: 1px solid #6c757d; }
-.hosting-other { background: #f0f0f0; color: #666; border: 1px solid #666; }
+
+.badge-default { 
+    background-color: var(--success-color); 
+    color: #fff; 
+    border: 1px solid var(--success-color); 
+}
+
+.badge-normal { 
+    background-color: #6b7280; 
+    color: #fff; 
+    border: 1px solid #6b7280; 
+}
+
+/* ============ 模板URL单元格 ============ */
+.template-url-cell {
+    max-width: 300px;
+    word-break: break-all;
+    white-space: normal;
+}
+
+/* ============ 加载器 ============ */
+.loader {
+    display: inline-block;
+    width: 50px;
+    height: 50px;
+    border: 3px solid var(--border-color);
+    border-radius: 50%;
+    border-top-color: var(--primary-color);
+    animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ============ 响应式设计 ============ */
+@media (max-width: 768px) {
+    html { font-size: 13px; }
+    
+    .container { padding: 15px; }
+    
+    .content-group { max-width: 100%; }
+    
+    .nav-grid { flex-direction: column; }
+    .nav-btn { width: 100%; }
+    
+    .stat-grid { grid-template-columns: repeat(2, 1fr); }
+    
+    .access-stat-grid { grid-template-columns: repeat(2, 1fr); }
+    
+    .switch-group { flex-direction: column; align-items: flex-start; }
+    
+    .auto-update-header { flex-direction: column; align-items: flex-start; gap: 10px; }
+    
+    .pagination-bar { flex-direction: column; gap: 10px; }
+    .page-ctrl { width: 100%; justify-content: center; }
+    
+    .modal { width: 95%; padding: 15px; }
+}
+
+@media (max-width: 480px) {
+    html { font-size: 12px; }
+    
+    .profile-name { font-size: 1.5rem; }
+    
+    .stat-grid { grid-template-columns: 1fr; }
+    
+    .access-stat-grid { grid-template-columns: 1fr; }
+    
+    .card { padding: 15px; }
+    
+    .top-bar { flex-direction: column; gap: 10px; align-items: flex-start; }
+}
 `;
 
 const loginHtml = `
@@ -1615,11 +2653,7 @@ const loginHtml = `
             </div>
         </div>
         
-        <a class="backup-link" onclick="showBackupLogin()" >使用备份码登录</a>
-            </div>
-        </div>
-        
-        
+        <a class="backup-link" onclick="showBackupLogin()">使用备份码登录</a>
     </div>
 
     <div class="login-box" id="backupStep" style="display: none;">
@@ -1650,7 +2684,6 @@ const loginHtml = `
     </footer>
     
     <script>
-        // ... 登录页面JavaScript保持不变 ...
         function toast(message, type = 'info') {
             const container = document.getElementById('toast-container');
             const toast = document.createElement('div');
@@ -1898,6 +2931,7 @@ const adminHtml = `
                 <button class="nav-btn" onclick="switchTab('dom', this)">优选域名</button>
                 <button class="nav-btn" onclick="switchTab('ips', this)">IP 资源池</button>
                 <button class="nav-btn" onclick="switchTab('uuids', this)">配置分组</button>
+                <button class="nav-btn" onclick="switchTab('templates', this)">配置模板</button>
                 <button class="nav-btn" onclick="switchTab('security', this)">安全中心</button>
             </div>
 
@@ -1907,6 +2941,7 @@ const adminHtml = `
                     <div class="stat-box"><span class="stat-num" id="s-dom">-</span><span class="stat-label">优选域名</span></div>
                     <div class="stat-box"><span class="stat-num" id="s-ip">-</span><span class="stat-label">活跃 IP</span></div>
                     <div class="stat-box"><span class="stat-num" id="s-uuid">-</span><span class="stat-label">配置分组</span></div>
+                    <div class="stat-box"><span class="stat-num" id="s-template">-</span><span class="stat-label">配置模板</span></div>
                 </div>
                 
                 <div class="access-stat-grid" id="accessStatsGrid" style="display:none;">
@@ -1984,35 +3019,34 @@ const adminHtml = `
                 </div>
             </div>
 
-            <!-- 订阅分析功能已移到系统概览页面 -->
-
-            <!-- 其他卡片内容保持不变 -->
             <div id="dom" class="card">
                 <h2>优选域名管理</h2>
-                <div style="display:flex; gap:10px; margin-bottom:15px;">
-                    <input type="text" id="newD" placeholder="域名 (例如: cf.example.com)" style="flex:2; margin:0">
-                    <input type="text" id="newR" placeholder="自定义备注" style="flex:1; margin:0">
-                    <select id="newSource" style="flex:1; margin:0; padding: 10px; border: 2px solid #89949B; border-radius: 4px; background: #fff; font-size: 0.9rem; box-sizing: border-box; color: #3d474d; cursor: pointer; transition: border-color 0.2s; font-family: inherit;">
+                <div style="display:flex; gap:10px; margin-bottom:15px; flex-wrap: wrap;">
+                    <input type="text" id="newD" placeholder="域名 (例如: cf.example.com)" style="flex:2; min-width: 200px; margin:0">
+                    <input type="text" id="newR" placeholder="自定义备注" style="flex:1; min-width: 150px; margin:0">
+                    <select id="newSource" style="flex:1; min-width: 150px; margin:0; padding: 10px; border: 2px solid #89949B; border-radius: 4px; background: #fff; font-size: 0.9rem; box-sizing: border-box; color: #3d474d; cursor: pointer; transition: border-color 0.2s; font-family: inherit;">
                         <option value="Cloudflare">Cloudflare</option>
                         <option value="腾讯云EdgeOne">腾讯云EdgeOne</option>
                     </select>
-                    <button class="nav-btn active" onclick="addDomain()">添加域名</button>
+                    <button class="nav-btn active" onclick="addDomain()" style="min-width: 100px;">添加域名</button>
                 </div>
                 <div class="table-container">
                     <table>
                         <thead>
                             <tr>
-                                <th onclick="sortDom('domain')">域名 ↕</th>
-                                <th onclick="sortDom('remark')">备注 ↕</th>
-                                <th onclick="sortDom('source')">来源 ↕</th>
-                                <th onclick="sortDom('created_at')">创建时间 ↕</th>
-                                <th>操作</th>
+                                <th class="sortable" onclick="sortDom('domain')">域名 ↕</th>
+                                <th class="sortable" onclick="sortDom('remark')">备注 ↕</th>
+                                <th class="sortable" onclick="sortDom('source')">来源 ↕</th>
+                                <th class="sortable" onclick="sortDom('created_at')">创建时间 ↕</th>
+                                <th style="width: 150px;">操作</th>
                             </tr>
                         </thead>
-                        <tbody id="domList"></tbody>
+                        <tbody id="domList">
+                            <tr><td colspan="5" style="text-align:center; padding:20px;">加载中...</td></tr>
+                        </tbody>
                     </table>
                 </div>
-                <div class="pagination-bar" id="domPager">
+                <div class="pagination-bar" id="domPager" style="display: none;">
                     <div class="page-ctrl">
                         <select class="page-size" id="domSize" onchange="changeDomSize()">
                             <option value="5">5条/页</option>
@@ -2022,9 +3056,9 @@ const adminHtml = `
                         </select>
                     </div>
                     <div class="page-ctrl">
-                        <button class="nav-btn small" onclick="changeDomPage(-1)">上一页</button>
+                        <button class="nav-btn small" onclick="changeDomPage(-1)" id="domPrevBtn">上一页</button>
                         <span class="page-info" id="domPageInfo">1 / 1</span>
-                        <button class="nav-btn small" onclick="changeDomPage(1)">下一页</button>
+                        <button class="nav-btn small" onclick="changeDomPage(1)" id="domNextBtn">下一页</button>
                     </div>
                 </div>
             </div>
@@ -2073,18 +3107,20 @@ const adminHtml = `
                     <table>
                         <thead>
                             <tr>
-                                <th onclick="sortIp('ip')">IP 地址 ↕</th>
-                                <th onclick="sortIp('ip_type')">类型 ↕</th>
-                                <th onclick="sortIp('carrier')">运营商 ↕</th>
-                                <th onclick="sortIp('source')">来源 ↕</th> <!-- 新增加的列 -->
-                                <th onclick="sortIp('created_at')">入库时间 ↕</th>
-                                <th>操作</th>
+                                <th class="sortable" onclick="sortIp('ip')">IP 地址 ↕</th>
+                                <th class="sortable" onclick="sortIp('ip_type')">类型 ↕</th>
+                                <th class="sortable" onclick="sortIp('carrier')">运营商 ↕</th>
+                                <th class="sortable" onclick="sortIp('source')">来源 ↕</th>
+                                <th class="sortable" onclick="sortIp('created_at')">入库时间 ↕</th>
+                                <th style="width: 100px;">操作</th>
                             </tr>
                         </thead>
-                        <tbody id="ipList"></tbody>
+                        <tbody id="ipList">
+                            <tr><td colspan="6" style="text-align:center; padding:20px;">加载中...</td></tr>
+                        </tbody>
                     </table>
                 </div>
-                <div class="pagination-bar" id="ipPager">
+                <div class="pagination-bar" id="ipPager" style="display: none;">
                     <div class="page-ctrl">
                         <select class="page-size" id="ipSize" onchange="changeIpSize()">
                             <option value="10">10条/页</option>
@@ -2094,9 +3130,9 @@ const adminHtml = `
                         </select>
                     </div>
                     <div class="page-ctrl">
-                        <button class="nav-btn small" onclick="changeIpPage(-1)">上一页</button>
+                        <button class="nav-btn small" onclick="changeIpPage(-1)" id="ipPrevBtn">上一页</button>
                         <span class="page-info" id="ipPageInfo">1 / 1</span>
-                        <button class="nav-btn small" onclick="changeIpPage(1)">下一页</button>
+                        <button class="nav-btn small" onclick="changeIpPage(1)" id="ipNextBtn">下一页</button>
                     </div>
                 </div>
             </div>
@@ -2107,16 +3143,18 @@ const adminHtml = `
                     <table>
                         <thead>
                             <tr>
-                                <th onclick="sortUuid('uuid')">UUID ↕</th>
-                                <th onclick="sortUuid('count')">包含节点数 ↕</th>
-                                <th onclick="sortUuid('updated_at')">最近更新 ↕</th>
-                                <th>操作</th>
+                                <th class="sortable" onclick="sortUuid('uuid')">UUID ↕</th>
+                                <th class="sortable" onclick="sortUuid('count')">包含节点数 ↕</th>
+                                <th class="sortable" onclick="sortUuid('updated_at')">最近更新 ↕</th>
+                                <th style="width: 120px;">操作</th>
                             </tr>
                         </thead>
-                        <tbody id="uuidList"></tbody>
+                        <tbody id="uuidList">
+                            <tr><td colspan="4" style="text-align:center; padding:20px;">加载中...</td></tr>
+                        </tbody>
                     </table>
                 </div>
-                <div class="pagination-bar" id="uuidPager">
+                <div class="pagination-bar" id="uuidPager" style="display: none;">
                     <div class="page-ctrl">
                         <select class="page-size" id="uuidSize" onchange="changeUuidSize()">
                             <option value="5">5条/页</option>
@@ -2126,13 +3164,75 @@ const adminHtml = `
                         </select>
                     </div>
                     <div class="page-ctrl">
-                        <button class="nav-btn small" onclick="changeUuidPage(-1)">上一页</button>
+                        <button class="nav-btn small" onclick="changeUuidPage(-1)" id="uuidPrevBtn">上一页</button>
                         <span class="page-info" id="uuidPageInfo">1 / 1</span>
-                        <button class="nav-btn small" onclick="changeUuidPage(1)">下一页</button>
+                        <button class="nav-btn small" onclick="changeUuidPage(1)" id="uuidNextBtn">下一页</button>
                     </div>
                 </div>
             </div>
             
+            <div id="templates" class="card">
+                <h2>📋 配置模板管理</h2>
+                <div style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 6px;">
+                    <p style="margin: 0; font-size: 0.9rem; color: #6b7280;">
+                        配置模板用于存储常用的配置格式，方便快速生成和统一管理配置。
+                    </p>
+                </div>
+                
+                <div class="template-form" style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
+                    <input type="text" id="newTemplateName" placeholder="模板名称（必填）" 
+                           style="flex: 1; min-width: 150px;" 
+                           title="模板名称，必须唯一">
+                    <input type="text" id="newTemplateUrl" placeholder="模板URL（必填）" 
+                           style="flex: 2; min-width: 200px;"
+                           title="配置模板的URL地址">
+                    <input type="text" id="newTemplateDesc" placeholder="模板描述" 
+                           style="flex: 1; min-width: 150px;"
+                           title="模板描述信息，可选">
+                    <div style="display: flex; align-items: center; gap: 8px; padding: 0 10px;">
+                        <input type="checkbox" id="newTemplateDefault" style="width: 16px; height: 16px;">
+                        <label for="newTemplateDefault" style="font-size: 0.9rem; color: #5a666d; cursor: pointer;">
+                            设为默认
+                        </label>
+                    </div>
+                    <button class="nav-btn active" onclick="addTemplate()" style="min-width: 100px;">添加模板</button>
+                </div>
+                
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th class="sortable" onclick="sortTemplate('name')">模板名称 ↕</th>
+                                <th class="sortable" onclick="sortTemplate('url')">模板URL ↕</th>
+                                <th class="sortable" onclick="sortTemplate('description')">描述 ↕</th>
+                                <th class="sortable" onclick="sortTemplate('is_default')">状态 ↕</th>
+                                <th class="sortable" onclick="sortTemplate('created_at')">创建时间 ↕</th>
+                                <th style="width: 200px;">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="templateList">
+                            <tr><td colspan="6" style="text-align:center; padding:20px;">加载中...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="pagination-bar" id="templatePager" style="display: none;">
+                    <div class="page-ctrl">
+                        <select class="page-size" id="templateSize" onchange="changeTemplateSize()">
+                            <option value="5">5条/页</option>
+                            <option value="10" selected>10条/页</option>
+                            <option value="20">20条/页</option>
+                            <option value="50">50条/页</option>
+                        </select>
+                    </div>
+                    <div class="page-ctrl">
+                        <button class="nav-btn small" onclick="changeTemplatePage(-1)" id="templatePrevBtn">上一页</button>
+                        <span class="page-info" id="templatePageInfo">1 / 1</span>
+                        <button class="nav-btn small" onclick="changeTemplatePage(1)" id="templateNextBtn">下一页</button>
+                    </div>
+                </div>
+            </div>
+
             <div id="security" class="card">
                 <div class="mfa-container">
                     <h2>🛡️ 账户安全</h2>
@@ -2158,7 +3258,7 @@ const adminHtml = `
     </div>
 
     <!-- 修改密码弹窗 -->
-    <div class="modal-overlay" id="pwdModal">
+    <div class="modal-overlay" id="pwdModal" onclick="event.target===this && (this.style.display='none')">
         <div class="modal">
             <h3 style="margin-top:0; color:#3d474d">修改管理员密码</h3>
             <div style="margin-bottom:15px;">
@@ -2168,13 +3268,13 @@ const adminHtml = `
             </div>
             <div style="display:flex; justify-content:flex-end; gap:10px;">
                 <button class="nav-btn" onclick="document.getElementById('pwdModal').style.display='none'">取消</button>
-                                <button class="nav-btn active" onclick="changePwd()">确认修改</button>
+                <button class="nav-btn active" onclick="changePwd()">确认修改</button>
             </div>
         </div>
     </div>
 
     <!-- 域名编辑弹窗 -->
-    <div class="modal-overlay" id="editDomModal">
+    <div class="modal-overlay" id="editDomModal" onclick="event.target===this && (this.style.display='none')">
         <div class="modal">
             <h3 style="margin-top:0; color:#3d474d">编辑域名</h3>
             <input type="hidden" id="editId">
@@ -2187,14 +3287,12 @@ const adminHtml = `
             </div>
             <div style="display:flex; justify-content:flex-end; gap:10px;">
                 <button class="nav-btn" onclick="document.getElementById('editDomModal').style.display='none'">取消</button>
-                                <button class="nav-btn active" onclick="updateDomain()">保存修改</button>
+                <button class="nav-btn active" onclick="updateDomain()">保存修改</button>
             </div>
         </div>
     </div>
 
-
-
-    <!-- MFA 验证密码弹窗（统一风格，替换原生 prompt） -->
+    <!-- MFA 验证密码弹窗 -->
     <div class="modal-overlay" id="mfaAuthModal" onclick="event.target===this && (this.style.display='none')">
         <div class="modal">
             <h3 style="margin-top:0; color:#3d474d">验证身份以启用双重验证</h3>
@@ -2290,6 +3388,48 @@ const adminHtml = `
         </div>
     </div>
 
+    <!-- 模板编辑弹窗 -->
+    <div class="modal-overlay" id="editTemplateModal" onclick="event.target===this && (this.style.display='none')">
+        <div class="modal">
+            <h3>✏️ 编辑模板</h3>
+            <input type="hidden" id="editTemplateId">
+            <div style="margin-bottom: 20px;">
+                <div style="margin-bottom: 15px;">
+                    <label style="display:block; margin-bottom:5px; font-size:0.9rem; color:#5a666d; font-weight: 500;">
+                        模板名称 <span style="color:#ef4444;">*</span>
+                    </label>
+                    <input type="text" id="editTemplateName" placeholder="请输入模板名称" required>
+                </div>
+                
+                <div style="margin-bottom: 15px;">
+                    <label style="display:block; margin-bottom:5px; font-size:0.9rem; color:#5a666d; font-weight: 500;">
+                        模板URL <span style="color:#ef4444;">*</span>
+                    </label>
+                    <input type="text" id="editTemplateUrl" placeholder="请输入模板URL" required>
+                </div>
+                
+                <div style="margin-bottom: 15px;">
+                    <label style="display:block; margin-bottom:5px; font-size:0.9rem; color:#5a666d; font-weight: 500;">
+                        模板描述
+                    </label>
+                    <input type="text" id="editTemplateDesc" placeholder="请输入模板描述（可选）">
+                </div>
+                
+                <div style="display: flex; align-items: center; gap: 8px; margin-top: 10px;">
+                    <input type="checkbox" id="editTemplateDefault" style="width: 16px; height: 16px;">
+                    <label for="editTemplateDefault" style="font-size: 0.9rem; color: #5a666d; cursor: pointer;">
+                        设为默认模板（只能有一个默认模板）
+                    </label>
+                </div>
+            </div>
+            
+            <div style="display:flex; justify-content:flex-end; gap:10px;">
+                <button class="nav-btn" onclick="document.getElementById('editTemplateModal').style.display='none'">取消</button>
+                <button class="nav-btn active" onclick="updateTemplate()" id="updateTemplateBtn">保存修改</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const token = localStorage.getItem('token');
         if (!token) window.location.href = '/login';
@@ -2353,11 +3493,10 @@ const adminHtml = `
                     return null;
                 }
                 
-                // For 200/OK, check if the response data itself signifies an error
                 const data = await res.json();
                 if (data.error) {
                     toast(data.error, 'error');
-                    return null; // Return null to indicate a logical error
+                    return null;
                 }
                 
                 return data;
@@ -2377,7 +3516,7 @@ const adminHtml = `
         let domState = { page: 1, size: 10, total: 0, sort: 'id', order: 'desc' };
         let ipState = { page: 1, size: 20, total: 0, sort: 'created_at', order: 'desc' };
         let uuidState = { page: 1, size: 10, total: 0, sort: 'updated_at', order: 'desc' };
-        // 更新 autoUpdateSettings 默认值，增加 hostmonit_v6
+        let templateState = { page: 1, size: 10, total: 0, sort: 'created_at', order: 'desc', loading: false };
         let autoUpdateSettings = { global_enabled: false, hostmonit_v4: true, hostmonit_v6: false, vps789: true };
         let mfaStatus = { enabled: false, last_login: 0, backup_codes: 0 };
         let currentMfaSecret = '';
@@ -2442,6 +3581,7 @@ const adminHtml = `
             if (id === 'dom') loadDom();
             if (id === 'ips') loadIp();
             if (id === 'uuids') loadUuid();
+            if (id === 'templates') loadTemplates();
             if (id === 'security') updateSecurityTab();
         }
 
@@ -2453,6 +3593,7 @@ const adminHtml = `
                 document.getElementById('s-dom').innerText = data.domains;
                 document.getElementById('s-ip').innerText = data.ips;
                 document.getElementById('s-uuid').innerText = data.uuids;
+                document.getElementById('s-template').innerText = data.templates;
                 
                 const statusText = data.autoUpdate === 1 ? 
                     '<span style="color:#10b981">已启用</span>' : 
@@ -2723,7 +3864,7 @@ const adminHtml = `
         function switchChartType(type) {
             currentChartType = type;
             updateChartButtons();
-            loadAccessStats(); // 重新加载图表
+            loadAccessStats();
         }
         
         function updateChartButtons() {
@@ -2749,7 +3890,6 @@ const adminHtml = `
             
             modal.style.display = 'flex';
             
-            // 加载UUID详情
             const data = await api(\`stats/uuid-details?uuid=\${encodeURIComponent(uuid)}\`);
             
             if (data && data.success) {
@@ -2783,7 +3923,7 @@ const adminHtml = `
             }
         }
 
-        // ============ 自动更新设置 (已修改) ============
+        // ============ 自动更新设置 ============
         async function loadAutoUpdateSettings() {
             const settings = await api('settings/auto-update');
             if (settings) {
@@ -2791,7 +3931,7 @@ const adminHtml = `
                 
                 document.getElementById('sw-global').checked = settings.global_enabled === 1;
                 document.getElementById('sw-hm-v4').checked = settings.hostmonit_v4 === 1;
-                document.getElementById('sw-hm-v6').checked = settings.hostmonit_v6 === 1; // 新增 IPv6 开关
+                document.getElementById('sw-hm-v6').checked = settings.hostmonit_v6 === 1;
                 document.getElementById('sw-v7').checked = settings.vps789 === 1;
                 
                 const indicator = document.getElementById('globalStatusIndicator');
@@ -2810,13 +3950,13 @@ const adminHtml = `
         async function saveAutoUpdateSettings() {
             const globalEnabled = document.getElementById('sw-global').checked;
             const hostmonitV4Enabled = document.getElementById('sw-hm-v4').checked;
-            const hostmonitV6Enabled = document.getElementById('sw-hm-v6').checked; // 获取 IPv6 开关状态
+            const hostmonitV6Enabled = document.getElementById('sw-hm-v6').checked;
             const vps789Enabled = document.getElementById('sw-v7').checked;
             
             const res = await api('settings/auto-update', 'POST', {
                 global_enabled: globalEnabled,
                 hostmonit_v4: hostmonitV4Enabled,
-                hostmonit_v6: hostmonitV6Enabled, // 提交 IPv6 开关状态
+                hostmonit_v6: hostmonitV6Enabled,
                 vps789: vps789Enabled
             });
             
@@ -2899,7 +4039,7 @@ const adminHtml = `
                 
                 enableMfaBtn.style.display = 'none';
                 disableMfaBtn.style.display = 'inline-block';
-                setupSteps.style.display = 'none'; // 确保禁用时隐藏设置步骤
+                setupSteps.style.display = 'none';
                 setupSteps.innerHTML = '';
             } else {
                 mfaStatusContent.innerHTML = \`
@@ -2919,7 +4059,6 @@ const adminHtml = `
 
         async function startMfaSetup() {
             const username = getCurrentUsername();
-            // 使用统一风格的密码验证弹窗代替原生 prompt
             openMfaAuthModal(async (password) => {
                 if (!password) return;
                 try {
@@ -3038,7 +4177,6 @@ const adminHtml = `
                 if (response.ok) {
                     showBackupCodes(data.backup_codes);
                     currentMfaSecret = '';
-                    // 隐藏并清空设置面板，避免在启用后仍显示步骤内容
                     const setupSteps = document.getElementById('mfaSetupSteps');
                     if (setupSteps) {
                         setupSteps.style.display = 'none';
@@ -3189,7 +4327,6 @@ const adminHtml = `
             setTimeout(()=>document.getElementById('oldP').focus(), 100);
         }
 
-        // 打开一个统一风格的验证密码弹窗，回调在确认后执行
         function openMfaAuthModal(callback) {
             window._mfaAuthCallback = callback;
             const modal = document.getElementById('mfaAuthModal');
@@ -3211,17 +4348,6 @@ const adminHtml = `
             window._mfaAuthCallback = null;
             document.getElementById('mfaAuthModal').style.display = 'none';
             if (typeof cb === 'function') cb(pwd);
-        }
-
-        function openMfaSettingsModal() {
-            document.getElementById('mfaModal').style.display = 'flex';
-            document.getElementById('mfaModalContent').innerHTML = \`
-                <p>请选择您要进行的操作：</p>
-                <div style="margin-top: 20px;">
-                    <button class="nav-btn" style="width:100%; margin-bottom:10px;" onclick="startMfaSetup()">启用双重验证</button>
-                    <button class="nav-btn danger" style="width:100%;" onclick="disableMfaConfirm()">禁用双重验证</button>
-                </div>
-            \`;
         }
 
         async function changePwd() {
@@ -3262,15 +4388,13 @@ const adminHtml = `
         async function loadDom() {
             const q = 'domains?page=' + domState.page + '&size=' + domState.size + '&sort=' + domState.sort + '&order=' + domState.order;
             const d = await api(q);
-            if(d && d.data) {
+            if(d && d.success && d.data) {
                 let h = '';
                 d.data.forEach((i, index) => {
-                    // 由于新的API返回的域名数据没有ID，我们需要用索引来临时标识
                     const domainSafe = (i.domain || '').replace(/"/g, '\\"');
                     const remarkSafe = (i.remark || '').replace(/"/g, '\\"');
                     const sourceSafe = (i.source || '').replace(/"/g, '\\"');
                     
-                    // 使用索引作为临时ID，实际编辑/删除时需要知道来源
                     h += '<tr>' +
                          '<td>' + i.domain + '</td>' +
                          '<td>' + (i.remark || '<span style="color:#ccc">无</span>') + '</td>' +
@@ -3312,15 +4436,12 @@ const adminHtml = `
         
         async function delD(index, source, domain) { 
             if(confirm('确认删除域名 "' + domain + '"?')) { 
-                // 这里需要重新获取数据来确定实际的ID
                 const q = 'domains?page=' + domState.page + '&size=' + domState.size + '&sort=' + domState.sort + '&order=' + domState.order;
                 const d = await api(q);
                 if(d && d.data && d.data[index]) {
                     const domainData = d.data[index];
-                    // 由于API返回的域名没有ID，我们需要从数据库重新查询
-                    // 实际上，删除操作应该由后端处理，我们只需要传递域名和来源
                     const res = await api('domains', 'DELETE', {
-                        id: index, // 这里传递索引，后端需要根据索引和来源在对应的表中查找
+                        id: index,
                         source: domainData.source
                     });
                     if(res && res.success) {
@@ -3367,14 +4488,13 @@ const adminHtml = `
         function changeDomSize() { changeSize('dom', domState, loadDom); }
         function sortDom(f) { changeSort(f, domState, loadDom); }
 
-        // ============ IP管理 (已修改) ============
+        // ============ IP管理 ============
         async function loadIp() {
             const q = \`ips?page=\${ipState.page}&size=\${ipState.size}&sort=\${ipState.sort}&order=\${ipState.order}\`;
             const d = await api(q);
-            if(d && d.data) {
+            if(d && d.success && d.data) {
                 let h = '';
                 d.data.forEach(i => {
-                    // 格式化来源显示
                     let sourceDisplay = (i.source || 'unknown').split('|').map(s => {
                         if (s === 'hostmonit_v4') return 'HostMonit IPv4';
                         if (s === 'hostmonit_v6') return 'HostMonit IPv6';
@@ -3386,18 +4506,17 @@ const adminHtml = `
                         <td>\${i.ip}</td>
                         <td>\${i.ip_type}</td>
                         <td>\${i.carrier}</td>
-                        <td>\${sourceDisplay}</td> <!-- 显示来源 -->
+                        <td>\${sourceDisplay}</td>
                         <td>\${fmtDate(i.created_at)}</td>
                         <td><button class="nav-btn danger small" onclick="delI('\${i.ip}')">删除</button></td>
                     </tr>\`;
                 });
-                document.getElementById('ipList').innerHTML = h || '<tr><td colspan="6" style="text-align:center">无数据</td></tr>'; // 调整 colspan
+                document.getElementById('ipList').innerHTML = h || '<tr><td colspan="6" style="text-align:center">无数据</td></tr>';
                 ipState.total = d.total;
                 updatePager('ip', ipState);
             }
         }
         
-        // 修改 refreshIps 函数以调用新的直接更新接口
         async function refreshIps() {
             const globalEnabled = document.getElementById('sw-global').checked;
             const hmV4 = document.getElementById('sw-hm-v4').checked; 
@@ -3416,24 +4535,22 @@ const adminHtml = `
             toast('IP更新任务已开始...', 'info');
             
             try {
-                // 调用新的直接更新接口 /api/ips/update
                 const res = await api('ips/update', 'POST', {
-                    global_enabled: globalEnabled, // 确保 global_enabled 也被传递
+                    global_enabled: globalEnabled,
                     hostmonit_v4: hmV4, 
                     hostmonit_v6: hmV6,
                     vps789: v7 
                 });
                 
-                // 'api' 辅助函数已经处理了 401/403/500 错误和 toast 消息。
-                if (res && res.success) { // 如果 res 不是 null 且 success 为 true
+                if (res && res.success) {
                     toast('更新完成: ' + res.message); 
                     ipState.page = 1; 
                     loadIp(); 
-                    loadStats(); // 重新加载状态，更新最后执行时间
-                } else if (res) { // 如果 res 不是 null 但 success 为 false
+                    loadStats();
+                } else if (res) {
                     toast('更新失败: ' + (res.message || '未知错误'), 'error'); 
                 }
-            } catch (error) { // 捕获 api 调用本身的网络错误
+            } catch (error) {
                 toast('网络错误: ' + error.message, 'error');
             }
         }
@@ -3447,13 +4564,13 @@ const adminHtml = `
         
         function changeIpPage(d) { changePage('ip', d, ipState, loadIp); }
         function changeIpSize() { changeSize('ip', ipState, loadIp); }
-        function sortIp(f) { changeSort(f, ipState, loadIp); } // sortIp 已支持 'source'
+        function sortIp(f) { changeSort(f, ipState, loadIp); }
 
         // ============ UUID管理 ============
         async function loadUuid() {
             const q = \`uuids?page=\${uuidState.page}&size=\${uuidState.size}&sort=\${uuidState.sort}&order=\${uuidState.order}\`;
             const d = await api(q);
-            if(d && d.data) {
+            if(d && d.success && d.data) {
                 let h = '';
                 d.data.forEach(i => h += \`<tr><td>\${i.uuid}</td><td>\${i.count} 个配置</td><td>\${fmtDate(i.updated_at)}</td><td><button class="nav-btn danger small" onclick="delU('\${i.uuid}')">删除整组</button></td></tr>\`);
                 document.getElementById('uuidList').innerHTML = h || '<tr><td colspan="4" style="text-align:center">无数据</td></tr>';
@@ -3473,33 +4590,296 @@ const adminHtml = `
         function changeUuidSize() { changeSize('uuid', uuidState, loadUuid); }
         function sortUuid(f) { changeSort(f, uuidState, loadUuid); }
 
-        // ============ 通用分页和排序函数 ============
-        function updatePager(p, s) {
-            const max = Math.ceil(s.total / s.size) || 1;
-            document.getElementById(p+'PageInfo').innerText = \`\${s.page} / \${max} (共\${s.total}条)\`;
-            document.getElementById(p+'Size').value = s.size;
-        }
-        
-        function changePage(p, delta, state, cb) {
-            const max = Math.ceil(state.total / state.size) || 1;
-            const n = state.page + delta;
-            if(n > 0 && n <= max) { state.page = n; cb(); }
-        }
-        
-        function changeSize(p, state, cb) {
-            state.size = parseInt(document.getElementById(p+'Size').value);
-            state.page = 1; 
-            cb();
-        }
-        
-        function changeSort(field, state, cb) {
-            if(state.sort === field) { 
-                state.order = state.order === 'asc' ? 'desc' : 'asc'; 
-            } else { 
-                state.sort = field; 
-                state.order = 'desc'; 
+        // ============ 模板管理 ============
+        async function loadTemplates() {
+            if (templateState.loading) return;
+            
+            templateState.loading = true;
+            const pager = document.getElementById('templatePager');
+            const list = document.getElementById('templateList');
+            
+            try {
+                list.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px;"><div class="loader"></div><div style="margin-top:10px; color:#89949B;">加载中...</div></td></tr>';
+                
+                const q = \`templates?page=\${templateState.page}&size=\${templateState.size}&sort=\${templateState.sort}&order=\${templateState.order}\`;
+                const response = await api(q);
+                
+                if (response && response.success) {
+                    const data = response.data;
+                    templateState.total = response.total;
+                    
+                    if (data && data.length > 0) {
+                        let html = '';
+                        data.forEach(i => {
+                            const defaultBadge = i.is_default === 1 ? 
+                                '<span class="template-badge badge-default">默认</span>' : 
+                                '<span class="template-badge badge-normal">普通</span>';
+                            
+                            const createdAt = fmtDate(i.created_at);
+                            const description = i.description ? i.description : '<span style="color:#ccc">无描述</span>';
+                            
+                            const safeName = (i.name || '').replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+                            const safeUrl = (i.url || '').replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+                            const safeDesc = (i.description || '').replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+                            
+                            html += \`<tr>
+                                <td><strong>\${i.name}</strong></td>
+                                <td class="template-url-cell" title="\${i.url}">\${i.url}</td>
+                                <td>\${description}</td>
+                                <td>\${defaultBadge}</td>
+                                <td>\${createdAt}</td>
+                                <td>
+                                    <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+                                        <button class="nav-btn small" onclick="editTemplate(\${i.id}, '\${safeName}', '\${safeUrl}', '\${safeDesc}', \${i.is_default})">
+                                            编辑
+                                        </button>
+                                        \${i.is_default === 0 ? 
+                                            \`<button class="nav-btn small" onclick="setDefaultTemplate(\${i.id})" title="设为默认模板">
+                                                设为默认
+                                            </button>\` : 
+                                            ''
+                                        }
+                                        <button class="nav-btn danger small" onclick="deleteTemplate(\${i.id})" title="删除模板">
+                                            删除
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>\`;
+                        });
+                        list.innerHTML = html;
+                        pager.style.display = 'flex';
+                        updatePager('template', templateState);
+                    } else {
+                        list.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px; color:#89949B;">暂无模板数据，请添加第一个模板</td></tr>';
+                        pager.style.display = 'none';
+                    }
+                } else {
+                    list.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:#ef4444;">加载失败，请刷新重试</td></tr>';
+                    pager.style.display = 'none';
+                }
+            } catch (error) {
+                console.error('加载模板失败:', error);
+                list.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:#ef4444;">加载失败：' + error.message + '</td></tr>';
+                pager.style.display = 'none';
+            } finally {
+                templateState.loading = false;
             }
-            cb();
+        }
+
+        async function addTemplate() {
+            const name = document.getElementById('newTemplateName').value.trim();
+            const url = document.getElementById('newTemplateUrl').value.trim();
+            const desc = document.getElementById('newTemplateDesc').value.trim();
+            const isDefault = document.getElementById('newTemplateDefault').checked ? 1 : 0;
+            
+            if (!name) {
+                toast('请输入模板名称', 'error');
+                document.getElementById('newTemplateName').focus();
+                return;
+            }
+            
+            if (!url) {
+                toast('请输入模板URL', 'error');
+                document.getElementById('newTemplateUrl').focus();
+                return;
+            }
+            
+            if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                toast('URL必须以 http:// 或 https:// 开头', 'error');
+                document.getElementById('newTemplateUrl').focus();
+                return;
+            }
+            
+            try {
+                const response = await api('templates', 'POST', {
+                    name,
+                    url,
+                    description: desc,
+                    is_default: isDefault
+                });
+                
+                if (response && response.success) {
+                    toast(response.message || '模板添加成功');
+                    
+                    document.getElementById('newTemplateName').value = '';
+                    document.getElementById('newTemplateUrl').value = '';
+                    document.getElementById('newTemplateDesc').value = '';
+                    document.getElementById('newTemplateDefault').checked = false;
+                    
+                    templateState.page = 1;
+                    await loadTemplates();
+                }
+            } catch (error) {
+                console.error('添加模板失败:', error);
+            }
+        }
+
+        function editTemplate(id, name, url, desc, isDefault) {
+            document.getElementById('editTemplateId').value = id;
+            document.getElementById('editTemplateName').value = name;
+            document.getElementById('editTemplateUrl').value = url;
+            document.getElementById('editTemplateDesc').value = desc;
+            document.getElementById('editTemplateDefault').checked = isDefault === 1;
+            
+            const modal = document.getElementById('editTemplateModal');
+            modal.style.display = 'flex';
+            
+            setTimeout(() => {
+                document.getElementById('editTemplateName').focus();
+            }, 100);
+        }
+
+        async function updateTemplate() {
+            const id = document.getElementById('editTemplateId').value;
+            const name = document.getElementById('editTemplateName').value.trim();
+            const url = document.getElementById('editTemplateUrl').value.trim();
+            const desc = document.getElementById('editTemplateDesc').value.trim();
+            const isDefault = document.getElementById('editTemplateDefault').checked ? 1 : 0;
+            
+            if (!name) {
+                toast('请输入模板名称', 'error');
+                document.getElementById('editTemplateName').focus();
+                return;
+            }
+            
+            if (!url) {
+                toast('请输入模板URL', 'error');
+                document.getElementById('editTemplateUrl').focus();
+                return;
+            }
+            
+            if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                toast('URL必须以 http:// 或 https:// 开头', 'error');
+                document.getElementById('editTemplateUrl').focus();
+                return;
+            }
+            
+            const btn = document.getElementById('updateTemplateBtn');
+            const originalText = btn.innerHTML;
+            
+            try {
+                btn.disabled = true;
+                btn.innerHTML = '保存中...';
+                
+                const response = await api('templates', 'PUT', {
+                    id,
+                    name,
+                    url,
+                    description: desc,
+                    is_default: isDefault
+                });
+                
+                if (response && response.success) {
+                    toast(response.message || '模板更新成功');
+                    document.getElementById('editTemplateModal').style.display = 'none';
+                    await loadTemplates();
+                }
+            } catch (error) {
+                console.error('更新模板失败:', error);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
+        }
+
+        async function deleteTemplate(id) {
+            if (!confirm('确定要删除这个模板吗？此操作不可撤销。')) {
+                return;
+            }
+            
+            try {
+                const response = await api('templates', 'DELETE', { id });
+                
+                if (response && response.success) {
+                    toast(response.message || '模板删除成功');
+                    
+                    if (templateState.total > 0) {
+                        const maxPage = Math.ceil((templateState.total - 1) / templateState.size);
+                        if (templateState.page > maxPage) {
+                            templateState.page = maxPage > 0 ? maxPage : 1;
+                        }
+                    }
+                    
+                    await loadTemplates();
+                }
+            } catch (error) {
+                console.error('删除模板失败:', error);
+            }
+        }
+
+        async function setDefaultTemplate(id) {
+            try {
+                const response = await api('templates/set-default', 'POST', { id });
+                
+                if (response && response.success) {
+                    toast(response.message || '默认模板设置成功');
+                    await loadTemplates();
+                }
+            } catch (error) {
+                console.error('设置默认模板失败:', error);
+            }
+        }
+
+        function changeTemplatePage(d) { changePage('template', d, templateState, loadTemplates); }
+        function changeTemplateSize() { changeSize('template', templateState, loadTemplates); }
+        function sortTemplate(f) { changeSort(f, templateState, loadTemplates); }
+
+        // ============ 通用分页和排序函数 ============
+        function updatePager(prefix, state) {
+            const pager = document.getElementById(\`\${prefix}Pager\`);
+            if (!pager) return;
+            
+            const maxPage = Math.ceil(state.total / state.size) || 1;
+            const currentPage = state.page;
+            
+            document.getElementById(\`\${prefix}PageInfo\`).innerText = \`\${currentPage} / \${maxPage} (共\${state.total}条)\`;
+            
+            const prevBtn = document.getElementById(\`\${prefix}PrevBtn\`);
+            const nextBtn = document.getElementById(\`\${prefix}NextBtn\`);
+            
+            if (prevBtn) prevBtn.disabled = currentPage <= 1;
+            if (nextBtn) nextBtn.disabled = currentPage >= maxPage;
+            
+            const sizeSelect = document.getElementById(\`\${prefix}Size\`);
+            if (sizeSelect) sizeSelect.value = state.size;
+        }
+        
+        function changePage(prefix, delta, state, callback) {
+            const maxPage = Math.ceil(state.total / state.size) || 1;
+            const newPage = state.page + delta;
+            
+            if (newPage > 0 && newPage <= maxPage) {
+                state.page = newPage;
+                if (callback) callback();
+                
+                const card = document.getElementById(prefix === 'template' ? 'templates' : prefix);
+                if (card) {
+                    const tableContainer = card.querySelector('.table-container');
+                    if (tableContainer) {
+                        tableContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                }
+            }
+        }
+        
+        function changeSize(prefix, state, callback) {
+            const newSize = parseInt(document.getElementById(\`\${prefix}Size\`).value);
+            if (newSize > 0 && newSize <= 100) {
+                state.size = newSize;
+                state.page = 1;
+                if (callback) callback();
+            }
+        }
+        
+        function changeSort(field, state, callback) {
+            if (state.sort === field) {
+                state.order = state.order === 'asc' ? 'desc' : 'asc';
+            } else {
+                state.sort = field;
+                state.order = 'desc';
+            }
+            state.page = 1;
+            if (callback) callback();
         }
 
         // ============ 关闭Modal函数 ============
@@ -3509,7 +4889,6 @@ const adminHtml = `
             });
         }
 
-        // 点击Modal外部关闭
         document.querySelectorAll('.modal-overlay').forEach(modal => {
             modal.addEventListener('click', function(e) {
                 if (e.target === this) {
@@ -3520,12 +4899,10 @@ const adminHtml = `
 
         // ============ 键盘快捷键 ============
         document.addEventListener('keydown', function(e) {
-            // ESC键关闭所有Modal
             if (e.key === 'Escape') {
                 closeAllModals();
             }
             
-            // Ctrl+S保存自动更新设置
             if (e.ctrlKey && e.key === 's') {
                 e.preventDefault();
                 const currentActiveCard = document.querySelector('.card.active');
@@ -3540,7 +4917,7 @@ const adminHtml = `
 `;
 
 // =================================================================
-//  8. 主入口 (添加定时任务)
+//  8. 主入口
 // =================================================================
 
 export default {
@@ -3560,7 +4937,7 @@ export default {
             return new Response(loginHtml, {
                 headers: {
                     'Content-Type': 'text/html;charset=UTF-8',
-                    'Cache-Control': 'no-cache, no-store, must-revalidate'
+                    'Cache-Control': CACHE_CONTROL
                 }
             });
         }
@@ -3569,7 +4946,7 @@ export default {
         return new Response(adminHtml, {
             headers: {
                 'Content-Type': 'text/html;charset=UTF-8',
-                'Cache-Control': 'no-cache, no-store, must-revalidate'
+                'Cache-Control': CACHE_CONTROL
             }
         });
     },
