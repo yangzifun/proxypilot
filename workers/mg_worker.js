@@ -1186,35 +1186,33 @@ async function handleDomains(req, env, method) {
             const actualSort = allowedSorts.includes(sortField) ? sortField : 'created_at';
             const offset = (page - 1) * size;
 
-            // 从两个表联合查询域名，添加来源标识
+            // 使用UNION查询两个表的数据，并排序分页
             const query = `
-                SELECT
-                    'Cloudflare' as source,
-                    domain,
-                    remark,
-                    created_at
-                FROM cf_domains
-                UNION ALL
-                SELECT
-                    '腾讯云EdgeOne' as source,
-                    domain,
-                    remark,
-                    created_at
-                FROM edgeone_domains
-                ORDER BY ${actualSort} ${sortOrder}
+                SELECT * FROM (
+                    SELECT id, domain, remark, created_at, 'Cloudflare' as source FROM cf_domains
+                    UNION ALL
+                    SELECT id, domain, remark, created_at, '腾讯云EdgeOne' as source FROM edgeone_domains
+                ) ORDER BY ${actualSort} ${sortOrder}
                 LIMIT ? OFFSET ?
             `;
 
             // 获取总域名数量
-            const cfTotal = await env.DB.prepare('SELECT COUNT(*) as c FROM cf_domains').first('c') || 0;
-            const edgeoneTotal = await env.DB.prepare('SELECT COUNT(*) as c FROM edgeone_domains').first('c') || 0;
-            const total = cfTotal + edgeoneTotal;
+            const totalQuery = `
+                SELECT COUNT(*) as total FROM (
+                    SELECT id FROM cf_domains
+                    UNION ALL
+                    SELECT id FROM edgeone_domains
+                )
+            `;
+
+            const totalResult = await env.DB.prepare(totalQuery).first();
+            const total = totalResult ? totalResult.total : 0;
 
             const { results } = await env.DB.prepare(query).bind(size, offset).all();
 
             return jsonResponse({
                 success: true,
-                total: total || 0,
+                total: total,
                 data: results || [],
                 page,
                 size
@@ -1307,13 +1305,15 @@ async function handleIps(req, env, method) {
             const actualSort = allowedSorts.includes(sortField) ? sortField : 'created_at';
             const offset = (page - 1) * size;
 
-            const total = await env.DB.prepare('SELECT COUNT(*) as c FROM cfips').first('c');
+            const totalResult = await env.DB.prepare('SELECT COUNT(*) as total FROM cfips').first();
+            const total = totalResult ? totalResult.total : 0;
+            
             const query = `SELECT * FROM cfips ORDER BY ${actualSort} ${sortOrder} LIMIT ? OFFSET ?`;
             const { results } = await env.DB.prepare(query).bind(size, offset).all();
 
             return jsonResponse({
                 success: true,
-                total: total || 0,
+                total: total,
                 data: results || [],
                 page,
                 size
@@ -1353,13 +1353,15 @@ async function handleUuids(req, env, method) {
             const actualSort = allowedSorts.includes(sortField) ? sortField : 'updated_at';
             const offset = (page - 1) * size;
 
-            const total = await env.DB.prepare('SELECT COUNT(DISTINCT uuid) as c FROM configs').first('c');
+            const totalResult = await env.DB.prepare('SELECT COUNT(DISTINCT uuid) as total FROM configs').first();
+            const total = totalResult ? totalResult.total : 0;
+            
             const query = `SELECT uuid, COUNT(*) as count, MAX(created_at) as updated_at FROM configs GROUP BY uuid ORDER BY ${actualSort} ${sortOrder} LIMIT ? OFFSET ?`;
             const { results } = await env.DB.prepare(query).bind(size, offset).all();
 
             return jsonResponse({
                 success: true,
-                total: total || 0,
+                total: total,
                 data: results || [],
                 page,
                 size
@@ -1404,8 +1406,8 @@ async function handleTemplates(req, env, method) {
             const offset = (page - 1) * size;
 
             // 获取总模板数量
-            const totalResult = await env.DB.prepare('SELECT COUNT(*) as c FROM config_templates').first();
-            const total = totalResult ? totalResult.c : 0;
+            const totalResult = await env.DB.prepare('SELECT COUNT(*) as total FROM config_templates').first();
+            const total = totalResult ? totalResult.total : 0;
             
             // 获取模板数据
             const { results } = await env.DB.prepare(
@@ -1929,7 +1931,8 @@ th.sortable::after {
     align-items: center; 
     padding-top: 15px; 
     font-size: 0.9rem; 
-    color: var(--primary-color); 
+    color: var(--primary-color);
+    min-height: 40px;
 }
 
 .page-ctrl { 
@@ -1941,6 +1944,8 @@ th.sortable::after {
 .page-info { 
     margin: 0 10px; 
     white-space: nowrap;
+    min-width: 120px;
+    text-align: center;
 }
 
 select.page-size { 
@@ -2593,6 +2598,17 @@ input:checked + .slider:before {
     .card { padding: 15px; }
     
     .top-bar { flex-direction: column; gap: 10px; align-items: flex-start; }
+    
+    /* 分页按钮在移动端优化 */
+    .page-ctrl button {
+        padding: 8px 12px;
+        font-size: 0.9rem;
+    }
+    
+    .page-info {
+        font-size: 0.8rem;
+        min-width: 80px;
+    }
 }
 `;
 
@@ -3046,7 +3062,7 @@ const adminHtml = `
                         </tbody>
                     </table>
                 </div>
-                <div class="pagination-bar" id="domPager" style="display: none;">
+                <div class="pagination-bar" id="domPager" style="display: flex;">
                     <div class="page-ctrl">
                         <select class="page-size" id="domSize" onchange="changeDomSize()">
                             <option value="5">5条/页</option>
@@ -3120,11 +3136,11 @@ const adminHtml = `
                         </tbody>
                     </table>
                 </div>
-                <div class="pagination-bar" id="ipPager" style="display: none;">
+                <div class="pagination-bar" id="ipPager" style="display: flex;">
                     <div class="page-ctrl">
                         <select class="page-size" id="ipSize" onchange="changeIpSize()">
-                            <option value="10">10条/页</option>
-                            <option value="20" selected>20条/页</option>
+                            <option value="10" selected>10条/页</option>
+                            <option value="20">20条/页</option>
                             <option value="50">50条/页</option>
                             <option value="100">100条/页</option>
                         </select>
@@ -3154,7 +3170,7 @@ const adminHtml = `
                         </tbody>
                     </table>
                 </div>
-                <div class="pagination-bar" id="uuidPager" style="display: none;">
+                <div class="pagination-bar" id="uuidPager" style="display: flex;">
                     <div class="page-ctrl">
                         <select class="page-size" id="uuidSize" onchange="changeUuidSize()">
                             <option value="5">5条/页</option>
@@ -3216,7 +3232,7 @@ const adminHtml = `
                     </table>
                 </div>
                 
-                <div class="pagination-bar" id="templatePager" style="display: none;">
+                <div class="pagination-bar" id="templatePager" style="display: flex;">
                     <div class="page-ctrl">
                         <select class="page-size" id="templateSize" onchange="changeTemplateSize()">
                             <option value="5">5条/页</option>
@@ -3514,7 +3530,7 @@ const adminHtml = `
 
         // ============ 状态管理 ============
         let domState = { page: 1, size: 10, total: 0, sort: 'id', order: 'desc' };
-        let ipState = { page: 1, size: 20, total: 0, sort: 'created_at', order: 'desc' };
+        let ipState = { page: 1, size: 10, total: 0, sort: 'created_at', order: 'desc' };
         let uuidState = { page: 1, size: 10, total: 0, sort: 'updated_at', order: 'desc' };
         let templateState = { page: 1, size: 10, total: 0, sort: 'created_at', order: 'desc', loading: false };
         let autoUpdateSettings = { global_enabled: false, hostmonit_v4: true, hostmonit_v6: false, vps789: true };
@@ -3547,6 +3563,11 @@ const adminHtml = `
                 await loadStats();
                 await loadAutoUpdateSettings();
                 await checkMfaStatus();
+                
+                // 初始化时显示所有分页容器
+                document.querySelectorAll('.pagination-bar').forEach(pager => {
+                    pager.style.display = 'flex';
+                });
                 
                 document.getElementById('loader').style.display = 'none';
                 document.getElementById('app').style.display = 'flex';
@@ -4386,6 +4407,10 @@ const adminHtml = `
 
         // ============ 域名管理 ============
         async function loadDom() {
+            // 确保分页按钮可见
+            const pager = document.getElementById('domPager');
+            if (pager) pager.style.display = 'flex';
+            
             const q = 'domains?page=' + domState.page + '&size=' + domState.size + '&sort=' + domState.sort + '&order=' + domState.order;
             const d = await api(q);
             if(d && d.success && d.data) {
@@ -4407,7 +4432,10 @@ const adminHtml = `
                          '</tr>';
                 });
                 document.getElementById('domList').innerHTML = h || '<tr><td colspan="5" style="text-align:center">无数据</td></tr>';
-                domState.total = d.total;
+                domState.total = d.total || 0;
+                updatePager('dom', domState);
+            } else {
+                // 即使加载失败，也更新分页信息
                 updatePager('dom', domState);
             }
         }
@@ -4441,10 +4469,11 @@ const adminHtml = `
                 if(d && d.data && d.data[index]) {
                     const domainData = d.data[index];
                     const res = await api('domains', 'DELETE', {
-                        id: index,
+                        id: domainData.id,
                         source: domainData.source
                     });
                     if(res && res.success) {
+                        toast('域名删除成功');
                         loadDom(); 
                     }
                 } else {
@@ -4490,6 +4519,10 @@ const adminHtml = `
 
         // ============ IP管理 ============
         async function loadIp() {
+            // 确保分页按钮可见
+            const pager = document.getElementById('ipPager');
+            if (pager) pager.style.display = 'flex';
+            
             const q = \`ips?page=\${ipState.page}&size=\${ipState.size}&sort=\${ipState.sort}&order=\${ipState.order}\`;
             const d = await api(q);
             if(d && d.success && d.data) {
@@ -4512,7 +4545,10 @@ const adminHtml = `
                     </tr>\`;
                 });
                 document.getElementById('ipList').innerHTML = h || '<tr><td colspan="6" style="text-align:center">无数据</td></tr>';
-                ipState.total = d.total;
+                ipState.total = d.total || 0;
+                updatePager('ip', ipState);
+            } else {
+                // 即使加载失败，也更新分页信息
                 updatePager('ip', ipState);
             }
         }
@@ -4568,13 +4604,20 @@ const adminHtml = `
 
         // ============ UUID管理 ============
         async function loadUuid() {
+            // 确保分页按钮可见
+            const pager = document.getElementById('uuidPager');
+            if (pager) pager.style.display = 'flex';
+            
             const q = \`uuids?page=\${uuidState.page}&size=\${uuidState.size}&sort=\${uuidState.sort}&order=\${uuidState.order}\`;
             const d = await api(q);
             if(d && d.success && d.data) {
                 let h = '';
                 d.data.forEach(i => h += \`<tr><td>\${i.uuid}</td><td>\${i.count} 个配置</td><td>\${fmtDate(i.updated_at)}</td><td><button class="nav-btn danger small" onclick="delU('\${i.uuid}')">删除整组</button></td></tr>\`);
                 document.getElementById('uuidList').innerHTML = h || '<tr><td colspan="4" style="text-align:center">无数据</td></tr>';
-                uuidState.total = d.total;
+                uuidState.total = d.total || 0;
+                updatePager('uuid', uuidState);
+            } else {
+                // 即使加载失败，也更新分页信息
                 updatePager('uuid', uuidState);
             }
         }
@@ -4599,6 +4642,9 @@ const adminHtml = `
             const list = document.getElementById('templateList');
             
             try {
+                // 确保分页按钮可见
+                if (pager) pager.style.display = 'flex';
+                
                 list.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px;"><div class="loader"></div><div style="margin-top:10px; color:#89949B;">加载中...</div></td></tr>';
                 
                 const q = \`templates?page=\${templateState.page}&size=\${templateState.size}&sort=\${templateState.sort}&order=\${templateState.order}\`;
@@ -4606,7 +4652,7 @@ const adminHtml = `
                 
                 if (response && response.success) {
                     const data = response.data;
-                    templateState.total = response.total;
+                    templateState.total = response.total || 0;
                     
                     if (data && data.length > 0) {
                         let html = '';
@@ -4647,20 +4693,19 @@ const adminHtml = `
                             </tr>\`;
                         });
                         list.innerHTML = html;
-                        pager.style.display = 'flex';
                         updatePager('template', templateState);
                     } else {
                         list.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px; color:#89949B;">暂无模板数据，请添加第一个模板</td></tr>';
-                        pager.style.display = 'none';
+                        updatePager('template', templateState);
                     }
                 } else {
                     list.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:#ef4444;">加载失败，请刷新重试</td></tr>';
-                    pager.style.display = 'none';
+                    updatePager('template', templateState);
                 }
             } catch (error) {
                 console.error('加载模板失败:', error);
                 list.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:#ef4444;">加载失败：' + error.message + '</td></tr>';
-                pager.style.display = 'none';
+                updatePager('template', templateState);
             } finally {
                 templateState.loading = false;
             }
@@ -4837,11 +4882,33 @@ const adminHtml = `
             const prevBtn = document.getElementById(\`\${prefix}PrevBtn\`);
             const nextBtn = document.getElementById(\`\${prefix}NextBtn\`);
             
-            if (prevBtn) prevBtn.disabled = currentPage <= 1;
-            if (nextBtn) nextBtn.disabled = currentPage >= maxPage;
+            if (prevBtn) {
+                prevBtn.disabled = currentPage <= 1;
+                prevBtn.style.opacity = currentPage <= 1 ? '0.5' : '1';
+                prevBtn.style.cursor = currentPage <= 1 ? 'not-allowed' : 'pointer';
+            }
+            
+            if (nextBtn) {
+                nextBtn.disabled = currentPage >= maxPage;
+                nextBtn.style.opacity = currentPage >= maxPage ? '0.5' : '1';
+                nextBtn.style.cursor = currentPage >= maxPage ? 'not-allowed' : 'pointer';
+            }
             
             const sizeSelect = document.getElementById(\`\${prefix}Size\`);
             if (sizeSelect) sizeSelect.value = state.size;
+            
+            // 始终显示分页栏
+            pager.style.display = 'flex';
+            
+            // 如果只有一页或没有数据，隐藏翻页按钮但保留分页信息
+            if (maxPage <= 1) {
+                if (prevBtn) prevBtn.style.display = 'none';
+                if (nextBtn) nextBtn.style.display = 'none';
+                document.getElementById(\`\${prefix}PageInfo\`).innerText = \`共\${state.total}条\`;
+            } else {
+                if (prevBtn) prevBtn.style.display = 'inline-flex';
+                if (nextBtn) nextBtn.style.display = 'inline-flex';
+            }
         }
         
         function changePage(prefix, delta, state, callback) {
