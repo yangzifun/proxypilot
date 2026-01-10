@@ -1,11 +1,11 @@
 # 生成时间: 2026-01-06
-# 模板类型: 全量模板
+# 模板类型: 测速优化版
 
 # ==========================================================
 # 节点信息
 # ==========================================================
 proxies:
-  - {name: 直连, type: direct}
+  - {name: 🎯 直连, type: direct}
 
 # ==========================================================
 # 全局配置 
@@ -100,68 +100,67 @@ rule-anchor:
 # ==========================================================
 proxy-groups:
   # --- 1. 默认代理 (总开关) ---
-  # 兜底使用的代理组，如果下方具体服务没命中，则默认走这里
   - {name: 🚀 默认代理, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动, 🌐 全部节点]}
-  
-  # --- 2. AI 服务 (对 IP 纯净度要求极高) ---
-  - {name: 🤖 OpenAI, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]} # 严禁香港
-  - {name: ✨ Gemini, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
-  - {name: 🧠 Claude, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇩🇪 德国自动]}
-  - {name: 🌌 常用 AI, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}  # 聚合其他 AI 规则
-  
-  # --- 3. 社交与办公 (注重低延迟和可用性) ---
-  - {name: 📲 Telegram, type: select, include-all: true, filter: "(?i)香港|东京|洛杉矶|弗吉尼亚|新加坡|台湾|德国", proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
-  - {name: 🌏 Meta, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇺🇸 美国自动]} # 包含 Facebook, Instagram, WhatsApp
-  - {name: 🐦 Twitter, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动]}
-  - {name: 💬 Discord, type: select, proxies: [🚀 默认代理, 🇺🇸 美国自动, 🇭🇰 香港自动, 🇩🇪 德国自动]}
-  - {name: 🐱 GitHub, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇩🇪 德国自动]} # 提升代码拉取速度
-  - {name: 🟦 Microsoft, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动]} # 解决 Outlook 或系统更新转圈
+   
+  # --- 2. AI 服务 ---
+  - {name: 🤖 OpenAI, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动, 🎯 直连]} 
+  - {name: ✨ Gemini, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动, 🎯 直连]}
+  - {name: 🧠 Claude, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇩🇪 德国自动, 🎯 直连]}
+  - {name: 🌌 常用 AI, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动, 🎯 直连]} 
+   
+  # --- 3. 社交与办公 ---
+  - {name: 📲 Telegram, type: select, include-all: true, filter: "(?i)香港|东京|洛杉矶|弗吉尼亚|新加坡|台湾|德国", proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动, 🎯 直连]}
+  - {name: 🌏 Meta, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🎯 直连]} 
+  - {name: 🐦 Twitter, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🎯 直连]}
+  - {name: 💬 Discord, type: select, proxies: [🚀 默认代理, 🇺🇸 美国自动, 🇭🇰 香港自动, 🇩🇪 德国自动, 🎯 直连]}
+  - {name: 🐱 GitHub, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇩🇪 德国自动, 🎯 直连]} 
+  - {name: 🟦 Microsoft, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动]} 
 
-# --- 4. 流媒体与娱乐 (注重带宽和地区版权) ---
-  - {name: 🎬 YouTube, type: select, include-all: true, filter: "(?i)香港|东京|洛杉矶|弗吉尼亚|新加坡|台湾|德国", proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
-  - {name: 🎥 Netflix, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
-  - {name: 🎞️ Disney+, type: select, proxies: [🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
-  - {name: 🎵 TikTok, type: select, proxies: [🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
-  - {name: 📺 更多流媒体, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇺🇸 美国自动]} # Prime Video, Viu, TVB, 动画疯等
-  - {name: 🎧 Spotify, type: select, proxies: [🚀 默认代理, ⚡ 自动选择, 🎯 直连]} # 建议首选直连或默认代理
-  
-  
- # --- 5. 流媒体与游戏 (建议：下载选直连，联机选代理) ---
-  - {name: 🎮 Steam, type: select, proxies: [⚡ 自动选择, 🚀 默认代理, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇭🇰 香港自动, 🎯 直连]}
-  - {name: 🎮 Ubisoft, type: select, proxies: [⚡ 自动选择, 🚀 默认代理, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇭🇰 香港自动, 🎯 直连]} # 原 Uplay 平台
-  - {name: 🎮 Epic, type: select, proxies: [ ⚡ 自动选择, 🚀 默认代理, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇭🇰 香港自动, 🎯 直连]}
-  - {name: 🎮 EA, type: select, proxies: [⚡ 自动选择, 🚀 默认代理, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇭🇰 香港自动, 🎯 直连]} # EA App / Origin
-  - {name: 🎮 PlayStation, type: select, proxies: [⚡ 自动选择, 🚀 默认代理, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇭🇰 香港自动, 🎯 直连]} # PSN 商店与更新
+  # --- 4. 流媒体与娱乐 ---
+  - {name: 🎬 YouTube, type: select, include-all: true, filter: "(?i)香港|东京|洛杉矶|弗吉尼亚|新加坡|台湾|德国", proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动, 🎯 直连]}
+  - {name: 🎥 Netflix, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动, 🎯 直连]}
+  - {name: 🎞️ Disney+, type: select, proxies: [🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动, 🎯 直连]}
+  - {name: 🎵 TikTok, type: select, proxies: [🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动, 🎯 直连]}
+  - {name: 📺 更多流媒体, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇺🇸 美国自动, 🎯 直连]} 
+  - {name: 🎧 Spotify, type: select, proxies: [🚀 默认代理, ⚡ 自动选择, 🎯 直连]} 
+   
+   
+  # --- 5. 流媒体与游戏 ---
+  - {name: 🎮 Steam, type: select, proxies: [🎯 直连, ⚡ 自动选择, 🚀 默认代理, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇭🇰 香港自动]}
+  - {name: 🎮 Ubisoft, type: select, proxies: [🎯 直连, ⚡ 自动选择, 🚀 默认代理, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇭🇰 香港自动]} 
+  - {name: 🎮 Epic, type: select, proxies: [🎯 直连,  ⚡ 自动选择, 🚀 默认代理, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇭🇰 香港自动]}
+  - {name: 🎮 EA, type: select, proxies: [🎯 直连, ⚡ 自动选择, 🚀 默认代理, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇭🇰 香港自动]} 
+  - {name: 🎮 PlayStation, type: select, proxies: [🎯 直连, ⚡ 自动选择, 🚀 默认代理, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇭🇰 香港自动]} 
 
- # --- 6. 中国大陆服务 (保持国内访问速度) ---
-  
-  - {name: 🎬 大陆视频, type: select, proxies: [🎯 直连, 🚀 默认代理, 🇨🇳 中国自动, 🇭🇰 香港自动]} # 哔哩哔哩、爱奇艺等
-  - {name: 🍎 Apple, type: select, proxies: [🎯 直连, 🚀 默认代理, 🇨🇳 中国自动, 🇭🇰 香港自动]}  # App Store 与 iCloud 加速
-  - {name: 🇨🇳 中国大陆, type: select, proxies: [🎯 直连, 🇨🇳 中国自动, 🚀 默认代理, 🇭🇰 香港自动]}  # 中国大陆地区域名及IP
+  # --- 6. 中国大陆服务 ---
+  - {name: 🎬 大陆视频, type: select, proxies: [🎯 直连, 🚀 默认代理, 🇨🇳 中国自动, 🇭🇰 香港自动]} 
+  - {name: 🍎 Apple, type: select, proxies: [🎯 直连, 🚀 默认代理, 🇨🇳 中国自动, 🇭🇰 香港自动]}  
+  - {name: 🇨🇳 中国大陆, type: select, proxies: [🎯 直连, 🇨🇳 中国自动, 🚀 默认代理, 🇭🇰 香港自动]}  
 
   # --- 7. 基础工具 ---
-  - {name: 🔍 Google, type: select,proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
+  - {name: 🔍 Google, type: select,proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动, 🎯 直连]}
   - {name: 🚀 Speedtest, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择]}
-  - {name: 💳 PayPal, type: select, proxies: [⚡ 自动选择, 🇺🇸 美国自动, 🇭🇰 香港自动, 🇩🇪 德国自动, 🎯 直连]} # 建议固定一个地区防止风控
+  - {name: 💳 PayPal, type: select, proxies: [⚡ 自动选择, 🇺🇸 美国自动, 🇭🇰 香港自动, 🇩🇪 德国自动, 🎯 直连]} 
   - {name: 🚫 广告拦截, type: select, proxies: [REJECT, DIRECT]}
   - {name: 🎯 直连, type: select, proxies: [DIRECT, 🚀 默认代理]} 
   - {name: 🐟 漏网之鱼, type: select, proxies: [🚀 默认代理, 🎯 直连, ⚡ 自动选择, 🇭🇰 香港自动, 🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
 
 
-
-
-  # --- 8. 底层自动选优策略 (供上方调用)  ---
-  - {name: ⚡ 自动选择, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连)).)*$"}
+  # --- 8. 底层自动选优策略 (重点修改区域) ---
+  # 境外优选：增加过滤条件，排除所有包含中国相关字眼的节点
+  - {name: ⚡ 自动选择, type: url-test, url: 'http://cp.cloudflare.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
   - {name: 🌐 全部节点, type: select, include-all: true}
- 
-  # 地区分组自动筛选 (基于正则匹配节点名)
-  - {name: 🇭🇰 香港自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)香港|HK|Hong Kong|HongKong|HKSAR|HKG|Hkg|Hk"}
-  - {name: 🇯🇵 日本自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)日本|JP|Japan|Tokyo|Osaka|Saitama|Kyoto|JP-|Japan|TYO|OSA|东京|大阪|埼玉|京都"}
-  - {name: 🇺🇸 美国自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)美国|US|USA|United States|America|States|US-|Virginia|VA|Ashburn|弗吉尼亚|维吉尼亚|阿什本|California|CA|Los Angeles|San Francisco|San Jose|Santa Clara|Santa Monica|Sacramento|Fremont|洛杉矶|旧金山|圣何塞|加州|New York|NY|New Jersey|NJ|纽约|新泽西|Texas|TX|Dallas|Houston|Austin|德克萨斯|德州|达拉斯|休斯顿|Washington|WA|Seattle|西雅图|Chicago|IL|芝加哥|Florida|FL|Miami|佛罗里达|迈阿密|Oregon|OR|Portland|波特兰|Nevada|NV|Las Vegas|拉斯维加斯|Arizona|AZ|Phoenix|凤凰城|Georgia|Atlanta|亚特兰大|Utah|Salt Lake|盐湖城|Boston|波士顿"}
-  - {name: 🇸🇬 新加坡自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)新加坡|SG|Singapore|Lion City|SGP|SIN|SGP|狮城"}
-  - {name: 🇹🇼 台湾自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)台湾|TW|Taiwan|Taipei|TPE|Taichung|Hsinchu|Republic of China|ROC|TW-|台北|台中|新竹"}
-  - {name: 🇩🇪 德国自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)德国|DE|Germany|Deutschland|Frankfurt|Berlin|Munich|FRG|DE-"}
-  - {name: 🇨🇳 中国自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH"}
+  
+  # 地区分组：使用 Cloudflare 测速
+  - {name: 🇭🇰 香港自动, type: url-test, url: 'https://www.google.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)香港|HK|Hong Kong|HongKong|HKSAR|HKG|Hkg|Hk"}
+  - {name: 🇯🇵 日本自动, type: url-test, url: 'https://www.google.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)日本|JP|Japan|Tokyo|Osaka|Saitama|Kyoto|JP-|Japan|TYO|OSA|东京|大阪|埼玉|京都"}
+  - {name: 🇺🇸 美国自动, type: url-test, url: 'https://www.google.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)美国|US|USA|United States|America|States|US-|Virginia|VA|Ashburn|弗吉尼亚|维吉尼亚|阿什本|California|CA|Los Angeles|San Francisco|San Jose|Santa Clara|Santa Monica|Sacramento|Fremont|洛杉矶|旧金山|圣何塞|加州|New York|NY|New Jersey|NJ|纽约|新泽西|Texas|TX|Dallas|Houston|Austin|德克萨斯|德州|达拉斯|休斯顿|Washington|WA|Seattle|西雅图|Chicago|IL|芝加哥|Florida|FL|Miami|佛罗里达|迈阿密|Oregon|OR|Portland|波特兰|Nevada|NV|Las Vegas|拉斯维加斯|Arizona|AZ|Phoenix|凤凰城|Georgia|Atlanta|亚特兰大|Utah|Salt Lake|盐湖城|Boston|波士顿"}
+  - {name: 🇸🇬 新加坡自动, type: url-test, url: 'https://www.google.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)新加坡|SG|Singapore|Lion City|SGP|SIN|SGP|狮城"}
+  - {name: 🇹🇼 台湾自动, type: url-test, url: 'http://cp.cloudflare.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)台湾|TW|Taiwan|Taipei|TPE|Taichung|Hsinchu|Republic of China|ROC|TW-|台北|台中|新竹"}
+  - {name: 🇩🇪 德国自动, type: url-test, url: 'https://www.google.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)德国|DE|Germany|Deutschland|Frankfurt|Berlin|Munich|FRG|DE-"}
+  
+  # 国内/回国优选：使用 MIUI 测速（必选，否则全红）
+  - {name: 🇨🇳 中国自动, type: url-test, url: 'http://connect.rom.miui.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH"}
 
 
 # ==========================================================
@@ -178,7 +177,7 @@ rules:
   - RULE-SET,gemini,✨ Gemini
   - RULE-SET,claude,🧠 Claude
   - RULE-SET,ai,🌌 常用 AI
-  
+   
 # 3. 社交与视频
   - RULE-SET,telegram_domain,📲 Telegram
   - RULE-SET,facebook_domain,🌏 Meta
@@ -193,7 +192,7 @@ rules:
   - RULE-SET,bahamut_domain,📺 更多流媒体
   - RULE-SET,viu_domain,📺 更多流媒体
   - RULE-SET,spotify_domain,🎧 Spotify
-  
+   
 # 4.中国大陆分流
   - RULE-SET,bilibili_domain,🎬 大陆视频
   - RULE-SET,iqiyi_domain,🎬 大陆视频
@@ -218,7 +217,7 @@ rules:
   - RULE-SET,paypal_domain,💳 PayPal
   - RULE-SET,proxylite,🚀 默认代理
   - RULE-SET,gfw_domain,🚀 默认代理
-  
+   
   # 7.地区分流直接调用自动选择分组
   - GEOIP,HK,🇭🇰 香港自动
   - GEOIP,TW,🇹🇼 台湾自动
@@ -248,7 +247,7 @@ rule-providers:
   gemini: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/google-gemini.mrs" }
   claude: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/anthropic.mrs" }
   ai: { <<: *domain, url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/category-ai-!cn.mrs" }
-  
+   
   # 社交与娱乐
   telegram_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/telegram.mrs"}
   discord_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/discord.mrs"}
@@ -278,13 +277,13 @@ rule-providers:
   speedtest_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/ookla-speedtest.mrs"}
   gfw_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/gfw.mrs"}
   cn_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs"}
-  
+   
   # IP 规则
   cn_ip: { <<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs"}
   google_ip: { <<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/google.mrs"}
   telegram_ip: { <<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/telegram.mrs"}
   netflix_ip: { <<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/netflix.mrs"}
-  
+   
   # 中国大陆服务相关
   bilibili_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/bilibili.mrs"}
   iqiyi_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/iqiyi.mrs"}
