@@ -114,10 +114,10 @@ proxy-groups:
   # [一致性哈希]：相同域名走相同节点，防止跳IP，适合日常使用
   - {name: ⚖️ 全球均衡, type: load-balance, strategy: consistent-hashing, include-all: true, filter: "^((?!(直连)).)*$", url: 'http://www.gstatic.com/generate_204', interval: 300}
   
-  - {name: 🇭🇰 香港均衡, type: load-balance, strategy: consistent-hashing, include-all: true, filter: "(?i)香港|HK|Hong Kong|HongKong|HKSAR|HKG", url: 'http://www.gstatic.com/generate_204', interval: 300}
-  - {name: 🇯🇵 日本均衡, type: load-balance, strategy: consistent-hashing, include-all: true, filter: "(?i)日本|JP|Japan|Tokyo|Osaka", url: 'http://www.gstatic.com/generate_204', interval: 300}
+  - {name: 🇭🇰 香港均衡, type: load-balance, strategy: consistent-hashing, include-all: true, filter: "(?i)香港|HK|Hong Kong|HongKong|HKSAR|HKG", url: 'http://www.google.com.hk/generate_204', interval: 300}
+  - {name: 🇯🇵 日本均衡, type: load-balance, strategy: consistent-hashing, include-all: true, filter: "(?i)日本|JP|Japan|Tokyo|Osaka", url: 'http://www.google.co.jp/generate_204', interval: 300}
   - {name: 🇺🇸 美国均衡, type: load-balance, strategy: consistent-hashing, include-all: true, filter: "(?i)美国|US|USA|United States", url: 'http://www.gstatic.com/generate_204', interval: 300}
-  - {name: 🇸🇬 新加坡均衡, type: load-balance, strategy: consistent-hashing, include-all: true, filter: "(?i)新加坡|SG|Singapore", url: 'http://www.gstatic.com/generate_204', interval: 300}
+  - {name: 🇸🇬 新加坡均衡, type: load-balance, strategy: consistent-hashing, include-all: true, filter: "(?i)新加坡|SG|Singapore", url: 'http://cp.cloudflare.com/generate_204', interval: 300}
 
   # [轮询策略]：适合纯下载工具（IDM, BitTorrent），不考虑IP一致性，只求速度叠加
   - {name: 📥 极速下载, type: load-balance, strategy: round-robin, include-all: true, filter: "^((?!(直连|剩余|到期|重置)).)*$", url: 'http://www.gstatic.com/generate_204', interval: 300}
