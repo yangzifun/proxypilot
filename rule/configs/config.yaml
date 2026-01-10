@@ -1,4 +1,4 @@
-# 生成时间: 2026-01-06
+# 生成时间: 2026-01-10
 # 模板类型: 默认模板
 
 # ==========================================================
@@ -171,22 +171,28 @@ rules:
 # 1. 拦截与私有网络
   - RULE-SET,category-ads-all,🚫 广告拦截
   - RULE-SET,private_domain,🎯 直连
-  - RULE-SET,custom_direct,🎯 直连
   - GEOIP,LAN,🎯 直连
-# 2. AI 规则
+
+# 2. 补充  
+  - RULE-SET,custom_direct,🎯 直连
+  
+  
+# 3. AI 规则
   - RULE-SET,openai,🤖 OpenAI
   - RULE-SET,gemini,✨ Gemini
   - RULE-SET,claude,🧠 Claude
   - RULE-SET,ai,🌌 常用 AI
   
-# 3. 社交与视频
+# 4. 社交与视频
   - RULE-SET,telegram_domain,📲 Telegram
+  - RULE-SET,telegram_ip,📲 Telegram,no-resolve
   - RULE-SET,facebook_domain,🌏 Meta
   - RULE-SET,instagram_domain,🌏 Meta
   - RULE-SET,twitter_domain,🐦 Twitter
   - RULE-SET,discord_domain,💬 Discord
   - RULE-SET,youtube_domain,🎬 YouTube
   - RULE-SET,netflix_domain,🎥 Netflix
+  - RULE-SET,netflix_ip,🎥 Netflix,no-resolve
   - RULE-SET,disney_domain,🎞️ Disney+
   - RULE-SET,tiktok_domain,🎵 TikTok
   - RULE-SET,primevideo_domain,📺 更多流媒体
@@ -194,7 +200,7 @@ rules:
   - RULE-SET,viu_domain,📺 更多流媒体
   - RULE-SET,spotify_domain,🎧 Spotify
   
-# 4.中国大陆分流
+# 5.中国大陆分流
   - RULE-SET,bilibili_domain,🎬 大陆视频
   - RULE-SET,iqiyi_domain,🎬 大陆视频
   - RULE-SET,weibo_domain,🇨🇳 中国大陆
@@ -202,13 +208,14 @@ rules:
   - RULE-SET,alipay_domain,🇨🇳 中国大陆
   - RULE-SET,cn_domain,🇨🇳 中国大陆
   - RULE-SET,cn_ip,🇨🇳 中国大陆,no-resolve
-# 5. 通用服务
+# 6. 通用服务
   - RULE-SET,github_domain,🐱 GitHub
   - RULE-SET,google_domain,🔍 Google
+  - RULE-SET,google_ip,🔍 Google,no-resolve
   - RULE-SET,onedrive_domain,🟦 Microsoft
   - RULE-SET,microsoft_domain,🟦 Microsoft
   - RULE-SET,apple_domain,🍎 Apple
-# 6. 游戏规则
+# 7. 游戏规则
   - RULE-SET,steam_domain,🎮 Steam
   - RULE-SET,ubisoft_domain,🎮 Ubisoft
   - RULE-SET,epic_domain,🎮 Epic
@@ -219,7 +226,7 @@ rules:
   - RULE-SET,proxylite,🚀 默认代理
   - RULE-SET,gfw_domain,🚀 默认代理
   
-  # 7.地区分流直接调用自动选择分组
+  # 8.地区分流直接调用自动选择分组
   - GEOIP,HK,🇭🇰 香港自动
   - GEOIP,TW,🇹🇼 台湾自动
   - GEOIP,JP,🇯🇵 日本自动
@@ -227,10 +234,7 @@ rules:
   - GEOIP,US,🇺🇸 美国自动
   - GEOIP,DE,🇩🇪 德国自动
 
-  # 8.境外 IP 类规则与兜底
-  - RULE-SET,google_ip,🔍 Google,no-resolve
-  - RULE-SET,telegram_ip,📲 Telegram,no-resolve
-  - RULE-SET,netflix_ip,🎥 Netflix,no-resolve
+  # 9.兜底
   - MATCH,🐟 漏网之鱼
 
 # ==========================================================
