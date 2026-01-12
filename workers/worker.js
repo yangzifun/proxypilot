@@ -2671,6 +2671,44 @@ trojan://..." rows="4"></textarea>
       }
     }
     
+    // 显示UUID二级菜单函数
+    function showUuidSubMenu() {
+      const subMenu = document.getElementById('uuidSubMenu');
+      const uuidDropdownMenu = document.getElementById('uuidDropdownMenu');
+      
+      if (subMenu && uuidDropdownMenu) {
+        // 计算二级菜单位置
+        const menuRect = uuidDropdownMenu.getBoundingClientRect();
+        const subMenuStyle = subMenu.style;
+        
+        // 设置二级菜单位置
+        subMenuStyle.top = '0';
+        subMenuStyle.left = '100%';
+        subMenuStyle.display = 'block';
+        
+        // 防止二级菜单超出屏幕右侧
+        const subMenuWidth = 180; // 二级菜单宽度
+        const screenWidth = window.innerWidth;
+        const rightEdge = menuRect.right + subMenuWidth;
+        
+        if (rightEdge > screenWidth) {
+          // 如果超出右侧，向左显示
+          subMenuStyle.left = '-100%';
+        }
+        
+        // 点击其他地方关闭二级菜单
+        setTimeout(() => {
+          const closeSubMenu = function(e) {
+            if (subMenu && !subMenu.contains(e.target) && !uuidDropdownMenu.contains(e.target)) {
+              subMenu.style.display = 'none';
+              document.removeEventListener('click', closeSubMenu);
+            }
+          };
+          document.addEventListener('click', closeSubMenu);
+        }, 10);
+      }
+    }
+    
     // 监听配置管理模态框的ESC键关闭
     document.addEventListener('keydown', function(e) {
       if (e.key === 'Escape' && document.getElementById('configManagerModal').style.display === 'flex') {
