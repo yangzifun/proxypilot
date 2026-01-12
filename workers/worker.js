@@ -5,6 +5,7 @@
  *  2. 订阅文件生成器（支持Clash/Mihomo格式）
  *  3. 批量配置生成器
  *  4. 统计分析功能
+ *  5. 配置筛选和翻页功能
  * ================================================================= */
 
 // =================================================================
@@ -102,17 +103,92 @@ function getClientIp(request) {
 //  DATABASE OPERATIONS (数据库操作)
 // =================================================================
 
-// 获取配置列表
-async function fetchConfigsByUuidFromDB(uuid, env) {
+// 获取配置列表（支持筛选和分页）
+async function fetchConfigsByUuidFromDB(uuid, env, options = {}) {
     const db = env.DB;
-    if (!db) return [];
+    if (!db) return { results: [], total: 0 };
+    
     try {
-        const stmt = db.prepare('SELECT id, config_data, protocol, remark, domain_hosting FROM configs WHERE uuid = ? ORDER BY id ASC');
-        const { results } = await stmt.bind(uuid).all();
-        return results;
+        // 构建查询条件
+        let conditions = ['uuid = ?'];
+        const params = [uuid];
+        
+        if (options.protocol && options.protocol !== 'all') {
+            conditions.push('protocol = ?');
+            params.push(options.protocol);
+        }
+        
+        if (options.domain_hosting && options.domain_hosting !== 'all') {
+            conditions.push('domain_hosting = ?');
+            params.push(options.domain_hosting);
+        }
+        
+        const whereClause = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
+        
+        // 获取总数
+        const countQuery = `SELECT COUNT(*) as total FROM configs ${whereClause}`;
+        const countResult = await db.prepare(countQuery).bind(...params).first();
+        const total = countResult?.total || 0;
+        
+        // 获取分页数据
+        let query = `SELECT id, config_data, protocol, remark, domain_hosting FROM configs ${whereClause} ORDER BY id ASC`;
+        
+        // 添加分页参数
+        const page = options.page || 1;
+        const pageSize = options.pageSize || 10;
+        const offset = (page - 1) * pageSize;
+        
+        query += ` LIMIT ? OFFSET ?`;
+        params.push(pageSize, offset);
+        
+        const { results } = await db.prepare(query).bind(...params).all();
+        
+        return {
+            results,
+            total,
+            page,
+            pageSize,
+            totalPages: Math.ceil(total / pageSize)
+        };
+        
     } catch (e) {
         console.error(`Error fetching configs for UUID ${uuid}:`, e.message);
-        return [];
+        return { results: [], total: 0, page: 1, pageSize: 10, totalPages: 0 };
+    }
+}
+
+// 批量删除配置
+async function deleteConfigsByIds(env, ids) {
+    const db = env.DB;
+    if (!db) throw new Error("D1 数据库未绑定。");
+    
+    if (!ids || ids.length === 0) {
+        return { success: true, deleted: 0 };
+    }
+    
+    try {
+        // 构建IN查询
+        const placeholders = ids.map(() => '?').join(',');
+        const query = `DELETE FROM configs WHERE id IN (${placeholders})`;
+        const stmt = db.prepare(query);
+        
+        // 绑定所有参数
+        let boundStmt = stmt;
+        for (const id of ids) {
+            boundStmt = boundStmt.bind(id);
+        }
+        
+        const result = await boundStmt.run();
+        return {
+            success: true,
+            deleted: result.changes || 0
+        };
+    } catch (e) {
+        console.error("批量删除配置失败:", e.message);
+        return {
+            success: false,
+            error: e.message
+        };
     }
 }
 
@@ -355,9 +431,35 @@ async function handleUpdateConfig(request, env) {
     } catch (e) { return jsonResponse({ error: e.message }, 500); }
 }
 
-async function handleGetConfigs(uuid, env) {
-    const results = await fetchConfigsByUuidFromDB(uuid, env);
-    return jsonResponse({ uuid, configs: results });
+async function handleGetConfigs(uuid, env, url) {
+    // 获取查询参数
+    const urlObj = new URL(url);
+    const protocol = urlObj.searchParams.get('protocol') || 'all';
+    const domain_hosting = urlObj.searchParams.get('domain_hosting') || 'all';
+    const page = parseInt(urlObj.searchParams.get('page') || '1');
+    const pageSize = parseInt(urlObj.searchParams.get('pageSize') || '10');
+    
+    const result = await fetchConfigsByUuidFromDB(uuid, env, {
+        protocol,
+        domain_hosting,
+        page,
+        pageSize
+    });
+    
+    return jsonResponse({
+        uuid,
+        configs: result.results,
+        pagination: {
+            page: result.page,
+            pageSize: result.pageSize,
+            total: result.total,
+            totalPages: result.totalPages
+        },
+        filters: {
+            protocol,
+            domain_hosting
+        }
+    });
 }
 
 async function handleGetUuidStats(uuid, env) {
@@ -369,9 +471,33 @@ async function handleGetUuidStats(uuid, env) {
 }
 
 async function handleDelete(type, value, env) {
-    const sql = type === 'uuid' ? 'DELETE FROM configs WHERE uuid = ?' : 'DELETE FROM configs WHERE id = ?';
-    await env.DB.prepare(sql).bind(value).run();
-    return jsonResponse({ success: true });
+    if (type === 'batch') {
+        // 批量删除
+        try {
+            const ids = JSON.parse(value);
+            if (!Array.isArray(ids) || ids.length === 0) {
+                return jsonResponse({ error: '无效的ID列表' }, 400);
+            }
+            
+            const result = await deleteConfigsByIds(env, ids);
+            if (!result.success) {
+                return jsonResponse({ error: result.error }, 500);
+            }
+            
+            return jsonResponse({ 
+                success: true, 
+                deleted: result.deleted,
+                message: `成功删除 ${result.deleted} 条配置`
+            });
+        } catch (e) {
+            return jsonResponse({ error: '无效的请求数据' }, 400);
+        }
+    } else {
+        // 单个删除
+        const sql = type === 'uuid' ? 'DELETE FROM configs WHERE uuid = ?' : 'DELETE FROM configs WHERE id = ?';
+        await env.DB.prepare(sql).bind(value).run();
+        return jsonResponse({ success: true });
+    }
 }
 
 // 订阅输出 (Raw Base64)
@@ -424,7 +550,8 @@ function replaceAddressesInConfigs(baseConfigsData, addressList) {
         if (configType === 'trojan' || configType === 'vless' ||
             configType === 'shadowsocks' || configType === 'hysteria2' ||
             configType === 'tuic' || configType === 'anytls' ||
-            configType === 'any-reality' || configType === 'reality') {
+            configType === 'any-reality' || configType === 'reality' ||
+            configType === 'socks5') {
 
             const addressMatch = baseConfig.match(addressExtractionRegex);
             if (!addressMatch) {
@@ -466,7 +593,8 @@ function replaceAddressesInConfigs(baseConfigsData, addressList) {
             if (configType === 'trojan' || configType === 'vless' ||
                 configType === 'shadowsocks' || configType === 'hysteria2' ||
                 configType === 'tuic' || configType === 'anytls' ||
-                configType === 'any-reality' || configType === 'reality') {
+                configType === 'any-reality' || configType === 'reality' ||
+                configType === 'socks5') {
 
                 try {
                     const url = new URL(processedBaseConfig);
@@ -1067,6 +1195,28 @@ function convertToClashFormat(configStr) {
         }
     }
 
+    // 处理Socks5配置
+    if (protocol === 'socks5') {
+        try {
+            const url = new URL(configStr);
+            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `Socks5-${url.hostname}-${url.port}`;
+
+            const clashConfig = {
+                name: name,
+                type: 'socks5',
+                server: url.hostname,
+                port: parseInt(url.port) || 1080,
+                username: url.username || '',
+                password: url.password || ''
+            };
+
+            return clashConfig;
+        } catch (error) {
+            console.error('转换Socks5配置失败:', error, configStr);
+            return null;
+        }
+    }
+
     return null;
 }
 
@@ -1263,7 +1413,7 @@ export default {
 
                 // ===== API: 配置管理 =====
                 const uuidMatch = manageUUID.exec(url);
-                if (uuidMatch) return await handleGetConfigs(uuidMatch.pathname.groups.uuid, env);
+                if (uuidMatch) return await handleGetConfigs(uuidMatch.pathname.groups.uuid, env, url);
 
                 // ===== API: UUID访问统计 =====
                 const statsMatch = uuidStats.exec(url);
@@ -1342,6 +1492,16 @@ export default {
                 if (idMatch) return await handleDelete('id', idMatch.pathname.groups.id, env);
                 const uuidMatch = manageUUID.exec(url);
                 if (uuidMatch) return await handleDelete('uuid', uuidMatch.pathname.groups.uuid, env);
+                
+                // ===== API: 批量删除配置 =====
+                if (path === '/manage/configs/batch') {
+                    const body = await request.json();
+                    const { ids } = body;
+                    if (!ids || !Array.isArray(ids)) {
+                        return jsonResponse({ error: '无效的请求数据，需要ids数组' }, 400);
+                    }
+                    return await handleDelete('batch', JSON.stringify(ids), env);
+                }
             }
 
             return new Response('404 Not Found', { status: 404 });
@@ -1646,6 +1806,33 @@ th { font-weight: bold; color: #3d474d; background-color: #f0f2f5; }
   color: #ff6600;
 }
 
+/* Table Checkbox Styles */
+.table-checkbox-cell { width: 40px; text-align: center; }
+.table-checkbox-cell input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
+.select-all-checkbox { margin-right: 5px; }
+
+/* Filter and Pagination Styles */
+.filter-bar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; align-items: center; }
+.filter-item { display: flex; align-items: center; gap: 5px; }
+.filter-label { font-size: 0.85rem; color: #5a666d; font-weight: 500; white-space: nowrap; }
+.filter-select { padding: 6px 10px; border: 2px solid #89949B; border-radius: 4px; background: #fff; font-size: 0.85rem; }
+.filter-select:focus { outline: none; border-color: #3d474d; }
+.pagination-container { display: flex; justify-content: space-between; align-items: center; margin-top: 15px; padding-top: 15px; border-top: 1px solid #E8EBED; }
+.pagination-info { font-size: 0.85rem; color: #89949B; }
+.pagination-controls { display: flex; gap: 5px; }
+.pagination-btn { padding: 6px 12px; background: #e8ebed; border: 2px solid #89949B; border-radius: 4px; color: #5a666d; cursor: pointer; font-size: 0.85rem; }
+.pagination-btn:hover:not(:disabled) { background: #89949B; color: white; }
+.pagination-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.page-number { padding: 6px 12px; background: #f8f9fa; border: 2px solid #E8EBED; border-radius: 4px; font-size: 0.85rem; color: #5a666d; }
+.page-size-select { padding: 6px 10px; border: 2px solid #89949B; border-radius: 4px; background: #fff; font-size: 0.85rem; }
+
+/* Bulk Actions Styles */
+.bulk-actions-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding: 10px; background: #f8f9fa; border: 1px solid #E8EBED; border-radius: 4px; }
+.selected-count { font-size: 0.85rem; color: #5a666d; font-weight: 500; }
+.bulk-delete-btn { padding: 6px 12px; background: #d44; color: white; border: 2px solid #d44; border-radius: 4px; font-size: 0.85rem; cursor: pointer; }
+.bulk-delete-btn:hover:not(:disabled) { background: #c33; border-color: #c33; }
+.bulk-delete-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
 /* Responsive Design */
 @media (max-width: 768px) { 
   html { font-size: 100%; } 
@@ -1656,6 +1843,10 @@ th { font-weight: bold; color: #3d474d; background-color: #f0f2f5; }
   .card h2 { font-size: 1.3rem; } 
   .nav-btn { padding: 9px 12px; font-size: 0.9rem; } 
   .tab-btn { padding: 10px 16px; font-size: 0.9rem; }
+  .filter-bar { flex-direction: column; align-items: stretch; }
+  .filter-item { width: 100%; }
+  .bulk-actions-bar { flex-direction: column; gap: 10px; align-items: stretch; }
+  .pagination-container { flex-direction: column; gap: 10px; align-items: stretch; }
 }
 `;
 
@@ -2046,10 +2237,73 @@ const unifiedPageHtmlContent = `
 
         <div id="manageResultCard" class="card hidden">
           <h2>2. 配置列表</h2>
-          <div style="text-align:right; margin-bottom:10px;">
-            <button class="nav-btn" style="background:#d44; color:#fff; border-color:#d44;" onclick="deleteAll()">删除本组所有</button>
+          
+          <!-- 筛选栏 -->
+          <div class="filter-bar">
+            <div class="filter-item">
+              <span class="filter-label">协议:</span>
+              <select id="protocolFilter" class="filter-select" onchange="applyFilters()">
+                <option value="all">全部</option>
+                <option value="vmess">VMess</option>
+                <option value="vless">VLESS</option>
+                <option value="trojan">Trojan</option>
+                <option value="shadowsocks">Shadowsocks</option>
+                <option value="hysteria2">Hysteria2</option>
+                <option value="tuic">Tuic</option>
+                <option value="anytls">AnyTLS</option>
+                <option value="any-reality">Any-reality</option>
+                <option value="reality">Reality</option>
+                <option value="socks5">Socks5</option>
+              </select>
+            </div>
+            <div class="filter-item">
+              <span class="filter-label">域名托管:</span>
+              <select id="hostingFilter" class="filter-select" onchange="applyFilters()">
+                <option value="all">全部</option>
+                <option value="Cloudflare">Cloudflare</option>
+                <option value="阿里ESA">阿里ESA</option>
+                <option value="腾讯Edgeone">腾讯Edgeone</option>
+                <option value="AWS Cloudfront">AWS Cloudfront</option>
+                <option value="Gcore">Gcore</option>
+                <option value="Fastly">Fastly</option>
+                <option value="CacheFly">CacheFly</option>
+                <option value="LightCDN">LightCDN</option>
+                <option value="Vercel">Vercel</option>
+                <option value="Netlify">Netlify</option>
+                <option value="无">无</option>
+                <option value="其他">其他</option>
+              </select>
+            </div>
+            <div class="filter-item">
+              <span class="filter-label">每页:</span>
+              <select id="pageSizeSelect" class="filter-select" onchange="changePageSize()">
+                <option value="5">5条</option>
+                <option value="10" selected>10条</option>
+                <option value="20">20条</option>
+                <option value="50">50条</option>
+                <option value="100">100条</option>
+              </select>
+            </div>
           </div>
+          
+          <!-- 批量操作栏 -->
+          <div id="bulkActionsBar" class="bulk-actions-bar hidden">
+            <div class="selected-count" id="selectedCount">已选择 <span id="selectedCountNum">0</span> 条</div>
+            <button id="bulkDeleteBtn" class="bulk-delete-btn" onclick="deleteSelectedConfigs()" disabled>批量删除</button>
+          </div>
+          
+          <!-- 配置列表表格 -->
           <div id="queryResultsContainer"></div>
+          
+          <!-- 分页控件 -->
+          <div id="paginationContainer" class="pagination-container hidden">
+            <div class="pagination-info" id="paginationInfo">第 1 页，共 1 页，总计 0 条</div>
+            <div class="pagination-controls">
+              <button id="prevPageBtn" class="pagination-btn" onclick="changePage(-1)" disabled>上一页</button>
+              <span id="currentPage" class="page-number">1</span>
+              <button id="nextPageBtn" class="pagination-btn" onclick="changePage(1)" disabled>下一页</button>
+            </div>
+          </div>
         </div>
 
         <div id="manageStatsCard" class="card hidden">
@@ -2147,6 +2401,15 @@ trojan://..." rows="4"></textarea>
       '无': 'hosting-none',
       '其他': 'hosting-other'
     };
+    
+    // Config management pagination variables
+    let currentPage = 1;
+    let currentPageSize = 10;
+    let currentTotal = 0;
+    let currentTotalPages = 0;
+    let currentProtocolFilter = 'all';
+    let currentHostingFilter = 'all';
+    let selectedConfigs = new Set();
     
     // ============================================
     // Local Storage Functions (本地存储功能)
@@ -2696,6 +2959,7 @@ trojan://..." rows="4"></textarea>
     // Config Management Tab Functions
     // ============================================
     
+    // 更新后的manageQueryByUuid函数，支持筛选和分页
     async function manageQueryByUuid(){
       const b = document.getElementById('queryBtn'); 
       setButtonLoading(b, true);
@@ -2718,31 +2982,74 @@ trojan://..." rows="4"></textarea>
       document.getElementById('manageSubLinkDisplay').style.display = 'flex';
       document.getElementById('manageSubLinkDisplay').classList.remove('hidden');
       
+      // 获取筛选参数
+      const protocolFilter = document.getElementById('protocolFilter').value;
+      const hostingFilter = document.getElementById('hostingFilter').value;
+      const pageSize = parseInt(document.getElementById('pageSizeSelect').value);
+      
+      // 更新当前筛选状态
+      currentProtocolFilter = protocolFilter;
+      currentHostingFilter = hostingFilter;
+      currentPageSize = pageSize;
+      
+      // 构建查询URL
+      let queryUrl = \`\${WORKER_DOMAIN}/manage/configs/\${u}?page=\${currentPage}&pageSize=\${pageSize}\`;
+      
+      if (protocolFilter !== 'all') {
+        queryUrl += \`&protocol=\${encodeURIComponent(protocolFilter)}\`;
+      }
+      
+      if (hostingFilter !== 'all') {
+        queryUrl += \`&domain_hosting=\${encodeURIComponent(hostingFilter)}\`;
+      }
+      
       try{
-        const r = await fetch(\`/manage/configs/\${u}\`);
+        const r = await fetch(queryUrl);
         const c = document.getElementById('queryResultsContainer');
         if(r.status === 404){ 
           c.innerHTML='<p style="padding:20px;text-align:center;color:#89949B">未找到配置，请直接添加。</p>'; 
+          document.getElementById('paginationContainer').classList.add('hidden');
+          document.getElementById('bulkActionsBar').classList.add('hidden');
         } else {
           const d = await r.json();
-          let h = '<div class="table-container"><table><thead><tr><th>备注</th><th>协议</th><th>域名托管</th><th>配置</th><th>操作</th></tr></thead><tbody>';
-          d.configs.forEach(Row=>{
-            const sc = JSON.stringify(Row).replace(/"/g, '&quot;');
-            const hosting = Row.domain_hosting || 'Cloudflare';
-            const hostingClass = hostingStyleMap[hosting] || 'hosting-other';
-            h+=\`<tr>
-              <td>\${Row.remark||'-'}</td>
-              <td>\${Row.protocol}</td>
-              <td class="domain-hosting-cell"><span class="hosting-badge \${hostingClass}">\${hosting}</span></td>
-              <td class="config-data-cell">\${Row.config_data.substring(0,40)}...</td>
-              <td class="actions-cell">
-                <button class="nav-btn" data-config="\${sc}" onclick="openEditModal(JSON.parse(this.dataset.config))">编辑</button>
-                <button class="nav-btn" style="background:#d44;color:#fff;border-color:#d44" onclick="delOne(\${Row.id})">删除</button>
-              </td>
-            </tr>\`;
-          });
+          
+          // 更新分页信息
+          currentTotal = d.pagination.total;
+          currentTotalPages = d.pagination.totalPages;
+          
+          // 渲染表格
+          let h = '<div class="table-container"><table><thead><tr><th class="table-checkbox-cell"><input type="checkbox" id="selectAllCheckbox" class="select-all-checkbox" onclick="toggleSelectAll()"></th><th>备注</th><th>协议</th><th>域名托管</th><th>配置</th><th>操作</th></tr></thead><tbody>';
+          
+          if (!d.configs || d.configs.length === 0) {
+            h += '<tr><td colspan="6" style="text-align:center;padding:20px;color:#89949B;">未找到符合条件的配置</td></tr>';
+          } else {
+            d.configs.forEach(Row=>{
+              const sc = JSON.stringify(Row).replace(/"/g, '&quot;');
+              const hosting = Row.domain_hosting || 'Cloudflare';
+              const hostingClass = hostingStyleMap[hosting] || 'hosting-other';
+              const isSelected = selectedConfigs.has(Row.id) ? 'checked' : '';
+              
+              h+=\`<tr>
+                <td class="table-checkbox-cell"><input type="checkbox" class="config-checkbox" data-id="\${Row.id}" \${isSelected} onchange="toggleConfigSelection(\${Row.id}, this.checked)"></td>
+                <td>\${Row.remark||'-'}</td>
+                <td>\${Row.protocol}</td>
+                <td class="domain-hosting-cell"><span class="hosting-badge \${hostingClass}">\${hosting}</span></td>
+                <td class="config-data-cell">\${Row.config_data.substring(0,40)}...</td>
+                <td class="actions-cell">
+                  <button class="nav-btn" data-config="\${sc}" onclick="openEditModal(JSON.parse(this.dataset.config))">编辑</button>
+                  <button class="nav-btn" style="background:#d44;color:#fff;border-color:#d44" onclick="delOne(\${Row.id})">删除</button>
+                </td>
+              </tr>\`;
+            });
+          }
           h+='</tbody></table></div>'; 
           c.innerHTML = h;
+          
+          // 更新分页控件
+          updatePaginationControls();
+          
+          // 更新批量操作栏
+          updateBulkActionsBar();
         }
         
         // Load statistics
@@ -2752,6 +3059,138 @@ trojan://..." rows="4"></textarea>
         showToast(e.message,'error'); 
       } finally{ 
         setButtonLoading(b, false, b.innerHTML); 
+      }
+    }
+    
+    // 应用筛选
+    function applyFilters() {
+      currentPage = 1; // 重置到第一页
+      selectedConfigs.clear(); // 清空选择
+      manageQueryByUuid();
+    }
+    
+    // 更改每页显示数量
+    function changePageSize() {
+      const newPageSize = parseInt(document.getElementById('pageSizeSelect').value);
+      if (newPageSize !== currentPageSize) {
+        currentPageSize = newPageSize;
+        currentPage = 1; // 重置到第一页
+        selectedConfigs.clear(); // 清空选择
+        manageQueryByUuid();
+      }
+    }
+    
+    // 更改页码
+    function changePage(delta) {
+      const newPage = currentPage + delta;
+      if (newPage >= 1 && newPage <= currentTotalPages) {
+        currentPage = newPage;
+        manageQueryByUuid();
+      }
+    }
+    
+    // 更新分页控件
+    function updatePaginationControls() {
+      const paginationContainer = document.getElementById('paginationContainer');
+      const prevPageBtn = document.getElementById('prevPageBtn');
+      const nextPageBtn = document.getElementById('nextPageBtn');
+      const currentPageSpan = document.getElementById('currentPage');
+      const paginationInfo = document.getElementById('paginationInfo');
+      
+      if (currentTotal === 0) {
+        paginationContainer.classList.add('hidden');
+        return;
+      }
+      
+      paginationContainer.classList.remove('hidden');
+      prevPageBtn.disabled = currentPage <= 1;
+      nextPageBtn.disabled = currentPage >= currentTotalPages;
+      currentPageSpan.textContent = currentPage;
+      paginationInfo.textContent = \`第 \${currentPage} 页，共 \${currentTotalPages} 页，总计 \${currentTotal} 条\`;
+    }
+    
+    // 配置选择相关函数
+    function toggleConfigSelection(id, checked) {
+      if (checked) {
+        selectedConfigs.add(id);
+      } else {
+        selectedConfigs.delete(id);
+        // 取消全选复选框
+        document.getElementById('selectAllCheckbox').checked = false;
+      }
+      updateBulkActionsBar();
+    }
+    
+    function toggleSelectAll() {
+      const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+      const configCheckboxes = document.querySelectorAll('.config-checkbox');
+      const isChecked = selectAllCheckbox.checked;
+      
+      selectedConfigs.clear();
+      
+      if (isChecked) {
+        configCheckboxes.forEach(checkbox => {
+          const id = parseInt(checkbox.dataset.id);
+          selectedConfigs.add(id);
+          checkbox.checked = true;
+        });
+      } else {
+        configCheckboxes.forEach(checkbox => {
+          checkbox.checked = false;
+        });
+      }
+      
+      updateBulkActionsBar();
+    }
+    
+    // 更新批量操作栏
+    function updateBulkActionsBar() {
+      const bulkActionsBar = document.getElementById('bulkActionsBar');
+      const selectedCountNum = document.getElementById('selectedCountNum');
+      const bulkDeleteBtn = document.getElementById('bulkDeleteBtn');
+      const selectedCount = selectedConfigs.size;
+      
+      if (selectedCount > 0) {
+        bulkActionsBar.classList.remove('hidden');
+        selectedCountNum.textContent = selectedCount;
+        bulkDeleteBtn.disabled = false;
+      } else {
+        bulkActionsBar.classList.add('hidden');
+        bulkDeleteBtn.disabled = true;
+      }
+    }
+    
+    // 批量删除配置
+    async function deleteSelectedConfigs() {
+      if (selectedConfigs.size === 0) {
+        showToast('请先选择要删除的配置', 'error');
+        return;
+      }
+      
+      if (!confirm(\`确定要删除选中的 \${selectedConfigs.size} 条配置吗？\`)) {
+        return;
+      }
+      
+      const ids = Array.from(selectedConfigs);
+      
+      try {
+        const response = await fetch(\`\${WORKER_DOMAIN}/manage/configs/batch\`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          showToast(\`成功删除 \${result.deleted} 条配置\`, 'success');
+          selectedConfigs.clear();
+          manageQueryByUuid();
+        } else {
+          showToast(result.error || '删除失败', 'error');
+        }
+      } catch (error) {
+        showToast('网络错误: ' + error.message, 'error');
       }
     }
     
@@ -2791,7 +3230,9 @@ trojan://..." rows="4"></textarea>
     
     async function delOne(id){ 
       if(confirm('确认删除?')) { 
-        await fetch(\`/manage/configs/id/\${id}\`,{method:'DELETE'}); 
+        await fetch(\`\${WORKER_DOMAIN}/manage/configs/id/\${id}\`,{method:'DELETE'}); 
+        // 如果该配置被选中，从选中列表中移除
+        selectedConfigs.delete(id);
         manageQueryByUuid(); 
       } 
     }
@@ -2799,7 +3240,8 @@ trojan://..." rows="4"></textarea>
     async function deleteAll(){ 
       const u = document.getElementById('queryUuidInput').value; 
       if(confirm('确认清空所有配置?')) { 
-        await fetch(\`/manage/configs/\${u}\`,{method:'DELETE'}); 
+        await fetch(\`\${WORKER_DOMAIN}/manage/configs/\${u}\`,{method:'DELETE'}); 
+        selectedConfigs.clear();
         manageQueryByUuid(); 
       } 
     }
@@ -2958,7 +3400,7 @@ trojan://..." rows="4"></textarea>
       
       const days = document.getElementById('statsDays').value;
       try {
-        const response = await fetch(\`/manage/stats/\${currentUuid}?days=\${days}\`);
+        const response = await fetch(\`\${WORKER_DOMAIN}/manage/stats/\${currentUuid}?days=\${days}\`);
         const data = await response.json();
         
         if (data.success) {
@@ -3500,4 +3942,3 @@ trojan://..." rows="4"></textarea>
 </body>
 </html>
 `;
-
