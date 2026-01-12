@@ -1,4 +1,4 @@
-# 生成时间: 2026-01-06
+# 生成时间: 2026-01-10
 # 模板类型: 默认模板
 
 # ==========================================================
@@ -151,28 +151,26 @@ proxy-groups:
 
 
   # --- 8. 底层自动选优策略 (供上方调用)  ---
-  - {name: ⚡ 自动选择, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连)).)*$"}
+  - {name: ⚡ 自动选择, type: url-test, url: 'http://cp.cloudflare.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
   - {name: 🌐 全部节点, type: select, include-all: true}
  
   # 地区分组自动筛选 (基于正则匹配节点名)
-  - {name: 🇭🇰 香港自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)香港|HK|Hong Kong|HongKong|HKSAR|HKG|Hkg|Hk"}
-  - {name: 🇯🇵 日本自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)日本|JP|Japan|Tokyo|Osaka|Saitama|Kyoto|JP-|Japan|TYO|OSA|东京|大阪|埼玉|京都"}
-  - {name: 🇺🇸 美国自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)美国|US|USA|United States|America|States|US-|Virginia|VA|Ashburn|弗吉尼亚|维吉尼亚|阿什本|California|CA|Los Angeles|San Francisco|San Jose|Santa Clara|Santa Monica|Sacramento|Fremont|洛杉矶|旧金山|圣何塞|加州|New York|NY|New Jersey|NJ|纽约|新泽西|Texas|TX|Dallas|Houston|Austin|德克萨斯|德州|达拉斯|休斯顿|Washington|WA|Seattle|西雅图|Chicago|IL|芝加哥|Florida|FL|Miami|佛罗里达|迈阿密|Oregon|OR|Portland|波特兰|Nevada|NV|Las Vegas|拉斯维加斯|Arizona|AZ|Phoenix|凤凰城|Georgia|Atlanta|亚特兰大|Utah|Salt Lake|盐湖城|Boston|波士顿"}
-  - {name: 🇸🇬 新加坡自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)新加坡|SG|Singapore|Lion City|SGP|SIN|SGP|狮城"}
-  - {name: 🇹🇼 台湾自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)台湾|TW|Taiwan|Taipei|TPE|Taichung|Hsinchu|Republic of China|ROC|TW-|台北|台中|新竹"}
-  - {name: 🇩🇪 德国自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)德国|DE|Germany|Deutschland|Frankfurt|Berlin|Munich|FRG|DE-"}
-  - {name: 🇨🇳 中国自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH"}
+  - {name: 🇭🇰 香港自动, type: url-test, url: 'http://www.google.com.hk/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)香港|HK|Hong Kong|HongKong|HKSAR|HKG|Hkg|Hk"}
+  - {name: 🇯🇵 日本自动, type: url-test, url: 'http://www.google.co.jp/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)日本|JP|Japan|Tokyo|Osaka|Saitama|Kyoto|JP-|Japan|TYO|OSA|东京|大阪|埼玉|京都"}
+  - {name: 🇺🇸 美国自动, type: url-test, url: 'http://www.google.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)美国|US|USA|United States|America|States|US-|Virginia|VA|Ashburn|弗吉尼亚|维吉尼亚|阿什本|California|CA|Los Angeles|San Francisco|San Jose|Santa Clara|Santa Monica|Sacramento|Fremont|洛杉矶|旧金山|圣何塞|加州|New York|NY|New Jersey|NJ|纽约|新泽西|Texas|TX|Dallas|Houston|Austin|德克萨斯|德州|达拉斯|休斯顿|Washington|WA|Seattle|西雅图|Chicago|IL|芝加哥|Florida|FL|Miami|佛罗里达|迈阿密|Oregon|OR|Portland|波特兰|Nevada|NV|Las Vegas|拉斯维加斯|Arizona|AZ|Phoenix|凤凰城|Georgia|Atlanta|亚特兰大|Utah|Salt Lake|盐湖城|Boston|波士顿"}
+  - {name: 🇸🇬 新加坡自动, type: url-test, url: 'http://cp.cloudflare.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)新加坡|SG|Singapore|Lion City|SGP|SIN|SGP|狮城"}
+  - {name: 🇹🇼 台湾自动, type: url-test, url: 'http://www.google.com.tw/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)台湾|TW|Taiwan|Taipei|TPE|Taichung|Hsinchu|Republic of China|ROC|TW-|台北|台中|新竹"}
+  - {name: 🇩🇪 德国自动, type: url-test, url: 'http://www.google.de/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)德国|DE|Germany|Deutschland|Frankfurt|Berlin|Munich|FRG|DE-"}
+  - {name: 🇨🇳 中国自动, type: url-test, url: 'http://connect.rom.miui.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH"}
 
 
 # ==========================================================
 # 规则匹配 (Rules)
 # ==========================================================
 rules:
-# 1. 拦截与私有网络
+# 1. 广告拦截
   - RULE-SET,category-ads-all,🚫 广告拦截
-  - RULE-SET,private_domain,🎯 直连
-  - RULE-SET,custom_direct,🎯 直连
-  - GEOIP,LAN,🎯 直连
+  
 # 2. AI 规则
   - RULE-SET,openai,🤖 OpenAI
   - RULE-SET,gemini,✨ Gemini
@@ -181,12 +179,14 @@ rules:
   
 # 3. 社交与视频
   - RULE-SET,telegram_domain,📲 Telegram
+  - RULE-SET,telegram_ip,📲 Telegram,no-resolve
   - RULE-SET,facebook_domain,🌏 Meta
   - RULE-SET,instagram_domain,🌏 Meta
   - RULE-SET,twitter_domain,🐦 Twitter
   - RULE-SET,discord_domain,💬 Discord
   - RULE-SET,youtube_domain,🎬 YouTube
   - RULE-SET,netflix_domain,🎥 Netflix
+  - RULE-SET,netflix_ip,🎥 Netflix,no-resolve
   - RULE-SET,disney_domain,🎞️ Disney+
   - RULE-SET,tiktok_domain,🎵 TikTok
   - RULE-SET,primevideo_domain,📺 更多流媒体
@@ -202,24 +202,25 @@ rules:
   - RULE-SET,alipay_domain,🇨🇳 中国大陆
   - RULE-SET,cn_domain,🇨🇳 中国大陆
   - RULE-SET,cn_ip,🇨🇳 中国大陆,no-resolve
+  
 # 5. 通用服务
   - RULE-SET,github_domain,🐱 GitHub
   - RULE-SET,google_domain,🔍 Google
+  - RULE-SET,google_ip,🔍 Google,no-resolve
   - RULE-SET,onedrive_domain,🟦 Microsoft
   - RULE-SET,microsoft_domain,🟦 Microsoft
   - RULE-SET,apple_domain,🍎 Apple
+  - RULE-SET,speedtest_domain,🚀 Speedtest
+  - RULE-SET,paypal_domain,💳 PayPal
+  
 # 6. 游戏规则
   - RULE-SET,steam_domain,🎮 Steam
   - RULE-SET,ubisoft_domain,🎮 Ubisoft
   - RULE-SET,epic_domain,🎮 Epic
   - RULE-SET,ea_domain,🎮 EA
   - RULE-SET,sony_domain,🎮 PlayStation
-  - RULE-SET,speedtest_domain,🚀 Speedtest
-  - RULE-SET,paypal_domain,💳 PayPal
-  - RULE-SET,proxylite,🚀 默认代理
-  - RULE-SET,gfw_domain,🚀 默认代理
-  
-  # 7.地区分流直接调用自动选择分组
+
+# 7.地区分流直接调用自动选择分组
   - GEOIP,HK,🇭🇰 香港自动
   - GEOIP,TW,🇹🇼 台湾自动
   - GEOIP,JP,🇯🇵 日本自动
@@ -227,11 +228,15 @@ rules:
   - GEOIP,US,🇺🇸 美国自动
   - GEOIP,DE,🇩🇪 德国自动
 
-  # 8.境外 IP 类规则与兜底
-  - RULE-SET,google_ip,🔍 Google,no-resolve
-  - RULE-SET,telegram_ip,📲 Telegram,no-resolve
-  - RULE-SET,netflix_ip,🎥 Netflix,no-resolve
+# 8.兜底
+  - RULE-SET,gfw_domain,🚀 默认代理
   - MATCH,🐟 漏网之鱼
+
+# 9. 代理补充列表
+  - RULE-SET,proxylite,🚀 默认代理
+  - RULE-SET,private_domain,🎯 直连
+  - RULE-SET,custom_direct,🎯 直连
+  - GEOIP,LAN,🎯 直连
 
 # ==========================================================
 # 规则源

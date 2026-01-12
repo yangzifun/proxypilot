@@ -101,15 +101,15 @@ proxy-groups:
   - {name: 🚫 广告拦截, type: select, proxies: [REJECT, DIRECT]}
 
   # --- 地区自动选优策略 ---
-  - {name: ⚡ 自动选择, type: url-test, include-all: true, filter: "(?i)上海|北京|深圳|广州|杭州|江苏|浙江|中国|CN|China", url: "http://www.gstatic.com/generate_204", interval: 300}
+  - {name: ⚡ 自动选择, type: url-test, include-all: true, filter: "(?i)上海|北京|深圳|广州|杭州|江苏|浙江|中国|CN|China", url: "http://cp.cloudflare.com/generate_204", interval: 300}
   
-  - {name: 🏙️ 上海自动, type: url-test, include-all: true, filter: "(?i)上海|SH|Shanghai", url: "http://www.gstatic.com/generate_204", interval: 300}
+  - {name: 🏙️ 上海自动, type: url-test, include-all: true, filter: "(?i)上海|SH|Shanghai", url: "http://connect.rom.miui.com/generate_204", interval: 300}
   
-  - {name: 🏛️ 北京自动, type: url-test, include-all: true, filter: "(?i)北京|BJ|Beijing", url: "http://www.gstatic.com/generate_204", interval: 300}
+  - {name: 🏛️ 北京自动, type: url-test, include-all: true, filter: "(?i)北京|BJ|Beijing", url: "http://connect.rom.miui.com/generate_204", interval: 300}
   
-  - {name: 🌆 深圳自动, type: url-test, include-all: true, filter: "(?i)深圳|SZ|Shenzhen", url: "http://www.gstatic.com/generate_204", interval: 300}
+  - {name: 🌆 深圳自动, type: url-test, include-all: true, filter: "(?i)深圳|SZ|Shenzhen", url: "http://connect.rom.miui.com/generate_204", interval: 300}
   
-  - {name: 🇭🇰 香港自动, type: url-test, include-all: true, filter: "(?i)香港|HK|HongKong", url: "https://www.google.com/generate_204", interval: 300}
+  - {name: 🇭🇰 香港自动, type: url-test, include-all: true, filter: "(?i)香港|HK|HongKong", url: "http://www.google.com.hk/generate_204", interval: 300}
 
   - {name: 🎯 直连, type: select, proxies: [DIRECT]}
 

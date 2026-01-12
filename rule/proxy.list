@@ -24,3 +24,10 @@ IP-CIDR,1.0.0.1/32,no-resolve
 IP-CIDR,185.222.222.222/32,no-resolve
 IP-CIDR,208.67.222.222/32,no-resolve
 IP-CIDR,208.67.220.220/32,no-resolve
+# 测速接口补充
+DOMAIN-SUFFIX,cp.cloudflare.com
+DOMAIN-SUFFIX,connectivitycheck.gstatic.com
+DOMAIN-SUFFIX,connectivitycheck.android.com
+DOMAIN-SUFFIX,clients3.google.com
+DOMAIN-SUFFIX,edge.microsoft.com
+DOMAIN-SUFFIX,msftconnecttest.com
