@@ -103,7 +103,7 @@ function getClientIp(request) {
 //  DATABASE OPERATIONS (数据库操作)
 // =================================================================
 
-// 获取配置列表（支持筛选和分页）
+// 获取配置列表（支持筛选、分页和全部获取）
 async function fetchConfigsByUuidFromDB(uuid, env, options = {}) {
     const db = env.DB;
     if (!db) return { results: [], total: 0 };
@@ -130,26 +130,40 @@ async function fetchConfigsByUuidFromDB(uuid, env, options = {}) {
         const countResult = await db.prepare(countQuery).bind(...params).first();
         const total = countResult?.total || 0;
         
-        // 获取分页数据
+        // 构建查询
         let query = `SELECT id, config_data, protocol, remark, domain_hosting FROM configs ${whereClause} ORDER BY id ASC`;
         
-        // 添加分页参数
-        const page = options.page || 1;
-        const pageSize = options.pageSize || 10;
-        const offset = (page - 1) * pageSize;
-        
-        query += ` LIMIT ? OFFSET ?`;
-        params.push(pageSize, offset);
-        
-        const { results } = await db.prepare(query).bind(...params).all();
-        
-        return {
-            results,
-            total,
-            page,
-            pageSize,
-            totalPages: Math.ceil(total / pageSize)
-        };
+        // 检查是否需要获取所有数据（用于订阅接口）
+        if (options.getAll) {
+            // 获取所有数据，不分页
+            const { results } = await db.prepare(query).bind(...params).all();
+            
+            return {
+                results,
+                total,
+                page: 1,
+                pageSize: total,
+                totalPages: 1
+            };
+        } else {
+            // 获取分页数据
+            const page = options.page || 1;
+            const pageSize = options.pageSize || 10;
+            const offset = (page - 1) * pageSize;
+            
+            query += ` LIMIT ? OFFSET ?`;
+            params.push(pageSize, offset);
+            
+            const { results } = await db.prepare(query).bind(...params).all();
+            
+            return {
+                results,
+                total,
+                page,
+                pageSize,
+                totalPages: Math.ceil(total / pageSize)
+            };
+        }
         
     } catch (e) {
         console.error(`Error fetching configs for UUID ${uuid}:`, e.message);
@@ -503,7 +517,7 @@ async function handleDelete(type, value, env) {
 // 订阅输出 (Raw Base64)
 async function handleRawSubscription(uuid, env) {
     if (!uuid) return jsonResponse({ error: 'UUID Required' }, 400);
-    const configs = await fetchConfigsByUuidFromDB(uuid, env);
+    const configs = await fetchConfigsByUuidFromDB(uuid, env, { getAll: true });
     if (!configs.results || configs.results.length === 0) return new Response("UUID Not Found or Empty", { status: 404 });
 
     const configList = configs.results.map(c => c.config_data);
@@ -643,7 +657,7 @@ async function generateConfigs(request, env) {
         let baseConfigsData = [];
 
         if (baseConfigUuid) {
-            const configsFromDb = await fetchConfigsByUuidFromDB(baseConfigUuid, env);
+            const configsFromDb = await fetchConfigsByUuidFromDB(baseConfigUuid, env, { getAll: true });
             // 修复：使用 configsFromDb.results 而不是 configsFromDb
             if (!configsFromDb.results || configsFromDb.results.length === 0) {
                 return jsonResponse({ error: `未找到 UUID 为 "${baseConfigUuid}" 的任何基础配置。` }, 404);
@@ -755,7 +769,7 @@ async function handleGetBatchAddresses(url, env) {
 async function handleGetBatchConfigs(uuid, urlParams, env, request) {
     if (!uuid) return jsonResponse({ error: 'UUID Required' }, 400);
 
-    const configsFromDb = await fetchConfigsByUuidFromDB(uuid, env);
+    const configsFromDb = await fetchConfigsByUuidFromDB(uuid, env, { getAll: true });
     // 修复：使用 .results
     if (configsFromDb.results.length === 0) return jsonResponse({ error: `UUID Not Found` }, 404);
     const baseConfigsData = configsFromDb.results;
@@ -1224,29 +1238,29 @@ function convertToClashFormat(configStr) {
 }
 
 // 生成完整的Clash配置文件
-async function generateClashConfig(request, env) {
-    try {
-        const url = new URL(request.url);
-        const uuid = url.searchParams.get('uuid');
-        const addressType = url.searchParams.get('type') || 'ip';
-        const ipType = url.searchParams.get('ipType') || 'all';
-        const carrier = url.searchParams.get('carrier') || 'all';
-        const template = url.searchParams.get('template') || '';
+    async function generateClashConfig(request, env) {
+        try {
+            const url = new URL(request.url);
+            const uuid = url.searchParams.get('uuid');
+            const addressType = url.searchParams.get('type') || 'ip';
+            const ipType = url.searchParams.get('ipType') || 'all';
+            const carrier = url.searchParams.get('carrier') || 'all';
+            const template = url.searchParams.get('template') || '';
 
-        if (!uuid) {
-            return jsonResponse({ error: '缺少必要参数: uuid' }, 400);
-        }
+            if (!uuid) {
+                return jsonResponse({ error: '缺少必要参数: uuid' }, 400);
+            }
 
-        if (!template) {
-            return jsonResponse({ error: '缺少必要参数: template' }, 400);
-        }
+            if (!template) {
+                return jsonResponse({ error: '缺少必要参数: template' }, 400);
+            }
 
-        const configsFromDb = await fetchConfigsByUuidFromDB(uuid, env);
-        // 修复：使用 .results
-        if (configsFromDb.results.length === 0) {
-            return jsonResponse({ error: `未找到 UUID 为 "${uuid}" 的配置` }, 404);
-        }
-        const baseConfigsData = configsFromDb.results;
+            const configsFromDb = await fetchConfigsByUuidFromDB(uuid, env, { getAll: true });
+            // 修复：使用 .results
+            if (configsFromDb.results.length === 0) {
+                return jsonResponse({ error: `未找到 UUID 为 "${uuid}" 的配置` }, 404);
+            }
+            const baseConfigsData = configsFromDb.results;
 
         let addressList = [];
         if (addressType === 'domain') {
