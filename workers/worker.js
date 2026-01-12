@@ -504,9 +504,9 @@ async function handleDelete(type, value, env) {
 async function handleRawSubscription(uuid, env) {
     if (!uuid) return jsonResponse({ error: 'UUID Required' }, 400);
     const configs = await fetchConfigsByUuidFromDB(uuid, env);
-    if (!configs || configs.length === 0) return new Response("UUID Not Found or Empty", { status: 404 });
+    if (!configs.results || configs.results.length === 0) return new Response("UUID Not Found or Empty", { status: 404 });
 
-    const configList = configs.map(c => c.config_data);
+    const configList = configs.results.map(c => c.config_data);
     return new Response(btoa(configList.join('\n')), {
         status: 200,
         headers: {
@@ -644,13 +644,14 @@ async function generateConfigs(request, env) {
 
         if (baseConfigUuid) {
             const configsFromDb = await fetchConfigsByUuidFromDB(baseConfigUuid, env);
-            if (configsFromDb.length === 0) {
+            // 修复：使用 configsFromDb.results 而不是 configsFromDb
+            if (!configsFromDb.results || configsFromDb.results.length === 0) {
                 return jsonResponse({ error: `未找到 UUID 为 "${baseConfigUuid}" 的任何基础配置。` }, 404);
             }
-            baseConfigsData = configsFromDb;
+            baseConfigsData = configsFromDb.results;
 
             const hostingStats = {};
-            configsFromDb.forEach(cfg => {
+            configsFromDb.results.forEach(cfg => {
                 const hosting = cfg.domain_hosting || 'Cloudflare';
                 hostingStats[hosting] = (hostingStats[hosting] || 0) + 1;
             });
@@ -754,8 +755,10 @@ async function handleGetBatchAddresses(url, env) {
 async function handleGetBatchConfigs(uuid, urlParams, env, request) {
     if (!uuid) return jsonResponse({ error: 'UUID Required' }, 400);
 
-    const baseConfigsData = await fetchConfigsByUuidFromDB(uuid, env);
-    if (baseConfigsData.length === 0) return jsonResponse({ error: `UUID Not Found` }, 404);
+    const configsFromDb = await fetchConfigsByUuidFromDB(uuid, env);
+    // 修复：使用 .results
+    if (configsFromDb.results.length === 0) return jsonResponse({ error: `UUID Not Found` }, 404);
+    const baseConfigsData = configsFromDb.results;
 
     const totalConfigs = baseConfigsData.length;
     const cloudflareConfigs = baseConfigsData.filter(cfg => cfg.domain_hosting === 'Cloudflare').length;
@@ -1238,10 +1241,12 @@ async function generateClashConfig(request, env) {
             return jsonResponse({ error: '缺少必要参数: template' }, 400);
         }
 
-        const baseConfigsData = await fetchConfigsByUuidFromDB(uuid, env);
-        if (baseConfigsData.length === 0) {
+        const configsFromDb = await fetchConfigsByUuidFromDB(uuid, env);
+        // 修复：使用 .results
+        if (configsFromDb.results.length === 0) {
             return jsonResponse({ error: `未找到 UUID 为 "${uuid}" 的配置` }, 404);
         }
+        const baseConfigsData = configsFromDb.results;
 
         let addressList = [];
         if (addressType === 'domain') {
@@ -1511,6 +1516,7 @@ export default {
         }
     }
 };
+
 // =================================================================
 //  UNIFIED FRONTEND PAGE (整合的前端页面)
 // =================================================================
@@ -1952,7 +1958,7 @@ const unifiedPageHtmlContent = `
       ⚙️ 配置管理
     </button>
     
-    <!-- UUID显示和下拉菜单（登录后显示） -->
+    <!-- UUID显示和二级菜单（登录后显示） -->
     <div id="uuidDropdownContainer" class="hidden" style="position: relative;">
       <button id="uuidDropdownBtn" class="uuid-dropdown-btn">
         <span id="uuidDisplay">UUID: ...</span>
@@ -1963,7 +1969,16 @@ const unifiedPageHtmlContent = `
         <div style="padding: 10px 15px; color: #5a666d; font-size: 0.9rem; border-bottom: 1px solid #E8EBED; word-break: break-all;">
           UUID: <span id="dropdownUuid"></span>
         </div>
-        <a href="javascript:void(0)" class="logout" onclick="logout()">退出登录</a>
+        <a href="javascript:void(0)" onclick="showUuidSubMenu()">管理菜单 ▸</a>
+        
+        <!-- UUID二级菜单 -->
+        <div id="uuidSubMenu" class="dropdown-menu" style="position: absolute; left: 100%; top: 0; display: none; min-width: 180px;">
+          <a href="javascript:void(0)" onclick="switchTab('manage')">配置管理</a>
+          <a href="javascript:void(0)" onclick="switchTab('clash')">订阅生成</a>
+          <a href="javascript:void(0)" onclick="loadUuidStats()">查看统计</a>
+          <hr style="margin: 5px 0; border: none; border-top: 1px solid #E8EBED;">
+          <a href="javascript:void(0)" class="logout" onclick="logout()">退出登录</a>
+        </div>
       </div>
     </div>
   </div>
