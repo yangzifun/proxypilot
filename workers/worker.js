@@ -1833,6 +1833,84 @@ th { font-weight: bold; color: #3d474d; background-color: #f0f2f5; }
 .bulk-delete-btn:hover:not(:disabled) { background: #c33; border-color: #c33; }
 .bulk-delete-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
+/* Dropdown Menu Styles */
+.dropdown-menu {
+  display: none;
+  position: absolute;
+  right: 0;
+  top: 100%;
+  background-color: #fff;
+  min-width: 220px;
+  box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+  border-radius: 4px;
+  padding: 10px 0;
+  margin-top: 5px;
+  border: 1px solid #E8EBED;
+  z-index: 1001;
+}
+
+.dropdown-menu a {
+  display: block;
+  padding: 10px 15px;
+  color: #5a666d;
+  text-decoration: none;
+  font-size: 0.9rem;
+  transition: background-color 0.3s;
+}
+
+.dropdown-menu a:hover {
+  background-color: #f8f9fa;
+}
+
+.dropdown-menu .logout {
+  color: #d44;
+}
+
+/* UUID Display */
+.uuid-display {
+  padding: 4px 12px;
+  background-color: #e8f4f8;
+  border: 1px solid #4a9;
+  border-radius: 4px;
+  color: #4a9;
+  font-size: 0.85rem;
+  font-family: 'SF Mono', 'Courier New', monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 150px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.uuid-display:hover {
+  background-color: #d0e8f0;
+}
+
+/* Dropdown Button */
+.uuid-dropdown-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 16px;
+  background-color: #4a9;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: 'SF Mono', 'Courier New', monospace;
+  font-size: 0.85rem;
+  transition: background-color 0.3s;
+}
+
+.uuid-dropdown-btn:hover {
+  background-color: #3a8;
+}
+
+.uuid-dropdown-btn .arrow {
+  font-size: 0.8em;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) { 
   html { font-size: 100%; } 
@@ -1866,16 +1944,32 @@ const unifiedPageHtmlContent = `
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-  <!-- Configuration Management Button -->
-  <div id="configManagerBtn" style="position: fixed; top: 20px; right: 20px; z-index: 1000;">
+  <!-- Configuration Management Button - 固定在右上角 -->
+  <div id="configManagerBtn" style="position: fixed; top: 20px; right: 20px; z-index: 1000; display: flex; align-items: center; gap: 10px;">
+    <!-- 配置管理按钮（未登录时显示） -->
     <button id="configManagerOpenBtn" class="nav-btn primary" onclick="openConfigManagerModal()" 
             style="padding: 8px 16px; background-color: #5a666d; color: white; border: none; border-radius: 4px; cursor: pointer;">
       ⚙️ 配置管理
     </button>
-    <div id="logoutBtnContainer" style="display: inline-block; margin-left: 10px;"></div>
-    <div id="uuidDisplayContainer" style="display: inline-block; margin-left: 10px;"></div>
-  </div> 
+    
+    <!-- UUID显示和下拉菜单（登录后显示） -->
+    <div id="uuidDropdownContainer" class="hidden" style="position: relative;">
+      <button id="uuidDropdownBtn" class="uuid-dropdown-btn">
+        <span id="uuidDisplay">UUID: ...</span>
+        <span class="arrow">▼</span>
+      </button>
+      
+      <div id="uuidDropdownMenu" class="dropdown-menu">
+        <div style="padding: 10px 15px; color: #5a666d; font-size: 0.9rem; border-bottom: 1px solid #E8EBED; word-break: break-all;">
+          UUID: <span id="dropdownUuid"></span>
+        </div>
+        <a href="javascript:void(0)" class="logout" onclick="logout()">退出登录</a>
+      </div>
+    </div>
+  </div>
 
+  <div id="toast-container"></div>
+  
   <!-- Config Manager Modal -->
   <div id="configManagerModal" class="modal-overlay" style="display: none;">
     <div class="modal" style="max-width: 500px;">
@@ -1900,8 +1994,6 @@ const unifiedPageHtmlContent = `
     </div>
   </div>
 
-  <div id="toast-container"></div>
-  
   <!-- Editor Modal -->
   <div id="editModalOverlay" class="modal-overlay">
     <div class="modal">
@@ -2499,55 +2591,68 @@ trojan://..." rows="4"></textarea>
     }
     
     function updateLogoutButton() {
-      const logoutBtnContainer = document.getElementById('logoutBtnContainer');
-      const uuidDisplayContainer = document.getElementById('uuidDisplayContainer');
-      logoutBtnContainer.innerHTML = '';
-      uuidDisplayContainer.innerHTML = '';
+      const configManagerOpenBtn = document.getElementById('configManagerOpenBtn');
+      const uuidDropdownContainer = document.getElementById('uuidDropdownContainer');
+      const uuidDisplay = document.getElementById('uuidDisplay');
+      const dropdownUuid = document.getElementById('dropdownUuid');
       
       const storedUuid = getUuidFromStorage();
-      const openBtn = document.getElementById('configManagerOpenBtn');
+      
       if (storedUuid) {
-        // 隐藏配置管理按钮
-        if (openBtn) openBtn.style.display = 'none';
-        
-        // 在顶部显示UUID
-        const uuidDisplay = document.createElement('div');
-        uuidDisplay.style.display = 'inline-block';
-        uuidDisplay.style.marginRight = '10px';
-        uuidDisplay.style.padding = '4px 12px';
-        uuidDisplay.style.backgroundColor = '#e8f4f8';
-        uuidDisplay.style.border = '1px solid #4a9';
-        uuidDisplay.style.borderRadius = '4px';
-        uuidDisplay.style.color = '#4a9';
-        uuidDisplay.style.fontSize = '0.85rem';
-        uuidDisplay.style.fontFamily = 'monospace';
-        uuidDisplay.innerHTML = 'UUID: ' + storedUuid;
-        uuidDisplay.title = 'UUID: ' + storedUuid;
-        uuidDisplayContainer.appendChild(uuidDisplay);
-        
-        // 创建退出按钮
-        const logoutBtn = document.createElement('button');
-        logoutBtn.className = 'nav-btn';
-        logoutBtn.style.padding = '8px 16px';
-        logoutBtn.style.backgroundColor = '#d44';
-        logoutBtn.style.color = 'white';
-        logoutBtn.style.border = 'none';
-        logoutBtn.style.borderRadius = '4px';
-        logoutBtn.style.cursor = 'pointer';
-        logoutBtn.innerHTML = '🔓 退出';
-        logoutBtn.title = '清除保存的UUID';
-        logoutBtn.onclick = function() {
-          if (confirm('确定要清除当前保存的UUID吗？')) {
-            clearUuidFromStorage();
-            location.reload();
-          }
-        };
-        
-        // 添加到容器
-        logoutBtnContainer.appendChild(logoutBtn);
+        // 有UUID，显示下拉菜单，隐藏配置管理按钮
+        if (configManagerOpenBtn) configManagerOpenBtn.style.display = 'none';
+        if (uuidDropdownContainer) {
+          uuidDropdownContainer.classList.remove('hidden');
+          
+          // 设置UUID显示（截短显示）
+          const shortUuid = storedUuid.substring(0, 8) + '...';
+          uuidDisplay.textContent = 'UUID: ' + shortUuid;
+          uuidDisplay.title = 'UUID: ' + storedUuid;
+          dropdownUuid.textContent = storedUuid;
+          
+          // 添加下拉菜单交互
+          setupUuidDropdown();
+        }
       } else {
-        // 没有UUID，确保按钮可见
-        if (openBtn) openBtn.style.display = 'inline-block';
+        // 没有UUID，显示配置管理按钮，隐藏下拉菜单
+        if (configManagerOpenBtn) configManagerOpenBtn.style.display = 'inline-block';
+        if (uuidDropdownContainer) uuidDropdownContainer.classList.add('hidden');
+      }
+    }
+    
+    // 设置UUID下拉菜单交互
+    function setupUuidDropdown() {
+      const dropdownBtn = document.getElementById('uuidDropdownBtn');
+      const dropdownMenu = document.getElementById('uuidDropdownMenu');
+      
+      if (!dropdownBtn || !dropdownMenu) return;
+      
+      // 点击按钮显示/隐藏下拉菜单
+      dropdownBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        const isVisible = dropdownMenu.style.display === 'block';
+        dropdownMenu.style.display = isVisible ? 'none' : 'block';
+      });
+      
+      // 点击其他地方关闭下拉菜单
+      document.addEventListener('click', function() {
+        dropdownMenu.style.display = 'none';
+      });
+      
+      // 防止下拉菜单内部点击关闭
+      dropdownMenu.addEventListener('click', function(e) {
+        e.stopPropagation();
+      });
+    }
+    
+    // 退出登录函数
+    function logout() {
+      if (confirm('确定要退出登录吗？这将清除当前保存的UUID。')) {
+        clearUuidFromStorage();
+        // 关闭下拉菜单
+        document.getElementById('uuidDropdownMenu').style.display = 'none';
+        // 重新加载页面
+        location.reload();
       }
     }
     
@@ -3941,4 +4046,5 @@ trojan://..." rows="4"></textarea>
   </script>
 </body>
 </html>
+
 `;
