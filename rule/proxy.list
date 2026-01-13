@@ -31,3 +31,5 @@ DOMAIN-SUFFIX,connectivitycheck.android.com
 DOMAIN-SUFFIX,clients3.google.com
 DOMAIN-SUFFIX,edge.microsoft.com
 DOMAIN-SUFFIX,msftconnecttest.com
+# 必应中国
+DOMAIN-SUFFIX,bing.com
