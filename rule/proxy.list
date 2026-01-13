@@ -33,3 +33,4 @@ DOMAIN-SUFFIX,edge.microsoft.com
 DOMAIN-SUFFIX,msftconnecttest.com
 # 必应
 DOMAIN-SUFFIX,bing.com
+DOMAIN-SUFFIX,cn.bing.com
