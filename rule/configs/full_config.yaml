@@ -1,4 +1,4 @@
-# 生成时间: 2026-01-12
+# 生成时间: 2026-01-13
 # 模板类型: 全量模板 - 包含完整规则和策略组的完整配置，适用于大多数场景
 # ==========================================================
 # 节点信息
@@ -195,11 +195,12 @@ rules:
 # 4.中国大陆分流
   - RULE-SET,bilibili_domain,🎬 大陆视频
   - RULE-SET,iqiyi_domain,🎬 大陆视频
-  - RULE-SET,weibo_domain,🇨🇳 中国大陆
-  - RULE-SET,wechat_domain,🇨🇳 中国大陆
-  - RULE-SET,alipay_domain,🇨🇳 中国大陆
+  - RULE-SET,sina_domain,🇨🇳 中国大陆
+  - RULE-SET,tencent_domain,🇨🇳 中国大陆
+  - RULE-SET,alibaba_domain,🇨🇳 中国大陆
   - RULE-SET,cn_domain,🇨🇳 中国大陆
   - RULE-SET,cn_ip,🇨🇳 中国大陆,no-resolve
+
 # 5. 通用服务
   - RULE-SET,github_domain,🐱 GitHub
   - RULE-SET,google_domain,🔍 Google
@@ -290,6 +291,6 @@ rule-providers:
   # 中国大陆服务相关
   bilibili_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/bilibili.mrs"}
   iqiyi_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/iqiyi.mrs"}
-  weibo_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/weibo.mrs"}
-  wechat_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/wechat.mrs"}
-  alipay_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/alipay.mrs"}
+  sina_domain: { <<: *domain, url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/sina.mrs"}
+  tencent_domain: { <<: *domain, url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/tencent.mrs"}
+  alibaba_domain: { <<: *domain, url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/alibaba.mrs"}

@@ -1,68 +1,23 @@
-# 生成时间: 2026-01-06
+# 生成时间: 2026-01-13
 # 模板类型: IP分流模板 - 基于IP地址进行智能分流，提供更精准的路由
 
 # ==========================================================
-# 节点信息 (占位符)
+# 节点与全局配置 
 # ==========================================================
 proxies:
   - {name: 直连, type: direct}
 
-# ==========================================================
-# 全局配置
-# ==========================================================
 port: 7890
 socks-port: 7891
 redir-port: 7892
 mixed-port: 7893
 tproxy-port: 7894
 allow-lan: true
-bind-address: "*"
 ipv6: false
 unified-delay: true
 tcp-concurrent: true
 log-level: warning
-find-process-mode: 'off'
-global-client-fingerprint: chrome
-keep-alive-idle: 600
-keep-alive-interval: 15
-disable-keep-alive: false
 
-profile:
-  store-selected: true
-  store-fake-ip: true
-
-# ==========================================================
-# 嗅探
-# ==========================================================
-sniffer:
-  enable: true
-  sniff:
-    HTTP:
-      ports: [80, 8080-8880]
-      override-destination: true
-    TLS:
-      ports: [443, 8443]
-    QUIC:
-      ports: [443, 8443]
-  force-domain:
-    - "+.v2ex.com"
-  skip-domain:
-    - "+.baidu.com"
-
-# ==========================================================
-# 入站
-# ==========================================================
-tun:
-  enable: true
-  stack: mixed
-  dns-hijack: ["any:53", "tcp://any:53"]
-  auto-route: true
-  auto-redirect: true
-  auto-detect-interface: true
-
-# ==========================================================
-# DNS 模块
-# ==========================================================
 dns:
   enable: true
   listen: 0.0.0.0:1053
@@ -70,129 +25,91 @@ dns:
   respect-rules: true
   fake-ip-range: 28.0.0.1/8
   fake-ip-filter-mode: blacklist
-  fake-ip-filter:
-    - "rule-set:private_domain,cn_domain"
-    - "+.msftconnecttest.com"
-    - "+.msftncsi.com"
-    - "time.*.com"
-  default-nameserver:
-   - 223.5.5.5
-   - 223.6.6.6
-  proxy-server-nameserver:
-    - https://dns.alidns.com/dns-query
-    - https://doh.pub/dns-query
-  nameserver:
-    - 8.8.8.8
-    - 1.1.1.1
+  default-nameserver: [223.5.5.5, 119.29.29.29]
+  proxy-server-nameserver: [https://dns.alidns.com/dns-query]
+  nameserver: [8.8.8.8, 1.1.1.1]
 
 # ==========================================================
 # 锚点配置
 # ==========================================================
 rule-anchor:
   ip: &ip {type: http, interval: 86400, behavior: ipcidr, format: mrs}
-  domain: &domain {type: http, interval: 86400, behavior: domain, format: mrs}
-  class: &class {type: http, interval: 86400, behavior: classical, format: text}
 
 # ==========================================================
 # 出站策略 (Proxy Groups)
 # ==========================================================
 proxy-groups:
-  # --- 1. 总入口 ---
-  - {name: 🚀 默认代理, type: select, include-all: true, filter: "^((?!(直连)).)*$", proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动, 🌐 全部节点]}
-
-  # --- 2. 场景化分流 ---
-  - {name: 🤖 OpenAI, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动]}
-  - {name: ✨ Gemini, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动]}
-  - {name: 🎬 YouTube, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动]}
-  - {name: 🎥 Netflix, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动]}
-  - {name: 📲 Telegram, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动]}
-  - {name: 🔍 Google, type: select, proxies: [🚀 默认代理, ⚡ 自动选择, 🇭🇰 香港自动, 🇺🇸 美国自动]}  # 新增 Google 代理组
+  - {name: 🚀 默认代理, type: select, include-all: true, filter: "^((?!(直连)).)*$", proxies: [⚡ 自动选择, 🌐 全部节点]}
   
-  # --- 3. 基础服务 ---
-  - {name: 🟦 Microsoft, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择]}
-  - {name: 🍎 Apple, type: select, proxies: [🎯 直连, 🚀 默认代理, 🇭🇰 香港自动]}
-  - {name: 🎮 游戏平台, type: select, proxies: [🎯 直连, 🚀 默认代理]}
+  # --- 专项 IP 分流组 ---
+  - {name: 🔍 Google IP, type: select, proxies: [🇺🇸 美国自动, ⚡ 自动选择]}
+  - {name: 📲 Telegram IP, type: select, proxies: [🇸🇬 新加坡自动, 🇭🇰 香港自动]}
+  - {name: 🌏 Meta IP, type: select, proxies: [🚀 默认代理, 🇺🇸 美国自动]}
+  - {name: 🐦 Twitter IP, type: select, proxies: [🚀 默认代理, 🇯🇵 日本自动]}
+  - {name: 🎥 Netflix IP, type: select, proxies: [⚡ 自动选择, 🇸🇬 新加坡自动]}
+  - {name: ☁️ Cloudflare IP, type: select, proxies: [🎯 直连, 🚀 默认代理]} # CF经常被用于CDN，直连通常更快
+  - {name: 📦 Amazon IP, type: select, proxies: [🚀 默认代理, 🇺🇸 美国自动]}
+
+  # --- 地区 IP 分流组 ---
+  - {name: 🇭🇰 香港 IP, type: select, include-all: true, filter: "(?i)香港|HK", proxies: [🇭🇰 香港自动]}
+  - {name: 🇯🇵 日本 IP, type: select, include-all: true, filter: "(?i)日本|JP", proxies: [🇯🇵 日本自动]}
+  - {name: 🇺🇸 美国 IP, type: select, include-all: true, filter: "(?i)美国|US", proxies: [🇺🇸 美国自动]}
+  - {name: 🇸🇬 新加坡 IP, type: select, include-all: true, filter: "(?i)新加坡|SG", proxies: [🇸🇬 新加坡自动]}
+  
   - {name: 🎯 直连, type: select, proxies: [DIRECT, 🚀 默认代理]}
-  
-  # --- 4. 地区 IP 自动分流组 (核心部分) ---
-  # 这些分组专门用于承接对应国家的 IP 流量
-  - {name: 🇭🇰 香港 IP, type: select, include-all: true, filter: "(?i)香港|HK|Hong Kong|HKSAR|HKG", proxies: [🇭🇰 香港自动]}
-  - {name: 🇯🇵 日本 IP, type: select, include-all: true, filter: "(?i)日本|JP|Japan|Tokyo|Osaka", proxies: [🇯🇵 日本自动]}
-  - {name: 🇺🇸 美国 IP, type: select, include-all: true, filter: "(?i)美国|US|USA|United States", proxies: [🇺🇸 美国自动]}
-  - {name: 🇸🇬 新加坡 IP, type: select, include-all: true, filter: "(?i)新加坡|SG|Singapore", proxies: [🇸🇬 新加坡自动]}
-  - {name: 🇰🇷 韩国 IP, type: select, include-all: true, filter: "(?i)韩国|KR|Korea|Seoul", proxies: [🚀 默认代理]} # 如果没韩国节点，走默认
-  - {name: 🐟 漏网之鱼, type: select, proxies: [🚀 默认代理, 🎯 直连, ⚡ 自动选择]}
+  - {name: 🐟 漏网之鱼, type: select, proxies: [🚀 默认代理, 🎯 直连]}
 
-  # --- 5. 自动测速底层 ---
-  - {name: ⚡ 自动选择, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连)).)*$"}
+  # --- 底层测速组 (保持不变) ---
+  - {name: ⚡ 自动选择, type: url-test, include-all: true, tolerance: 20, interval: 300}
   - {name: 🌐 全部节点, type: select, include-all: true}
-  
-  # 地区池
-  - {name: 🇭🇰 香港自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)香港|HK|Hong Kong|HKSAR|HKG"}
-  - {name: 🇯🇵 日本自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)日本|JP|Japan|Tokyo|Osaka"}
-  - {name: 🇺🇸 美国自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)美国|US|USA|United States"}
-  - {name: 🇸🇬 新加坡自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)新加坡|SG|Singapore"}
-  - {name: 🇹🇼 台湾自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)台湾|TW|Taiwan|Taipei"}
-  - {name: 🇩🇪 德国自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)德国|DE|Germany"}
+  - {name: 🇭🇰 香港自动, type: url-test, include-all: true, filter: "(?i)香港|HK"}
+  - {name: 🇯🇵 日本自动, type: url-test, include-all: true, filter: "(?i)日本|JP"}
+  - {name: 🇺🇸 美国自动, type: url-test, include-all: true, filter: "(?i)美国|US"}
+  - {name: 🇸🇬 新加坡自动, type: url-test, include-all: true, filter: "(?i)新加坡|SG"}
 
 # ==========================================================
-# 规则匹配 (Rules) - 流量走向的核心逻辑
+# 规则匹配 (Rules) - 重点扩展 IP 规则
 # ==========================================================
 rules:
-  # 1. 广告与隐私 (最高优先级)
-  - RULE-SET,category-ads-all,REJECT
-  - RULE-SET,private_domain,🎯 直连
+  # 1. 基础连接
   - GEOIP,LAN,🎯 直连
 
-  # 2. 重点应用 (域名匹配优先，因为速度快且准)
-  - RULE-SET,openai,🤖 OpenAI
-  - RULE-SET,gemini,✨ Gemini
-  - RULE-SET,telegram_domain,📲 Telegram
-  - RULE-SET,youtube_domain,🎬 YouTube
-  - RULE-SET,netflix_domain,🎥 Netflix
-  - RULE-SET,spotify_domain,🚀 默认代理
-  - RULE-SET,steam_domain,🎮 游戏平台
-
-  # 3. 中国大陆服务 (域名 + IP)
-  - RULE-SET,cn_domain,🎯 直连
-  - RULE-SET,cn_ip,🎯 直连,no-resolve # 遇到国内 IP 直接直连，不解析
-
-  # 4. 基于 GEOIP 的境外 IP 精准分流 (本配置的核心)
-  # 逻辑：如果上面的域名都没匹配上，Clash 会解析 IP，然后匹配下面的国家
+  # 2. 专项 IP 段匹配 (no-resolve 模式防止 DNS 解析死循环)
+  - RULE-SET,google_ip,🔍 Google IP,no-resolve
+  - RULE-SET,telegram_ip,📲 Telegram IP,no-resolve
+  - RULE-SET,facebook_ip,🌏 Meta IP,no-resolve
+  - RULE-SET,twitter_ip,🐦 Twitter IP,no-resolve
+  - RULE-SET,netflix_ip,🎥 Netflix IP,no-resolve
+  - RULE-SET,cloudflare_ip,☁️ Cloudflare IP,no-resolve
+  - RULE-SET,amazon_ip,📦 Amazon IP,no-resolve
   
-  - GEOIP,HK,🇭🇰 香港 IP  # 如果目标 IP 是香港，走香港节点
-  - GEOIP,JP,🇯🇵 日本 IP  # 如果目标 IP 是日本，走日本节点
-  - GEOIP,US,🇺🇸 美国 IP  # 如果目标 IP 是美国，走美国节点
+  # 3. 大陆 IP 排除
+  - RULE-SET,cn_ip,🎯 直连,no-resolve
+
+  # 4. GEOIP 国家级分流 (作为专项 IP 段之外的补充)
+  - GEOIP,HK,🇭🇰 香港 IP
+  - GEOIP,JP,🇯🇵 日本 IP
+  - GEOIP,US,🇺🇸 美国 IP
   - GEOIP,SG,🇸🇬 新加坡 IP
-  - GEOIP,KR,🇰🇷 韩国 IP
-  - GEOIP,TW,🇹🇼 台湾自动
-  - GEOIP,DE,🇩🇪 德国自动
-  - GEOIP,GB,🚀 默认代理 # 英国流量
+  - GEOIP,CN,🎯 直连
 
-  # 5. 补充 IP 规则 - 修复：将 🔍 Google 改为已定义的代理组
-  - RULE-SET,google_ip,🔍 Google,no-resolve
-  - RULE-SET,telegram_ip,📲 Telegram,no-resolve
-  - RULE-SET,netflix_ip,🎥 Netflix,no-resolve
-
-  # 6. 兜底 (既不是国内，也不是上述国家的 IP)
+  # 5. 兜底
   - MATCH,🐟 漏网之鱼
 
 # ==========================================================
-# 规则源 (保持不变)
+# 规则源 (Rule Providers)
 # ==========================================================
 rule-providers:
-  private_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs"}
-  category-ads-all: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ads-all.mrs"}
-  openai: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/openai.mrs" }
-  gemini: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/google-gemini.mrs" }
-  telegram_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/telegram.mrs"}
-  youtube_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/youtube.mrs"}
-  netflix_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/netflix.mrs"}
-  spotify_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/spotify.mrs"}
-  steam_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/steam.mrs"}
-  cn_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs"}
-  
+  # 国内 IP
   cn_ip: { <<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs"}
+  
+  # 重点服务 IP 段
   google_ip: { <<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/google.mrs"}
   telegram_ip: { <<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/telegram.mrs"}
+  facebook_ip: { <<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/facebook.mrs"}
+  twitter_ip: { <<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/twitter.mrs"}
   netflix_ip: { <<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/netflix.mrs"}
+  
+  # 云服务商 IP 段 (作为补充)
+  cloudflare_ip: { <<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cloudflare.mrs"}
+  amazon_ip: { <<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/amazon.mrs"}

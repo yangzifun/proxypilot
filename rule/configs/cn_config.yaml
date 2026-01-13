@@ -1,4 +1,4 @@
-# 生成时间: 2026-01-06
+# 生成时间: 2026-01-13
 # 模板类型: 回国模板 - 针对海外用户访问国内服务优化
 
 # ==========================================================
@@ -127,9 +127,9 @@ rules:
   - RULE-SET,youku_domain,📺 大陆影音
 
   # 社交与支付 (回国节点)
-  - RULE-SET,wechat_domain,🇨🇳 回国核心
-  - RULE-SET,alipay_domain,🇨🇳 回国核心
-  - RULE-SET,weibo_domain,🇨🇳 回国核心
+  - RULE-SET,tencent_domain,🇨🇳 回国核心
+  - RULE-SET,alibaba_domain,🇨🇳 回国核心
+  - RULE-SET,sina_domain,🇨🇳 回国核心
 
   # 游戏分流
   - RULE-SET,games_cn,🎮 国服游戏
@@ -155,9 +155,9 @@ rule-providers:
   youku_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/youku.mrs"}
   tencent_video: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/tencent.mrs"}
   netease_music: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/netease.mrs"}
-  wechat_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/wechat.mrs"}
-  alipay_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/alipay.mrs"}
-  weibo_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/weibo.mrs"}
+  alibaba_domain: { <<: *domain, url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/alibaba.mrs"}
+  sina_domain: { <<: *domain, url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/sina.mrs"}
+  tencent_domain: { <<: *domain, url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/tencent.mrs"}
   cn_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs"}
   google_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/google.mrs"}
   youtube_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/youtube.mrs"}

@@ -1,4 +1,4 @@
-# 生成时间: 2026-01-06
+# 生成时间: 2026-01-13
 # 模板类型: 全球上网模板 - 针对全球上网需求优化，适用于国际访问
 
 # ==========================================================
@@ -176,11 +176,6 @@ rules:
   - RULE-SET,spotify_domain,🎧 Spotify
   
   # 中国大陆服务全部走 DIRECT
-  - RULE-SET,bilibili_domain,DIRECT
-  - RULE-SET,iqiyi_domain,DIRECT
-  - RULE-SET,weibo_domain,DIRECT
-  - RULE-SET,wechat_domain,DIRECT
-  - RULE-SET,alipay_domain,DIRECT
   - RULE-SET,cn_domain,DIRECT
   - RULE-SET,cn_ip,DIRECT,no-resolve
 
@@ -254,8 +249,4 @@ rule-providers:
   google_ip: { <<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/google.mrs"}
   telegram_ip: { <<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/telegram.mrs"}
   netflix_ip: { <<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/netflix.mrs"}
-  bilibili_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/bilibili.mrs"}
-  iqiyi_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/iqiyi.mrs"}
-  weibo_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/weibo.mrs"}
-  wechat_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/wechat.mrs"}
-  alipay_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/alipay.mrs"}
+  
