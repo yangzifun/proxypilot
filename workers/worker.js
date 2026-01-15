@@ -6,6 +6,7 @@
  *  3. 批量配置生成器
  *  4. 统计分析功能
  *  5. 配置筛选和翻页功能
+ *  6. UUID信息管理功能（简化版）
  * ================================================================= */
 
 // =================================================================
@@ -107,37 +108,37 @@ function getClientIp(request) {
 async function fetchConfigsByUuidFromDB(uuid, env, options = {}) {
     const db = env.DB;
     if (!db) return { results: [], total: 0 };
-    
+
     try {
         // 构建查询条件
         let conditions = ['uuid = ?'];
         const params = [uuid];
-        
+  
         if (options.protocol && options.protocol !== 'all') {
             conditions.push('protocol = ?');
             params.push(options.protocol);
         }
-        
+  
         if (options.domain_hosting && options.domain_hosting !== 'all') {
             conditions.push('domain_hosting = ?');
             params.push(options.domain_hosting);
         }
-        
+  
         const whereClause = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
-        
+  
         // 获取总数
         const countQuery = `SELECT COUNT(*) as total FROM configs ${whereClause}`;
         const countResult = await db.prepare(countQuery).bind(...params).first();
         const total = countResult?.total || 0;
-        
+  
         // 构建查询
         let query = `SELECT id, config_data, protocol, remark, domain_hosting FROM configs ${whereClause} ORDER BY id ASC`;
-        
+  
         // 检查是否需要获取所有数据（用于订阅接口）
         if (options.getAll) {
             // 获取所有数据，不分页
             const { results } = await db.prepare(query).bind(...params).all();
-            
+      
             return {
                 results,
                 total,
@@ -150,12 +151,12 @@ async function fetchConfigsByUuidFromDB(uuid, env, options = {}) {
             const page = options.page || 1;
             const pageSize = options.pageSize || 10;
             const offset = (page - 1) * pageSize;
-            
+      
             query += ` LIMIT ? OFFSET ?`;
             params.push(pageSize, offset);
-            
+      
             const { results } = await db.prepare(query).bind(...params).all();
-            
+      
             return {
                 results,
                 total,
@@ -164,7 +165,7 @@ async function fetchConfigsByUuidFromDB(uuid, env, options = {}) {
                 totalPages: Math.ceil(total / pageSize)
             };
         }
-        
+  
     } catch (e) {
         console.error(`Error fetching configs for UUID ${uuid}:`, e.message);
         return { results: [], total: 0, page: 1, pageSize: 10, totalPages: 0 };
@@ -175,23 +176,23 @@ async function fetchConfigsByUuidFromDB(uuid, env, options = {}) {
 async function deleteConfigsByIds(env, ids) {
     const db = env.DB;
     if (!db) throw new Error("D1 数据库未绑定。");
-    
+
     if (!ids || ids.length === 0) {
         return { success: true, deleted: 0 };
     }
-    
+
     try {
         // 构建IN查询
         const placeholders = ids.map(() => '?').join(',');
         const query = `DELETE FROM configs WHERE id IN (${placeholders})`;
         const stmt = db.prepare(query);
-        
+  
         // 绑定所有参数
         let boundStmt = stmt;
         for (const id of ids) {
             boundStmt = boundStmt.bind(id);
         }
-        
+  
         const result = await boundStmt.run();
         return {
             success: true,
@@ -293,6 +294,262 @@ async function fetchUuidAccessStatsFromDB(uuid, env, days = 30) {
     }
 }
 
+// 获取UUID信息（简化版，不返回时间字段）
+async function fetchUuidInfoFromDB(uuid, env) {
+    const db = env.DB;
+    if (!db) return { success: false, error: "数据库未连接" };
+
+    try {
+        const tableCheck = await db.prepare(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='uuid_info'"
+        ).first();
+
+        if (!tableCheck) {
+            return {
+                success: false,
+                error: "UUID信息表不存在，请确保已升级到v3.0.3+版本"
+            };
+        }
+
+        // 只查询基础信息，不查询访问统计和时间字段
+        const uuidInfo = await db.prepare(`
+            SELECT uuid, owner, email, contact_info, status, remark
+            FROM uuid_info
+            WHERE uuid = ?
+        `).bind(uuid).first();
+
+        if (!uuidInfo) {
+            return {
+                success: true,
+                exists: false,
+                message: "UUID信息不存在"
+            };
+        }
+
+        return {
+            success: true,
+            exists: true,
+            data: uuidInfo
+        };
+
+    } catch (e) {
+        console.error("获取UUID信息失败:", e.message);
+        return {
+            success: false,
+            error: "数据库查询失败: " + e.message
+        };
+    }
+}
+
+// 创建或更新UUID信息（简化版，不更新时间字段）
+async function upsertUuidInfoToDB(uuid, info, env) {
+    const db = env.DB;
+    if (!db) return { success: false, error: "数据库未连接" };
+
+    try {
+        // 检查表是否存在
+        const tableCheck = await db.prepare(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='uuid_info'"
+        ).first();
+
+        if (!tableCheck) {
+            return {
+                success: false,
+                error: "UUID信息表不存在，请确保已升级到v3.0.3+版本"
+            };
+        }
+
+        // 检查UUID是否存在
+        const existingInfo = await db.prepare(
+            "SELECT id FROM uuid_info WHERE uuid = ?"
+        ).bind(uuid).first();
+
+        if (existingInfo) {
+            // 更新现有记录（不更新时间字段）
+            const result = await db.prepare(`
+                UPDATE uuid_info 
+                SET owner = ?, email = ?, contact_info = ?, status = ?, remark = ?
+                WHERE uuid = ?
+            `).bind(
+                info.owner,
+                info.email,
+                info.contact_info || '',
+                info.status || 'active',
+                info.remark || '',
+                uuid
+            ).run();
+
+            return {
+                success: true,
+                action: 'updated',
+                changes: result.changes || 0
+            };
+        } else {
+            // 插入新记录（简化版，不插入时间字段）
+            const result = await db.prepare(`
+                INSERT INTO uuid_info 
+                (uuid, owner, email, contact_info, status, remark)
+                VALUES (?, ?, ?, ?, ?, ?)
+            `).bind(
+                uuid,
+                info.owner,
+                info.email,
+                info.contact_info || '',
+                info.status || 'active',
+                info.remark || ''
+            ).run();
+
+            return {
+                success: true,
+                action: 'created',
+                changes: result.changes || 0
+            };
+        }
+
+    } catch (e) {
+        console.error("创建或更新UUID信息失败:", e.message);
+        return {
+            success: false,
+            error: "数据库操作失败: " + e.message
+        };
+    }
+}
+
+// 更新UUID访问统计（保留此函数用于其他功能）
+async function updateUuidAccessStats(uuid, env) {
+    const db = env.DB;
+    if (!db) return { success: false, error: "数据库未连接" };
+
+    try {
+        // 检查表是否存在
+        const tableCheck = await db.prepare(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='uuid_info'"
+        ).first();
+
+        if (!tableCheck) {
+            return { success: false, error: "UUID信息表不存在" };
+        }
+
+        const currentTime = Math.floor(Date.now() / 1000) * 1000;
+
+        // 更新访问次数和最后访问时间
+        const result = await db.prepare(`
+            UPDATE uuid_info 
+            SET last_accessed = ?, access_count = access_count + 1
+            WHERE uuid = ?
+        `).bind(currentTime, uuid).run();
+
+        return {
+            success: true,
+            changes: result.changes || 0
+        };
+
+    } catch (e) {
+        console.error("更新UUID访问统计失败:", e);
+        return {
+            success: false,
+            error: "数据库操作失败: " + e.message
+        };
+    }
+}
+
+// 获取所有UUID信息列表（分页，简化版） - 保留给管理员使用
+async function fetchAllUuidInfoFromDB(env, options = {}) {
+    const db = env.DB;
+    if (!db) return { results: [], total: 0 };
+
+    try {
+        const tableCheck = await db.prepare(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='uuid_info'"
+        ).first();
+
+        if (!tableCheck) {
+            return {
+                results: [],
+                total: 0,
+                page: 1,
+                pageSize: 10,
+                totalPages: 0
+            };
+        }
+
+        // 构建查询条件
+        let conditions = [];
+        const params = [];
+
+        if (options.search) {
+            conditions.push('(uuid LIKE ? OR owner LIKE ? OR email LIKE ?)');
+            const searchTerm = `%${options.search}%`;
+            params.push(searchTerm, searchTerm, searchTerm);
+        }
+
+        if (options.status && options.status !== 'all') {
+            conditions.push('status = ?');
+            params.push(options.status);
+        }
+
+        const whereClause = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
+
+        // 获取总数
+        const countQuery = `SELECT COUNT(*) as total FROM uuid_info ${whereClause}`;
+        const countResult = await db.prepare(countQuery).bind(...params).first();
+        const total = countResult?.total || 0;
+
+        // 构建查询（只查询基础信息）
+        let query = `
+            SELECT uuid, owner, email, contact_info, status, remark
+            FROM uuid_info 
+            ${whereClause}
+            ORDER BY created_at DESC
+        `;
+
+        const page = options.page || 1;
+        const pageSize = options.pageSize || 10;
+        const offset = (page - 1) * pageSize;
+
+        query += ` LIMIT ? OFFSET ?`;
+        params.push(pageSize, offset);
+
+        const { results } = await db.prepare(query).bind(...params).all();
+
+        return {
+            results,
+            total,
+            page,
+            pageSize,
+            totalPages: Math.ceil(total / pageSize)
+        };
+
+    } catch (e) {
+        console.error("获取UUID信息列表失败:", e.message);
+        return { results: [], total: 0, page: 1, pageSize: 10, totalPages: 0 };
+    }
+}
+
+// 删除UUID信息
+async function deleteUuidInfoFromDB(uuid, env) {
+    const db = env.DB;
+    if (!db) return { success: false, error: "数据库未连接" };
+
+    try {
+        const result = await db.prepare(
+            "DELETE FROM uuid_info WHERE uuid = ?"
+        ).bind(uuid).run();
+
+        return {
+            success: true,
+            deleted: result.changes || 0
+        };
+
+    } catch (e) {
+        console.error("删除UUID信息失败:", e.message);
+        return {
+            success: false,
+            error: "数据库操作失败: " + e.message
+        };
+    }
+}
+
 // 获取 IP (仅读取 SELECT)
 async function fetchIpsFromDB(ipType, carrierType, env) {
     const db = env.DB;
@@ -387,6 +644,9 @@ async function logConfigAccess(env, uuid, queryType, clientIp, userAgent) {
 
         await stmt.bind(uuid, queryType, clientIp || 'unknown', userAgent || 'unknown').run();
         console.log(`成功记录访问日志: uuid=${uuid}, type=${queryType}`);
+
+        // 同时更新UUID访问统计
+        await updateUuidAccessStats(uuid, env);
     } catch (e) {
         console.error("记录访问日志失败:", e.message);
     }
@@ -452,14 +712,14 @@ async function handleGetConfigs(uuid, env, url) {
     const domain_hosting = urlObj.searchParams.get('domain_hosting') || 'all';
     const page = parseInt(urlObj.searchParams.get('page') || '1');
     const pageSize = parseInt(urlObj.searchParams.get('pageSize') || '10');
-    
+
     const result = await fetchConfigsByUuidFromDB(uuid, env, {
         protocol,
         domain_hosting,
         page,
         pageSize
     });
-    
+
     return jsonResponse({
         uuid,
         configs: result.results,
@@ -484,6 +744,72 @@ async function handleGetUuidStats(uuid, env) {
     return jsonResponse(stats);
 }
 
+async function handleGetUuidInfo(uuid, env) {
+    if (!uuid) return jsonResponse({ error: 'UUID Required' }, 400);
+    const info = await fetchUuidInfoFromDB(uuid, env);
+    return jsonResponse(info);
+}
+
+async function handlePostUuidInfo(request, env) {
+    let body;
+    try { body = await request.json(); } catch (e) { return jsonResponse({ error: '无效 JSON' }, 400); }
+  
+    const { uuid, owner, email, contact_info, status, remark } = body;
+  
+    if (!uuid || !owner || !email) {
+        return jsonResponse({ error: '缺少必要字段: uuid, owner, email' }, 400);
+    }
+
+    const validStatuses = ['active', 'inactive', 'suspended'];
+    const finalStatus = validStatuses.includes(status) ? status : 'active';
+
+    const info = {
+        owner,
+        email,
+        contact_info: contact_info || '',
+        status: finalStatus,
+        remark: remark || ''
+    };
+
+    const result = await upsertUuidInfoToDB(uuid, info, env);
+    return jsonResponse(result);
+}
+
+async function handleGetAllUuidInfo(env, url) {
+    const urlObj = new URL(url);
+    const page = parseInt(urlObj.searchParams.get('page') || '1');
+    const pageSize = parseInt(urlObj.searchParams.get('pageSize') || '10');
+    const search = urlObj.searchParams.get('search') || '';
+    const status = urlObj.searchParams.get('status') || 'all';
+
+    const result = await fetchAllUuidInfoFromDB(env, {
+        page,
+        pageSize,
+        search,
+        status
+    });
+
+    return jsonResponse({
+        uuid_info: result.results,
+        pagination: {
+            page: result.page,
+            pageSize: result.pageSize,
+            total: result.total,
+            totalPages: result.totalPages
+        },
+        filters: {
+            search,
+            status
+        }
+    });
+}
+
+async function handleDeleteUuidInfo(uuid, env) {
+    if (!uuid) return jsonResponse({ error: 'UUID Required' }, 400);
+    const result = await deleteUuidInfoFromDB(uuid, env);
+    return jsonResponse(result);
+}
+
 async function handleDelete(type, value, env) {
     if (type === 'batch') {
         // 批量删除
@@ -492,12 +818,12 @@ async function handleDelete(type, value, env) {
             if (!Array.isArray(ids) || ids.length === 0) {
                 return jsonResponse({ error: '无效的ID列表' }, 400);
             }
-            
+      
             const result = await deleteConfigsByIds(env, ids);
             if (!result.success) {
                 return jsonResponse({ error: result.error }, 500);
             }
-            
+      
             return jsonResponse({ 
                 success: true, 
                 deleted: result.deleted,
@@ -892,375 +1218,375 @@ function convertToClashFormat(configStr) {
         }
     }
 
-    // 处理Trojan配置
-    if (protocol === 'trojan') {
-        try {
-            const url = new URL(configStr);
-            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `Trojan-${url.hostname}-${url.port}`;
+// 处理Trojan配置
+if (protocol === 'trojan') {
+    try {
+        const url = new URL(configStr);
+        const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `Trojan-${url.hostname}-${url.port}`;
 
-            const clashConfig = {
-                name: name,
-                type: 'trojan',
-                server: url.hostname,
-                port: parseInt(url.port) || 443,
-                password: url.username,
-                sni: url.searchParams.get('sni') || url.hostname,
-                'skip-cert-verify': true
+        const clashConfig = {
+            name: name,
+            type: 'trojan',
+            server: url.hostname,
+            port: parseInt(url.port) || 443,
+            password: url.username,
+            sni: url.searchParams.get('sni') || url.hostname,
+            'skip-cert-verify': true
+        };
+
+        const typeParam = url.searchParams.get('type') || '';
+        if (typeParam === 'ws') {
+            clashConfig.network = 'ws';
+            const path = url.searchParams.get('path') || '/';
+            const host = url.searchParams.get('host');
+
+            clashConfig['ws-opts'] = {
+                path: path,
+                headers: host ? { Host: host } : {}
             };
-
-            const typeParam = url.searchParams.get('type') || '';
-            if (typeParam === 'ws') {
-                clashConfig.network = 'ws';
-                const path = url.searchParams.get('path') || '/';
-                const host = url.searchParams.get('host');
-
-                clashConfig['ws-opts'] = {
-                    path: path,
-                    headers: host ? { Host: host } : {}
-                };
-            } else if (typeParam === 'grpc') {
-                clashConfig.network = 'grpc';
-                clashConfig['grpc-opts'] = {
-                    'grpc-service-name': url.searchParams.get('serviceName') || ''
-                };
-            }
-
-            return clashConfig;
-        } catch (error) {
-            console.error('转换Trojan配置失败:', error, configStr);
-            return null;
+        } else if (typeParam === 'grpc') {
+            clashConfig.network = 'grpc';
+            clashConfig['grpc-opts'] = {
+                'grpc-service-name': url.searchParams.get('serviceName') || ''
+            };
         }
+
+        return clashConfig;
+    } catch (error) {
+        console.error('转换Trojan配置失败:', error, configStr);
+        return null;
     }
+}
 
-    // 处理VLESS配置
-    if (protocol === 'vless') {
-        try {
-            const url = new URL(configStr);
-            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `VLESS-${url.hostname}-${url.port}`;
+// 处理VLESS配置
+if (protocol === 'vless') {
+    try {
+        const url = new URL(configStr);
+        const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `VLESS-${url.hostname}-${url.port}`;
 
-            const clashConfig = {
-                name: name,
-                type: 'vless',
-                server: url.hostname,
-                port: parseInt(url.port) || 443,
-                uuid: url.username,
-                tls: true,
-                'skip-cert-verify': true
+        const clashConfig = {
+            name: name,
+            type: 'vless',
+            server: url.hostname,
+            port: parseInt(url.port) || 443,
+            uuid: url.username,
+            tls: true,
+            'skip-cert-verify': true
+        };
+
+        const typeParam = url.searchParams.get('type') || '';
+        if (typeParam === 'ws') {
+            clashConfig.network = 'ws';
+            const path = url.searchParams.get('path') || '/';
+            const host = url.searchParams.get('host');
+
+            clashConfig['ws-opts'] = {
+                path: path,
+                headers: host ? { Host: host } : {}
             };
+        } else if (typeParam === 'grpc') {
+            clashConfig.network = 'grpc';
+            clashConfig['grpc-opts'] = {
+                'grpc-service-name': url.searchParams.get('serviceName') || ''
+            };
+        } else if (typeParam === 'h2') {
+            clashConfig.network = 'h2';
+            const path = url.searchParams.get('path') || '/';
+            const host = url.searchParams.get('host');
 
-            const typeParam = url.searchParams.get('type') || '';
-            if (typeParam === 'ws') {
-                clashConfig.network = 'ws';
-                const path = url.searchParams.get('path') || '/';
-                const host = url.searchParams.get('host');
-
-                clashConfig['ws-opts'] = {
-                    path: path,
-                    headers: host ? { Host: host } : {}
-                };
-            } else if (typeParam === 'grpc') {
-                clashConfig.network = 'grpc';
-                clashConfig['grpc-opts'] = {
-                    'grpc-service-name': url.searchParams.get('serviceName') || ''
-                };
-            } else if (typeParam === 'h2') {
-                clashConfig.network = 'h2';
-                const path = url.searchParams.get('path') || '/';
-                const host = url.searchParams.get('host');
-
-                clashConfig['h2-opts'] = {
-                    path: path,
-                    host: host ? [host] : []
-                };
-            }
-
-            return clashConfig;
-        } catch (error) {
-            console.error('转换VLESS配置失败:', error, configStr);
-            return null;
+            clashConfig['h2-opts'] = {
+                path: path,
+                host: host ? [host] : []
+            };
         }
+
+        return clashConfig;
+    } catch (error) {
+        console.error('转换VLESS配置失败:', error, configStr);
+        return null;
     }
+}
 
-    // 处理Shadowsocks配置
-    if (protocol === 'shadowsocks') {
-        try {
-            const url = new URL(configStr);
-            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `SS-${url.hostname}-${url.port}`;
+// 处理Shadowsocks配置
+if (protocol === 'shadowsocks') {
+    try {
+        const url = new URL(configStr);
+        const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `SS-${url.hostname}-${url.port}`;
 
-            let password = '';
-            let method = 'aes-256-gcm';
+        let password = '';
+        let method = 'aes-256-gcm';
 
-            const userInfo = atob(url.username).split(':');
-            if (userInfo.length >= 2) {
-                method = userInfo[0];
-                password = userInfo.slice(1).join(':');
-            }
-
-            const clashConfig = {
-                name: name,
-                type: 'ss',
-                server: url.hostname,
-                port: parseInt(url.port) || 8388,
-                password: password,
-                cipher: method,
-                'udp-over-tcp': true
-            };
-
-            const pluginParam = url.searchParams.get('plugin');
-            if (pluginParam) {
-                clashConfig.plugin = pluginParam;
-                const pluginOpts = url.searchParams.get('plugin-opts');
-                if (pluginOpts) {
-                    clashConfig['plugin-opts'] = pluginOpts;
-                }
-            }
-
-            return clashConfig;
-        } catch (error) {
-            console.error('转换Shadowsocks配置失败:', error, configStr);
-            return null;
+        const userInfo = atob(url.username).split(':');
+        if (userInfo.length >= 2) {
+            method = userInfo[0];
+            password = userInfo.slice(1).join(':');
         }
-    }
 
-    // 处理Hysteria2配置
-    if (protocol === 'hysteria2') {
-        try {
-            const url = new URL(configStr);
-            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `Hysteria2-${url.hostname}-${url.port}`;
+        const clashConfig = {
+            name: name,
+            type: 'ss',
+            server: url.hostname,
+            port: parseInt(url.port) || 8388,
+            password: password,
+            cipher: method,
+            'udp-over-tcp': true
+        };
 
-            const clashConfig = {
-                name: name,
-                type: 'hysteria2',
-                server: url.hostname,
-                port: parseInt(url.port) || 443,
-                password: url.username,
-                sni: url.searchParams.get('sni') || url.hostname,
-                'skip-cert-verify': true
-            };
-
-            const alpnParam = url.searchParams.get('alpn');
-            if (alpnParam) {
-                clashConfig.alpn = alpnParam.split(',');
+        const pluginParam = url.searchParams.get('plugin');
+        if (pluginParam) {
+            clashConfig.plugin = pluginParam;
+            const pluginOpts = url.searchParams.get('plugin-opts');
+            if (pluginOpts) {
+                clashConfig['plugin-opts'] = pluginOpts;
             }
-
-            const obfsParam = url.searchParams.get('obfs');
-            if (obfsParam) {
-                clashConfig.obfs = obfsParam;
-                const obfsPassword = url.searchParams.get('obfs-password');
-                if (obfsPassword) {
-                    clashConfig['obfs-password'] = obfsPassword;
-                }
-            }
-
-            const downMbps = url.searchParams.get('downspeed');
-            const upMbps = url.searchParams.get('upspeed');
-            if (downMbps) {
-                clashConfig.down = downMbps;
-            }
-            if (upMbps) {
-                clashConfig.up = upMbps;
-            }
-
-            return clashConfig;
-        } catch (error) {
-            console.error('转换Hysteria2配置失败:', error, configStr);
-            return null;
         }
+
+        return clashConfig;
+    } catch (error) {
+        console.error('转换Shadowsocks配置失败:', error, configStr);
+        return null;
     }
+}
 
-    // 处理Tuic配置
-    if (protocol === 'tuic') {
-        try {
-            const url = new URL(configStr);
-            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `Tuic-${url.hostname}-${url.port}`;
+// 处理Hysteria2配置
+if (protocol === 'hysteria2') {
+    try {
+        const url = new URL(configStr);
+        const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `Hysteria2-${url.hostname}-${url.port}`;
 
-            const clashConfig = {
-                name: name,
-                type: 'tuic',
-                server: url.hostname,
-                port: parseInt(url.port) || 443,
-                uuid: url.username,
-                password: url.password || '',
-                sni: url.searchParams.get('sni') || url.hostname,
-                'skip-cert-verify': true
-            };
+        const clashConfig = {
+            name: name,
+            type: 'hysteria2',
+            server: url.hostname,
+            port: parseInt(url.port) || 443,
+            password: url.username,
+            sni: url.searchParams.get('sni') || url.hostname,
+            'skip-cert-verify': true
+        };
 
-            const alpnParam = url.searchParams.get('alpn');
-            if (alpnParam) {
-                clashConfig.alpn = alpnParam.split(',');
-            }
-
-            const disableSni = url.searchParams.get('disable-sni');
-            if (disableSni === 'true') {
-                delete clashConfig.sni;
-            }
-
-            const congestionControl = url.searchParams.get('congestion-controller');
-            if (congestionControl) {
-                clashConfig['congestion-controller'] = congestionControl;
-            }
-
-            const udpRelayMode = url.searchParams.get('udp-relay-mode');
-            if (udpRelayMode) {
-                clashConfig['udp-relay-mode'] = udpRelayMode;
-            }
-
-            return clashConfig;
-        } catch (error) {
-            console.error('转换Tuic配置失败:', error, configStr);
-            return null;
+        const alpnParam = url.searchParams.get('alpn');
+        if (alpnParam) {
+            clashConfig.alpn = alpnParam.split(',');
         }
-    }
 
-    // 处理AnyTLS配置
-    if (protocol === 'anytls') {
-        try {
-            const url = new URL(configStr);
-            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `AnyTLS-${url.hostname}-${url.port}`;
-
-            let type = 'vless';
-            let uuid = url.username;
-
-            const clashConfig = {
-                name: name,
-                type: type,
-                server: url.hostname,
-                port: parseInt(url.port) || 443,
-                uuid: uuid,
-                tls: true,
-                'skip-cert-verify': true
-            };
-
-            const typeParam = url.searchParams.get('type') || '';
-            if (typeParam === 'ws') {
-                clashConfig.network = 'ws';
-                const path = url.searchParams.get('path') || '/';
-                const host = url.searchParams.get('host');
-
-                clashConfig['ws-opts'] = {
-                    path: path,
-                    headers: host ? { Host: host } : {}
-                };
-            } else if (typeParam === 'grpc') {
-                clashConfig.network = 'grpc';
-                clashConfig['grpc-opts'] = {
-                    'grpc-service-name': url.searchParams.get('serviceName') || ''
-                };
+        const obfsParam = url.searchParams.get('obfs');
+        if (obfsParam) {
+            clashConfig.obfs = obfsParam;
+            const obfsPassword = url.searchParams.get('obfs-password');
+            if (obfsPassword) {
+                clashConfig['obfs-password'] = obfsPassword;
             }
-
-            const sniParam = url.searchParams.get('sni') || url.searchParams.get('host');
-            if (sniParam) {
-                clashConfig.sni = sniParam;
-            }
-
-            const alpnParam = url.searchParams.get('alpn');
-            if (alpnParam) {
-                clashConfig.alpn = alpnParam.split(',');
-            }
-
-            return clashConfig;
-        } catch (error) {
-            console.error('转换AnyTLS配置失败:', error, configStr);
-            return null;
         }
-    }
 
-    // 处理Reality/Any-reality配置
-    if (protocol === 'any-reality' || protocol === 'reality') {
-        try {
-            const url = new URL(configStr);
-            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `Reality-${url.hostname}-${url.port}`;
-
-            const clashConfig = {
-                name: name,
-                type: 'vless',
-                server: url.hostname,
-                port: parseInt(url.port) || 443,
-                uuid: url.username,
-                'skip-cert-verify': true,
-                'client-fingerprint': 'chrome'
-            };
-
-            const realityConfig = {
-                type: 'reality',
-                'server-name': url.searchParams.get('sni') || url.hostname,
-                'public-key': url.searchParams.get('pbk') || '',
-                'short-id': url.searchParams.get('sid') || ''
-            };
-
-            Object.assign(clashConfig, realityConfig);
-
-            const typeParam = url.searchParams.get('type') || '';
-            if (typeParam === 'grpc') {
-                clashConfig.network = 'grpc';
-                clashConfig['grpc-opts'] = {
-                    'grpc-service-name': url.searchParams.get('serviceName') || ''
-                };
-            } else if (typeParam === 'tcp') {
-                clashConfig.network = 'tcp';
-            }
-
-            const fpParam = url.searchParams.get('fp');
-            if (fpParam) {
-                clashConfig['client-fingerprint'] = fpParam;
-            }
-
-            return clashConfig;
-        } catch (error) {
-            console.error('转换Reality配置失败:', error, configStr);
-            return null;
+        const downMbps = url.searchParams.get('downspeed');
+        const upMbps = url.searchParams.get('upspeed');
+        if (downMbps) {
+            clashConfig.down = downMbps;
         }
-    }
-
-    // 处理Socks5配置
-    if (protocol === 'socks5') {
-        try {
-            const url = new URL(configStr);
-            const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `Socks5-${url.hostname}-${url.port}`;
-
-            const clashConfig = {
-                name: name,
-                type: 'socks5',
-                server: url.hostname,
-                port: parseInt(url.port) || 1080,
-                username: url.username || '',
-                password: url.password || ''
-            };
-
-            return clashConfig;
-        } catch (error) {
-            console.error('转换Socks5配置失败:', error, configStr);
-            return null;
+        if (upMbps) {
+            clashConfig.up = upMbps;
         }
-    }
 
-    return null;
+        return clashConfig;
+    } catch (error) {
+        console.error('转换Hysteria2配置失败:', error, configStr);
+        return null;
+    }
+}
+
+// 处理Tuic配置
+if (protocol === 'tuic') {
+    try {
+        const url = new URL(configStr);
+        const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `Tuic-${url.hostname}-${url.port}`;
+
+        const clashConfig = {
+            name: name,
+            type: 'tuic',
+            server: url.hostname,
+            port: parseInt(url.port) || 443,
+            uuid: url.username,
+            password: url.password || '',
+            sni: url.searchParams.get('sni') || url.hostname,
+            'skip-cert-verify': true
+        };
+
+        const alpnParam = url.searchParams.get('alpn');
+        if (alpnParam) {
+            clashConfig.alpn = alpnParam.split(',');
+        }
+
+        const disableSni = url.searchParams.get('disable-sni');
+        if (disableSni === 'true') {
+            delete clashConfig.sni;
+        }
+
+        const congestionControl = url.searchParams.get('congestion-controller');
+        if (congestionControl) {
+            clashConfig['congestion-controller'] = congestionControl;
+        }
+
+        const udpRelayMode = url.searchParams.get('udp-relay-mode');
+        if (udpRelayMode) {
+            clashConfig['udp-relay-mode'] = udpRelayMode;
+        }
+
+        return clashConfig;
+    } catch (error) {
+        console.error('转换Tuic配置失败:', error, configStr);
+        return null;
+    }
+}
+
+// 处理AnyTLS配置
+if (protocol === 'anytls') {
+    try {
+        const url = new URL(configStr);
+        const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `AnyTLS-${url.hostname}-${url.port}`;
+
+        let type = 'vless';
+        let uuid = url.username;
+
+        const clashConfig = {
+            name: name,
+            type: type,
+            server: url.hostname,
+            port: parseInt(url.port) || 443,
+            uuid: uuid,
+            tls: true,
+            'skip-cert-verify': true
+        };
+
+        const typeParam = url.searchParams.get('type') || '';
+        if (typeParam === 'ws') {
+            clashConfig.network = 'ws';
+            const path = url.searchParams.get('path') || '/';
+            const host = url.searchParams.get('host');
+
+            clashConfig['ws-opts'] = {
+                path: path,
+                headers: host ? { Host: host } : {}
+            };
+        } else if (typeParam === 'grpc') {
+            clashConfig.network = 'grpc';
+            clashConfig['grpc-opts'] = {
+                'grpc-service-name': url.searchParams.get('serviceName') || ''
+            };
+        }
+
+        const sniParam = url.searchParams.get('sni') || url.searchParams.get('host');
+        if (sniParam) {
+            clashConfig.sni = sniParam;
+        }
+
+        const alpnParam = url.searchParams.get('alpn');
+        if (alpnParam) {
+            clashConfig.alpn = alpnParam.split(',');
+        }
+
+        return clashConfig;
+    } catch (error) {
+        console.error('转换AnyTLS配置失败:', error, configStr);
+        return null;
+    }
+}
+
+// 处理Reality/Any-reality配置
+if (protocol === 'any-reality' || protocol === 'reality') {
+    try {
+        const url = new URL(configStr);
+        const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `Reality-${url.hostname}-${url.port}`;
+
+        const clashConfig = {
+            name: name,
+            type: 'vless',
+            server: url.hostname,
+            port: parseInt(url.port) || 443,
+            uuid: url.username,
+            'skip-cert-verify': true,
+            'client-fingerprint': 'chrome'
+        };
+
+        const realityConfig = {
+            type: 'reality',
+            'server-name': url.searchParams.get('sni') || url.hostname,
+            'public-key': url.searchParams.get('pbk') || '',
+            'short-id': url.searchParams.get('sid') || ''
+        };
+
+        Object.assign(clashConfig, realityConfig);
+
+        const typeParam = url.searchParams.get('type') || '';
+        if (typeParam === 'grpc') {
+            clashConfig.network = 'grpc';
+            clashConfig['grpc-opts'] = {
+                'grpc-service-name': url.searchParams.get('serviceName') || ''
+            };
+        } else if (typeParam === 'tcp') {
+            clashConfig.network = 'tcp';
+        }
+
+        const fpParam = url.searchParams.get('fp');
+        if (fpParam) {
+            clashConfig['client-fingerprint'] = fpParam;
+        }
+
+        return clashConfig;
+    } catch (error) {
+        console.error('转换Reality配置失败:', error, configStr);
+        return null;
+    }
+}
+
+// 处理Socks5配置
+if (protocol === 'socks5') {
+    try {
+        const url = new URL(configStr);
+        const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `Socks5-${url.hostname}-${url.port}`;
+
+        const clashConfig = {
+            name: name,
+            type: 'socks5',
+            server: url.hostname,
+            port: parseInt(url.port) || 1080,
+            username: url.username || '',
+            password: url.password || ''
+        };
+
+        return clashConfig;
+    } catch (error) {
+        console.error('转换Socks5配置失败:', error, configStr);
+        return null;
+    }
+}
+
+return null;
 }
 
 // 生成完整的Clash配置文件
-    async function generateClashConfig(request, env) {
-        try {
-            const url = new URL(request.url);
-            const uuid = url.searchParams.get('uuid');
-            const addressType = url.searchParams.get('type') || 'ip';
-            const ipType = url.searchParams.get('ipType') || 'all';
-            const carrier = url.searchParams.get('carrier') || 'all';
-            const template = url.searchParams.get('template') || '';
+async function generateClashConfig(request, env) {
+    try {
+        const url = new URL(request.url);
+        const uuid = url.searchParams.get('uuid');
+        const addressType = url.searchParams.get('type') || 'ip';
+        const ipType = url.searchParams.get('ipType') || 'all';
+        const carrier = url.searchParams.get('carrier') || 'all';
+        const template = url.searchParams.get('template') || '';
 
-            if (!uuid) {
-                return jsonResponse({ error: '缺少必要参数: uuid' }, 400);
-            }
+        if (!uuid) {
+            return jsonResponse({ error: '缺少必要参数: uuid' }, 400);
+        }
 
-            if (!template) {
-                return jsonResponse({ error: '缺少必要参数: template' }, 400);
-            }
+        if (!template) {
+            return jsonResponse({ error: '缺少必要参数: template' }, 400);
+        }
 
-            const configsFromDb = await fetchConfigsByUuidFromDB(uuid, env, { getAll: true });
-            // 修复：使用 .results
-            if (configsFromDb.results.length === 0) {
-                return jsonResponse({ error: `未找到 UUID 为 "${uuid}" 的配置` }, 404);
-            }
-            const baseConfigsData = configsFromDb.results;
+        const configsFromDb = await fetchConfigsByUuidFromDB(uuid, env, { getAll: true });
+        // 修复：使用 .results
+        if (configsFromDb.results.length === 0) {
+            return jsonResponse({ error: `未找到 UUID 为 "${uuid}" 的配置` }, 404);
+        }
+        const baseConfigsData = configsFromDb.results;
 
         let addressList = [];
         if (addressType === 'domain') {
@@ -1416,6 +1742,8 @@ export default {
         const subUUID = new URLPattern({ pathname: '/sub/:uuid' });
         const uuidStats = new URLPattern({ pathname: '/manage/stats/:uuid' });
         const batchUUID = new URLPattern({ pathname: '/batch-configs/:uuid' });
+        const uuidInfo = new URLPattern({ pathname: '/manage/uuid-info/:uuid' });
+        const allUuidInfo = new URLPattern({ pathname: '/manage/all-uuid-info' });
 
         try {
             if (method === 'GET') {
@@ -1441,6 +1769,17 @@ export default {
                     const days = urlObj.searchParams.get('days') || 30;
                     const stats = await fetchUuidAccessStatsFromDB(statsMatch.pathname.groups.uuid, env, parseInt(days));
                     return jsonResponse(stats);
+                }
+
+                // ===== API: UUID信息管理 =====
+                const uuidInfoMatch = uuidInfo.exec(url);
+                if (uuidInfoMatch) {
+                    return await handleGetUuidInfo(uuidInfoMatch.pathname.groups.uuid, env);
+                }
+
+                // ===== API: 获取所有UUID信息列表 =====
+                if (path === '/manage/all-uuid-info') {
+                    return await handleGetAllUuidInfo(env, url);
                 }
 
                 // ===== API: 批量配置订阅 =====
@@ -1498,6 +1837,9 @@ export default {
 
                 // ===== API: 批量配置生成 =====
                 if (path === '/generate') return await generateConfigs(request, env);
+
+                // ===== API: 创建或更新UUID信息 =====
+                if (path === '/manage/uuid-info') return await handlePostUuidInfo(request, env);
             }
 
             if (method === 'PUT') {
@@ -1511,7 +1853,7 @@ export default {
                 if (idMatch) return await handleDelete('id', idMatch.pathname.groups.id, env);
                 const uuidMatch = manageUUID.exec(url);
                 if (uuidMatch) return await handleDelete('uuid', uuidMatch.pathname.groups.uuid, env);
-                
+          
                 // ===== API: 批量删除配置 =====
                 if (path === '/manage/configs/batch') {
                     const body = await request.json();
@@ -1520,6 +1862,12 @@ export default {
                         return jsonResponse({ error: '无效的请求数据，需要ids数组' }, 400);
                     }
                     return await handleDelete('batch', JSON.stringify(ids), env);
+                }
+
+                // ===== API: 删除UUID信息 =====
+                const deleteUuidInfoMatch = uuidInfo.exec(url);
+                if (deleteUuidInfoMatch) {
+                    return await handleDeleteUuidInfo(deleteUuidInfoMatch.pathname.groups.uuid, env);
                 }
             }
 
@@ -1552,8 +1900,8 @@ html { font-size: 87.5%; } body, html { margin: 0; padding: 0; min-height: 100%;
 .card h2 { font-size: 1.5rem; color: #3d474d; margin-top: 0; margin-bottom: 20px; text-align: center;}
 .form-group { margin-bottom: 16px; }
 .form-group label { display: block; color: #5a666d; font-weight: 500; margin-bottom: 8px; font-size: 0.9rem;}
-textarea, input[type="text"], input[type="number"], select { width: 100%; padding: 10px; border: 2px solid #89949B; border-radius: 4px; background: #fff; font-family: 'SF Mono', 'Courier New', monospace; font-size: 0.9rem; box-sizing: border-box; resize: vertical; margin-bottom: 5px;}
-textarea:focus, input:focus, select:focus { outline: none; border-color: #3d474d; }
+textarea, input[type="text"], input[type="email"], input[type="number"], select { width: 100%; padding: 10px; border: 2px solid #89949B; border-radius: 4px; background: #fff; font-family: 'SF Mono', 'Courier New', monospace; font-size: 0.9rem; box-sizing: border-box; resize: vertical; margin-bottom: 5px;}
+textarea:focus, input[type="text"]:focus, input[type="email"]:focus, input[type="number"]:focus, select:focus { outline: none; border-color: #3d474d; }
 .info-box { background-color: #e8ebed; color: #5a666d; border-left: 4px solid #89949B; padding: 12px 16px; border-radius: 4px; font-size: 0.85rem; text-align: left; line-height: 1.5; margin: 16px 0; }
 .footer { margin-top: 40px; text-align: center; color: #89949B; font-size: 0.8rem; }
 .footer a { color: #5a666d; text-decoration: none; }
@@ -1860,7 +2208,7 @@ th { font-weight: bold; color: #3d474d; background-color: #f0f2f5; }
   right: 0;
   top: 100%;
   background-color: #fff;
-  min-width: 220px;
+  min-width: 180px;
   box-shadow: 0 8px 16px rgba(0,0,0,0.2);
   border-radius: 4px;
   padding: 10px 0;
@@ -1931,6 +2279,31 @@ th { font-weight: bold; color: #3d474d; background-color: #f0f2f5; }
   font-size: 0.8em;
 }
 
+/* UUID Status Badges */
+.uuid-status-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.4;
+}
+.uuid-status-active {
+  background-color: #10b981;
+  color: white;
+  border: 1px solid #10b981;
+}
+.uuid-status-inactive {
+  background-color: #6b7280;
+  color: white;
+  border: 1px solid #6b7280;
+}
+.uuid-status-suspended {
+  background-color: #ef4444;
+  color: white;
+  border: 1px solid #ef4444;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) { 
   html { font-size: 100%; } 
@@ -1967,38 +2340,94 @@ const unifiedPageHtmlContent = `
   <!-- Configuration Management Button - 固定在右上角 -->
   <div id="configManagerBtn" style="position: fixed; top: 20px; right: 20px; z-index: 1000; display: flex; align-items: center; gap: 10px;">
     <!-- 配置管理按钮（未登录时显示） -->
-    <button id="configManagerOpenBtn" class="nav-btn primary" onclick="openConfigManagerModal()" 
+    <button id="configManagerOpenBtn" class="nav-btn primary" 
             style="padding: 8px 16px; background-color: #5a666d; color: white; border: none; border-radius: 4px; cursor: pointer;">
       ⚙️ 配置管理
     </button>
-    
-    <!-- UUID显示和二级菜单（登录后显示） -->
+
+    <!-- UUID显示和下拉菜单（登录后显示） -->
     <div id="uuidDropdownContainer" class="hidden" style="position: relative;">
       <button id="uuidDropdownBtn" class="uuid-dropdown-btn">
         <span id="uuidDisplay">UUID: ...</span>
         <span class="arrow">▼</span>
       </button>
-      
+
       <div id="uuidDropdownMenu" class="dropdown-menu">
         <div style="padding: 10px 15px; color: #5a666d; font-size: 0.9rem; border-bottom: 1px solid #E8EBED; word-break: break-all;">
           UUID: <span id="dropdownUuid"></span>
         </div>
-        <a href="javascript:void(0)" onclick="showUuidSubMenu()">管理菜单 ▸</a>
+        <a href="javascript:void(0)" onclick="openUuidInfoModal()">编辑UUID信息</a>
+        <hr style="margin: 5px 0; border: none; border-top: 1px solid #E8EBED;">
+        <a href="javascript:void(0)" class="logout" onclick="logout()">退出登录</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- UUID信息管理模态框（简化版）- 移除了UUID列表标签页 -->
+  <div id="uuidInfoModal" class="modal-overlay" style="display: none;">
+    <div class="modal" style="max-width: 600px;">
+      <div class="modal-header">
+        <span class="modal-title">UUID信息管理</span>
+        <span class="modal-close" onclick="closeUuidInfoModal()">&times;</span>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <div class="info-box">
+            <strong>注意：</strong> 在此处管理UUID的详细信息，包括所属人、联系方式、状态等。
+            <br>这些信息仅用于管理和统计，不会影响配置的正常使用。
+          </div>
+        </div>
+      
+        <!-- 个人信息标签页（简化版） -->
+        <div id="uuidInfoPersonalContent">
+          <div class="form-group">
+            <label>UUID</label>
+            <input type="text" id="uuidInfoUuid" readonly style="background-color: #f8f9fa; font-family: 'SF Mono', 'Courier New', monospace;">
+          </div>
         
-        <!-- UUID二级菜单 -->
-        <div id="uuidSubMenu" class="dropdown-menu" style="position: absolute; left: 100%; top: 0; display: none; min-width: 180px;">
-          <a href="javascript:void(0)" onclick="switchTab('manage')">配置管理</a>
-          <a href="javascript:void(0)" onclick="switchTab('clash')">订阅生成</a>
-          <a href="javascript:void(0)" onclick="loadUuidStats()">查看统计</a>
-          <hr style="margin: 5px 0; border: none; border-top: 1px solid #E8EBED;">
-          <a href="javascript:void(0)" class="logout" onclick="logout()">退出登录</a>
+          <div class="grid-2">
+            <div class="form-group">
+              <label>所属人姓名/标识 *</label>
+              <input type="text" id="uuidInfoOwner" placeholder="请输入所属人姓名或标识">
+            </div>
+            <div class="form-group">
+              <label>邮箱地址 *</label>
+              <input type="email" id="uuidInfoEmail" placeholder="请输入邮箱地址">
+            </div>
+          </div>
+        
+          <div class="form-group">
+            <label>其他联系信息</label>
+            <input type="text" id="uuidInfoContact" placeholder="电话、微信等其他联系方式（可选）">
+          </div>
+        
+          <div class="grid-2">
+            <div class="form-group">
+              <label>状态</label>
+              <select id="uuidInfoStatus" class="hosting-select">
+                <option value="active">活跃 (active)</option>
+                <option value="inactive">停用 (inactive)</option>
+                <option value="suspended">暂停 (suspended)</option>
+              </select>
+            </div>
+          </div>
+        
+          <div class="form-group">
+            <label>备注信息</label>
+            <textarea id="uuidInfoRemark" rows="3" placeholder="可在此添加备注信息..."></textarea>
+          </div>
+        
+          <div style="margin-top: 20px; text-align: right;">
+            <button class="nav-btn" onclick="closeUuidInfoModal()">取消</button>
+            <button id="uuidInfoSaveBtn" class="nav-btn primary" onclick="saveUuidInfo()">保存信息</button>
+          </div>
         </div>
       </div>
     </div>
   </div>
 
   <div id="toast-container"></div>
-  
+
   <!-- Config Manager Modal -->
   <div id="configManagerModal" class="modal-overlay" style="display: none;">
     <div class="modal" style="max-width: 500px;">
@@ -2078,7 +2507,7 @@ const unifiedPageHtmlContent = `
     <div class="content-group">
       <h1 class="profile-name">代理配置管理工具</h1>
       <p class="profile-quote">一站式代理配置管理、生成与订阅服务</p>
-      
+
       <!-- Tab Navigation -->
       <div class="tab-nav">
         <button class="tab-btn active" onclick="switchTab('batch')">批量生成</button>
@@ -2146,7 +2575,7 @@ const unifiedPageHtmlContent = `
           </div>
 
           <button id="genFetchBtn" class="nav-btn" style="width:100%; margin-bottom: 16px;" onclick="genFetchAddresses()">获取优选列表</button>
-          
+    
           <div id="batchSubscriptionLinkBox" class="form-group hidden" style="display:none; gap:10px;">
               <input type="text" id="batchSubscriptionLink" readonly style="margin-bottom:0; color:#5a666d; background-color: #f8f9fa;">
               <button class="nav-btn" onclick="copyBatchSubscriptionLink()" style="white-space: nowrap;">复制</button>
@@ -2163,7 +2592,7 @@ const unifiedPageHtmlContent = `
             <button class="nav-btn" onclick="copyBatchGeneratedLink()" style="white-space: nowrap;">复制</button>
           </div>
           <textarea id="genResultTextarea" readonly placeholder="点击下方"生成配置"按钮..." rows="6"></textarea>
-          
+    
           <div id="batchQrCodeContainer" class="qr-code-container hidden">
             <label class="qr-code-label">订阅链接二维码</label>
             <div id="batchQrCodeImageContainer">
@@ -2204,7 +2633,7 @@ const unifiedPageHtmlContent = `
               <br>如果您已登录，UUID将自动填充。
             </div>
           </div>
-          
+    
           <div class="protocol-support">
             <h3>支持的协议类型</h3>
             <div class="protocol-list">
@@ -2237,23 +2666,23 @@ const unifiedPageHtmlContent = `
               </div>
             </div>
           </div>
-          
+    
           <div id="customTemplateInput" class="form-group hidden">
             <input type="text" id="customTemplateUrl" placeholder="输入自定义模板URL，如: https://raw.githubusercontent.com/your-repo/config.yaml">
             <div class="info-box">
               请输入可公开访问的YAML配置文件的完整URL地址。
             </div>
           </div>
-          
+    
           <div id="templateLoading" class="loading-state hidden">
             <div class="loader"></div>
             <p>正在加载模板列表...</p>
           </div>
-          
+    
           <div id="templateError" class="info-box hidden">
             无法加载模板列表，请稍后重试。
           </div>
-          
+    
           <div id="templateInfoBox" class="info-box">
             <strong>模板说明：</strong>
             <br>• 所有模板均从数据库读取
@@ -2303,14 +2732,14 @@ const unifiedPageHtmlContent = `
           <div class="form-group">
             <button id="generateClashBtn" class="nav-btn primary" style="width:100%; padding: 12px;" onclick="generateClashConfig()" disabled>生成Clash订阅文件</button>
           </div>
-          
+    
           <div class="subscription-link-box hidden" id="clashSubscriptionLinkBox">
             <label>订阅链接</label>
             <div class="link-input-container">
               <input type="text" id="clashGeneratedLink" readonly>
               <button class="nav-btn" onclick="copyClashGeneratedLink()">复制</button>
             </div>
-            
+      
             <div id="clashQrCodeContainer" class="qr-code-container hidden">
               <label class="qr-code-label">订阅链接二维码</label>
               <div id="clashQrCodeImageContainer">
@@ -2326,7 +2755,7 @@ const unifiedPageHtmlContent = `
               </div>
             </div>
           </div>
-          
+    
           <div class="info-box">
             <strong>新特性：</strong> 现在支持更多现代协议，包括Hysteria2、Tuic、AnyTLS、Any-reality等。
             <br>配置文件基于您选择的模板生成，包含完整的规则和策略组。
@@ -2344,12 +2773,12 @@ const unifiedPageHtmlContent = `
             <button id="queryBtn" class="nav-btn primary" onclick="manageQueryByUuid()">刷新配置</button>
             <button class="nav-btn" onclick="openConfigManagerModal()" style="background:#f0ad4e; color:white; border-color:#f0ad4e;">切换UUID</button>
           </div>
-          
+    
           <div id="manageSubLinkDisplay" class="form-group hidden" style="display:none; gap:10px; margin-top:10px;">
             <input type="text" id="manageSubUrlLink" readonly style="margin-bottom:0; color:#5a666d; background-color: #f8f9fa; flex: 1;">
             <button class="nav-btn" onclick="copyManageSubLink()" style="white-space: nowrap;">复制</button>
           </div>
-          
+    
           <div class="info-box">
             <strong>提示：</strong> UUID已自动保存。您可以在其他标签页（批量生成、订阅生成）中使用同一个UUID。
             <br>如需切换UUID，请点击"切换UUID"按钮。
@@ -2358,7 +2787,7 @@ const unifiedPageHtmlContent = `
 
         <div id="manageResultCard" class="card hidden">
           <h2>2. 配置列表</h2>
-          
+    
           <!-- 筛选栏 -->
           <div class="filter-bar">
             <div class="filter-item">
@@ -2406,16 +2835,16 @@ const unifiedPageHtmlContent = `
               </select>
             </div>
           </div>
-          
+    
           <!-- 批量操作栏 -->
           <div id="bulkActionsBar" class="bulk-actions-bar hidden">
             <div class="selected-count" id="selectedCount">已选择 <span id="selectedCountNum">0</span> 条</div>
             <button id="bulkDeleteBtn" class="bulk-delete-btn" onclick="deleteSelectedConfigs()" disabled>批量删除</button>
           </div>
-          
+    
           <!-- 配置列表表格 -->
           <div id="queryResultsContainer"></div>
-          
+    
           <!-- 分页控件 -->
           <div id="paginationContainer" class="pagination-container hidden">
             <div class="pagination-info" id="paginationInfo">第 1 页，共 1 页，总计 0 条</div>
@@ -2440,13 +2869,13 @@ const unifiedPageHtmlContent = `
             <button class="nav-btn" onclick="switchChartType('total')" id="chartTotalBtn">总访问</button>
             <button class="nav-btn" onclick="switchChartType('split')" id="chartSplitBtn">分类统计</button>
           </div>
-          
+    
           <div id="manageStatsSummary" class="stat-grid"></div>
-          
+    
           <div class="chart-container">
             <canvas id="manageStatsChart"></canvas>
           </div>
-          
+    
           <div style="margin-top: 20px;">
             <h3 style="font-size: 1.1rem; margin: 0 0 10px 0;">最近访问记录</h3>
             <div id="manageRecentLogs" class="access-log-container">
@@ -2499,14 +2928,14 @@ trojan://..." rows="4"></textarea>
     const WORKER_DOMAIN = "YOUR_WORKER_DOMAIN_PATH";
     const QR_CODE_API = "https://qrcode.api.yangzifun.org/qr";
     const toastIcons = { success: '✅', error: '❌', info: 'ℹ️' };
-    
+
     // Shared variables
     let currentUuid = '';
     let statsChart = null;
     let currentChartType = 'split';
     let currentSubscriptionLink = '';
     let templatesList = [];
-    
+
     // Domain hosting style mapping
     const hostingStyleMap = {
       'Cloudflare': 'hosting-cloudflare',
@@ -2522,7 +2951,7 @@ trojan://..." rows="4"></textarea>
       '无': 'hosting-none',
       '其他': 'hosting-other'
     };
-    
+
     // Config management pagination variables
     let currentPage = 1;
     let currentPageSize = 10;
@@ -2531,21 +2960,21 @@ trojan://..." rows="4"></textarea>
     let currentProtocolFilter = 'all';
     let currentHostingFilter = 'all';
     let selectedConfigs = new Set();
-    
+
     // ============================================
     // Local Storage Functions (本地存储功能)
     // ============================================
-    
+
     // Local storage functions for UUID persistence
     function saveUuidToStorage(uuid) {
       localStorage.setItem('proxy_manager_uuid', uuid);
       localStorage.setItem('proxy_manager_last_access', Date.now().toString());
     }
-    
+
     function getUuidFromStorage() {
       const uuid = localStorage.getItem('proxy_manager_uuid');
       const lastAccess = localStorage.getItem('proxy_manager_last_access');
-      
+
       // Check if UUID is still valid (less than 30 days old)
       if (uuid && lastAccess) {
         const thirtyDays = 30 * 24 * 60 * 60 * 1000; // 30 days in milliseconds
@@ -2556,37 +2985,55 @@ trojan://..." rows="4"></textarea>
       }
       return null;
     }
-    
+
     function clearUuidFromStorage() {
       localStorage.removeItem('proxy_manager_uuid');
       localStorage.removeItem('proxy_manager_last_access');
     }
-    
+
     // ============================================
     // Configuration Management Functions
     // ============================================
-    
+
     function openConfigManagerModal() {
-      document.getElementById('configManagerModal').style.display = 'flex';
-      setTimeout(() => {
-        document.getElementById('configManagerModal').classList.add('open');
-        document.getElementById('configUuidInput').focus();
+      const modal = document.getElementById('configManagerModal');
+      if (!modal) {
+        console.error('配置管理模态框未找到');
+        return;
+      }
+      
+      modal.style.display = 'flex';
+      
+      // 使用 requestAnimationFrame 确保 DOM 更新后添加类
+      requestAnimationFrame(() => {
+        modal.classList.add('open');
         
-        // Fill with stored UUID if available
-        const storedUuid = getUuidFromStorage();
-        if (storedUuid) {
-          document.getElementById('configUuidInput').value = storedUuid;
+        // 聚焦到输入框
+        const input = document.getElementById('configUuidInput');
+        if (input) {
+          input.focus();
+          
+          // 自动填充存储的 UUID
+          const storedUuid = getUuidFromStorage();
+          if (storedUuid) {
+            input.value = storedUuid;
+          }
         }
-      }, 10);
+      });
     }
-    
+
     function closeConfigManagerModal() {
-      document.getElementById('configManagerModal').classList.remove('open');
+      const modal = document.getElementById('configManagerModal');
+      if (!modal) return;
+      
+      modal.classList.remove('open');
+      
+      // 延迟隐藏以确保动画完成
       setTimeout(() => {
-        document.getElementById('configManagerModal').style.display = 'none';
+        modal.style.display = 'none';
       }, 300);
     }
-    
+
     function generateNewUuid() {
       const newUuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
         const r = Math.random() * 16 | 0;
@@ -2596,49 +3043,49 @@ trojan://..." rows="4"></textarea>
       document.getElementById('configUuidInput').value = newUuid;
       showToast('已生成新的 UUID', 'success');
     }
-    
+
     function enterConfigManagement() {
       const uuid = document.getElementById('configUuidInput').value.trim();
       if (!uuid) {
         showToast('请输入 UUID', 'error');
         return;
       }
-      
+
       closeConfigManagerModal();
-      
+
       // Save UUID to storage
       saveUuidToStorage(uuid);
-      
+
       // Update logout button
       updateLogoutButton();
-      
+
       // Show manage tab button
       document.getElementById('manageTabBtn').classList.remove('hidden');
-      
+
       // Switch to manage tab
       switchTab('manage', uuid);
     }
-    
+
     function updateLogoutButton() {
       const configManagerOpenBtn = document.getElementById('configManagerOpenBtn');
       const uuidDropdownContainer = document.getElementById('uuidDropdownContainer');
       const uuidDisplay = document.getElementById('uuidDisplay');
       const dropdownUuid = document.getElementById('dropdownUuid');
-      
+
       const storedUuid = getUuidFromStorage();
-      
+
       if (storedUuid) {
         // 有UUID，显示下拉菜单，隐藏配置管理按钮
         if (configManagerOpenBtn) configManagerOpenBtn.style.display = 'none';
         if (uuidDropdownContainer) {
           uuidDropdownContainer.classList.remove('hidden');
-          
+    
           // 设置UUID显示（截短显示）
           const shortUuid = storedUuid.substring(0, 8) + '...';
           uuidDisplay.textContent = 'UUID: ' + shortUuid;
           uuidDisplay.title = 'UUID: ' + storedUuid;
           dropdownUuid.textContent = storedUuid;
-          
+    
           // 添加下拉菜单交互
           setupUuidDropdown();
         }
@@ -2648,92 +3095,262 @@ trojan://..." rows="4"></textarea>
         if (uuidDropdownContainer) uuidDropdownContainer.classList.add('hidden');
       }
     }
-    
+
     // 设置UUID下拉菜单交互
     function setupUuidDropdown() {
       const dropdownBtn = document.getElementById('uuidDropdownBtn');
       const dropdownMenu = document.getElementById('uuidDropdownMenu');
-      
+
       if (!dropdownBtn || !dropdownMenu) return;
-      
+
       // 点击按钮显示/隐藏下拉菜单
       dropdownBtn.addEventListener('click', function(e) {
         e.stopPropagation();
         const isVisible = dropdownMenu.style.display === 'block';
         dropdownMenu.style.display = isVisible ? 'none' : 'block';
       });
-      
+
       // 点击其他地方关闭下拉菜单
       document.addEventListener('click', function() {
         dropdownMenu.style.display = 'none';
       });
-      
+
       // 防止下拉菜单内部点击关闭
       dropdownMenu.addEventListener('click', function(e) {
         e.stopPropagation();
       });
     }
-    
+
     // 退出登录函数
     function logout() {
       if (confirm('确定要退出登录吗？这将清除当前保存的UUID。')) {
         clearUuidFromStorage();
         // 关闭下拉菜单
-        document.getElementById('uuidDropdownMenu').style.display = 'none';
+        const dropdownMenu = document.getElementById('uuidDropdownMenu');
+        if (dropdownMenu) {
+          dropdownMenu.style.display = 'none';
+        }
         // 重新加载页面
         location.reload();
       }
     }
-    
-    // 显示UUID二级菜单函数
-    function showUuidSubMenu() {
-      const subMenu = document.getElementById('uuidSubMenu');
-      const uuidDropdownMenu = document.getElementById('uuidDropdownMenu');
-      
-      if (subMenu && uuidDropdownMenu) {
-        // 计算二级菜单位置
-        const menuRect = uuidDropdownMenu.getBoundingClientRect();
-        const subMenuStyle = subMenu.style;
-        
-        // 设置二级菜单位置
-        subMenuStyle.top = '0';
-        subMenuStyle.left = '100%';
-        subMenuStyle.display = 'block';
-        
-        // 防止二级菜单超出屏幕右侧
-        const subMenuWidth = 180; // 二级菜单宽度
-        const screenWidth = window.innerWidth;
-        const rightEdge = menuRect.right + subMenuWidth;
-        
-        if (rightEdge > screenWidth) {
-          // 如果超出右侧，向左显示
-          subMenuStyle.left = '-100%';
-        }
-        
-        // 点击其他地方关闭二级菜单
-        setTimeout(() => {
-          const closeSubMenu = function(e) {
-            if (subMenu && !subMenu.contains(e.target) && !uuidDropdownMenu.contains(e.target)) {
-              subMenu.style.display = 'none';
-              document.removeEventListener('click', closeSubMenu);
-            }
-          };
-          document.addEventListener('click', closeSubMenu);
-        }, 10);
-      }
-    }
-    
+
     // 监听配置管理模态框的ESC键关闭
     document.addEventListener('keydown', function(e) {
-      if (e.key === 'Escape' && document.getElementById('configManagerModal').style.display === 'flex') {
-        closeConfigManagerModal();
+      const configManagerModal = document.getElementById('configManagerModal');
+      const uuidInfoModal = document.getElementById('uuidInfoModal');
+      
+      if (e.key === 'Escape') {
+        if (configManagerModal && configManagerModal.style.display === 'flex') {
+          closeConfigManagerModal();
+        }
+        if (uuidInfoModal && uuidInfoModal.style.display === 'flex') {
+          closeUuidInfoModal();
+        }
       }
     });
-    
+
+    // ============================================
+    // UUID信息管理功能（简化版）
+    // ============================================
+
+    // 打开UUID信息管理模态框
+    function openUuidInfoModal() {
+      const storedUuid = getUuidFromStorage();
+      if (!storedUuid) {
+        showToast('请先登录或输入UUID', 'error');
+        return;
+      }
+
+      const modal = document.getElementById('uuidInfoModal');
+      modal.style.display = 'flex';
+      
+      // 使用 requestAnimationFrame 确保 DOM 更新
+      requestAnimationFrame(() => {
+        modal.classList.add('open');
+      
+        // 加载当前UUID信息
+        loadCurrentUuidInfo(storedUuid);
+        
+        // 确保保存按钮状态正确
+        const saveBtn = document.getElementById('uuidInfoSaveBtn');
+        if (saveBtn && !saveBtn.originalText) {
+          saveBtn.originalText = saveBtn.innerHTML;
+        }
+      });
+    }
+
+    // 关闭UUID信息管理模态框
+    function closeUuidInfoModal() {
+      const modal = document.getElementById('uuidInfoModal');
+      modal.classList.remove('open');
+      
+      // 延迟隐藏以确保动画完成
+      setTimeout(() => {
+        modal.style.display = 'none';
+        
+        // 重置保存按钮状态
+        const saveBtn = document.getElementById('uuidInfoSaveBtn');
+        if (saveBtn && saveBtn.originalText) {
+          saveBtn.innerHTML = saveBtn.originalText;
+          saveBtn.disabled = false;
+        }
+      }, 300);
+    }
+
+    // 加载当前UUID信息（简化版，不加载时间字段）
+    async function loadCurrentUuidInfo(uuid) {
+      const saveBtn = document.getElementById('uuidInfoSaveBtn');
+      
+      // 保存原始文本
+      if (!saveBtn.originalText) {
+        saveBtn.originalText = saveBtn.innerHTML;
+      }
+      
+      // 设置加载状态
+      saveBtn.disabled = true;
+      saveBtn.innerHTML = '<span class="loader"></span>加载中...';
+
+      try {
+        const response = await fetch(\`\${WORKER_DOMAIN}/manage/uuid-info/\${uuid}\`);
+        const data = await response.json();
+
+        if (data.success) {
+          if (data.exists) {
+            // 填充表单（只填充基础信息）
+            document.getElementById('uuidInfoUuid').value = data.data.uuid;
+            document.getElementById('uuidInfoOwner').value = data.data.owner;
+            document.getElementById('uuidInfoEmail').value = data.data.email;
+            document.getElementById('uuidInfoContact').value = data.data.contact_info || '';
+            document.getElementById('uuidInfoStatus').value = data.data.status;
+            document.getElementById('uuidInfoRemark').value = data.data.remark || '';
+
+            showToast('UUID信息加载成功', 'success');
+          } else {
+            // UUID信息不存在，显示默认值
+            document.getElementById('uuidInfoUuid').value = uuid;
+            document.getElementById('uuidInfoOwner').value = '';
+            document.getElementById('uuidInfoEmail').value = '';
+            document.getElementById('uuidInfoContact').value = '';
+            document.getElementById('uuidInfoStatus').value = 'active';
+            document.getElementById('uuidInfoRemark').value = '';
+
+            showToast('UUID信息不存在，可以创建新的', 'info');
+          }
+        } else {
+          showToast(data.error || '加载UUID信息失败', 'error');
+        }
+      } catch (error) {
+        console.error('加载UUID信息失败:', error);
+        showToast('加载UUID信息失败: ' + error.message, 'error');
+      } finally {
+        // 无论成功失败都重置按钮状态
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = saveBtn.originalText;
+      }
+    }
+
+    // 保存UUID信息 - 修复：移除了邮箱验证，只保留必填字段检查
+    async function saveUuidInfo() {
+      const uuid = document.getElementById('uuidInfoUuid').value.trim();
+      const owner = document.getElementById('uuidInfoOwner').value.trim();
+      const email = document.getElementById('uuidInfoEmail').value.trim();
+      const contact = document.getElementById('uuidInfoContact').value.trim();
+      const status = document.getElementById('uuidInfoStatus').value;
+      const remark = document.getElementById('uuidInfoRemark').value.trim();
+
+      if (!uuid) {
+        showToast('UUID不能为空', 'error');
+        return;
+      }
+
+      if (!owner) {
+        showToast('所属人姓名/标识不能为空', 'error');
+        document.getElementById('uuidInfoOwner').focus();
+        return;
+      }
+
+      if (!email) {
+        showToast('邮箱地址不能为空', 'error');
+        document.getElementById('uuidInfoEmail').focus();
+        return;
+      }
+
+      // 修复：移除了邮箱格式验证，只检查是否为空
+      // 因为有些用户可能使用非标准邮箱格式
+
+      const saveBtn = document.getElementById('uuidInfoSaveBtn');
+      
+      // 保存按钮原始文本
+      if (!saveBtn.originalText) {
+        saveBtn.originalText = saveBtn.innerHTML;
+      }
+      
+      // 正确设置加载状态
+      saveBtn.disabled = true;
+      saveBtn.innerHTML = '<span class="loader"></span>保存中...';
+
+      try {
+        const response = await fetch(\`\${WORKER_DOMAIN}/manage/uuid-info\`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            uuid,
+            owner,
+            email,
+            contact_info: contact,
+            status,
+            remark
+          })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          showToast(\`UUID信息\${data.action === 'created' ? '创建' : '更新'}成功\`, 'success');
+        
+          // 重新加载信息以获取更新时间
+          setTimeout(() => {
+            loadCurrentUuidInfo(uuid);
+          }, 500);
+        } else {
+          showToast(data.error || '保存UUID信息失败', 'error');
+          
+          // 出错时重置按钮状态
+          saveBtn.disabled = false;
+          saveBtn.innerHTML = saveBtn.originalText;
+        }
+      } catch (error) {
+        console.error('保存UUID信息失败:', error);
+        showToast('保存UUID信息失败: ' + error.message, 'error');
+        
+        // 捕获异常时重置按钮状态
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = saveBtn.originalText;
+      }
+    }
+
+    // 更新 setButtonLoading 函数以确保一致性
+    function setButtonLoading(btn, ld, txt) { 
+      if (ld) { 
+        // 保存原始文本，而不是整个innerHTML
+        if (!btn.originalText) {
+          btn.originalText = btn.innerHTML;
+        }
+        btn.disabled = true; 
+        btn.innerHTML = '<span class="loader"></span>' + (txt || '处理中...'); 
+      } else { 
+        btn.disabled = false; 
+        if (btn.originalText) {
+          btn.innerHTML = btn.originalText;
+        }
+      } 
+    }
+
     // ============================================
     // Tab Switching Functions
     // ============================================
-    
+
     function switchTab(tabName, forceUuid = null) {
       // If switching to manage tab and we have a stored UUID, use it
       if (tabName === 'manage' && !forceUuid) {
@@ -2746,43 +3363,43 @@ trojan://..." rows="4"></textarea>
           return;
         }
       }
-      
+
       // Hide all tabs
       document.querySelectorAll('.tab-content').forEach(tab => {
         tab.classList.remove('active');
       });
-      
+
       // Deactivate all tab buttons
       document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.classList.remove('active');
       });
-      
+
       // Show selected tab
       const tabElement = document.getElementById(\`\${tabName}-tab\`);
       if (tabElement) {
         tabElement.classList.add('active');
       }
-      
+
       // Activate selected tab button
       const tabBtn = document.querySelector(\`.tab-btn[onclick*="\${tabName}"]\`);
       if (tabBtn) {
         tabBtn.classList.add('active');
       }
-      
+
       // If it's manage tab and we have a UUID, load it
       if (tabName === 'manage' && forceUuid) {
         setTimeout(() => {
           loadUuidData(forceUuid);
         }, 100);
       }
-      
+
       // Load templates if switching to clash tab
       if (tabName === 'clash') {
         setTimeout(() => {
           loadTemplates();
         }, 100);
       }
-      
+
       // Update UUID inputs if switching to batch or clash tabs
       if (tabName === 'batch' || tabName === 'clash') {
         setTimeout(() => {
@@ -2790,31 +3407,31 @@ trojan://..." rows="4"></textarea>
         }, 100);
       }
     }
-    
+
     // New function to load UUID data
     function loadUuidData(uuid) {
       currentUuid = uuid;
-      
+
       // Fill UUID input
       document.getElementById('queryUuidInput').value = uuid;
-      
+
       // Show manage sections
       document.getElementById('manageResultCard').classList.remove('hidden');
       document.getElementById('manageStatsCard').classList.remove('hidden');
       document.getElementById('manageAddCard').classList.remove('hidden');
-      
+
       // Show subscription link
       const subLink = WORKER_DOMAIN + '/sub/' + uuid;
       const subInput = document.getElementById('manageSubUrlLink');
       subInput.value = subLink;
       document.getElementById('manageSubLinkDisplay').style.display = 'flex';
       document.getElementById('manageSubLinkDisplay').classList.remove('hidden');
-      
+
       // Load configs and stats
       manageQueryByUuid();
       showToast('已加载 UUID: ' + uuid.substring(0, 8) + '...', 'success');
     }
-    
+
     function updateUuidInputs() {
       const storedUuid = getUuidFromStorage();
       if (storedUuid) {
@@ -2823,7 +3440,7 @@ trojan://..." rows="4"></textarea>
         if (batchUuidInput) {
           batchUuidInput.value = storedUuid;
         }
-        
+  
         // Update clash generation UUID input
         const clashUuidInput = document.getElementById('clashConfigUuid');
         if (clashUuidInput) {
@@ -2831,11 +3448,11 @@ trojan://..." rows="4"></textarea>
         }
       }
     }
-    
+
     // ============================================
     // Utility functions
     // ============================================
-    
+
     function showToast(msg, type='info') { 
       const c = document.getElementById('toast-container'); 
       const t = document.createElement('div'); 
@@ -2844,26 +3461,15 @@ trojan://..." rows="4"></textarea>
       c.appendChild(t); 
       setTimeout(()=>t.remove(), 5000); 
     }
-    
-    function setButtonLoading(btn, ld, txt) { 
-      if(ld){ 
-        btn.ds = btn.innerHTML;
-        btn.disabled = true; 
-        btn.innerHTML = '<span class="loader"></span>处理中...'; 
-      } else { 
-        btn.disabled = false; 
-        if(btn.ds) btn.innerHTML = btn.ds; 
-      } 
-    }
-    
+
     function b64DecodeUnicode(str) { 
       return decodeURIComponent(atob(str).split('').map(c=>'%'+('00'+c.charCodeAt(0).toString(16)).slice(-2)).join('')); 
     }
-    
+
     function b64EncodeUnicode(str) { 
       return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g,(m,p1)=>String.fromCharCode(parseInt(p1,16)))); 
     }
-    
+
     function formatDate(dateStr) {
       if (!dateStr) return '';
       const date = new Date(dateStr);
@@ -2871,7 +3477,7 @@ trojan://..." rows="4"></textarea>
       const day = date.getDate().toString().padStart(2, '0');
       return \`\${month}/\${day}\`;
     }
-    
+
     function formatDateTime(dateStr) {
       if (!dateStr) return '';
       const date = new Date(dateStr);
@@ -2881,11 +3487,11 @@ trojan://..." rows="4"></textarea>
       const minutes = date.getMinutes().toString().padStart(2, '0');
       return \`\${month}/\${day} \${hours}:\${minutes}\`;
     }
-    
+
     // ============================================
     // Batch Generation Tab Functions
     // ============================================
-    
+
     function toggleBatchAddressOptions() {
       const type = document.querySelector('input[name="genAddressType"]:checked').value;
       const ipContainer = document.getElementById('batchIpOptionsContainer');
@@ -2898,7 +3504,7 @@ trojan://..." rows="4"></textarea>
         domainBox.classList.add('hidden');
       }
     }
-    
+
     // Tab switching for Config Source
     const sourceRadios = document.querySelectorAll('input[name="genConfigSource"]');
     sourceRadios.forEach(r => r.addEventListener('change', (e) => {
@@ -2910,44 +3516,44 @@ trojan://..." rows="4"></textarea>
         document.getElementById('genUuidConfigInput').classList.add('hidden');
       }
     }));
-    
+
     async function genFetchAddresses() {
       const btn = document.getElementById('genFetchBtn');
       const textarea = document.getElementById('genAddressListInput');
       const subBox = document.getElementById('batchSubscriptionLinkBox');
       const subInput = document.getElementById('batchSubscriptionLink');
-      
+
       subBox.style.display = 'none';
       subBox.classList.add('hidden');
-      
+
       setButtonLoading(btn, true, '');
-      
+
       try {
         const addrType = document.querySelector('input[name="genAddressType"]:checked').value;
         let url = \`\${WORKER_DOMAIN}/fetch-addresses?type=\${addrType}\`;
-        
+  
         if (addrType === 'ip') {
           const ipType = document.querySelector('input[name="genIpType"]:checked').value;
           const carrier = document.querySelector('input[name="genCarrierType"]:checked').value;
           url += \`&ipType=\${ipType}&carrierType=\${carrier}&source=database\`;
-          
+    
           const subUrl = \`\${WORKER_DOMAIN}/batch-ip?type=ip&ipType=\${ipType}&carrier=\${carrier}\`;
           subInput.value = subUrl;
           subBox.style.display = 'flex';
           subBox.classList.remove('hidden');
-          
+    
         } else {
           const subUrl = \`\${WORKER_DOMAIN}/batch-ip?type=domain\`;
           subInput.value = subUrl;
           subBox.style.display = 'flex';
           subBox.classList.remove('hidden');
         }
-        
+
         const res = await fetch(url);
         const data = await res.json();
-        
+
         if (data.error) throw new Error(data.error);
-        
+
         if (data.list && Array.isArray(data.list)) {
           textarea.value = data.list.join('\\n');
           showToast(data.message || \`获取成功: \${data.list.length} 条\`, 'success');
@@ -2961,31 +3567,31 @@ trojan://..." rows="4"></textarea>
         setButtonLoading(btn, false, '获取优选列表');
       }
     }
-    
+
     async function genGenerateConfigs() {
       const btn = document.getElementById('genGenerateButton');
       const resultArea = document.getElementById('genResultTextarea');
       const linkBox = document.getElementById('batchGeneratedLinkBox');
       const linkInput = document.getElementById('batchGeneratedConfigLink');
       const qrCodeContainer = document.getElementById('batchQrCodeContainer');
-      
+
       linkBox.style.display = 'none';
       linkBox.classList.add('hidden');
       qrCodeContainer.classList.add('hidden');
-      
+
       setButtonLoading(btn, true, '');
-      
+
       try {
         const configSource = document.querySelector('input[name="genConfigSource"]:checked').value;
         const addressList = document.getElementById('genAddressListInput').value;
-        
+  
         let payload = { addressList };
-        
+  
         if (configSource === 'uuid') {
           const uuid = document.getElementById('genBaseConfigUuidInput').value.trim();
           if(!uuid) throw new Error("请输入 UUID");
           payload.baseConfigUuid = uuid;
-          
+    
           const addrType = document.querySelector('input[name="genAddressType"]:checked').value;
           let linkParams = \`type=\${addrType}\`;
           if(addrType === 'ip') {
@@ -2997,31 +3603,31 @@ trojan://..." rows="4"></textarea>
           linkInput.value = subLink;
           linkBox.style.display = 'flex';
           linkBox.classList.remove('hidden');
-          
+    
           // Generate QR code
           generateBatchQRCode(subLink);
-          
+    
         } else {
           const manualConfig = document.getElementById('genBaseConfigInput').value.trim();
           if(!manualConfig) throw new Error("请输入基础配置");
           payload.baseConfig = manualConfig;
-          
+    
           showToast('手动模式不支持二维码生成，请使用UUID模式获取订阅链接', 'info');
         }
-        
+
         const res = await fetch(\`\${WORKER_DOMAIN}/generate\`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
         const data = await res.json();
-        
+
         if (data.error) throw new Error(data.error);
-        
+
         if (data.configs && Array.isArray(data.configs)) {
           resultArea.value = data.configs.join('\\n');
           showToast(data.message || "生成成功", 'success');
-          
+    
           if (data.stats) {
             console.log("生成统计:", data.stats);
           }
@@ -3032,57 +3638,57 @@ trojan://..." rows="4"></textarea>
         setButtonLoading(btn, false, '生成配置');
       }
     }
-    
+
     function copyResults() {
       const content = document.getElementById('genResultTextarea').value;
       if (!content) return showToast('没有可复制的内容', 'error');
       const b64 = btoa(unescape(encodeURIComponent(content)));
       navigator.clipboard.writeText(b64).then(() => showToast('已复制 Base64 编码结果', 'success'));
     }
-    
+
     function copyBatchGeneratedLink() {
       const link = document.getElementById('batchGeneratedConfigLink').value;
       if(!link) return;
       navigator.clipboard.writeText(link).then(() => showToast('订阅链接已复制', 'success'));
     }
-    
+
     function copyBatchSubscriptionLink() {
       const link = document.getElementById('batchSubscriptionLink').value;
       if(!link) return;
       navigator.clipboard.writeText(link).then(() => showToast('列表地址已复制', 'success'));
     }
-    
+
     // Batch QR Code functions
     function generateBatchQRCode(subscriptionLink) {
       if (!subscriptionLink) return;
-      
+
       currentSubscriptionLink = subscriptionLink;
       const qrCodeContainer = document.getElementById('batchQrCodeContainer');
       const qrCodeImage = document.getElementById('batchQrCodeImage');
-      
+
       const encodedUrl = encodeURIComponent(subscriptionLink);
       const qrCodeUrl = \`\${QR_CODE_API}?text=\${encodedUrl}&cellSize=4&margin=0&errorCorrectionLevel=L&typeNumber=0\`;
-      
+
       qrCodeImage.src = qrCodeUrl;
       qrCodeImage.alt = \`订阅链接二维码: \${subscriptionLink.substring(0, 50)}...\`;
-      
+
       qrCodeContainer.classList.remove('hidden');
-      
+
       qrCodeImage.onload = function() {
         showToast('二维码生成成功', 'success');
       };
-      
+
       qrCodeImage.onerror = function() {
         showToast('二维码生成失败，请重试', 'error');
       };
     }
-    
+
     function downloadBatchQRCode() {
       if (!currentSubscriptionLink) {
         showToast('没有可用的订阅链接', 'error');
         return;
       }
-      
+
       const qrCodeImage = document.getElementById('batchQrCodeImage');
       const link = document.createElement('a');
       link.href = qrCodeImage.src;
@@ -3090,15 +3696,15 @@ trojan://..." rows="4"></textarea>
       link.click();
       showToast('二维码已下载', 'success');
     }
-    
+
     function shareBatchQRCode() {
       if (!currentSubscriptionLink) {
         showToast('没有可用的订阅链接', 'error');
         return;
       }
-      
+
       const qrCodeImage = document.getElementById('batchQrCodeImage');
-      
+
       if (navigator.share) {
         navigator.share({
           title: '代理订阅配置',
@@ -3116,21 +3722,21 @@ trojan://..." rows="4"></textarea>
           .then(() => showToast('链接已复制到剪贴板', 'success'));
       }
     }
-    
+
     function refreshBatchQRCode() {
       if (!currentSubscriptionLink) {
         showToast('没有可用的订阅链接', 'error');
         return;
       }
-      
+
       generateBatchQRCode(currentSubscriptionLink);
       showToast('二维码已刷新', 'info');
     }
-    
+
     // ============================================
     // Config Management Tab Functions
     // ============================================
-    
+
     // 更新后的manageQueryByUuid函数，支持筛选和分页
     async function manageQueryByUuid(){
       const b = document.getElementById('queryBtn'); 
@@ -3141,9 +3747,9 @@ trojan://..." rows="4"></textarea>
         setButtonLoading(b, false, b.innerHTML); 
         return;
       }
-      
+
       currentUuid = u;
-      
+
       // Show sections
       document.getElementById('manageResultCard').classList.remove('hidden');
       document.getElementById('manageStatsCard').classList.remove('hidden');
@@ -3153,28 +3759,28 @@ trojan://..." rows="4"></textarea>
       input.value = l; 
       document.getElementById('manageSubLinkDisplay').style.display = 'flex';
       document.getElementById('manageSubLinkDisplay').classList.remove('hidden');
-      
+
       // 获取筛选参数
       const protocolFilter = document.getElementById('protocolFilter').value;
       const hostingFilter = document.getElementById('hostingFilter').value;
       const pageSize = parseInt(document.getElementById('pageSizeSelect').value);
-      
+
       // 更新当前筛选状态
       currentProtocolFilter = protocolFilter;
       currentHostingFilter = hostingFilter;
       currentPageSize = pageSize;
-      
+
       // 构建查询URL
       let queryUrl = \`\${WORKER_DOMAIN}/manage/configs/\${u}?page=\${currentPage}&pageSize=\${pageSize}\`;
-      
+
       if (protocolFilter !== 'all') {
         queryUrl += \`&protocol=\${encodeURIComponent(protocolFilter)}\`;
       }
-      
+
       if (hostingFilter !== 'all') {
         queryUrl += \`&domain_hosting=\${encodeURIComponent(hostingFilter)}\`;
       }
-      
+
       try{
         const r = await fetch(queryUrl);
         const c = document.getElementById('queryResultsContainer');
@@ -3184,14 +3790,14 @@ trojan://..." rows="4"></textarea>
           document.getElementById('bulkActionsBar').classList.add('hidden');
         } else {
           const d = await r.json();
-          
+    
           // 更新分页信息
           currentTotal = d.pagination.total;
           currentTotalPages = d.pagination.totalPages;
-          
+    
           // 渲染表格
           let h = '<div class="table-container"><table><thead><tr><th class="table-checkbox-cell"><input type="checkbox" id="selectAllCheckbox" class="select-all-checkbox" onclick="toggleSelectAll()"></th><th>备注</th><th>协议</th><th>域名托管</th><th>配置</th><th>操作</th></tr></thead><tbody>';
-          
+    
           if (!d.configs || d.configs.length === 0) {
             h += '<tr><td colspan="6" style="text-align:center;padding:20px;color:#89949B;">未找到符合条件的配置</td></tr>';
           } else {
@@ -3200,7 +3806,7 @@ trojan://..." rows="4"></textarea>
               const hosting = Row.domain_hosting || 'Cloudflare';
               const hostingClass = hostingStyleMap[hosting] || 'hosting-other';
               const isSelected = selectedConfigs.has(Row.id) ? 'checked' : '';
-              
+        
               h+=\`<tr>
                 <td class="table-checkbox-cell"><input type="checkbox" class="config-checkbox" data-id="\${Row.id}" \${isSelected} onchange="toggleConfigSelection(\${Row.id}, this.checked)"></td>
                 <td>\${Row.remark||'-'}</td>
@@ -3216,31 +3822,31 @@ trojan://..." rows="4"></textarea>
           }
           h+='</tbody></table></div>'; 
           c.innerHTML = h;
-          
+    
           // 更新分页控件
           updatePaginationControls();
-          
+    
           // 更新批量操作栏
           updateBulkActionsBar();
         }
-        
+  
         // Load statistics
         await loadUuidStats();
-        
+  
       } catch(e){ 
         showToast(e.message,'error'); 
       } finally{ 
         setButtonLoading(b, false, b.innerHTML); 
       }
     }
-    
+
     // 应用筛选
     function applyFilters() {
       currentPage = 1; // 重置到第一页
       selectedConfigs.clear(); // 清空选择
       manageQueryByUuid();
     }
-    
+
     // 更改每页显示数量
     function changePageSize() {
       const newPageSize = parseInt(document.getElementById('pageSizeSelect').value);
@@ -3251,7 +3857,7 @@ trojan://..." rows="4"></textarea>
         manageQueryByUuid();
       }
     }
-    
+
     // 更改页码
     function changePage(delta) {
       const newPage = currentPage + delta;
@@ -3260,7 +3866,7 @@ trojan://..." rows="4"></textarea>
         manageQueryByUuid();
       }
     }
-    
+
     // 更新分页控件
     function updatePaginationControls() {
       const paginationContainer = document.getElementById('paginationContainer');
@@ -3268,19 +3874,19 @@ trojan://..." rows="4"></textarea>
       const nextPageBtn = document.getElementById('nextPageBtn');
       const currentPageSpan = document.getElementById('currentPage');
       const paginationInfo = document.getElementById('paginationInfo');
-      
+
       if (currentTotal === 0) {
         paginationContainer.classList.add('hidden');
         return;
       }
-      
+
       paginationContainer.classList.remove('hidden');
       prevPageBtn.disabled = currentPage <= 1;
       nextPageBtn.disabled = currentPage >= currentTotalPages;
       currentPageSpan.textContent = currentPage;
       paginationInfo.textContent = \`第 \${currentPage} 页，共 \${currentTotalPages} 页，总计 \${currentTotal} 条\`;
     }
-    
+
     // 配置选择相关函数
     function toggleConfigSelection(id, checked) {
       if (checked) {
@@ -3292,14 +3898,14 @@ trojan://..." rows="4"></textarea>
       }
       updateBulkActionsBar();
     }
-    
+
     function toggleSelectAll() {
       const selectAllCheckbox = document.getElementById('selectAllCheckbox');
       const configCheckboxes = document.querySelectorAll('.config-checkbox');
       const isChecked = selectAllCheckbox.checked;
-      
+
       selectedConfigs.clear();
-      
+
       if (isChecked) {
         configCheckboxes.forEach(checkbox => {
           const id = parseInt(checkbox.dataset.id);
@@ -3311,17 +3917,17 @@ trojan://..." rows="4"></textarea>
           checkbox.checked = false;
         });
       }
-      
+
       updateBulkActionsBar();
     }
-    
+
     // 更新批量操作栏
     function updateBulkActionsBar() {
       const bulkActionsBar = document.getElementById('bulkActionsBar');
       const selectedCountNum = document.getElementById('selectedCountNum');
       const bulkDeleteBtn = document.getElementById('bulkDeleteBtn');
       const selectedCount = selectedConfigs.size;
-      
+
       if (selectedCount > 0) {
         bulkActionsBar.classList.remove('hidden');
         selectedCountNum.textContent = selectedCount;
@@ -3331,29 +3937,29 @@ trojan://..." rows="4"></textarea>
         bulkDeleteBtn.disabled = true;
       }
     }
-    
+
     // 批量删除配置
     async function deleteSelectedConfigs() {
       if (selectedConfigs.size === 0) {
         showToast('请先选择要删除的配置', 'error');
         return;
       }
-      
+
       if (!confirm(\`确定要删除选中的 \${selectedConfigs.size} 条配置吗？\`)) {
         return;
       }
-      
+
       const ids = Array.from(selectedConfigs);
-      
+
       try {
         const response = await fetch(\`\${WORKER_DOMAIN}/manage/configs/batch\`, {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ids })
         });
-        
+  
         const result = await response.json();
-        
+  
         if (result.success) {
           showToast(\`成功删除 \${result.deleted} 条配置\`, 'success');
           selectedConfigs.clear();
@@ -3365,17 +3971,17 @@ trojan://..." rows="4"></textarea>
         showToast('网络错误: ' + error.message, 'error');
       }
     }
-    
+
     async function manageAddConfig(){
       const u = document.getElementById('queryUuidInput').value; 
       const d = document.getElementById('addConfigData').value;
       const hosting = document.getElementById('domainHostingSelect').value;
-      
+
       if(!u || !d) {
         showToast('UUID或配置为空','error');
         return;
       }
-      
+
       try {
         const response = await fetch('/manage/configs', {
           method: 'POST', 
@@ -3386,7 +3992,7 @@ trojan://..." rows="4"></textarea>
             domain_hosting: hosting
           })
         });
-        
+  
         const result = await response.json();
         if (result.success) {
           showToast('添加成功','success'); 
@@ -3399,7 +4005,7 @@ trojan://..." rows="4"></textarea>
         showToast('网络错误: ' + error.message, 'error');
       }
     }
-    
+
     async function delOne(id){ 
       if(confirm('确认删除?')) { 
         await fetch(\`\${WORKER_DOMAIN}/manage/configs/id/\${id}\`,{method:'DELETE'}); 
@@ -3408,7 +4014,7 @@ trojan://..." rows="4"></textarea>
         manageQueryByUuid(); 
       } 
     }
-    
+
     async function deleteAll(){ 
       const u = document.getElementById('queryUuidInput').value; 
       if(confirm('确认清空所有配置?')) { 
@@ -3417,19 +4023,19 @@ trojan://..." rows="4"></textarea>
         manageQueryByUuid(); 
       } 
     }
-    
+
     function copyManageSubLink(){ 
       navigator.clipboard.writeText(document.getElementById('manageSubUrlLink').value)
         .then(()=>showToast('已复制','success'))
         .catch(()=>showToast('复制失败','error')); 
     }
-    
+
     // Edit modal functions
     function openEditModal(config) {
       document.getElementById('edit-id').value = config.id;
       let p = 'unknown'; 
       const l = config.config_data;
-      
+
       const protocolPatterns = [
         { prefix: 'vmess://', type: 'vmess' },
         { prefix: 'vless://', type: 'vless' },
@@ -3443,20 +4049,20 @@ trojan://..." rows="4"></textarea>
         { prefix: 'reality://', type: 'reality' },
         { prefix: 'ss://', type: 'ss' }
       ];
-      
+
       for (const pattern of protocolPatterns) {
         if (l.toLowerCase().startsWith(pattern.prefix)) {
           p = pattern.type;
           break;
         }
       }
-      
+
       document.getElementById('edit-protocol').value = p;
       ['ps','add','port','id-uuid','net','type','host','path','tls','sni'].forEach(k=>document.getElementById('edit-'+k).value='');
-      
+
       const hostingSelect = document.getElementById('edit-domain-hosting');
       hostingSelect.value = config.domain_hosting || 'Cloudflare';
-      
+
       try {
         if (p === 'vmess') {
           const c = JSON.parse(b64DecodeUnicode(l.substring(8)));
@@ -3493,11 +4099,11 @@ trojan://..." rows="4"></textarea>
       }
       document.getElementById('editModalOverlay').classList.add('open');
     }
-    
+
     function closeEditModal() { 
       document.getElementById('editModalOverlay').classList.remove('open'); 
     }
-    
+
     async function saveEditedConfig() {
       const id = document.getElementById('edit-id').value;
       const proto = document.getElementById('edit-protocol').value;
@@ -3512,7 +4118,7 @@ trojan://..." rows="4"></textarea>
       const tls = document.getElementById('edit-tls').value;
       const sni = document.getElementById('edit-sni').value;
       const domainHosting = document.getElementById('edit-domain-hosting').value;
-      
+
       let nL = '';
       if (proto === 'vmess') {
         nL = 'vmess://' + b64EncodeUnicode(JSON.stringify({
@@ -3539,7 +4145,7 @@ trojan://..." rows="4"></textarea>
         u.hash = encodeURIComponent(ps);
         nL = u.toString();
       }
-      
+
       const b = document.querySelector('.modal .primary');
       const o = b.innerHTML;
       setButtonLoading(b, true);
@@ -3565,16 +4171,16 @@ trojan://..." rows="4"></textarea>
         setButtonLoading(b, false, o);
       }
     }
-    
+
     // Statistics functions
     async function loadUuidStats() {
       if (!currentUuid) return;
-      
+
       const days = document.getElementById('statsDays').value;
       try {
         const response = await fetch(\`\${WORKER_DOMAIN}/manage/stats/\${currentUuid}?days=\${days}\`);
         const data = await response.json();
-        
+  
         if (data.success) {
           displayStatsSummary(data);
           renderStatsChart(data.daily_stats);
@@ -3593,15 +4199,15 @@ trojan://..." rows="4"></textarea>
         showToast('获取统计失败: ' + error.message, 'error');
       }
     }
-    
+
     function displayStatsSummary(stats) {
       const container = document.getElementById('manageStatsSummary');
-      
+
       const subscriptionPercent = stats.total_access > 0 ? 
         Math.round(stats.subscription_count / stats.total_access * 100) : 0;
       const apigenPercent = stats.total_access > 0 ? 
         Math.round(stats.apigen_count / stats.total_access * 100) : 0;
-      
+
       container.innerHTML = \`
         <div class="stat-box">
           <span class="stat-num">\${stats.total_access}</span>
@@ -3625,21 +4231,21 @@ trojan://..." rows="4"></textarea>
         </div>
       \`;
     }
-    
+
     function renderStatsChart(dailyStats) {
       const ctx = document.getElementById('manageStatsChart').getContext('2d');
-      
+
       const dates = dailyStats.map(item => formatDate(item.date));
       const totals = dailyStats.map(item => item.total);
       const subscriptions = dailyStats.map(item => item.subscription);
       const apigens = dailyStats.map(item => item.api_generation);
-      
+
       if (statsChart) {
         statsChart.destroy();
       }
-      
+
       let datasets = [];
-      
+
       switch (currentChartType) {
         case 'total':
           datasets = [{
@@ -3652,7 +4258,7 @@ trojan://..." rows="4"></textarea>
             tension: 0.4
           }];
           break;
-          
+    
         case 'split':
           datasets = [
             {
@@ -3676,7 +4282,7 @@ trojan://..." rows="4"></textarea>
           ];
           break;
       }
-      
+
       statsChart = new Chart(ctx, {
         type: 'line',
         data: {
@@ -3727,15 +4333,15 @@ trojan://..." rows="4"></textarea>
         }
       });
     }
-    
+
     function displayRecentLogs(logs) {
       const container = document.getElementById('manageRecentLogs');
-      
+
       if (!logs || logs.length === 0) {
         container.innerHTML = '<div style="text-align: center; padding: 20px; color: #6b7280;">暂无访问记录</div>';
         return;
       }
-      
+
       let html = '';
       logs.forEach(log => {
         const typeClass = log.query_type === 'subscription' ? 'type-subscription' : 'type-apigen';
@@ -3743,7 +4349,7 @@ trojan://..." rows="4"></textarea>
         const userAgentShort = log.user_agent ? 
           (log.user_agent.length > 30 ? log.user_agent.substring(0, 30) + '...' : log.user_agent) : 
           '未知';
-        
+  
         html += \`
           <div class="access-log-item">
             <div>
@@ -3756,25 +4362,25 @@ trojan://..." rows="4"></textarea>
           </div>
         \`;
       });
-      
+
       container.innerHTML = html;
     }
-    
+
     function switchChartType(type) {
       currentChartType = type;
       updateChartButtons();
       loadUuidStats();
     }
-    
+
     function updateChartButtons() {
       document.getElementById('chartTotalBtn').classList.toggle('active', currentChartType === 'total');
       document.getElementById('chartSplitBtn').classList.toggle('active', currentChartType === 'split');
     }
-    
+
     // ============================================
     // Clash Subscription Tab Functions
     // ============================================
-    
+
     function toggleClashAddressOptions() {
       const type = document.querySelector('input[name="clashAddressType"]:checked').value;
       const ipContainer = document.getElementById('clashIpOptionsContainer');
@@ -3787,14 +4393,14 @@ trojan://..." rows="4"></textarea>
         domainBox.classList.add('hidden');
       }
     }
-    
+
     function handleTemplateChange() {
       const templateSelect = document.getElementById('templateSelect');
       const selectedValue = templateSelect.value;
       const customTemplateInput = document.getElementById('customTemplateInput');
       const templateDescription = document.getElementById('templateDescription');
       const templateInfoBox = document.getElementById('templateInfoBox');
-      
+
       if (selectedValue === 'custom') {
         customTemplateInput.classList.remove('hidden');
         templateDescription.textContent = '使用自定义模板URL，请输入可公开访问的YAML配置文件URL。';
@@ -3812,11 +4418,11 @@ trojan://..." rows="4"></textarea>
         }
       }
     }
-    
+
     function getTemplateParam() {
       const templateSelect = document.getElementById('templateSelect');
       const selectedValue = templateSelect.value;
-      
+
       if (selectedValue === 'custom') {
         const customUrl = document.getElementById('customTemplateUrl').value.trim();
         if (!customUrl) {
@@ -3835,35 +4441,35 @@ trojan://..." rows="4"></textarea>
         return selectedValue;
       }
     }
-    
+
     async function loadTemplates() {
       const templateSelect = document.getElementById('templateSelect');
       const templateLoading = document.getElementById('templateLoading');
       const templateError = document.getElementById('templateError');
       const generateClashBtn = document.getElementById('generateClashBtn');
-      
+
       templateSelect.disabled = true;
       templateLoading.classList.remove('hidden');
       templateError.classList.add('hidden');
       generateClashBtn.disabled = true;
-      
+
       try {
         const response = await fetch(\`\${WORKER_DOMAIN}/api/templates\`);
-        
+  
         if (!response.ok) {
           throw new Error(\`加载失败: \${response.status}\`);
         }
-        
+  
         const templates = await response.json();
         templatesList = templates;
-        
+  
         templateSelect.innerHTML = '';
-        
+  
         const customOption = document.createElement('option');
         customOption.value = 'custom';
         customOption.textContent = '自定义模板';
         templateSelect.appendChild(customOption);
-        
+  
         if (templates.length === 0) {
           const noTemplateOption = document.createElement('option');
           noTemplateOption.value = '';
@@ -3872,7 +4478,7 @@ trojan://..." rows="4"></textarea>
           showToast('数据库中没有配置模板', 'error');
         } else {
           const defaultTemplate = templates.find(t => t.is_default === 1);
-          
+    
           templates.forEach(template => {
             const option = document.createElement('option');
             option.value = template.name;
@@ -3882,27 +4488,27 @@ trojan://..." rows="4"></textarea>
             }
             templateSelect.appendChild(option);
           });
-          
+    
           if (!defaultTemplate && templates.length > 0) {
             templateSelect.value = templates[0].name;
           }
-          
+    
           const selectedValue = templateSelect.value;
           const selectedTemplate = templates.find(t => t.name === selectedValue);
           const templateDescription = document.getElementById('templateDescription');
           if (selectedTemplate && selectedTemplate.description) {
             templateDescription.textContent = selectedTemplate.description;
           }
-          
+    
           generateClashBtn.disabled = false;
         }
-        
+  
         showToast('模板列表加载成功', 'success');
       } catch (error) {
         console.error('加载模板失败:', error);
         templateError.classList.remove('hidden');
         showToast(\`加载模板失败: \${error.message}\`, 'error');
-        
+  
         templateSelect.innerHTML = '';
         const errorOption = document.createElement('option');
         errorOption.value = '';
@@ -3914,17 +4520,17 @@ trojan://..." rows="4"></textarea>
         handleTemplateChange();
       }
     }
-    
+
     async function generateClashConfig() {
       const btn = document.getElementById('generateClashBtn');
       const uuid = document.getElementById('clashConfigUuid').value.trim();
       const addressType = document.querySelector('input[name="clashAddressType"]:checked').value;
       const ipType = document.querySelector('input[name="clashIpType"]:checked').value;
       const carrier = document.querySelector('input[name="clashCarrier"]:checked').value;
-      
+
       const templateParam = getTemplateParam();
       if (templateParam === null) return;
-      
+
       const clashLinkBox = document.getElementById('clashSubscriptionLinkBox');
       const clashLinkInput = document.getElementById('clashGeneratedLink');
       const qrCodeContainer = document.getElementById('clashQrCodeContainer');
@@ -3932,37 +4538,37 @@ trojan://..." rows="4"></textarea>
       qrCodeContainer.classList.add('hidden');
       clashLinkInput.value = '';
       currentSubscriptionLink = '';
-      
+
       if (!uuid) {
         showToast('请输入UUID', 'error');
         return;
       }
-      
+
       setButtonLoading(btn, true, '正在生成...');
-      
+
       try {
         const subscriptionUrl = new URL(\`\${WORKER_DOMAIN}/clash-config\`);
         subscriptionUrl.searchParams.set('uuid', uuid);
         subscriptionUrl.searchParams.set('type', addressType);
         subscriptionUrl.searchParams.set('template', templateParam);
-        
+  
         if (addressType === 'ip') {
           subscriptionUrl.searchParams.set('ipType', ipType);
           subscriptionUrl.searchParams.set('carrier', carrier);
         }
-        
+  
         const clashSubscriptionLink = subscriptionUrl.toString();
-        
+  
         const response = await fetch(subscriptionUrl);
-        
+  
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
           throw new Error(errorData.error || \`生成失败: \${response.status}\`);
         }
-        
+  
         const blob = await response.blob();
         const downloadUrl = URL.createObjectURL(blob);
-        
+  
         const a = document.createElement('a');
         a.href = downloadUrl;
         a.download = \`clash-config-\${uuid}-\${new Date().toISOString().split('T')[0]}.yaml\`;
@@ -3970,14 +4576,14 @@ trojan://..." rows="4"></textarea>
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(downloadUrl);
-        
+  
         showToast('Clash订阅文件生成成功，已开始下载', 'success');
-        
+  
         clashLinkInput.value = clashSubscriptionLink;
         clashLinkBox.classList.remove('hidden');
-        
+  
         generateClashQRCode(clashSubscriptionLink);
-        
+  
       } catch (error) {
         console.error('生成Clash配置失败:', error);
         showToast(\`生成失败: \${error.message}\`, 'error');
@@ -3985,29 +4591,29 @@ trojan://..." rows="4"></textarea>
         setButtonLoading(btn, false, '生成Clash订阅文件');
       }
     }
-    
+
     function copyClashGeneratedLink() {
       const link = document.getElementById('clashGeneratedLink').value;
       if(!link) return;
       navigator.clipboard.writeText(link).then(() => showToast('订阅链接已复制', 'success'));
     }
-    
+
     // Clash QR Code functions
     function generateClashQRCode(subscriptionLink) {
       if (!subscriptionLink) return;
-      
+
       currentSubscriptionLink = subscriptionLink;
       const qrCodeContainer = document.getElementById('clashQrCodeContainer');
       const qrCodeImage = document.getElementById('clashQrCodeImage');
-      
+
       const encodedUrl = encodeURIComponent(subscriptionLink);
       const qrCodeUrl = \`\${QR_CODE_API}?text=\${encodedUrl}&cellSize=4&margin=0&errorCorrectionLevel=L&typeNumber=0\`;
-      
+
       qrCodeImage.src = qrCodeUrl;
       qrCodeImage.alt = \`订阅链接二维码: \${subscriptionLink.substring(0, 50)}...\`;
-      
+
       qrCodeContainer.classList.remove('hidden');
-      
+
       qrCodeImage.onload = function() { 
         showToast('二维码生成成功', 'success'); 
       };
@@ -4015,7 +4621,7 @@ trojan://..." rows="4"></textarea>
         showToast('二维码生成失败，请重试', 'error'); 
       };
     }
-    
+
     function downloadClashQRCode() {
       if (!currentSubscriptionLink) { 
         showToast('没有可用的订阅链接', 'error'); 
@@ -4028,7 +4634,7 @@ trojan://..." rows="4"></textarea>
       link.click();
       showToast('二维码已下载', 'success');
     }
-    
+
     function shareClashQRCode() {
       if (!currentSubscriptionLink) { 
         showToast('没有可用的订阅链接', 'error'); 
@@ -4051,7 +4657,7 @@ trojan://..." rows="4"></textarea>
           .then(() => showToast('链接已复制到剪贴板', 'success'));
       }
     }
-    
+
     function refreshClashQRCode() {
       if (!currentSubscriptionLink) { 
         showToast('没有可用的订阅链接', 'error'); 
@@ -4060,19 +4666,19 @@ trojan://..." rows="4"></textarea>
       generateClashQRCode(currentSubscriptionLink);
       showToast('二维码已刷新', 'info');
     }
-    
+
     // ============================================
     // Initialize
     // ============================================
-    
+
     document.addEventListener('DOMContentLoaded', function() {
       // Initialize domain hosting select
       const hostingSelect = document.getElementById('domainHostingSelect');
       hostingSelect.value = 'Cloudflare';
-      
+
       // Initialize tab functionality
       toggleBatchAddressOptions();
-      
+
       // Set up radio button listeners for batch tab
       const batchSourceRadios = document.querySelectorAll('input[name="genConfigSource"]');
       batchSourceRadios.forEach(r => r.addEventListener('change', (e) => {
@@ -4084,26 +4690,38 @@ trojan://..." rows="4"></textarea>
           document.getElementById('genUuidConfigInput').classList.add('hidden');
         }
       }));
-      
+
+      // 为配置管理按钮添加事件监听器
+      const configManagerOpenBtn = document.getElementById('configManagerOpenBtn');
+      if (configManagerOpenBtn) {
+        configManagerOpenBtn.addEventListener('click', function(e) {
+          e.preventDefault();
+          openConfigManagerModal();
+        });
+        console.log('配置管理按钮事件监听器已绑定');
+      } else {
+        console.error('配置管理按钮未找到');
+      }
+
       // Check for stored UUID on page load
       const storedUuid = getUuidFromStorage();
       if (storedUuid) {
         // Show manage tab button
         document.getElementById('manageTabBtn').classList.remove('hidden');
-        
+  
         // Update logout button
         updateLogoutButton();
-        
+  
         // Update UUID inputs
         updateUuidInputs();
-        
+  
         // If current tab is manage, load the data
         const activeTab = document.querySelector('.tab-content.active');
         if (activeTab && activeTab.id === 'manage-tab') {
           loadUuidData(storedUuid);
         }
       }
-      
+
       // Load templates if clash tab is active
       const activeTab = document.querySelector('.tab-content.active');
       if (activeTab && activeTab.id === 'clash-tab') {

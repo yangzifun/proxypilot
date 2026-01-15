@@ -1,6 +1,6 @@
 -- ========================================================
 -- Cloudflare Worker 配置管理器 - 数据库简化脚本
--- 版本: v3.0.2 (仅保留实际使用的表)
+-- 版本: v3.0.3 (添加UUID信息管理表)
 -- ========================================================
 
 -- ========================================================
@@ -25,7 +25,32 @@ CREATE INDEX IF NOT EXISTS idx_configs_domain_hosting ON configs(domain_hosting)
 CREATE INDEX IF NOT EXISTS idx_configs_uuid_config ON configs(uuid, config_data);
 
 -- ========================================================
--- 2. 访问日志表 
+-- 2. UUID信息管理表
+-- ========================================================
+CREATE TABLE IF NOT EXISTS uuid_info (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    uuid TEXT UNIQUE NOT NULL,            -- UUID (唯一)
+    owner TEXT NOT NULL,                  -- 所属人姓名/标识
+    email TEXT NOT NULL,                  -- 邮箱地址
+    contact_info TEXT,                    -- 其他联系信息 (可选)
+    status TEXT DEFAULT 'active',         -- 状态: active(活跃), inactive(停用), suspended(暂停)
+    remark TEXT,                          -- 备注信息
+    last_accessed INTEGER DEFAULT 0,      -- 最后访问时间戳
+    access_count INTEGER DEFAULT 0,       -- 访问次数统计
+    created_at INTEGER DEFAULT (CAST(STRFTIME('%s', 'now') AS INT) * 1000),
+    updated_at INTEGER DEFAULT (CAST(STRFTIME('%s', 'now') AS INT) * 1000)
+);
+
+-- UUID信息管理表索引
+CREATE INDEX IF NOT EXISTS idx_uuid_info_uuid ON uuid_info(uuid);
+CREATE INDEX IF NOT EXISTS idx_uuid_info_owner ON uuid_info(owner);
+CREATE INDEX IF NOT EXISTS idx_uuid_info_email ON uuid_info(email);
+CREATE INDEX IF NOT EXISTS idx_uuid_info_status ON uuid_info(status);
+CREATE INDEX IF NOT EXISTS idx_uuid_info_created ON uuid_info(created_at);
+CREATE INDEX IF NOT EXISTS idx_uuid_info_last_accessed ON uuid_info(last_accessed);
+
+-- ========================================================
+-- 3. 访问日志表 
 -- ========================================================
 CREATE TABLE IF NOT EXISTS config_access_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -44,7 +69,7 @@ CREATE INDEX IF NOT EXISTS idx_access_logs_client_ip ON config_access_logs(clien
 CREATE INDEX IF NOT EXISTS idx_access_logs_uuid_date ON config_access_logs(uuid, created_at);
 
 -- ========================================================
--- 3. IP池表
+-- 4. IP池表
 -- ========================================================
 CREATE TABLE IF NOT EXISTS cfips (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -62,7 +87,7 @@ CREATE INDEX IF NOT EXISTS idx_cfips_carrier ON cfips(carrier);
 CREATE INDEX IF NOT EXISTS idx_cfips_source ON cfips(source);
 
 -- ========================================================
--- 4. Cloudflare优选域名表
+-- 5. Cloudflare优选域名表
 -- ========================================================
 CREATE TABLE IF NOT EXISTS cf_domains (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -76,7 +101,7 @@ CREATE TABLE IF NOT EXISTS cf_domains (
 CREATE INDEX IF NOT EXISTS idx_cf_domains_domain ON cf_domains(domain);
 
 -- ========================================================
--- 5. 腾讯云EdgeOne优选域名表
+-- 6. 腾讯云EdgeOne优选域名表
 -- ========================================================
 CREATE TABLE IF NOT EXISTS edgeone_domains (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -90,7 +115,7 @@ CREATE TABLE IF NOT EXISTS edgeone_domains (
 CREATE INDEX IF NOT EXISTS idx_edgeone_domains_domain ON edgeone_domains(domain);
 
 -- ========================================================
--- 5. 自动更新设置表
+-- 7. 自动更新设置表
 -- ========================================================
 CREATE TABLE IF NOT EXISTS auto_update_settings (
     source TEXT PRIMARY KEY,              -- 来源标识
@@ -99,7 +124,7 @@ CREATE TABLE IF NOT EXISTS auto_update_settings (
 );
 
 -- ========================================================
--- 6. 管理用户表
+-- 8. 管理用户表
 -- ========================================================
 CREATE TABLE IF NOT EXISTS admin_users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -116,7 +141,7 @@ CREATE TABLE IF NOT EXISTS admin_users (
 CREATE INDEX IF NOT EXISTS idx_admin_users_username ON admin_users(username);
 
 -- ========================================================
--- 7. MFA备份码表
+-- 9. MFA备份码表
 -- ========================================================
 CREATE TABLE IF NOT EXISTS mfa_backup_codes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -132,23 +157,7 @@ CREATE INDEX IF NOT EXISTS idx_mfa_backup_codes_user ON mfa_backup_codes(usernam
 CREATE INDEX IF NOT EXISTS idx_mfa_backup_codes_used ON mfa_backup_codes(used);
 
 -- ========================================================
--- 8. 初始化数据
--- ========================================================
-
--- 初始化默认管理员账户 (如果不存在)
-INSERT OR IGNORE INTO admin_users (username, password_hash, mfa_enabled) VALUES 
-('admin', '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8', 0);
-
--- 初始化自动更新配置 (如果不存在)
-INSERT OR IGNORE INTO auto_update_settings (source, enabled) VALUES 
-('global_enabled', 1),           -- 全局开关
-('hostmonit_v4', 1),             -- HostMonit IPv4
-('hostmonit_v6', 0),             -- HostMonit IPv6 (默认禁用)
-('vps789', 1),                   -- Vps789
-('last_executed', 0);            -- 上次执行时间戳占位符
-
--- ========================================================
--- 9. API密钥表 (用于IP更新API的鉴权)
+-- 10. API密钥表 (用于IP更新API的鉴权)
 -- ========================================================
 CREATE TABLE IF NOT EXISTS api_keys (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -168,12 +177,8 @@ CREATE INDEX IF NOT EXISTS idx_api_keys_key ON api_keys(api_key);
 CREATE INDEX IF NOT EXISTS idx_api_keys_enabled ON api_keys(enabled);
 CREATE INDEX IF NOT EXISTS idx_api_keys_created ON api_keys(created_at);
 
--- 初始化一个默认的API密钥 (如果需要)
-INSERT OR IGNORE INTO api_keys (key_name, api_key, secret_key, enabled, permissions) VALUES 
-('default_ip_update_key', 'default_key_12345', NULL, 1, 'ip_update');
-
 -- ========================================================
--- 10. 配置模板表
+-- 11. 配置模板表
 -- ========================================================
 CREATE TABLE IF NOT EXISTS config_templates (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -190,6 +195,26 @@ CREATE INDEX IF NOT EXISTS idx_config_templates_name ON config_templates(name);
 CREATE INDEX IF NOT EXISTS idx_config_templates_is_default ON config_templates(is_default);
 CREATE INDEX IF NOT EXISTS idx_config_templates_created ON config_templates(created_at);
 
+-- ========================================================
+-- 12. 初始化数据
+-- ========================================================
+
+-- 初始化默认管理员账户 (如果不存在)
+INSERT OR IGNORE INTO admin_users (username, password_hash, mfa_enabled) VALUES 
+('admin', '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8', 0);
+
+-- 初始化自动更新配置 (如果不存在)
+INSERT OR IGNORE INTO auto_update_settings (source, enabled) VALUES 
+('global_enabled', 1),           -- 全局开关
+('hostmonit_v4', 1),             -- HostMonit IPv4
+('hostmonit_v6', 0),             -- HostMonit IPv6 (默认禁用)
+('vps789', 1),                   -- Vps789
+('last_executed', 0);            -- 上次执行时间戳占位符
+
+-- 初始化一个默认的API密钥 (如果需要)
+INSERT OR IGNORE INTO api_keys (key_name, api_key, secret_key, enabled, permissions) VALUES 
+('default_ip_update_key', 'default_key_12345', NULL, 1, 'ip_update');
+
 -- 初始化一些默认模板 (基于现有的硬编码映射)
 INSERT OR IGNORE INTO config_templates (name, url, description, is_default) VALUES
 ('full_config.yaml', 'https://github.com/yangzifun/proxypilot/raw/refs/heads/main/rule/configs/full_config.yaml', '全量模板 - 包含完整规则和策略组的完整配置，适用于大多数场景', 1),
@@ -202,7 +227,7 @@ INSERT OR IGNORE INTO config_templates (name, url, description, is_default) VALU
 ('stream_config.yaml', 'https://github.com/yangzifun/proxypilot/raw/refs/heads/main/rule/configs/stream_config.yaml', '视频优化模板 - 针对视频流媒体和直播优化，提供更好的观看体验', 0);
 
 -- ========================================================
--- 11. 简单查询验证
+-- 13. 简单查询验证
 -- ========================================================
 
 -- 显示创建的表数量
