@@ -194,16 +194,9 @@ rules:
   - RULE-SET,viu_domain,📺 更多流媒体
   - RULE-SET,spotify_domain,🎧 Spotify
   
-# 4.中国大陆分流
-  - RULE-SET,bilibili_domain,🎬 大陆视频
-  - RULE-SET,iqiyi_domain,🎬 大陆视频
-  - RULE-SET,sina_domain,🇨🇳 中国大陆
-  - RULE-SET,tencent_domain,🇨🇳 中国大陆
-  - RULE-SET,alibaba_domain,🇨🇳 中国大陆
-  - RULE-SET,cn_domain,🇨🇳 中国大陆
-  - RULE-SET,cn_ip,🇨🇳 中国大陆,no-resolve
+
   
-# 5. 通用服务
+# 4. 通用服务
   - RULE-SET,github_domain,🐱 GitHub
   - RULE-SET,google_domain,🔍 Google
   - RULE-SET,google_ip,🔍 Google,no-resolve
@@ -213,14 +206,14 @@ rules:
   - RULE-SET,speedtest_domain,🚀 Speedtest
   - RULE-SET,paypal_domain,💳 PayPal
   
-# 6. 游戏规则
+# 5. 游戏规则
   - RULE-SET,steam_domain,🎮 Steam
   - RULE-SET,ubisoft_domain,🎮 Ubisoft
   - RULE-SET,epic_domain,🎮 Epic
   - RULE-SET,ea_domain,🎮 EA
   - RULE-SET,sony_domain,🎮 PlayStation
 
-# 7.地区分流直接调用自动选择分组
+# 6.地区分流直接调用自动选择分组
   - GEOIP,HK,🇭🇰 香港自动
   - GEOIP,TW,🇹🇼 台湾自动
   - GEOIP,JP,🇯🇵 日本自动
@@ -228,13 +221,26 @@ rules:
   - GEOIP,US,🇺🇸 美国自动
   - GEOIP,DE,🇩🇪 德国自动
 
-# 8. 代理补充列表
+# 7. 代理补充列表
   - RULE-SET,proxylite,🚀 默认代理
-  - RULE-SET,private_domain,🎯 直连
-  - RULE-SET,custom_direct,🎯 直连
-  - GEOIP,LAN,🎯 直连
+  - RULE-SET,private_domain,🚀 默认代理
 
-# 9.兜底
+
+# 8.中国大陆分流
+  - RULE-SET,bilibili_domain,🎬 大陆视频
+  - RULE-SET,iqiyi_domain,🎬 大陆视频
+  - RULE-SET,sina_domain,🇨🇳 中国大陆
+  - RULE-SET,tencent_domain,🇨🇳 中国大陆
+  - RULE-SET,alibaba_domain,🇨🇳 中国大陆
+  - RULE-SET,cn_domain,🇨🇳 中国大陆
+  - RULE-SET,cn_ip,🇨🇳 中国大陆,no-resolve
+
+# 9.直连补充
+  - RULE-SET,custom_direct,🎯 直连
+  - GEOIP,LAN,🎯 直连  
+
+# 10.兜底
+
   - RULE-SET,gfw_domain,🚀 默认代理
   - MATCH,🐟 漏网之鱼
 
