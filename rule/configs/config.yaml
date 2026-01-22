@@ -170,14 +170,17 @@ proxy-groups:
 rules:
 # 1. 广告拦截
   - RULE-SET,category-ads-all,🚫 广告拦截
-  
-# 2. AI 规则
+
+# 2. 代理补充列表
+  - RULE-SET,proxylite,🚀 默认代理
+
+# 3. AI 规则
   - RULE-SET,openai,🤖 OpenAI
   - RULE-SET,gemini,✨ Gemini
   - RULE-SET,claude,🧠 Claude
   - RULE-SET,ai,🌌 常用 AI
   
-# 3. 社交与视频
+# 4. 社交与视频
   - RULE-SET,telegram_domain,📲 Telegram
   - RULE-SET,telegram_ip,📲 Telegram,no-resolve
   - RULE-SET,facebook_domain,🌏 Meta
@@ -196,7 +199,7 @@ rules:
   
 
   
-# 4. 通用服务
+# 5. 通用服务
   - RULE-SET,github_domain,🐱 GitHub
   - RULE-SET,google_domain,🔍 Google
   - RULE-SET,google_ip,🔍 Google,no-resolve
@@ -206,25 +209,20 @@ rules:
   - RULE-SET,speedtest_domain,🚀 Speedtest
   - RULE-SET,paypal_domain,💳 PayPal
   
-# 5. 游戏规则
+# 6. 游戏规则
   - RULE-SET,steam_domain,🎮 Steam
   - RULE-SET,ubisoft_domain,🎮 Ubisoft
   - RULE-SET,epic_domain,🎮 Epic
   - RULE-SET,ea_domain,🎮 EA
   - RULE-SET,sony_domain,🎮 PlayStation
 
-# 6.地区分流直接调用自动选择分组
+# 7.地区分流直接调用自动选择分组
   - GEOIP,HK,🇭🇰 香港自动
   - GEOIP,TW,🇹🇼 台湾自动
   - GEOIP,JP,🇯🇵 日本自动
   - GEOIP,SG,🇸🇬 新加坡自动
   - GEOIP,US,🇺🇸 美国自动
   - GEOIP,DE,🇩🇪 德国自动
-
-# 7. 代理补充列表
-  - RULE-SET,proxylite,🚀 默认代理
-  - RULE-SET,private_domain,🚀 默认代理
-
 
 # 8.中国大陆分流
   - RULE-SET,bilibili_domain,🎬 大陆视频
@@ -236,6 +234,7 @@ rules:
   - RULE-SET,cn_ip,🇨🇳 中国大陆,no-resolve
 
 # 9.直连补充
+  - RULE-SET,private_domain,🎯 直连
   - RULE-SET,custom_direct,🎯 直连
   - GEOIP,LAN,🎯 直连  
 
