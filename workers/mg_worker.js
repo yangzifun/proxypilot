@@ -651,6 +651,31 @@ async function initializeDatabaseSettings(env) {
         await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_config_templates_is_default ON config_templates(is_default);').run();
         await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_config_templates_created ON config_templates(created_at);').run();
 
+        // 创建 uuid_info 表（新增）
+        await env.DB.prepare(`
+            CREATE TABLE IF NOT EXISTS uuid_info (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                uuid TEXT UNIQUE NOT NULL,            -- UUID (唯一)
+                owner TEXT NOT NULL,                  -- 所属人姓名/标识
+                email TEXT NOT NULL,                  -- 邮箱地址
+                contact_info TEXT,                    -- 其他联系信息 (可选)
+                status TEXT DEFAULT 'active',         -- 状态: active(活跃), inactive(停用), suspended(暂停)
+                remark TEXT,                          -- 备注信息
+                last_accessed INTEGER DEFAULT 0,      -- 最后访问时间戳
+                access_count INTEGER DEFAULT 0,       -- 访问次数统计
+                created_at INTEGER DEFAULT (CAST(STRFTIME('%s', 'now') AS INT) * 1000),
+                updated_at INTEGER DEFAULT (CAST(STRFTIME('%s', 'now') AS INT) * 1000)
+            )
+        `).run();
+
+        // UUID信息管理表索引
+        await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_uuid_info_uuid ON uuid_info(uuid);').run();
+        await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_uuid_info_owner ON uuid_info(owner);').run();
+        await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_uuid_info_email ON uuid_info(email);').run();
+        await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_uuid_info_status ON uuid_info(status);').run();
+        await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_uuid_info_created ON uuid_info(created_at);').run();
+        await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_uuid_info_last_accessed ON uuid_info(last_accessed);').run();
+
         console.log('mg_worker.js: D1 database tables checked/initialized.');
 
         // 初始化默认设置
@@ -1349,14 +1374,33 @@ async function handleUuids(req, env, method) {
             const sortField = url.searchParams.get('sort') || 'updated_at';
             const sortOrder = (url.searchParams.get('order') || 'desc').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
-            const allowedSorts = ['uuid', 'count', 'updated_at'];
+            // 允许的排序字段增加了owner, email, status等
+            const allowedSorts = ['uuid', 'owner', 'email', 'status', 'count', 'updated_at', 'last_accessed', 'access_count'];
             const actualSort = allowedSorts.includes(sortField) ? sortField : 'updated_at';
             const offset = (page - 1) * size;
 
             const totalResult = await env.DB.prepare('SELECT COUNT(DISTINCT uuid) as total FROM configs').first();
             const total = totalResult ? totalResult.total : 0;
             
-            const query = `SELECT uuid, COUNT(*) as count, MAX(created_at) as updated_at FROM configs GROUP BY uuid ORDER BY ${actualSort} ${sortOrder} LIMIT ? OFFSET ?`;
+            // 修改查询：左连接uuid_info表获取所有者信息
+            const query = `
+                SELECT 
+                    c.uuid, 
+                    COUNT(*) as count, 
+                    MAX(c.created_at) as updated_at,
+                    ui.owner,
+                    ui.email,
+                    ui.status,
+                    ui.remark,
+                    ui.contact_info,
+                    ui.last_accessed,
+                    ui.access_count
+                FROM configs c 
+                LEFT JOIN uuid_info ui ON c.uuid = ui.uuid 
+                GROUP BY c.uuid 
+                ORDER BY ${actualSort} ${sortOrder} 
+                LIMIT ? OFFSET ?`;
+            
             const { results } = await env.DB.prepare(query).bind(size, offset).all();
 
             return jsonResponse({
@@ -1376,6 +1420,83 @@ async function handleUuids(req, env, method) {
             return jsonResponse({
                 success: true,
                 message: 'UUID组删除成功'
+            });
+        }
+
+        // 添加POST方法用于创建/更新UUID信息
+        if (method === 'POST') {
+            const { uuid, owner, email, contact_info, status, remark } = await req.json();
+            
+            if (!uuid) return jsonResponse({success: false, error:'UUID不能为空'}, 400);
+            if (!owner) return jsonResponse({success: false, error:'所属人姓名/标识不能为空'}, 400);
+            if (!email) return jsonResponse({success: false, error:'邮箱地址不能为空'}, 400);
+            
+            // 检查UUID是否存在
+            const uuidExists = await env.DB.prepare(
+                'SELECT COUNT(*) as count FROM configs WHERE uuid = ?'
+            ).bind(uuid).first('count') || 0;
+            
+            if (uuidExists === 0) {
+                return jsonResponse({success: false, error:'UUID不存在，请先创建配置'}, 400);
+            }
+            
+            const now = Date.now();
+            const statusValue = status || 'active';
+            
+            // 插入或更新uuid_info表
+            await env.DB.prepare(`
+                INSERT OR REPLACE INTO uuid_info (
+                    uuid, owner, email, contact_info, status, remark, 
+                    last_accessed, access_count, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).bind(
+                uuid, owner, email, contact_info || '', statusValue, remark || '',
+                0, 0, now, now
+            ).run();
+            
+            return jsonResponse({
+                success: true,
+                message: 'UUID信息保存成功'
+            });
+        }
+
+        // 添加PUT方法用于更新UUID信息
+        if (method === 'PUT') {
+            const { uuid, owner, email, contact_info, status, remark } = await req.json();
+            
+            if (!uuid) return jsonResponse({success: false, error:'UUID不能为空'}, 400);
+            if (!owner) return jsonResponse({success: false, error:'所属人姓名/标识不能为空'}, 400);
+            if (!email) return jsonResponse({success: false, error:'邮箱地址不能为空'}, 400);
+            
+            // 检查uuid_info记录是否存在
+            const existingRecord = await env.DB.prepare(
+                'SELECT id FROM uuid_info WHERE uuid = ?'
+            ).bind(uuid).first();
+            
+            if (!existingRecord) {
+                return jsonResponse({success: false, error:'UUID信息记录不存在'}, 404);
+            }
+            
+            const now = Date.now();
+            const statusValue = status || 'active';
+            
+            // 更新uuid_info表
+            await env.DB.prepare(`
+                UPDATE uuid_info SET 
+                    owner = ?, 
+                    email = ?, 
+                    contact_info = ?, 
+                    status = ?, 
+                    remark = ?,
+                    updated_at = ?
+                WHERE uuid = ?
+            `).bind(
+                owner, email, contact_info || '', statusValue, remark || '', now, uuid
+            ).run();
+            
+            return jsonResponse({
+                success: true,
+                message: 'UUID信息更新成功'
             });
         }
 
@@ -1640,7 +1761,7 @@ async function handleApi(req, env) {
             return await handleDirectIpUpdate(req, env);
         }
 
-        if (path === '/api/uuids' && ['GET', 'DELETE'].includes(method)) {
+        if (path === '/api/uuids' && ['GET', 'DELETE', 'POST', 'PUT'].includes(method)) {
             return await handleUuids(req, env, method);
         }
 
@@ -3160,13 +3281,16 @@ const adminHtml = `
                         <thead>
                             <tr>
                                 <th class="sortable" onclick="sortUuid('uuid')">UUID ↕</th>
-                                <th class="sortable" onclick="sortUuid('count')">包含节点数 ↕</th>
+                                <th class="sortable" onclick="sortUuid('owner')">所有者 ↕</th>
+                                <th class="sortable" onclick="sortUuid('email')">邮箱 ↕</th>
+                                <th class="sortable" onclick="sortUuid('status')">状态 ↕</th>
+                                <th class="sortable" onclick="sortUuid('count')">节点数 ↕</th>
                                 <th class="sortable" onclick="sortUuid('updated_at')">最近更新 ↕</th>
-                                <th style="width: 120px;">操作</th>
+                                <th style="width: 200px;">操作</th>
                             </tr>
                         </thead>
                         <tbody id="uuidList">
-                            <tr><td colspan="4" style="text-align:center; padding:20px;">加载中...</td></tr>
+                            <tr><td colspan="7" style="text-align:center; padding:20px;">加载中...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -3442,6 +3566,34 @@ const adminHtml = `
             <div style="display:flex; justify-content:flex-end; gap:10px;">
                 <button class="nav-btn" onclick="document.getElementById('editTemplateModal').style.display='none'">取消</button>
                 <button class="nav-btn active" onclick="updateTemplate()" id="updateTemplateBtn">保存修改</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 编辑UUID信息弹窗 -->
+    <div class="modal-overlay" id="editUuidModal" onclick="event.target===this && (this.style.display='none')">
+        <div class="modal">
+            <h3 style="margin-top:0; color:#3d474d">编辑UUID信息</h3>
+            <input type="hidden" id="editUuid">
+            <div style="margin-bottom:15px;">
+                <label style="display:block;margin-bottom:5px;font-size:0.9rem;color:#5a666d;">所属人姓名/标识:</label>
+                <input type="text" id="editOwner" required>
+                <label style="display:block;margin-bottom:5px;font-size:0.9rem;color:#5a666d;">邮箱地址:</label>
+                <input type="email" id="editEmail" required>
+                <label style="display:block;margin-bottom:5px;font-size:0.9rem;color:#5a666d;">其他联系信息:</label>
+                <input type="text" id="editContactInfo">
+                <label style="display:block;margin-bottom:5px;font-size:0.9rem;color:#5a666d;">状态:</label>
+                <select id="editStatus">
+                    <option value="active">活跃</option>
+                    <option value="inactive">停用</option>
+                    <option value="suspended">暂停</option>
+                </select>
+                <label style="display:block;margin-bottom:5px;font-size:0.9rem;color:#5a666d;">备注:</label>
+                <textarea id="editUuidRemark" rows="3"></textarea>
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:10px;">
+                <button class="nav-btn" onclick="document.getElementById('editUuidModal').style.display='none'">取消</button>
+                <button class="nav-btn active" onclick="saveUuidInfo()">保存</button>
             </div>
         </div>
     </div>
@@ -4612,21 +4764,108 @@ const adminHtml = `
             const d = await api(q);
             if(d && d.success && d.data) {
                 let h = '';
-                d.data.forEach(i => h += \`<tr><td>\${i.uuid}</td><td>\${i.count} 个配置</td><td>\${fmtDate(i.updated_at)}</td><td><button class="nav-btn danger small" onclick="delU('\${i.uuid}')">删除整组</button></td></tr>\`);
-                document.getElementById('uuidList').innerHTML = h || '<tr><td colspan="4" style="text-align:center">无数据</td></tr>';
+                d.data.forEach(i => {
+                    // 处理所有者信息（可能为空）
+                    const owner = i.owner || '<span style="color:#ccc">未设置</span>';
+                    const email = i.email || '<span style="color:#ccc">未设置</span>';
+                    const status = i.status || 'active';
+                    
+                    // 状态显示样式
+                    let statusBadge = '';
+                    if (status === 'active') {
+                        statusBadge = '<span style="background:#10b981; color:white; padding:2px 8px; border-radius:12px; font-size:0.8rem;">活跃</span>';
+                    } else if (status === 'inactive') {
+                        statusBadge = '<span style="background:#6b7280; color:white; padding:2px 8px; border-radius:12px; font-size:0.8rem;">停用</span>';
+                    } else if (status === 'suspended') {
+                        statusBadge = '<span style="background:#ef4444; color:white; padding:2px 8px; border-radius:12px; font-size:0.8rem;">暂停</span>';
+                    } else {
+                        statusBadge = \`<span style="background:#ccc; color:white; padding:2px 8px; border-radius:12px; font-size:0.8rem;">\${status}</span>\`;
+                    }
+                    
+                    const safeUUID = (i.uuid || '').replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+                    const safeOwner = (i.owner || '').replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+                    const safeEmail = (i.email || '').replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+                    const safeContactInfo = (i.contact_info || '').replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+                    const safeRemark = (i.remark || '').replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+                    const safeStatus = (i.status || 'active').replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+                    
+                    h += \`
+                    <tr>
+                        <td style="font-family:monospace; font-size:0.85rem;">\${i.uuid}</td>
+                        <td>\${owner}</td>
+                        <td>\${email}</td>
+                        <td>\${statusBadge}</td>
+                        <td>\${i.count} 个配置</td>
+                        <td>\${fmtDate(i.updated_at)}</td>
+                        <td>
+                            <div style="display:flex; gap:5px;">
+                                <button class="nav-btn small" onclick="editUuidInfo('\${safeUUID}', '\${safeOwner}', '\${safeEmail}', '\${safeContactInfo}', '\${safeStatus}', '\${safeRemark}')">编辑信息</button>
+                                <button class="nav-btn danger small" onclick="delU('\${i.uuid}')">删除整组</button>
+                            </div>
+                        </td>
+                    </tr>\`;
+                });
+                document.getElementById('uuidList').innerHTML = h || '<tr><td colspan="7" style="text-align:center">无数据</td></tr>';
                 uuidState.total = d.total || 0;
                 updatePager('uuid', uuidState);
             } else {
                 // 即使加载失败，也更新分页信息
+                document.getElementById('uuidList').innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px;">加载失败，请刷新重试</td></tr>';
                 updatePager('uuid', uuidState);
             }
         }
         
-        async function delU(u) { 
-            if(confirm('确认删除此 UUID 分组? 这将删除所有关联配置。')) { 
-                await api('uuids', 'DELETE', {uuid:u}); 
-                loadUuid(); 
+        async function delU(uuid) { 
+            if(confirm('确认删除此UUID的所有配置?')) { 
+                const res = await api('uuids', 'DELETE', {uuid}); 
+                if(res && res.success) {
+                    toast('UUID组删除成功');
+                    loadUuid();
+                }
             } 
+        }
+        
+        function editUuidInfo(uuid, owner, email, contactInfo, status, remark) {
+            document.getElementById('editUuid').value = uuid;
+            document.getElementById('editOwner').value = owner;
+            document.getElementById('editEmail').value = email;
+            document.getElementById('editContactInfo').value = contactInfo;
+            document.getElementById('editStatus').value = status;
+            document.getElementById('editUuidRemark').value = remark;
+            document.getElementById('editUuidModal').style.display = 'flex';
+        }
+        
+        async function saveUuidInfo() {
+            const uuid = document.getElementById('editUuid').value;
+            const owner = document.getElementById('editOwner').value.trim();
+            const email = document.getElementById('editEmail').value.trim();
+            const contactInfo = document.getElementById('editContactInfo').value.trim();
+            const status = document.getElementById('editStatus').value;
+            const remark = document.getElementById('editUuidRemark').value.trim();
+
+            if (!owner) {
+                toast('所属人姓名/标识不能为空', 'error');
+                return;
+            }
+            if (!email) {
+                toast('邮箱地址不能为空', 'error');
+                return;
+            }
+
+            const res = await api('uuids', 'POST', {
+                uuid,
+                owner,
+                email,
+                contact_info: contactInfo,
+                status,
+                remark
+            });
+
+            if (res && res.success) {
+                toast('UUID信息保存成功');
+                document.getElementById('editUuidModal').style.display = 'none';
+                loadUuid();
+            }
         }
         
         function changeUuidPage(d) { changePage('uuid', d, uuidState, loadUuid); }
@@ -4636,32 +4875,22 @@ const adminHtml = `
         // ============ 模板管理 ============
         async function loadTemplates() {
             if (templateState.loading) return;
-            
             templateState.loading = true;
-            const pager = document.getElementById('templatePager');
+            
+            const q = \`templates?page=\${templateState.page}&size=\${templateState.size}&sort=\${templateState.sort}&order=\${templateState.order}\`;
             const list = document.getElementById('templateList');
             
             try {
-                // 确保分页按钮可见
-                if (pager) pager.style.display = 'flex';
-                
-                list.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px;"><div class="loader"></div><div style="margin-top:10px; color:#89949B;">加载中...</div></td></tr>';
-                
-                const q = \`templates?page=\${templateState.page}&size=\${templateState.size}&sort=\${templateState.sort}&order=\${templateState.order}\`;
-                const response = await api(q);
-                
-                if (response && response.success) {
-                    const data = response.data;
-                    templateState.total = response.total || 0;
-                    
-                    if (data && data.length > 0) {
+                const d = await api(q);
+                if (d && d.success) {
+                    if (d.data && d.data.length > 0) {
                         let html = '';
-                        data.forEach(i => {
+                        d.data.forEach(i => {
+                            const createdAt = fmtDate(i.created_at);
                             const defaultBadge = i.is_default === 1 ? 
                                 '<span class="template-badge badge-default">默认</span>' : 
                                 '<span class="template-badge badge-normal">普通</span>';
                             
-                            const createdAt = fmtDate(i.created_at);
                             const description = i.description ? i.description : '<span style="color:#ccc">无描述</span>';
                             
                             const safeName = (i.name || '').replace(/'/g, "&#39;").replace(/"/g, "&quot;");

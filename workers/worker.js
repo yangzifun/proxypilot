@@ -1880,449 +1880,7 @@ export default {
 };
 
 // =================================================================
-//  UNIFIED FRONTEND PAGE (整合的前端页面)
-// =================================================================
-
-// 全局样式
-const globalStyle = `
-html { font-size: 87.5%; } body, html { margin: 0; padding: 0; min-height: 100%; background-color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-.container { width: 100%; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 40px 20px; box-sizing: border-box; }
-.content-group { width: 100%; max-width: 1200px; text-align: center; z-index: 10; box-sizing: border-box; }
-.profile-name { font-size: 2.2rem; color: #3d474d; margin-bottom: 10px; font-weight: bold;}
-.profile-quote { color: #89949B; margin-bottom: 27px; min-height: 1.2em; }
-.nav-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 27px; }
-.nav-btn { display: inline-flex; align-items: center; justify-content: center; padding: 8px 16px; text-align: center; background: #E8EBED; border: 2px solid #89949B; border-radius: 4px; color: #5a666d; text-decoration: none !important; font-weight: 500; font-size: 0.95rem; line-height: 1.2; transition: all 0.3s; white-space: nowrap; cursor: pointer; box-sizing: border-box; }
-.nav-btn:hover:not(:disabled) { background: #89949B; color: white; }
-.nav-btn:disabled { opacity: 0.6; cursor: not-allowed;}
-.nav-btn.primary { background-color: #5a666d; color: white; border-color: #5a666d;}
-.nav-btn.primary:hover:not(:disabled) { background-color: #3d474d; }
-.card { background: #f8f9fa; border: 1px solid #E8EBED; border-radius: 8px; padding: 24px; margin-bottom: 24px; text-align: left; }
-.card h2 { font-size: 1.5rem; color: #3d474d; margin-top: 0; margin-bottom: 20px; text-align: center;}
-.form-group { margin-bottom: 16px; }
-.form-group label { display: block; color: #5a666d; font-weight: 500; margin-bottom: 8px; font-size: 0.9rem;}
-textarea, input[type="text"], input[type="email"], input[type="number"], select { width: 100%; padding: 10px; border: 2px solid #89949B; border-radius: 4px; background: #fff; font-family: 'SF Mono', 'Courier New', monospace; font-size: 0.9rem; box-sizing: border-box; resize: vertical; margin-bottom: 5px;}
-textarea:focus, input[type="text"]:focus, input[type="email"]:focus, input[type="number"]:focus, select:focus { outline: none; border-color: #3d474d; }
-.info-box { background-color: #e8ebed; color: #5a666d; border-left: 4px solid #89949B; padding: 12px 16px; border-radius: 4px; font-size: 0.85rem; text-align: left; line-height: 1.5; margin: 16px 0; }
-.footer { margin-top: 40px; text-align: center; color: #89949B; font-size: 0.8rem; }
-.footer a { color: #5a666d; text-decoration: none; }
-.hidden { display: none; }
-#toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 10px; }
-.toast { display: flex; align-items: center; padding: 12px 18px; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); font-weight: 500; font-size: 0.9rem; border: 2px solid #89949B; background: #fff; color: #3d474d; opacity: 0; transform: translateX(100%); animation: slideIn 0.5s forwards, fadeOut 0.5s 4.5s forwards; }
-@keyframes slideIn { to { opacity: 1; transform: translateX(0); } }
-@keyframes fadeOut { from { opacity: 1; } to { opacity: 0; transform: translateX(100%); } }
-.loader { width: 16px; height: 16px; border: 2px solid white; border-bottom-color: transparent; border-radius: 50%; display: inline-block; box-sizing: border-box; animation: rotation 1s linear infinite; margin-right: 8px; }
-@keyframes rotation { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-
-/* Tab Navigation */
-.tab-nav { display: flex; border-bottom: 2px solid #E8EBED; margin-bottom: 20px; }
-.tab-btn { padding: 12px 24px; background: transparent; border: none; border-bottom: 2px solid transparent; font-size: 1rem; color: #89949B; cursor: pointer; transition: all 0.3s; }
-.tab-btn:hover { color: #5a666d; }
-.tab-btn.active { color: #3d474d; border-bottom-color: #3d474d; font-weight: 500; }
-
-/* Tab Content */
-.tab-content { display: none; }
-.tab-content.active { display: block; }
-
-/* Table & Modal Specific */
-.table-container { overflow-x: auto; border: 2px solid #89949B; border-radius: 4px; background: #fff; margin-top:20px;}
-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-th, td { padding: 10px 14px; text-align: left; border-bottom: 2px solid #E8EBED; white-space: nowrap; }
-th { font-weight: bold; color: #3d474d; background-color: #f0f2f5; }
-.config-data-cell { white-space: normal; word-break: break-all; max-width: 200px; font-size: 0.8rem; color: #666; }
-.actions-cell button { margin-right: 5px; padding: 4px 8px; font-size: 0.8rem; }
-.domain-hosting-cell { font-size: 0.85rem; font-weight: 500; }
-
-/* Domain Hosting Badges */
-.hosting-badge { 
-    display: inline-block; 
-    padding: 2px 8px; 
-    border-radius: 12px; 
-    font-size: 0.75rem; 
-    font-weight: 500; 
-    line-height: 1.4;
-}
-.hosting-cloudflare { background: #F6821F; color: #fff; border: 1px solid #F6821F; }
-.hosting-aliyun { background: #FE6A00; color: #fff; border: 1px solid #FE6A00; }
-.hosting-tencent { background: #4A86FF; color: #fff; border: 1px solid #4A86FF; }
-.hosting-aws { background: #232B37; color: #fff; border: 1px solid #232B37; }
-.hosting-gcore { background: #FF4C00; color: #fff; border: 1px solid #FF4C00; }
-.hosting-fastly { background: #F7272C; color: #fff; border: 1px solid #F7272C; }
-.hosting-cachefly { background: #391376; color: #fff; border: 1px solid #391376; }
-.hosting-lightcdn { background: #F78B2C; color: #fff; border: 1px solid #F78B2C; }
-.hosting-vercel { background: #000; color: #fff; border: 1px solid #000; }
-.hosting-netlify { background: #05B7B5; color: #fff; border: 1px solid #05B7B5; }
-.hosting-none { background: #f8f9fa; color: #6c757d; border: 1px solid #6c757d; }
-.hosting-other { background: #f0f0f0; color: #666; border: 1px solid #666; }
-
-/* Modal Styles */
-.modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 100; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.3s; }
-.modal-overlay.open { opacity: 1; pointer-events: auto; }
-.modal { background: #fff; width: 90%; max-width: 600px; max-height: 90vh; overflow-y: auto; border-radius: 8px; padding: 25px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); transform: translateY(-20px); transition: transform 0.3s; }
-.modal-overlay.open .modal { transform: translateY(0); }
-.modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 2px solid #E8EBED; padding-bottom: 10px; }
-.modal-title { font-size: 1.25rem; font-weight: bold; color: #3d474d; }
-.modal-close { cursor: pointer; font-size: 1.5rem; color: #89949B; line-height: 1; }
-.modal-body { text-align: left; }
-.edit-field { margin-bottom: 12px; }
-.edit-field label { font-size: 0.85rem; color: #89949B; margin-bottom: 4px; display: block; }
-.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
-
-/* Statistics Styles */
-.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
-.stat-box { background: #f0f4f8; padding: 15px; border-radius: 4px; border-left: 4px solid #3b82f6; text-align: center; }
-.stat-num { font-size: 1.8rem; color: #1e40af; font-weight: bold; display: block; }
-.stat-label { font-size: 0.85rem; color: #4b5563; margin-top: 5px; }
-.stat-sub { font-size: 0.75rem; color: #6b7280; margin-top: 3px; }
-.chart-container { position: relative; width: 100%; height: 300px; margin: 20px 0; }
-.chart-controls { display: flex; gap: 10px; margin-bottom: 15px; align-items: center; }
-.chart-controls select { padding: 6px 12px; border: 2px solid #89949B; border-radius: 4px; background: #fff; font-size: 0.9rem; }
-.chart-controls button { padding: 6px 12px; background: #e8ebed; border: 2px solid #89949B; border-radius: 4px; color: #5a666d; cursor: pointer; transition: all 0.2s; font-size: 0.9rem; }
-.chart-controls button:hover { background: #89949B; color: white; }
-.chart-controls button.active { background: #5a666d; color: white; border-color: #5a666d; }
-.access-detail-table { width: 100%; font-size: 0.85rem; border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; }
-.access-detail-table th { background: #f8fafc; font-weight: 600; padding: 8px 10px; }
-.access-detail-table td { padding: 8px 10px; border-top: 1px solid #e5e7eb; }
-.type-badge { display: inline-block; padding: 2px 6px; border-radius: 10px; font-size: 0.75rem; font-weight: 500; }
-.type-subscription { background: #dbeafe; color: #1e40af; }
-.type-apigen { background: #d1fae5; color: #065f46; }
-.access-log-container { max-height: 200px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 4px; padding: 10px; margin-top: 10px; }
-.access-log-item { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #f3f4f6; font-size: 0.85rem; }
-.access-log-item:last-child { border-bottom: none; }
-.timestamp { color: #6b7280; font-family: monospace; }
-.log-type { font-weight: 500; }
-
-/* Enhanced Select Styles */
-.hosting-select { 
-    padding: 10px 12px; 
-    border: 2px solid #89949B; 
-    border-radius: 4px; 
-    background-color: #fff;
-    font-size: 0.9rem;
-    color: #5a666d;
-    font-family: 'SF Mono', 'Courier New', monospace;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M2.5 4.5L6 8L9.5 4.5' stroke='%235a666d' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 12px center;
-    background-size: 12px;
-    padding-right: 32px;
-}
-.hosting-select:hover { 
-    border-color: #5a666d; 
-    background-color: #f8f9fa;
-}
-.hosting-select:focus { 
-    outline: none; 
-    border-color: #3d474d; 
-    box-shadow: 0 0 0 3px rgba(93, 105, 109, 0.1);
-}
-.hosting-select:disabled { 
-    opacity: 0.6; 
-    cursor: not-allowed;
-    background-color: #f0f2f5;
-}
-.hosting-option { 
-    padding: 10px 12px; 
-    font-size: 0.9rem;
-    font-family: 'SF Mono', 'Courier New', monospace;
-}
-.hosting-option:hover {
-    background-color: #f0f2f5;
-}
-
-/* Radio Group Styles */
-.radio-group { display: flex; flex-wrap: wrap; gap: 10px; }
-.radio-group label { padding: 6px 14px; background: #E8EBED; border: 2px solid #89949B; border-radius: 4px; color: #5a666d; font-size: 0.85rem; cursor: pointer; transition: all 0.3s; }
-.radio-group input[type="radio"] { display: none; }
-.radio-group input[type="radio"]:checked + span { background: #89949B; color: white; }
-.radio-group label:hover { background: #d1d5d8; }
-.radio-group input[type="radio"]:checked + span:hover { background: #89949B; color: white; }
-
-/* QR Code Styles */
-.qr-code-container {
-  margin-top: 16px;
-  text-align: center;
-  padding: 16px;
-  background: #f8f9fa;
-  border: 1px solid #E8EBED;
-  border-radius: 8px;
-}
-.qr-code-container.hidden {
-  display: none;
-}
-.qr-code-image {
-  max-width: 200px;
-  height: auto;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  margin: 10px 0;
-}
-.qr-code-label {
-  display: block;
-  color: #5a666d;
-  font-weight: 500;
-  margin-bottom: 8px;
-  font-size: 0.9rem;
-}
-.qr-code-buttons {
-  display: flex;
-  gap: 8px;
-  justify-content: center;
-  margin-top: 12px;
-}
-.qr-code-buttons .nav-btn {
-  font-size: 0.85rem;
-  padding: 6px 12px;
-}
-.qr-code-info {
-  font-size: 0.8rem;
-  color: #89949B;
-  margin-top: 8px;
-}
-
-/* Subscription Link Area */
-.subscription-link-box {
-  margin-top: 15px;
-  background: #f8f9fa;
-  border: 1px solid #E8EBED;
-  border-radius: 8px;
-  padding: 15px;
-}
-.subscription-link-box label {
-  display: block;
-  color: #5a666d;
-  font-weight: 500;
-  margin-bottom: 8px;
-  font-size: 0.9rem;
-}
-.link-input-container {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 15px;
-}
-.link-input-container input {
-  flex-grow: 1;
-  background: #fff;
-  border: 2px solid #89949B;
-  color: #5a666d;
-}
-
-/* Template Selection */
-.template-select-container {
-  margin-top: 10px;
-}
-.template-select-container select {
-  width: 100%;
-  margin-bottom: 10px;
-}
-.template-description {
-  font-size: 0.85rem;
-  color: #89949B;
-  margin-top: 8px;
-  line-height: 1.4;
-}
-
-/* Loading State */
-.loading-state {
-  text-align: center;
-  padding: 20px;
-  color: #89949B;
-}
-.loading-state .loader {
-  width: 32px;
-  height: 32px;
-  border: 3px solid #89949B;
-  border-bottom-color: transparent;
-  margin-bottom: 10px;
-}
-
-/* Protocol Support */
-.protocol-support {
-  margin-top: 20px;
-  padding: 15px;
-  background: #f0f7ff;
-  border: 1px solid #cce5ff;
-  border-radius: 8px;
-}
-.protocol-support h3 {
-  margin-top: 0;
-  color: #0066cc;
-  font-size: 1.1rem;
-}
-.protocol-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 10px;
-}
-.protocol-badge {
-  display: inline-block;
-  padding: 4px 10px;
-  background: #e6f2ff;
-  border: 1px solid #99ccff;
-  border-radius: 4px;
-  font-size: 0.8rem;
-  color: #0066cc;
-  font-weight: 500;
-}
-.protocol-badge.new {
-  background: #fff0e6;
-  border-color: #ffcc99;
-  color: #ff6600;
-}
-
-/* Table Checkbox Styles */
-.table-checkbox-cell { width: 40px; text-align: center; }
-.table-checkbox-cell input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
-.select-all-checkbox { margin-right: 5px; }
-
-/* Filter and Pagination Styles */
-.filter-bar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; align-items: center; }
-.filter-item { display: flex; align-items: center; gap: 5px; }
-.filter-label { font-size: 0.85rem; color: #5a666d; font-weight: 500; white-space: nowrap; }
-.filter-select { padding: 6px 10px; border: 2px solid #89949B; border-radius: 4px; background: #fff; font-size: 0.85rem; }
-.filter-select:focus { outline: none; border-color: #3d474d; }
-.pagination-container { display: flex; justify-content: space-between; align-items: center; margin-top: 15px; padding-top: 15px; border-top: 1px solid #E8EBED; }
-.pagination-info { font-size: 0.85rem; color: #89949B; }
-.pagination-controls { display: flex; gap: 5px; }
-.pagination-btn { padding: 6px 12px; background: #e8ebed; border: 2px solid #89949B; border-radius: 4px; color: #5a666d; cursor: pointer; font-size: 0.85rem; }
-.pagination-btn:hover:not(:disabled) { background: #89949B; color: white; }
-.pagination-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.page-number { padding: 6px 12px; background: #f8f9fa; border: 2px solid #E8EBED; border-radius: 4px; font-size: 0.85rem; color: #5a666d; }
-.page-size-select { padding: 6px 10px; border: 2px solid #89949B; border-radius: 4px; background: #fff; font-size: 0.85rem; }
-
-/* Bulk Actions Styles */
-.bulk-actions-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding: 10px; background: #f8f9fa; border: 1px solid #E8EBED; border-radius: 4px; }
-.selected-count { font-size: 0.85rem; color: #5a666d; font-weight: 500; }
-.bulk-delete-btn { padding: 6px 12px; background: #d44; color: white; border: 2px solid #d44; border-radius: 4px; font-size: 0.85rem; cursor: pointer; }
-.bulk-delete-btn:hover:not(:disabled) { background: #c33; border-color: #c33; }
-.bulk-delete-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-/* Dropdown Menu Styles */
-.dropdown-menu {
-  display: none;
-  position: absolute;
-  right: 0;
-  top: 100%;
-  background-color: #fff;
-  min-width: 180px;
-  box-shadow: 0 8px 16px rgba(0,0,0,0.2);
-  border-radius: 4px;
-  padding: 10px 0;
-  margin-top: 5px;
-  border: 1px solid #E8EBED;
-  z-index: 1001;
-}
-
-.dropdown-menu a {
-  display: block;
-  padding: 10px 15px;
-  color: #5a666d;
-  text-decoration: none;
-  font-size: 0.9rem;
-  transition: background-color 0.3s;
-}
-
-.dropdown-menu a:hover {
-  background-color: #f8f9fa;
-}
-
-.dropdown-menu .logout {
-  color: #d44;
-}
-
-/* UUID Display */
-.uuid-display {
-  padding: 4px 12px;
-  background-color: #e8f4f8;
-  border: 1px solid #4a9;
-  border-radius: 4px;
-  color: #4a9;
-  font-size: 0.85rem;
-  font-family: 'SF Mono', 'Courier New', monospace;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 150px;
-  cursor: pointer;
-  transition: all 0.3s;
-}
-
-.uuid-display:hover {
-  background-color: #d0e8f0;
-}
-
-/* Dropdown Button */
-.uuid-dropdown-btn {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 8px 16px;
-  background-color: #4a9;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-family: 'SF Mono', 'Courier New', monospace;
-  font-size: 0.85rem;
-  transition: background-color 0.3s;
-}
-
-.uuid-dropdown-btn:hover {
-  background-color: #3a8;
-}
-
-.uuid-dropdown-btn .arrow {
-  font-size: 0.8em;
-}
-
-/* UUID Status Badges */
-.uuid-status-badge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 12px;
-  font-size: 0.75rem;
-  font-weight: 500;
-  line-height: 1.4;
-}
-.uuid-status-active {
-  background-color: #10b981;
-  color: white;
-  border: 1px solid #10b981;
-}
-.uuid-status-inactive {
-  background-color: #6b7280;
-  color: white;
-  border: 1px solid #6b7280;
-}
-.uuid-status-suspended {
-  background-color: #ef4444;
-  color: white;
-  border: 1px solid #ef4444;
-}
-
-/* Responsive Design */
-@media (max-width: 768px) { 
-  html { font-size: 100%; } 
-  .container { padding: 20px 15px; justify-content: flex-start; } 
-  .profile-name { font-size: 1.8rem; } 
-  .profile-quote { font-size: 0.95rem; margin-bottom: 20px; } 
-  .card { padding: 20px 15px; margin-bottom: 20px; } 
-  .card h2 { font-size: 1.3rem; } 
-  .nav-btn { padding: 9px 12px; font-size: 0.9rem; } 
-  .tab-btn { padding: 10px 16px; font-size: 0.9rem; }
-  .filter-bar { flex-direction: column; align-items: stretch; }
-  .filter-item { width: 100%; }
-  .bulk-actions-bar { flex-direction: column; gap: 10px; align-items: stretch; }
-  .pagination-container { flex-direction: column; gap: 10px; align-items: stretch; }
-}
-`;
-
-// =================================================================
-//  UNIFIED PAGE CONTENT (整合的页面内容)
+//  UNIFIED FRONTEND PAGE (整合的前端页面) - Tailwind CSS + Lucide 版本
 // =================================================================
 
 const unifiedPageHtmlContent = `
@@ -2333,78 +1891,202 @@ const unifiedPageHtmlContent = `
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" href="https://s3.yangzifun.org/logo.ico" type="image/x-icon">
   <title>代理配置管理工具</title>
-  <style>${globalStyle}</style>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    /* 自定义样式补充 */
+    .config-data-cell { white-space: normal; word-break: break-all; max-width: 200px; }
+    .animate-slide-in {
+      animation: slideIn 0.5s forwards;
+    }
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    .animate-fade-out {
+      animation: fadeOut 0.5s forwards;
+    }
+    @keyframes fadeOut {
+      from { opacity: 1; }
+      to { opacity: 0; transform: translateX(100%); }
+    }
+    
+    /* 域名托管徽章样式 */
+    .hosting-cloudflare { background-color: #F6821F; color: white; }
+    .hosting-aliyun { background-color: #FE6A00; color: white; }
+    .hosting-tencent { background-color: #4A86FF; color: white; }
+    .hosting-aws { background-color: #232B37; color: white; }
+    .hosting-gcore { background-color: #FF4C00; color: white; }
+    .hosting-fastly { background-color: #F7272C; color: white; }
+    .hosting-cachefly { background-color: #391376; color: white; }
+    .hosting-lightcdn { background-color: #F78B2C; color: white; }
+    .hosting-vercel { background-color: #000; color: white; }
+    .hosting-netlify { background-color: #05B7B5; color: white; }
+    .hosting-none { background-color: #f8f9fa; color: #6c757d; }
+    .hosting-other { background-color: #f0f0f0; color: #666; }
+    
+    /* UUID状态徽章 */
+    .uuid-status-active { background-color: #10b981; color: white; }
+    .uuid-status-inactive { background-color: #6b7280; color: white; }
+    .uuid-status-suspended { background-color: #ef4444; color: white; }
+    
+    /* 访问类型徽章 */
+    .type-subscription { background-color: #dbeafe; color: #1e40af; }
+    .type-apigen { background-color: #d1fae5; color: #065f46; }
+    
+    /* 自定义单选按钮样式 */
+    .radio-option {
+      position: relative;
+      padding: 8px 16px;
+      background-color: #f3f4f6;
+      border: 2px solid #d1d5db;
+      border-radius: 0.375rem;
+      color: #4b5563;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    .radio-option:hover {
+      background-color: #e5e7eb;
+    }
+    .radio-option input[type="radio"] {
+      position: absolute;
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .radio-option input[type="radio"]:checked + span {
+      background-color: #6b7280;
+      color: white;
+      border-color: #6b7280;
+    }
+    
+    /* 加载动画 */
+    .loader {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid white;
+      border-bottom-color: transparent;
+      border-radius: 50%;
+      animation: rotation 1s linear infinite;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+    @keyframes rotation {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    /* 表格滚动条样式 */
+    .table-container {
+      overflow-x: auto;
+      border: 2px solid #d1d5db;
+      border-radius: 0.375rem;
+    }
+    .table-container::-webkit-scrollbar {
+      height: 8px;
+    }
+    .table-container::-webkit-scrollbar-track {
+      background: #f1f1f1;
+      border-radius: 4px;
+    }
+    .table-container::-webkit-scrollbar-thumb {
+      background: #c1c1c1;
+      border-radius: 4px;
+    }
+    .table-container::-webkit-scrollbar-thumb:hover {
+      background: #a8a8a8;
+    }
+  </style>
 </head>
-<body>
-  <!-- Configuration Management Button - 固定在右上角 -->
-  <div id="configManagerBtn" style="position: fixed; top: 20px; right: 20px; z-index: 1000; display: flex; align-items: center; gap: 10px;">
+<body class="bg-white min-h-screen font-sans text-gray-800">
+  <!-- 配置管理按钮和UUID下拉菜单 -->
+  <div id="configManagerBtn" class="fixed top-5 right-5 z-50 flex items-center gap-3">
     <!-- 配置管理按钮（未登录时显示） -->
-    <button id="configManagerOpenBtn" class="nav-btn primary" 
-            style="padding: 8px 16px; background-color: #5a666d; color: white; border: none; border-radius: 4px; cursor: pointer;">
-      ⚙️ 配置管理
+    <button id="configManagerOpenBtn" class="flex items-center gap-2 px-4 py-2 bg-gray-700 text-white rounded-lg border border-gray-700 hover:bg-gray-800 transition-colors shadow-sm">
+      <i data-lucide="settings" class="w-4 h-4"></i>
+      配置管理
     </button>
 
     <!-- UUID显示和下拉菜单（登录后显示） -->
-    <div id="uuidDropdownContainer" class="hidden" style="position: relative;">
-      <button id="uuidDropdownBtn" class="uuid-dropdown-btn">
-        <span id="uuidDisplay">UUID: ...</span>
-        <span class="arrow">▼</span>
+    <div id="uuidDropdownContainer" class="hidden relative">
+      <button id="uuidDropdownBtn" class="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg border border-teal-600 hover:bg-teal-700 transition-colors shadow-sm font-mono">
+        <span id="uuidDisplay" class="truncate max-w-[120px]">UUID: ...</span>
+        <i data-lucide="chevron-down" class="w-4 h-4"></i>
       </button>
 
-      <div id="uuidDropdownMenu" class="dropdown-menu">
-        <div style="padding: 10px 15px; color: #5a666d; font-size: 0.9rem; border-bottom: 1px solid #E8EBED; word-break: break-all;">
+      <div id="uuidDropdownMenu" class="hidden absolute right-0 top-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg min-w-[200px] z-50">
+        <div class="px-4 py-3 border-b border-gray-200 text-gray-700 text-sm font-mono break-all">
           UUID: <span id="dropdownUuid"></span>
         </div>
-        <a href="javascript:void(0)" onclick="openUuidInfoModal()">编辑UUID信息</a>
-        <hr style="margin: 5px 0; border: none; border-top: 1px solid #E8EBED;">
-        <a href="javascript:void(0)" class="logout" onclick="logout()">退出登录</a>
+        <a href="javascript:void(0)" onclick="openUuidInfoModal()" class="flex items-center gap-2 px-4 py-3 text-gray-700 hover:bg-gray-100 transition-colors">
+          <i data-lucide="user" class="w-4 h-4"></i>
+          编辑UUID信息
+        </a>
+        <hr class="border-gray-200 mx-2">
+        <a href="javascript:void(0)" onclick="logout()" class="flex items-center gap-2 px-4 py-3 text-red-600 hover:bg-red-50 transition-colors">
+          <i data-lucide="log-out" class="w-4 h-4"></i>
+          退出登录
+        </a>
       </div>
     </div>
   </div>
 
-  <!-- UUID信息管理模态框（简化版）- 移除了UUID列表标签页 -->
-  <div id="uuidInfoModal" class="modal-overlay" style="display: none;">
-    <div class="modal" style="max-width: 600px;">
-      <div class="modal-header">
-        <span class="modal-title">UUID信息管理</span>
-        <span class="modal-close" onclick="closeUuidInfoModal()">&times;</span>
+  <!-- UUID信息管理模态框 -->
+  <div id="uuidInfoModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center border-b border-gray-200 px-6 py-4">
+        <h3 class="text-lg font-semibold text-gray-800">UUID信息管理</h3>
+        <button onclick="closeUuidInfoModal()" class="text-gray-500 hover:text-gray-700 transition-colors">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
       </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <div class="info-box">
-            <strong>注意：</strong> 在此处管理UUID的详细信息，包括所属人、联系方式、状态等。
-            <br>这些信息仅用于管理和统计，不会影响配置的正常使用。
+      
+      <div class="p-6">
+        <div class="mb-4 bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg">
+          <div class="flex items-start gap-2">
+            <i data-lucide="info" class="w-5 h-5 text-blue-500 mt-0.5"></i>
+            <p class="text-sm text-gray-700">
+              <strong>注意：</strong> 在此处管理UUID的详细信息，包括所属人、联系方式、状态等。
+              这些信息仅用于管理和统计，不会影响配置的正常使用。
+            </p>
           </div>
         </div>
       
-        <!-- 个人信息标签页（简化版） -->
         <div id="uuidInfoPersonalContent">
-          <div class="form-group">
-            <label>UUID</label>
-            <input type="text" id="uuidInfoUuid" readonly style="background-color: #f8f9fa; font-family: 'SF Mono', 'Courier New', monospace;">
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-1">UUID</label>
+            <input type="text" id="uuidInfoUuid" readonly 
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 font-mono text-gray-600 focus:outline-none">
           </div>
         
-          <div class="grid-2">
-            <div class="form-group">
-              <label>所属人姓名/标识 *</label>
-              <input type="text" id="uuidInfoOwner" placeholder="请输入所属人姓名或标识">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">所属人姓名/标识 *</label>
+              <input type="text" id="uuidInfoOwner" placeholder="请输入所属人姓名或标识"
+                     class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none">
             </div>
-            <div class="form-group">
-              <label>邮箱地址 *</label>
-              <input type="email" id="uuidInfoEmail" placeholder="请输入邮箱地址">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">邮箱地址 *</label>
+              <input type="email" id="uuidInfoEmail" placeholder="请输入邮箱地址"
+                     class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none">
             </div>
           </div>
         
-          <div class="form-group">
-            <label>其他联系信息</label>
-            <input type="text" id="uuidInfoContact" placeholder="电话、微信等其他联系方式（可选）">
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-1">其他联系信息</label>
+            <input type="text" id="uuidInfoContact" placeholder="电话、微信等其他联系方式（可选）"
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none">
           </div>
         
-          <div class="grid-2">
-            <div class="form-group">
-              <label>状态</label>
-              <select id="uuidInfoStatus" class="hosting-select">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">状态</label>
+              <select id="uuidInfoStatus" 
+                      class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none">
                 <option value="active">活跃 (active)</option>
                 <option value="inactive">停用 (inactive)</option>
                 <option value="suspended">暂停 (suspended)</option>
@@ -2412,387 +2094,708 @@ const unifiedPageHtmlContent = `
             </div>
           </div>
         
-          <div class="form-group">
-            <label>备注信息</label>
-            <textarea id="uuidInfoRemark" rows="3" placeholder="可在此添加备注信息..."></textarea>
+          <div class="mb-6">
+            <label class="block text-sm font-medium text-gray-700 mb-1">备注信息</label>
+            <textarea id="uuidInfoRemark" rows="3" placeholder="可在此添加备注信息..."
+                      class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none resize-y"></textarea>
           </div>
         
-          <div style="margin-top: 20px; text-align: right;">
-            <button class="nav-btn" onclick="closeUuidInfoModal()">取消</button>
-            <button id="uuidInfoSaveBtn" class="nav-btn primary" onclick="saveUuidInfo()">保存信息</button>
+          <div class="flex justify-end gap-3">
+            <button onclick="closeUuidInfoModal()" 
+                    class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+              取消
+            </button>
+            <button id="uuidInfoSaveBtn" onclick="saveUuidInfo()"
+                    class="px-4 py-2 bg-gray-700 text-white rounded-lg border border-gray-700 hover:bg-gray-800 transition-colors">
+              保存信息
+            </button>
           </div>
         </div>
       </div>
     </div>
   </div>
 
-  <div id="toast-container"></div>
-
-  <!-- Config Manager Modal -->
-  <div id="configManagerModal" class="modal-overlay" style="display: none;">
-    <div class="modal" style="max-width: 500px;">
-      <div class="modal-header">
-        <span class="modal-title">配置管理入口</span>
-        <span class="modal-close" onclick="closeConfigManagerModal()">&times;</span>
+  <!-- 配置管理入口模态框 -->
+  <div id="configManagerModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl max-w-md w-full">
+      <div class="flex justify-between items-center border-b border-gray-200 px-6 py-4">
+        <h3 class="text-lg font-semibold text-gray-800">配置管理入口</h3>
+        <button onclick="closeConfigManagerModal()" class="text-gray-500 hover:text-gray-700 transition-colors">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
       </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <label for="configUuidInput">请输入您的 UUID：</label>
-          <input type="text" id="configUuidInput" placeholder="输入UUID以管理配置" style="width: 100%;">
-          <div class="info-box">
-            如果您没有 UUID，可以<a href="javascript:void(0)" onclick="generateNewUuid()" style="color: #5a666d; text-decoration: underline;">点击这里生成一个新的</a>
-            <br>UUID 将保存在您的浏览器中，方便下次使用。
+      
+      <div class="p-6">
+        <div class="mb-4">
+          <label for="configUuidInput" class="block text-sm font-medium text-gray-700 mb-1">
+            请输入您的 UUID：
+          </label>
+          <input type="text" id="configUuidInput" placeholder="输入UUID以管理配置"
+                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none">
+          <div class="mt-2 bg-gray-50 border-l-4 border-gray-500 p-3 rounded-lg">
+            <p class="text-sm text-gray-700">
+              如果您没有 UUID，可以
+              <a href="javascript:void(0)" onclick="generateNewUuid()" class="text-gray-700 underline font-medium hover:text-gray-900">
+                点击这里生成一个新的
+              </a>
+              <br>UUID 将保存在您的浏览器中，方便下次使用。
+            </p>
           </div>
         </div>
-        <div style="margin-top: 20px; text-align: right;">
-          <button class="nav-btn" onclick="closeConfigManagerModal()">取消</button>
-          <button class="nav-btn primary" onclick="enterConfigManagement()">进入配置管理</button>
+        
+        <div class="flex justify-end gap-3">
+          <button onclick="closeConfigManagerModal()"
+                  class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+            取消
+          </button>
+          <button onclick="enterConfigManagement()"
+                  class="px-4 py-2 bg-gray-700 text-white rounded-lg border border-gray-700 hover:bg-gray-800 transition-colors">
+            进入配置管理
+          </button>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Editor Modal -->
-  <div id="editModalOverlay" class="modal-overlay">
-    <div class="modal">
-      <div class="modal-header">
-        <span class="modal-title">编辑配置 (Editor)</span>
-        <span class="modal-close" onclick="closeEditModal()">&times;</span>
+  <!-- Toast 容器 -->
+  <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-3"></div>
+
+  <!-- 编辑配置模态框 -->
+  <div id="editModalOverlay" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center border-b border-gray-200 px-6 py-4">
+        <h3 class="text-lg font-semibold text-gray-800">编辑配置 (Editor)</h3>
+        <button onclick="closeEditModal()" class="text-gray-500 hover:text-gray-700 transition-colors">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
       </div>
-      <div class="modal-body">
-        <input type="hidden" id="edit-id"><input type="hidden" id="edit-protocol">
-        <div class="grid-3">
-            <div class="edit-field"><label>别名 (Remarks)</label><input type="text" id="edit-ps"></div>
-            <div class="edit-field"><label>端口 (Port)</label><input type="number" id="edit-port"></div>
-            <div class="edit-field"><label>域名托管 (Hosting)</label>
-                <select id="edit-domain-hosting" class="hosting-select">
-                    <option value="Cloudflare" class="hosting-option">Cloudflare</option>
-                    <option value="阿里ESA" class="hosting-option">阿里ESA</option>
-                    <option value="腾讯Edgeone" class="hosting-option">腾讯Edgeone</option>
-                    <option value="AWS Cloudfront" class="hosting-option">AWS Cloudfront</option>
-                    <option value="Gcore" class="hosting-option">Gcore</option>
-                    <option value="Fastly" class="hosting-option">Fastly</option>
-                    <option value="CacheFly" class="hosting-option">CacheFly</option>
-                    <option value="LightCDN" class="hosting-option">LightCDN</option>
-                    <option value="Vercel" class="hosting-option">Vercel</option>
-                    <option value="Netlify" class="hosting-option">Netlify</option>
-                    <option value="无" class="hosting-option">无</option>
-                    <option value="其他" class="hosting-option">其他</option>
-                </select>
+      
+      <div class="p-6">
+        <input type="hidden" id="edit-id">
+        <input type="hidden" id="edit-protocol">
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">别名 (Remarks)</label>
+            <input type="text" id="edit-ps"
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">端口 (Port)</label>
+            <input type="number" id="edit-port"
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">域名托管 (Hosting)</label>
+            <select id="edit-domain-hosting"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none">
+              <option value="Cloudflare">Cloudflare</option>
+              <option value="阿里ESA">阿里ESA</option>
+              <option value="腾讯Edgeone">腾讯Edgeone</option>
+              <option value="AWS Cloudfront">AWS Cloudfront</option>
+              <option value="Gcore">Gcore</option>
+              <option value="Fastly">Fastly</option>
+              <option value="CacheFly">CacheFly</option>
+              <option value="LightCDN">LightCDN</option>
+              <option value="Vercel">Vercel</option>
+              <option value="Netlify">Netlify</option>
+              <option value="无">无</option>
+              <option value="其他">其他</option>
+            </select>
+          </div>
+        </div>
+        
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-1">地址 (Address)</label>
+          <input type="text" id="edit-add"
+                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none">
+        </div>
+        
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-1">UUID / Password</label>
+          <input type="text" id="edit-id-uuid"
+                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none">
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">传输 (Net)</label>
+            <select id="edit-net"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none">
+              <option value="tcp">TCP</option>
+              <option value="ws">WebSocket</option>
+              <option value="grpc">gRPC</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">伪装 (Type)</label>
+            <input type="text" id="edit-type" placeholder="none"
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none">
+          </div>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">伪装域名 (Host)</label>
+            <input type="text" id="edit-host"
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">路径 (Path)</label>
+            <input type="text" id="edit-path"
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none">
+          </div>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">TLS</label>
+            <select id="edit-tls"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none">
+              <option value="">关闭</option>
+              <option value="tls">开启 TLS</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">SNI</label>
+            <input type="text" id="edit-sni"
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none">
+          </div>
+        </div>
+        
+        <div class="flex justify-end gap-3">
+          <button onclick="closeEditModal()"
+                  class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+            取消
+          </button>
+          <button onclick="saveEditedConfig()"
+                  class="px-4 py-2 bg-gray-700 text-white rounded-lg border border-gray-700 hover:bg-gray-800 transition-colors">
+            保存修改
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 主内容容器 -->
+  <div class="min-h-screen flex flex-col items-center justify-center px-4 py-8 sm:px-6 lg:px-8">
+    <div class="w-full max-w-6xl">
+      <!-- 标题区域 -->
+      <div class="text-center mb-8">
+        <h1 class="text-3xl sm:text-4xl font-bold text-gray-800 mb-2">代理配置管理工具</h1>
+        <p class="text-gray-600 text-lg">一站式代理配置管理、生成与订阅服务</p>
+      </div>
+
+      <!-- Tab 导航 -->
+      <div class="flex border-b border-gray-200 mb-8 overflow-x-auto">
+        <button onclick="switchTab('batch')" 
+                class="tab-btn px-6 py-3 font-medium text-gray-600 border-b-2 border-transparent hover:text-gray-800 transition-colors data-[active=true]:text-gray-800 data-[active=true]:border-gray-800 whitespace-nowrap"
+                data-active="true">
+          配置生成
+        </button>
+        <button onclick="switchTab('clash')" 
+                class="tab-btn px-6 py-3 font-medium text-gray-600 border-b-2 border-transparent hover:text-gray-800 transition-colors data-[active=false]:text-gray-600 whitespace-nowrap"
+                data-active="false">
+          订阅生成
+        </button>
+        <button id="manageTabBtn" onclick="switchTab('manage')" 
+                class="tab-btn px-6 py-3 font-medium text-gray-600 border-b-2 border-transparent hover:text-gray-800 transition-colors hidden whitespace-nowrap"
+                data-active="false">
+          配置管理
+        </button>
+      </div>
+
+      <!-- 配置生成 Tab -->
+      <div id="batch-tab" class="tab-content space-y-6">
+        <!-- 基础配置卡片 -->
+        <div class="bg-gray-50 border border-gray-200 rounded-xl p-6 shadow-sm">
+          <div class="flex items-center gap-2 mb-4">
+            <i data-lucide="settings" class="w-5 h-5 text-gray-700"></i>
+            <h2 class="text-xl font-semibold text-gray-800">1. 基础配置</h2>
+          </div>
+          
+          <div class="mb-4 bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg">
+            <div class="flex items-start gap-2">
+              <i data-lucide="info" class="w-5 h-5 text-blue-500 mt-0.5"></i>
+              <p class="text-sm text-gray-700">
+                <strong>注意：</strong> 所有配置都会输出原配置。
+                <br>域名托管属性为"Cloudflare"的配置会进行优选替换（每条原配置 + 优选地址数条新配置）。
+                <br>其他域名托管配置（如阿里ESA、腾讯Edgeone、AWS Cloudfront、Gcore、Fastly等）只输出原配置，不进行优选替换。
+              </p>
             </div>
-        </div>
-        <div class="edit-field"><label>地址 (Address)</label><input type="text" id="edit-add"></div>
-        <div class="edit-field"><label>UUID / Password</label><input type="text" id="edit-id-uuid"></div>
-        <div class="grid-2">
-            <div class="edit-field"><label>传输 (Net)</label><select id="edit-net"><option value="tcp">TCP</option><option value="ws">WebSocket</option><option value="grpc">gRPC</option></select></div>
-            <div class="edit-field"><label>伪装 (Type)</label><input type="text" id="edit-type" placeholder="none"></div>
-        </div>
-        <div class="grid-2">
-            <div class="edit-field"><label>伪装域名 (Host)</label><input type="text" id="edit-host"></div>
-            <div class="edit-field"><label>路径 (Path)</label><input type="text" id="edit-path"></div>
-        </div>
-        <div class="grid-2">
-             <div class="edit-field"><label>TLS</label><select id="edit-tls"><option value="">关闭</option><option value="tls">开启 TLS</option></select></div>
-             <div class="edit-field"><label>SNI</label><input type="text" id="edit-sni"></div>
-        </div>
-        <div style="margin-top: 20px; text-align: right;">
-            <button class="nav-btn" onclick="closeEditModal()">取消</button>
-            <button class="nav-btn primary" onclick="saveEditedConfig()">保存修改</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="container">
-    <div class="content-group">
-      <h1 class="profile-name">代理配置管理工具</h1>
-      <p class="profile-quote">一站式代理配置管理、生成与订阅服务</p>
-
-      <!-- Tab Navigation -->
-      <div class="tab-nav">
-        <button class="tab-btn active" onclick="switchTab('batch')">批量生成</button>
-        <button class="tab-btn" onclick="switchTab('clash')">订阅生成</button>
-        <button id="manageTabBtn" class="tab-btn hidden" onclick="switchTab('manage')">配置管理</button>
-      </div>
-
-      <!-- Batch Generation Tab -->
-      <div id="batch-tab" class="tab-content active">
-        <div class="card">
-          <h2>1. 基础配置</h2>
-          <div class="form-group">
-            <div class="info-box">
-              <strong>注意：</strong> 所有配置都会输出原配置。
-              <br>域名托管属性为"Cloudflare"的配置会进行优选替换（每条原配置 + 优选地址数条新配置）。
-              <br>其他域名托管配置（如阿里ESA、腾讯Edgeone、AWS Cloudfront、Gcore、Fastly等）只输出原配置，不进行优选替换。
+          </div>
+          
+          <div class="flex flex-wrap gap-3 mb-4">
+            <label class="radio-option">
+              <input type="radio" name="genConfigSource" value="manual" checked>
+              <span class="px-4 py-2 rounded-lg">手动粘贴</span>
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="genConfigSource" value="uuid">
+              <span class="px-4 py-2 rounded-lg">从UUID获取</span>
+            </label>
+          </div>
+          
+          <div id="genManualConfigInput">
+            <textarea id="genBaseConfigInput" placeholder="在此粘贴一个或多个基础配置，每行一个。"
+                      class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none font-mono text-sm resize-y" rows="4"></textarea>
+          </div>
+          
+          <div id="genUuidConfigInput" class="hidden">
+            <input type="text" id="genBaseConfigUuidInput" placeholder="UUID将自动填充"
+                   class="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-50 font-mono text-sm mb-3 focus:outline-none">
+            <div class="bg-gray-50 border-l-4 border-gray-500 p-3 rounded-lg">
+              <p class="text-sm text-gray-700">
+                在"配置管理"标签页添加和管理UUID。
+                <br>所有配置都会输出原配置，只有域名托管属性为"Cloudflare"的配置会进行优选替换。
+              </p>
             </div>
           </div>
-          <div class="form-group radio-group">
-              <label><input type="radio" name="genConfigSource" value="manual" checked><span>手动粘贴</span></label>
-              <label><input type="radio" name="genConfigSource" value="uuid"><span>从UUID获取</span></label>
-          </div>
-          <div id="genManualConfigInput" class="form-group">
-              <textarea id="genBaseConfigInput" placeholder="在此粘贴一个或多个基础配置，每行一个。" rows="4"></textarea>
-          </div>
-          <div id="genUuidConfigInput" class="form-group hidden">
-              <input type="text" id="genBaseConfigUuidInput" placeholder="UUID将自动填充" style="background-color: #f8f9fa;">
-              <div class="info-box">在"配置管理"标签页添加和管理UUID。
-              <br>所有配置都会输出原配置，只有域名托管属性为"Cloudflare"的配置会进行优选替换。</div>
-          </div>
         </div>
 
-        <div class="card">
-          <h2>2. 优选列表 (IP/域名)</h2>
-          <div class="form-group">
-            <label>地址类型</label>
-            <div class="radio-group">
-              <label><input type="radio" name="genAddressType" value="ip" checked onchange="toggleBatchAddressOptions()"><span>IP 地址</span></label>
-              <label><input type="radio" name="genAddressType" value="domain" onchange="toggleBatchAddressOptions()"><span>优选域名</span></label>
+        <!-- 优选列表卡片 -->
+        <div class="bg-gray-50 border border-gray-200 rounded-xl p-6 shadow-sm">
+          <div class="flex items-center gap-2 mb-4">
+            <i data-lucide="list" class="w-5 h-5 text-gray-700"></i>
+            <h2 class="text-xl font-semibold text-gray-800">2. 优选列表 (IP/域名)</h2>
+          </div>
+          
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-2">地址类型</label>
+            <div class="flex flex-wrap gap-3">
+              <label class="radio-option">
+                <input type="radio" name="genAddressType" value="ip" checked onchange="toggleBatchAddressOptions()">
+                <span class="px-4 py-2 rounded-lg">IP 地址</span>
+              </label>
+              <label class="radio-option">
+                <input type="radio" name="genAddressType" value="domain" onchange="toggleBatchAddressOptions()">
+                <span class="px-4 py-2 rounded-lg">优选域名</span>
+              </label>
             </div>
           </div>
 
           <div id="batchIpOptionsContainer">
-              <div class="form-group">
-                <label>IP 类型</label>
-                <div class="radio-group">
-                  <label><input type="radio" name="genIpType" value="all" checked><span>全部</span></label>
-                  <label><input type="radio" name="genIpType" value="v4"><span>仅IPv4</span></label>
-                  <label><input type="radio" name="genIpType" value="v6"><span>仅IPv6</span></label>
-                </div>
+            <div class="mb-4">
+              <label class="block text-sm font-medium text-gray-700 mb-2">IP 类型</label>
+              <div class="flex flex-wrap gap-3">
+                <label class="radio-option">
+                  <input type="radio" name="genIpType" value="all" checked>
+                  <span class="px-4 py-2 rounded-lg">全部</span>
+                </label>
+                <label class="radio-option">
+                  <input type="radio" name="genIpType" value="v4">
+                  <span class="px-4 py-2 rounded-lg">仅IPv4</span>
+                </label>
+                <label class="radio-option">
+                  <input type="radio" name="genIpType" value="v6">
+                  <span class="px-4 py-2 rounded-lg">仅IPv6</span>
+                </label>
               </div>
-              <div class="form-group">
-                <label>运营商</label>
-                <div class="radio-group">
-                  <label><input type="radio" name="genCarrierType" value="all" checked><span>全部</span></label>
-                  <label><input type="radio" name="genCarrierType" value="CM"><span>移动</span></label>
-                  <label><input type="radio" name="genCarrierType" value="CU"><span>联通</span></label>
-                  <label><input type="radio" name="genCarrierType" value="CT"><span>电信</span></label>
-                </div>
+            </div>
+            
+            <div class="mb-6">
+              <label class="block text-sm font-medium text-gray-700 mb-2">运营商</label>
+              <div class="flex flex-wrap gap-3">
+                <label class="radio-option">
+                  <input type="radio" name="genCarrierType" value="all" checked>
+                  <span class="px-4 py-2 rounded-lg">全部</span>
+                </label>
+                <label class="radio-option">
+                  <input type="radio" name="genCarrierType" value="CM">
+                  <span class="px-4 py-2 rounded-lg">移动</span>
+                </label>
+                <label class="radio-option">
+                  <input type="radio" name="genCarrierType" value="CU">
+                  <span class="px-4 py-2 rounded-lg">联通</span>
+                </label>
+                <label class="radio-option">
+                  <input type="radio" name="genCarrierType" value="CT">
+                  <span class="px-4 py-2 rounded-lg">电信</span>
+                </label>
               </div>
+            </div>
           </div>
 
-          <div id="batchDomainInfoBox" class="info-box hidden">
-             将使用数据库中存储的 Cloudflare 优选域名列表进行替换。
+          <div id="batchDomainInfoBox" class="hidden mb-6 bg-gray-50 border-l-4 border-gray-500 p-3 rounded-lg">
+            <p class="text-sm text-gray-700">
+              将使用数据库中存储的 Cloudflare 优选域名列表进行替换。
+            </p>
           </div>
 
-          <button id="genFetchBtn" class="nav-btn" style="width:100%; margin-bottom: 16px;" onclick="genFetchAddresses()">获取优选列表</button>
+          <button id="genFetchBtn" onclick="genFetchAddresses()"
+                  class="w-full mb-4 px-4 py-3 bg-gray-100 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
+            获取优选列表
+          </button>
     
-          <div id="batchSubscriptionLinkBox" class="form-group hidden" style="display:none; gap:10px;">
-              <input type="text" id="batchSubscriptionLink" readonly style="margin-bottom:0; color:#5a666d; background-color: #f8f9fa;">
-              <button class="nav-btn" onclick="copyBatchSubscriptionLink()" style="white-space: nowrap;">复制</button>
+          <div id="batchSubscriptionLinkBox" class="hidden mb-4">
+            <div class="flex gap-2">
+              <input type="text" id="batchSubscriptionLink" readonly
+                     class="flex-1 px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 font-mono text-sm focus:outline-none">
+              <button onclick="copyBatchSubscriptionLink()"
+                      class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
+                复制
+              </button>
+            </div>
           </div>
 
-          <textarea id="genAddressListInput" placeholder="点击上方按钮获取，或在此手动粘贴 IP 或 域名 列表..." rows="4"></textarea>
+          <textarea id="genAddressListInput" placeholder="点击上方按钮获取，或在此手动粘贴 IP 或 域名 列表..."
+                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none font-mono text-sm resize-y" rows="4"></textarea>
         </div>
 
-        <div class="card">
-          <h2>3. 生成结果</h2>
-          <div id="batchGeneratedLinkBox" class="form-group hidden" style="display:none; gap:10px;">
-            <label style="align-self:center; white-space:nowrap; margin-bottom:0; margin-right:5px;">订阅:</label>
-            <input type="text" id="batchGeneratedConfigLink" readonly style="margin-bottom:0; color:#5a666d; background-color: #f8f9fa;">
-            <button class="nav-btn" onclick="copyBatchGeneratedLink()" style="white-space: nowrap;">复制</button>
+        <!-- 生成结果卡片 -->
+        <div class="bg-gray-50 border border-gray-200 rounded-xl p-6 shadow-sm">
+          <div class="flex items-center gap-2 mb-4">
+            <i data-lucide="package" class="w-5 h-5 text-gray-700"></i>
+            <h2 class="text-xl font-semibold text-gray-800">3. 生成结果</h2>
           </div>
-          <textarea id="genResultTextarea" readonly placeholder="点击下方"生成配置"按钮..." rows="6"></textarea>
+          
+          <div id="batchGeneratedLinkBox" class="hidden mb-4">
+            <div class="flex items-center gap-3 mb-2">
+              <span class="text-sm font-medium text-gray-700">订阅:</span>
+              <div class="flex-1 flex gap-2">
+                <input type="text" id="batchGeneratedConfigLink" readonly
+                       class="flex-1 px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 font-mono text-sm focus:outline-none">
+                <button onclick="copyBatchGeneratedLink()"
+                        class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
+                  复制
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          <textarea id="genResultTextarea" readonly placeholder="点击下方'生成配置'按钮..."
+                    class="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-50 font-mono text-sm resize-y focus:outline-none" rows="6"></textarea>
     
-          <div id="batchQrCodeContainer" class="qr-code-container hidden">
-            <label class="qr-code-label">订阅链接二维码</label>
-            <div id="batchQrCodeImageContainer">
-              <img id="batchQrCodeImage" src="" alt="订阅链接二维码">
+          <div id="batchQrCodeContainer" class="hidden mt-4 p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
+            <label class="block text-sm font-medium text-gray-700 mb-2">订阅链接二维码</label>
+            <div class="text-center mb-3">
+              <img id="batchQrCodeImage" src="" alt="订阅链接二维码" class="inline-block border border-gray-300 rounded-lg max-w-[200px]">
             </div>
-            <div class="qr-code-buttons">
-              <button class="nav-btn" onclick="downloadBatchQRCode()">下载二维码</button>
-              <button class="nav-btn" onclick="shareBatchQRCode()">分享二维码</button>
-              <button class="nav-btn" onclick="refreshBatchQRCode()">刷新</button>
+            <div class="flex flex-wrap justify-center gap-3">
+              <button onclick="downloadBatchQRCode()"
+                      class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
+                下载二维码
+              </button>
+              <button onclick="shareBatchQRCode()"
+                      class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
+                分享二维码
+              </button>
+              <button onclick="refreshBatchQRCode()"
+                      class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
+                刷新
+              </button>
             </div>
-            <div class="qr-code-info">
+            <p class="text-xs text-gray-500 text-center mt-3">
               扫描二维码即可导入订阅配置。二维码内容为上方订阅链接。
-            </div>
+            </p>
           </div>
         </div>
 
-        <div class="form-group" style="display: flex; gap: 10px; margin-top: 20px;">
-          <button id="genGenerateButton" class="nav-btn primary" style="flex: 1;" onclick="genGenerateConfigs()">生成配置</button>
-          <button id="copyResultButton" class="nav-btn" style="flex: 1;" onclick="copyResults()">复制结果 (Base64)</button>
+        <!-- 操作按钮 -->
+        <div class="flex flex-col sm:flex-row gap-4">
+          <button id="genGenerateButton" onclick="genGenerateConfigs()"
+                  class="flex-1 px-6 py-3 bg-gray-700 text-white rounded-lg border border-gray-700 hover:bg-gray-800 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
+            生成配置
+          </button>
+          <button id="copyResultButton" onclick="copyResults()"
+                  class="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
+            复制结果 (Base64)
+          </button>
         </div>
       </div>
 
-      <!-- Clash Subscription Tab -->
-      <div id="clash-tab" class="tab-content">
-        <div class="card">
-          <h2>1. 配置信息</h2>
-          <div class="form-group">
-            <div class="info-box">
-              <strong>注意：</strong> 所有配置都会输出原配置。
-              <br>域名托管属性为"Cloudflare"的配置会进行优选替换（每条原配置 + 优选地址数条新配置）。
-              <br>其他域名托管配置（如阿里ESA、腾讯Edgeone、AWS Cloudfront、Gcore、Fastly等）只输出原配置，不进行优选替换。
+      <!-- 订阅生成 Tab -->
+      <div id="clash-tab" class="tab-content hidden space-y-6">
+        <!-- 配置信息卡片 -->
+        <div class="bg-gray-50 border border-gray-200 rounded-xl p-6 shadow-sm">
+          <div class="flex items-center gap-2 mb-4">
+            <i data-lucide="settings" class="w-5 h-5 text-gray-700"></i>
+            <h2 class="text-xl font-semibold text-gray-800">1. 配置信息</h2>
+          </div>
+          
+          <div class="mb-4 bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg">
+            <div class="flex items-start gap-2">
+              <i data-lucide="info" class="w-5 h-5 text-blue-500 mt-0.5"></i>
+              <p class="text-sm text-gray-700">
+                <strong>注意：</strong> 所有配置都会输出原配置。
+                <br>域名托管属性为"Cloudflare"的配置会进行优选替换（每条原配置 + 优选地址数条新配置）。
+                <br>其他域名托管配置（如阿里ESA、腾讯Edgeone、AWS Cloudfront、Gcore、Fastly等）只输出原配置，不进行优选替换。
+              </p>
             </div>
           </div>
-          <div class="form-group">
-            <input type="text" id="clashConfigUuid" placeholder="UUID将自动填充" style="background-color: #f8f9fa;">
-            <div class="info-box">
-              在"配置管理"标签页添加和管理配置，获取UUID后在此输入。
-              <br>如果您已登录，UUID将自动填充。
+          
+          <div class="mb-6">
+            <input type="text" id="clashConfigUuid" placeholder="UUID将自动填充"
+                   class="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-50 font-mono text-sm mb-3 focus:outline-none">
+            <div class="bg-gray-50 border-l-4 border-gray-500 p-3 rounded-lg">
+              <p class="text-sm text-gray-700">
+                在"配置管理"标签页添加和管理配置，获取UUID后在此输入。
+                <br>如果您已登录，UUID将自动填充。
+              </p>
             </div>
           </div>
     
-          <div class="protocol-support">
-            <h3>支持的协议类型</h3>
-            <div class="protocol-list">
-              <span class="protocol-badge">VMess</span>
-              <span class="protocol-badge">VLESS</span>
-              <span class="protocol-badge">Trojan</span>
-              <span class="protocol-badge">Shadowsocks</span>
-              <span class="protocol-badge new">Hysteria2</span>
-              <span class="protocol-badge new">Tuic</span>
-              <span class="protocol-badge new">AnyTLS</span>
-              <span class="protocol-badge new">Any-reality</span>
-              <span class="protocol-badge new">Reality</span>
+          <div class="p-4 bg-blue-50 border border-blue-200 rounded-lg shadow-sm">
+            <div class="flex items-center gap-2 mb-3">
+              <i data-lucide="shield" class="w-5 h-5 text-blue-600"></i>
+              <h3 class="font-semibold text-gray-800">支持的协议类型</h3>
             </div>
-            <p style="margin-top: 10px; font-size: 0.85rem; color: #666;">
+            <div class="flex flex-wrap gap-2 mb-3">
+              <span class="px-3 py-1 bg-blue-100 text-blue-700 border border-blue-200 rounded-full text-sm">VMess</span>
+              <span class="px-3 py-1 bg-blue-100 text-blue-700 border border-blue-200 rounded-full text-sm">VLESS</span>
+              <span class="px-3 py-1 bg-blue-100 text-blue-700 border border-blue-200 rounded-full text-sm">Trojan</span>
+              <span class="px-3 py-1 bg-blue-100 text-blue-700 border border-blue-200 rounded-full text-sm">Shadowsocks</span>
+              <span class="px-3 py-1 bg-orange-100 text-orange-700 border border-orange-200 rounded-full text-sm">Hysteria2</span>
+              <span class="px-3 py-1 bg-orange-100 text-orange-700 border border-orange-200 rounded-full text-sm">Tuic</span>
+              <span class="px-3 py-1 bg-orange-100 text-orange-700 border border-orange-200 rounded-full text-sm">AnyTLS</span>
+              <span class="px-3 py-1 bg-orange-100 text-orange-700 border border-orange-200 rounded-full text-sm">Any-reality</span>
+              <span class="px-3 py-1 bg-orange-100 text-orange-700 border border-orange-200 rounded-full text-sm">Reality</span>
+            </div>
+            <p class="text-sm text-gray-600">
               现在支持更多现代协议，包括高速传输协议和最新的加密技术。
             </p>
           </div>
         </div>
 
-        <div class="card">
-          <h2>2. 模板选择</h2>
-          <div class="form-group">
-            <label>选择配置文件模板</label>
+        <!-- 模板选择卡片 -->
+        <div class="bg-gray-50 border border-gray-200 rounded-xl p-6 shadow-sm">
+          <div class="flex items-center gap-2 mb-4">
+            <i data-lucide="file-text" class="w-5 h-5 text-gray-700"></i>
+            <h2 class="text-xl font-semibold text-gray-800">2. 模板选择</h2>
+          </div>
+          
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-2">选择配置文件模板</label>
             <div class="template-select-container">
-              <select id="templateSelect" onchange="handleTemplateChange()">
+              <select id="templateSelect" onchange="handleTemplateChange()"
+                      class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none mb-3">
                 <option value="">正在加载模板...</option>
               </select>
-              <div id="templateDescription" class="template-description">
+              <div id="templateDescription" class="text-sm text-gray-600">
                 请从下拉列表中选择一个配置文件模板
               </div>
             </div>
           </div>
     
-          <div id="customTemplateInput" class="form-group hidden">
-            <input type="text" id="customTemplateUrl" placeholder="输入自定义模板URL，如: https://raw.githubusercontent.com/your-repo/config.yaml">
-            <div class="info-box">
-              请输入可公开访问的YAML配置文件的完整URL地址。
+          <div id="customTemplateInput" class="hidden mb-4">
+            <input type="text" id="customTemplateUrl" placeholder="输入自定义模板URL，如: https://raw.githubusercontent.com/your-repo/config.yaml"
+                   class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none">
+            <div class="mt-2 bg-gray-50 border-l-4 border-gray-500 p-3 rounded-lg">
+              <p class="text-sm text-gray-700">
+                请输入可公开访问的YAML配置文件的完整URL地址。
+              </p>
             </div>
           </div>
     
-          <div id="templateLoading" class="loading-state hidden">
-            <div class="loader"></div>
-            <p>正在加载模板列表...</p>
+          <div id="templateLoading" class="hidden text-center py-8">
+            <div class="inline-block w-8 h-8 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin mb-3"></div>
+            <p class="text-gray-600">正在加载模板列表...</p>
           </div>
     
-          <div id="templateError" class="info-box hidden">
-            无法加载模板列表，请稍后重试。
+          <div id="templateError" class="hidden mb-4 bg-red-50 border-l-4 border-red-500 p-4 rounded-lg">
+            <p class="text-sm text-red-700">
+              无法加载模板列表，请稍后重试。
+            </p>
           </div>
     
-          <div id="templateInfoBox" class="info-box">
-            <strong>模板说明：</strong>
-            <br>• 所有模板均从数据库读取
-            <br>• 模板包含完整的规则和策略组配置
-            <br>• 选择不同的模板可以获得不同的分流规则和优化策略
-            <br><br><strong>注意：</strong>如果数据库中没有配置模板，将无法生成配置文件。
+          <div class="bg-gray-50 border-l-4 border-gray-500 p-4 rounded-lg">
+            <p class="text-sm text-gray-700">
+              <strong>模板说明：</strong>
+              <br>• 所有模板均从数据库读取
+              <br>• 模板包含完整的规则和策略组配置
+              <br>• 选择不同的模板可以获得不同的分流规则和优化策略
+              <br><br><strong>注意：</strong>如果数据库中没有配置模板，将无法生成配置文件。
+            </p>
           </div>
         </div>
 
-        <div class="card">
-          <h2>3. 优选地址配置</h2>
-          <div class="form-group">
-            <label>地址类型</label>
-            <div class="radio-group">
-              <label><input type="radio" name="clashAddressType" value="ip" checked onchange="toggleClashAddressOptions()"><span>IP 地址</span></label>
-              <label><input type="radio" name="clashAddressType" value="domain" onchange="toggleClashAddressOptions()"><span>优选域名</span></label>
+        <!-- 优选地址配置卡片 -->
+        <div class="bg-gray-50 border border-gray-200 rounded-xl p-6 shadow-sm">
+          <div class="flex items-center gap-2 mb-4">
+            <i data-lucide="globe" class="w-5 h-5 text-gray-700"></i>
+            <h2 class="text-xl font-semibold text-gray-800">3. 优选地址配置</h2>
+          </div>
+          
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-2">地址类型</label>
+            <div class="flex flex-wrap gap-3">
+              <label class="radio-option">
+                <input type="radio" name="clashAddressType" value="ip" checked onchange="toggleClashAddressOptions()">
+                <span class="px-4 py-2 rounded-lg">IP 地址</span>
+              </label>
+              <label class="radio-option">
+                <input type="radio" name="clashAddressType" value="domain" onchange="toggleClashAddressOptions()">
+                <span class="px-4 py-2 rounded-lg">优选域名</span>
+              </label>
             </div>
           </div>
 
           <div id="clashIpOptionsContainer">
-              <div class="form-group">
-                <label>IP 类型</label>
-                <div class="radio-group">
-                  <label><input type="radio" name="clashIpType" value="all" checked><span>全部</span></label>
-                  <label><input type="radio" name="clashIpType" value="v4"><span>仅IPv4</span></label>
-                  <label><input type="radio" name="clashIpType" value="v6"><span>仅IPv6</span></label>
-                </div>
+            <div class="mb-4">
+              <label class="block text-sm font-medium text-gray-700 mb-2">IP 类型</label>
+              <div class="flex flex-wrap gap-3">
+                <label class="radio-option">
+                  <input type="radio" name="clashIpType" value="all" checked>
+                  <span class="px-4 py-2 rounded-lg">全部</span>
+                </label>
+                <label class="radio-option">
+                  <input type="radio" name="clashIpType" value="v4">
+                  <span class="px-4 py-2 rounded-lg">仅IPv4</span>
+                </label>
+                <label class="radio-option">
+                  <input type="radio" name="clashIpType" value="v6">
+                  <span class="px-4 py-2 rounded-lg">仅IPv6</span>
+                </label>
               </div>
-              <div class="form-group">
-                <label>运营商</label>
-                <div class="radio-group">
-                  <label><input type="radio" name="clashCarrier" value="all" checked><span>全部</span></label>
-                  <label><input type="radio" name="clashCarrier" value="CM"><span>移动</span></label>
-                  <label><input type="radio" name="clashCarrier" value="CU"><span>联通</span></label>
-                  <label><input type="radio" name="clashCarrier" value="CT"><span>电信</span></label>
-                </div>
+            </div>
+            
+            <div class="mb-4">
+              <label class="block text-sm font-medium text-gray-700 mb-2">运营商</label>
+              <div class="flex flex-wrap gap-3">
+                <label class="radio-option">
+                  <input type="radio" name="clashCarrier" value="all" checked>
+                  <span class="px-4 py-2 rounded-lg">全部</span>
+                </label>
+                <label class="radio-option">
+                  <input type="radio" name="clashCarrier" value="CM">
+                  <span class="px-4 py-2 rounded-lg">移动</span>
+                </label>
+                <label class="radio-option">
+                  <input type="radio" name="clashCarrier" value="CU">
+                  <span class="px-4 py-2 rounded-lg">联通</span>
+                </label>
+                <label class="radio-option">
+                  <input type="radio" name="clashCarrier" value="CT">
+                  <span class="px-4 py-2 rounded-lg">电信</span>
+                </label>
               </div>
+            </div>
           </div>
 
-          <div id="clashDomainInfoBox" class="info-box hidden">
-            将使用数据库中存储的 Cloudflare 优选域名列表进行替换。
+          <div id="clashDomainInfoBox" class="hidden bg-gray-50 border-l-4 border-gray-500 p-3 rounded-lg">
+            <p class="text-sm text-gray-700">
+              将使用数据库中存储的 Cloudflare 优选域名列表进行替换。
+            </p>
           </div>
         </div>
 
-        <div class="card">
-          <h2>4. 生成结果</h2>
-          <div class="form-group">
-            <button id="generateClashBtn" class="nav-btn primary" style="width:100%; padding: 12px;" onclick="generateClashConfig()" disabled>生成Clash订阅文件</button>
+        <!-- 生成结果卡片 -->
+        <div class="bg-gray-50 border border-gray-200 rounded-xl p-6 shadow-sm">
+          <div class="flex items-center gap-2 mb-4">
+            <i data-lucide="package" class="w-5 h-5 text-gray-700"></i>
+            <h2 class="text-xl font-semibold text-gray-800">4. 生成结果</h2>
+          </div>
+          
+          <div class="mb-6">
+            <button id="generateClashBtn" onclick="generateClashConfig()"
+                    class="w-full px-6 py-4 bg-gray-700 text-white rounded-lg border border-gray-700 hover:bg-gray-800 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled>
+              生成Clash订阅文件
+            </button>
           </div>
     
-          <div class="subscription-link-box hidden" id="clashSubscriptionLinkBox">
-            <label>订阅链接</label>
-            <div class="link-input-container">
-              <input type="text" id="clashGeneratedLink" readonly>
-              <button class="nav-btn" onclick="copyClashGeneratedLink()">复制</button>
+          <div class="subscription-link-box hidden p-4 bg-white border border-gray-200 rounded-lg shadow-sm" id="clashSubscriptionLinkBox">
+            <label class="block text-sm font-medium text-gray-700 mb-2">订阅链接</label>
+            <div class="flex flex-col sm:flex-row gap-2 mb-4">
+              <input type="text" id="clashGeneratedLink" readonly
+                     class="flex-1 px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 font-mono text-sm focus:outline-none">
+              <button onclick="copyClashGeneratedLink()"
+                      class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 whitespace-nowrap">
+                复制
+              </button>
             </div>
       
-            <div id="clashQrCodeContainer" class="qr-code-container hidden">
-              <label class="qr-code-label">订阅链接二维码</label>
-              <div id="clashQrCodeImageContainer">
-                <img id="clashQrCodeImage" src="" alt="订阅链接二维码">
+            <div id="clashQrCodeContainer" class="hidden mt-4 p-4 bg-gray-50 border border-gray-200 rounded-lg shadow-sm">
+              <label class="block text-sm font-medium text-gray-700 mb-2">订阅链接二维码</label>
+              <div class="text-center mb-3">
+                <img id="clashQrCodeImage" src="" alt="订阅链接二维码" class="inline-block border border-gray-300 rounded-lg max-w-[200px]">
               </div>
-              <div class="qr-code-buttons">
-                <button class="nav-btn" onclick="downloadClashQRCode()">下载二维码</button>
-                <button class="nav-btn" onclick="shareClashQRCode()">分享</button>
-                <button class="nav-btn" onclick="refreshClashQRCode()">刷新</button>
+              <div class="flex flex-wrap justify-center gap-3">
+                <button onclick="downloadClashQRCode()"
+                        class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
+                  下载二维码
+                </button>
+                <button onclick="shareClashQRCode()"
+                        class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
+                  分享
+                </button>
+                <button onclick="refreshClashQRCode()"
+                        class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
+                  刷新
+                </button>
               </div>
-              <div class="qr-code-info">
+              <p class="text-xs text-gray-500 text-center mt-3">
                 扫描二维码即可导入Clash配置文件到客户端。二维码内容为上方订阅链接。
-              </div>
+              </p>
             </div>
           </div>
     
-          <div class="info-box">
-            <strong>新特性：</strong> 现在支持更多现代协议，包括Hysteria2、Tuic、AnyTLS、Any-reality等。
-            <br>配置文件基于您选择的模板生成，包含完整的规则和策略组。
-            <br>生成的订阅链接可直接在Clash/Mihomo客户端中使用。
+          <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg">
+            <p class="text-sm text-gray-700">
+              <strong>新特性：</strong> 现在支持更多现代协议，包括Hysteria2、Tuic、AnyTLS、Any-reality等。
+              <br>配置文件基于您选择的模板生成，包含完整的规则和策略组。
+              <br>生成的订阅链接可直接在Clash/Mihomo客户端中使用。
+            </p>
           </div>
         </div>
       </div>
 
-      <!-- Config Management Tab -->
-      <div id="manage-tab" class="tab-content">
-        <div class="card">
-          <h2>1. 当前UUID</h2>
-          <div class="form-group" style="display:flex; gap:10px;">
-            <input type="text" id="queryUuidInput" placeholder="UUID将自动加载" readonly style="margin-bottom:0; background-color: #f8f9fa; flex: 1;">
-            <button id="queryBtn" class="nav-btn primary" onclick="manageQueryByUuid()">刷新配置</button>
-            <button class="nav-btn" onclick="openConfigManagerModal()" style="background:#f0ad4e; color:white; border-color:#f0ad4e;">切换UUID</button>
+      <!-- 配置管理 Tab -->
+      <div id="manage-tab" class="tab-content hidden space-y-6">
+        <!-- 当前UUID卡片 -->
+        <div class="bg-gray-50 border border-gray-200 rounded-xl p-6 shadow-sm">
+          <div class="flex items-center gap-2 mb-4">
+            <i data-lucide="key" class="w-5 h-5 text-gray-700"></i>
+            <h2 class="text-xl font-semibold text-gray-800">1. 当前UUID</h2>
+          </div>
+          
+          <div class="flex flex-col sm:flex-row gap-3 mb-4">
+            <input type="text" id="queryUuidInput" placeholder="UUID将自动加载" readonly
+                   class="flex-1 px-4 py-3 border border-gray-300 rounded-lg bg-gray-50 font-mono text-sm focus:outline-none">
+            <div class="flex gap-3">
+              <button id="queryBtn" onclick="manageQueryByUuid()"
+                      class="flex-1 px-6 py-3 bg-gray-700 text-white rounded-lg border border-gray-700 hover:bg-gray-800 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
+                刷新配置
+              </button>
+              <button onclick="openConfigManagerModal()"
+                      class="flex-1 px-6 py-3 bg-amber-500 text-white rounded-lg border border-amber-500 hover:bg-amber-600 transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500">
+                切换UUID
+              </button>
+            </div>
           </div>
     
-          <div id="manageSubLinkDisplay" class="form-group hidden" style="display:none; gap:10px; margin-top:10px;">
-            <input type="text" id="manageSubUrlLink" readonly style="margin-bottom:0; color:#5a666d; background-color: #f8f9fa; flex: 1;">
-            <button class="nav-btn" onclick="copyManageSubLink()" style="white-space: nowrap;">复制</button>
+          <div id="manageSubLinkDisplay" class="hidden mt-4">
+            <div class="flex flex-col sm:flex-row gap-2">
+              <input type="text" id="manageSubUrlLink" readonly
+                     class="flex-1 px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 font-mono text-sm focus:outline-none">
+              <button onclick="copyManageSubLink()"
+                      class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 whitespace-nowrap">
+                复制
+              </button>
+            </div>
           </div>
     
-          <div class="info-box">
-            <strong>提示：</strong> UUID已自动保存。您可以在其他标签页（批量生成、订阅生成）中使用同一个UUID。
-            <br>如需切换UUID，请点击"切换UUID"按钮。
+          <div class="mt-4 bg-gray-50 border-l-4 border-gray-500 p-3 rounded-lg">
+            <p class="text-sm text-gray-700">
+              <strong>提示：</strong> UUID已自动保存。您可以在其他标签页（配置生成、订阅生成）中使用同一个UUID。
+              <br>如需切换UUID，请点击"切换UUID"按钮。
+            </p>
           </div>
         </div>
 
-        <div id="manageResultCard" class="card hidden">
-          <h2>2. 配置列表</h2>
+        <!-- 配置列表卡片 -->
+        <div id="manageResultCard" class="bg-gray-50 border border-gray-200 rounded-xl p-6 hidden shadow-sm">
+          <div class="flex items-center gap-2 mb-4">
+            <i data-lucide="list" class="w-5 h-5 text-gray-700"></i>
+            <h2 class="text-xl font-semibold text-gray-800">2. 配置列表</h2>
+          </div>
     
           <!-- 筛选栏 -->
-          <div class="filter-bar">
-            <div class="filter-item">
-              <span class="filter-label">协议:</span>
-              <select id="protocolFilter" class="filter-select" onchange="applyFilters()">
+          <div class="flex flex-col sm:flex-row flex-wrap gap-4 mb-4">
+            <div class="flex items-center gap-2">
+              <span class="text-sm font-medium text-gray-700">协议:</span>
+              <select id="protocolFilter" onchange="applyFilters()"
+                      class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-500">
                 <option value="all">全部</option>
                 <option value="vmess">VMess</option>
                 <option value="vless">VLESS</option>
@@ -2806,9 +2809,10 @@ const unifiedPageHtmlContent = `
                 <option value="socks5">Socks5</option>
               </select>
             </div>
-            <div class="filter-item">
-              <span class="filter-label">域名托管:</span>
-              <select id="hostingFilter" class="filter-select" onchange="applyFilters()">
+            <div class="flex items-center gap-2">
+              <span class="text-sm font-medium text-gray-700">域名托管:</span>
+              <select id="hostingFilter" onchange="applyFilters()"
+                      class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-500">
                 <option value="all">全部</option>
                 <option value="Cloudflare">Cloudflare</option>
                 <option value="阿里ESA">阿里ESA</option>
@@ -2824,9 +2828,10 @@ const unifiedPageHtmlContent = `
                 <option value="其他">其他</option>
               </select>
             </div>
-            <div class="filter-item">
-              <span class="filter-label">每页:</span>
-              <select id="pageSizeSelect" class="filter-select" onchange="changePageSize()">
+            <div class="flex items-center gap-2">
+              <span class="text-sm font-medium text-gray-700">每页:</span>
+              <select id="pageSizeSelect" onchange="changePageSize()"
+                      class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-500">
                 <option value="5">5条</option>
                 <option value="10" selected>10条</option>
                 <option value="20">20条</option>
@@ -2837,58 +2842,99 @@ const unifiedPageHtmlContent = `
           </div>
     
           <!-- 批量操作栏 -->
-          <div id="bulkActionsBar" class="bulk-actions-bar hidden">
-            <div class="selected-count" id="selectedCount">已选择 <span id="selectedCountNum">0</span> 条</div>
-            <button id="bulkDeleteBtn" class="bulk-delete-btn" onclick="deleteSelectedConfigs()" disabled>批量删除</button>
+          <div id="bulkActionsBar" class="hidden mb-4 p-3 bg-gray-100 border border-gray-200 rounded-lg">
+            <div class="flex flex-col sm:flex-row justify-between items-center gap-3">
+              <div class="text-sm font-medium text-gray-700">
+                已选择 <span id="selectedCountNum" class="font-bold">0</span> 条
+              </div>
+              <button id="bulkDeleteBtn" onclick="deleteSelectedConfigs()"
+                      class="px-4 py-2 bg-red-600 text-white rounded-lg border border-red-600 hover:bg-red-700 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled>
+                批量删除
+              </button>
+            </div>
           </div>
     
           <!-- 配置列表表格 -->
-          <div id="queryResultsContainer"></div>
+          <div id="queryResultsContainer" class="mb-6"></div>
     
           <!-- 分页控件 -->
-          <div id="paginationContainer" class="pagination-container hidden">
-            <div class="pagination-info" id="paginationInfo">第 1 页，共 1 页，总计 0 条</div>
-            <div class="pagination-controls">
-              <button id="prevPageBtn" class="pagination-btn" onclick="changePage(-1)" disabled>上一页</button>
-              <span id="currentPage" class="page-number">1</span>
-              <button id="nextPageBtn" class="pagination-btn" onclick="changePage(1)" disabled>下一页</button>
+          <div id="paginationContainer" class="hidden pt-4 border-t border-gray-200">
+            <div class="flex flex-col sm:flex-row justify-between items-center gap-3">
+              <div class="text-sm text-gray-600" id="paginationInfo">
+                第 1 页，共 1 页，总计 0 条
+              </div>
+              <div class="flex gap-2">
+                <button id="prevPageBtn" onclick="changePage(-1)"
+                        class="px-4 py-2 bg-gray-100 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled>
+                  上一页
+                </button>
+                <span id="currentPage" class="px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700">1</span>
+                <button id="nextPageBtn" onclick="changePage(1)"
+                        class="px-4 py-2 bg-gray-100 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled>
+                  下一页
+                </button>
+              </div>
             </div>
           </div>
         </div>
 
-        <div id="manageStatsCard" class="card hidden">
-          <h2>3. 访问统计</h2>
-          <div class="chart-controls">
-            <select id="statsDays" class="hosting-select" onchange="loadUuidStats()">
-              <option value="7" class="hosting-option">最近7天</option>
-              <option value="14" class="hosting-option">最近14天</option>
-              <option value="30" selected class="hosting-option">最近30天</option>
-              <option value="60" class="hosting-option">最近60天</option>
+        <!-- 访问统计卡片 -->
+        <div id="manageStatsCard" class="bg-gray-50 border border-gray-200 rounded-xl p-6 hidden shadow-sm">
+          <div class="flex items-center gap-2 mb-4">
+            <i data-lucide="bar-chart" class="w-5 h-5 text-gray-700"></i>
+            <h2 class="text-xl font-semibold text-gray-800">3. 访问统计</h2>
+          </div>
+          
+          <div class="flex flex-wrap gap-3 mb-4">
+            <select id="statsDays" onchange="loadUuidStats()"
+                    class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-500">
+              <option value="7">最近7天</option>
+              <option value="14">最近14天</option>
+              <option value="30" selected>最近30天</option>
+              <option value="60">最近60天</option>
             </select>
-            <button class="nav-btn active" onclick="loadUuidStats()">刷新</button>
-            <button class="nav-btn" onclick="switchChartType('total')" id="chartTotalBtn">总访问</button>
-            <button class="nav-btn" onclick="switchChartType('split')" id="chartSplitBtn">分类统计</button>
+            <button onclick="loadUuidStats()"
+                    class="px-4 py-2 bg-gray-100 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
+              刷新
+            </button>
+            <button onclick="switchChartType('total')" id="chartTotalBtn"
+                    class="px-4 py-2 bg-gray-700 text-white rounded-lg border border-gray-700 hover:bg-gray-800 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
+              总访问
+            </button>
+            <button onclick="switchChartType('split')" id="chartSplitBtn"
+                    class="px-4 py-2 bg-gray-100 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
+              分类统计
+            </button>
           </div>
     
-          <div id="manageStatsSummary" class="stat-grid"></div>
+          <div id="manageStatsSummary" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"></div>
     
-          <div class="chart-container">
+          <div class="mb-6" style="height: 300px;">
             <canvas id="manageStatsChart"></canvas>
           </div>
     
-          <div style="margin-top: 20px;">
-            <h3 style="font-size: 1.1rem; margin: 0 0 10px 0;">最近访问记录</h3>
-            <div id="manageRecentLogs" class="access-log-container">
-              <div style="text-align: center; padding: 20px; color: #6b7280;">加载中...</div>
+          <div>
+            <h3 class="font-semibold text-gray-800 mb-3">最近访问记录</h3>
+            <div id="manageRecentLogs" class="border border-gray-200 rounded-lg p-4 max-h-60 overflow-y-auto bg-white">
+              <div class="text-center py-8 text-gray-500">加载中...</div>
             </div>
           </div>
         </div>
 
-        <div id="manageAddCard" class="card hidden">
-          <h2>4. 添加新节点</h2>
-          <div class="form-group">
-            <label>域名托管服务 (Domain Hosting)</label>
-            <select id="domainHostingSelect" class="hosting-select">
+        <!-- 添加新节点卡片 -->
+        <div id="manageAddCard" class="bg-gray-50 border border-gray-200 rounded-xl p-6 hidden shadow-sm">
+          <div class="flex items-center gap-2 mb-4">
+            <i data-lucide="plus" class="w-5 h-5 text-gray-700"></i>
+            <h2 class="text-xl font-semibold text-gray-800">4. 添加新节点</h2>
+          </div>
+          
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-2">域名托管服务 (Domain Hosting)</label>
+            <select id="domainHostingSelect"
+                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none mb-3">
               <option value="Cloudflare" selected>Cloudflare</option>
               <option value="阿里ESA">阿里ESA</option>
               <option value="腾讯Edgeone">腾讯Edgeone</option>
@@ -2902,24 +2948,37 @@ const unifiedPageHtmlContent = `
               <option value="无">无</option>
               <option value="其他">其他</option>
             </select>
-            <div class="info-box">
-              <strong>说明：</strong> 选择此配置使用的域名托管服务。这有助于管理和分类不同CDN厂商的配置。
-              <br>新增选项：Gcore, Fastly, CacheFly, LightCDN, Vercel, Netlify，"无"表示不使用域名托管。
+            <div class="bg-gray-50 border-l-4 border-gray-500 p-3 rounded-lg">
+              <p class="text-sm text-gray-700">
+                <strong>说明：</strong> 选择此配置使用的域名托管服务。这有助于管理和分类不同CDN厂商的配置。
+                <br>新增选项：Gcore, Fastly, CacheFly, LightCDN, Vercel, Netlify，"无"表示不使用域名托管。
+              </p>
             </div>
           </div>
-          <div class="form-group">
-            <label>配置数据 (可批量添加)</label>
+          
+          <div class="mb-6">
+            <label class="block text-sm font-medium text-gray-700 mb-2">配置数据 (可批量添加)</label>
             <textarea id="addConfigData" placeholder="支持批量添加：
 vmess://...
 vless://...
-trojan://..." rows="4"></textarea>
+trojan://..."
+                      class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none font-mono text-sm resize-y" rows="4"></textarea>
           </div>
-          <button onclick="manageAddConfig()" class="nav-btn primary" style="width:100%">添加到当前 UUID</button>
+          
+          <button onclick="manageAddConfig()"
+                  class="w-full px-6 py-4 bg-gray-700 text-white rounded-lg border border-gray-700 hover:bg-gray-800 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
+            添加到当前 UUID
+          </button>
         </div>
       </div>
 
-      <footer class="footer">
-        <p>Powered by <a href="https://www.yangzifun.org">YZFN</a> | <a href="https://www.yangzifun.org/security.html">安全声明</a> | <a href="https://github.com/yangzifun/proxypilot">Github</a></p>
+      <!-- 页脚 -->
+      <footer class="mt-12 text-center text-gray-600 text-sm">
+        <p>Powered by 
+          <a href="https://www.yangzifun.org" class="text-gray-700 hover:text-gray-900 transition-colors">YZFN</a> | 
+          <a href="https://www.yangzifun.org/security.html" class="text-gray-700 hover:text-gray-900 transition-colors">安全声明</a> | 
+          <a href="https://github.com/yangzifun/proxypilot" class="text-gray-700 hover:text-gray-900 transition-colors">Github</a>
+        </p>
       </footer>
     </div>
   </div>
@@ -3002,36 +3061,23 @@ trojan://..." rows="4"></textarea>
         return;
       }
       
-      modal.style.display = 'flex';
+      modal.classList.remove('hidden');
       
-      // 使用 requestAnimationFrame 确保 DOM 更新后添加类
-      requestAnimationFrame(() => {
-        modal.classList.add('open');
+      // 聚焦到输入框
+      const input = document.getElementById('configUuidInput');
+      if (input) {
+        input.focus();
         
-        // 聚焦到输入框
-        const input = document.getElementById('configUuidInput');
-        if (input) {
-          input.focus();
-          
-          // 自动填充存储的 UUID
-          const storedUuid = getUuidFromStorage();
-          if (storedUuid) {
-            input.value = storedUuid;
-          }
+        // 自动填充存储的 UUID
+        const storedUuid = getUuidFromStorage();
+        if (storedUuid) {
+          input.value = storedUuid;
         }
-      });
+      }
     }
 
     function closeConfigManagerModal() {
-      const modal = document.getElementById('configManagerModal');
-      if (!modal) return;
-      
-      modal.classList.remove('open');
-      
-      // 延迟隐藏以确保动画完成
-      setTimeout(() => {
-        modal.style.display = 'none';
-      }, 300);
+      document.getElementById('configManagerModal').classList.add('hidden');
     }
 
     function generateNewUuid() {
@@ -3106,13 +3152,13 @@ trojan://..." rows="4"></textarea>
       // 点击按钮显示/隐藏下拉菜单
       dropdownBtn.addEventListener('click', function(e) {
         e.stopPropagation();
-        const isVisible = dropdownMenu.style.display === 'block';
-        dropdownMenu.style.display = isVisible ? 'none' : 'block';
+        const isVisible = !dropdownMenu.classList.contains('hidden');
+        dropdownMenu.classList.toggle('hidden', isVisible);
       });
 
       // 点击其他地方关闭下拉菜单
       document.addEventListener('click', function() {
-        dropdownMenu.style.display = 'none';
+        dropdownMenu.classList.add('hidden');
       });
 
       // 防止下拉菜单内部点击关闭
@@ -3128,7 +3174,7 @@ trojan://..." rows="4"></textarea>
         // 关闭下拉菜单
         const dropdownMenu = document.getElementById('uuidDropdownMenu');
         if (dropdownMenu) {
-          dropdownMenu.style.display = 'none';
+          dropdownMenu.classList.add('hidden');
         }
         // 重新加载页面
         location.reload();
@@ -3141,10 +3187,10 @@ trojan://..." rows="4"></textarea>
       const uuidInfoModal = document.getElementById('uuidInfoModal');
       
       if (e.key === 'Escape') {
-        if (configManagerModal && configManagerModal.style.display === 'flex') {
+        if (configManagerModal && !configManagerModal.classList.contains('hidden')) {
           closeConfigManagerModal();
         }
-        if (uuidInfoModal && uuidInfoModal.style.display === 'flex') {
+        if (uuidInfoModal && !uuidInfoModal.classList.contains('hidden')) {
           closeUuidInfoModal();
         }
       }
@@ -3163,39 +3209,28 @@ trojan://..." rows="4"></textarea>
       }
 
       const modal = document.getElementById('uuidInfoModal');
-      modal.style.display = 'flex';
+      modal.classList.remove('hidden');
       
-      // 使用 requestAnimationFrame 确保 DOM 更新
-      requestAnimationFrame(() => {
-        modal.classList.add('open');
+      // 加载当前UUID信息
+      loadCurrentUuidInfo(storedUuid);
       
-        // 加载当前UUID信息
-        loadCurrentUuidInfo(storedUuid);
-        
-        // 确保保存按钮状态正确
-        const saveBtn = document.getElementById('uuidInfoSaveBtn');
-        if (saveBtn && !saveBtn.originalText) {
-          saveBtn.originalText = saveBtn.innerHTML;
-        }
-      });
+      // 确保保存按钮状态正确
+      const saveBtn = document.getElementById('uuidInfoSaveBtn');
+      if (saveBtn && !saveBtn.originalText) {
+        saveBtn.originalText = saveBtn.innerHTML;
+      }
     }
 
     // 关闭UUID信息管理模态框
     function closeUuidInfoModal() {
-      const modal = document.getElementById('uuidInfoModal');
-      modal.classList.remove('open');
+      document.getElementById('uuidInfoModal').classList.add('hidden');
       
-      // 延迟隐藏以确保动画完成
-      setTimeout(() => {
-        modal.style.display = 'none';
-        
-        // 重置保存按钮状态
-        const saveBtn = document.getElementById('uuidInfoSaveBtn');
-        if (saveBtn && saveBtn.originalText) {
-          saveBtn.innerHTML = saveBtn.originalText;
-          saveBtn.disabled = false;
-        }
-      }, 300);
+      // 重置保存按钮状态
+      const saveBtn = document.getElementById('uuidInfoSaveBtn');
+      if (saveBtn && saveBtn.originalText) {
+        saveBtn.innerHTML = saveBtn.originalText;
+        saveBtn.disabled = false;
+      }
     }
 
     // 加载当前UUID信息（简化版，不加载时间字段）
@@ -3209,7 +3244,7 @@ trojan://..." rows="4"></textarea>
       
       // 设置加载状态
       saveBtn.disabled = true;
-      saveBtn.innerHTML = '<span class="loader"></span>加载中...';
+      saveBtn.innerHTML = '<div class="loader"></div>加载中...';
 
       try {
         const response = await fetch(\`\${WORKER_DOMAIN}/manage/uuid-info/\${uuid}\`);
@@ -3288,7 +3323,7 @@ trojan://..." rows="4"></textarea>
       
       // 正确设置加载状态
       saveBtn.disabled = true;
-      saveBtn.innerHTML = '<span class="loader"></span>保存中...';
+      saveBtn.innerHTML = '<div class="loader"></div>保存中...';
 
       try {
         const response = await fetch(\`\${WORKER_DOMAIN}/manage/uuid-info\`, {
@@ -3338,7 +3373,7 @@ trojan://..." rows="4"></textarea>
           btn.originalText = btn.innerHTML;
         }
         btn.disabled = true; 
-        btn.innerHTML = '<span class="loader"></span>' + (txt || '处理中...'); 
+        btn.innerHTML = '<div class="loader"></div>' + (txt || '处理中...'); 
       } else { 
         btn.disabled = false; 
         if (btn.originalText) {
@@ -3366,24 +3401,28 @@ trojan://..." rows="4"></textarea>
 
       // Hide all tabs
       document.querySelectorAll('.tab-content').forEach(tab => {
-        tab.classList.remove('active');
+        tab.classList.add('hidden');
       });
 
       // Deactivate all tab buttons
       document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.classList.remove('active');
+        btn.setAttribute('data-active', 'false');
+        btn.classList.remove('text-gray-800', 'border-gray-800');
+        btn.classList.add('text-gray-600', 'border-transparent');
       });
 
       // Show selected tab
       const tabElement = document.getElementById(\`\${tabName}-tab\`);
       if (tabElement) {
-        tabElement.classList.add('active');
+        tabElement.classList.remove('hidden');
       }
 
       // Activate selected tab button
       const tabBtn = document.querySelector(\`.tab-btn[onclick*="\${tabName}"]\`);
       if (tabBtn) {
-        tabBtn.classList.add('active');
+        tabBtn.setAttribute('data-active', 'true');
+        tabBtn.classList.remove('text-gray-600', 'border-transparent');
+        tabBtn.classList.add('text-gray-800', 'border-gray-800');
       }
 
       // If it's manage tab and we have a UUID, load it
@@ -3424,7 +3463,6 @@ trojan://..." rows="4"></textarea>
       const subLink = WORKER_DOMAIN + '/sub/' + uuid;
       const subInput = document.getElementById('manageSubUrlLink');
       subInput.value = subLink;
-      document.getElementById('manageSubLinkDisplay').style.display = 'flex';
       document.getElementById('manageSubLinkDisplay').classList.remove('hidden');
 
       // Load configs and stats
@@ -3456,10 +3494,21 @@ trojan://..." rows="4"></textarea>
     function showToast(msg, type='info') { 
       const c = document.getElementById('toast-container'); 
       const t = document.createElement('div'); 
-      t.className = 'toast'; 
-      t.innerHTML = '<span>' + toastIcons[type] + ' ' + msg + '</span>'; 
+      t.className = 'px-4 py-3 rounded-lg shadow-lg border border-gray-300 bg-white text-gray-800 animate-slide-in'; 
+      
+      // 设置图标
+      let icon = 'ℹ️';
+      if (type === 'success') icon = '✅';
+      if (type === 'error') icon = '❌';
+      
+      t.innerHTML = \`<span>\${icon} \${msg}</span>\`; 
       c.appendChild(t); 
-      setTimeout(()=>t.remove(), 5000); 
+      
+      // 5秒后移除
+      setTimeout(()=>{
+        t.classList.add('animate-fade-out');
+        setTimeout(()=>t.remove(), 500);
+      }, 4500); 
     }
 
     function b64DecodeUnicode(str) { 
@@ -3523,7 +3572,6 @@ trojan://..." rows="4"></textarea>
       const subBox = document.getElementById('batchSubscriptionLinkBox');
       const subInput = document.getElementById('batchSubscriptionLink');
 
-      subBox.style.display = 'none';
       subBox.classList.add('hidden');
 
       setButtonLoading(btn, true, '');
@@ -3539,13 +3587,11 @@ trojan://..." rows="4"></textarea>
     
           const subUrl = \`\${WORKER_DOMAIN}/batch-ip?type=ip&ipType=\${ipType}&carrier=\${carrier}\`;
           subInput.value = subUrl;
-          subBox.style.display = 'flex';
           subBox.classList.remove('hidden');
     
         } else {
           const subUrl = \`\${WORKER_DOMAIN}/batch-ip?type=domain\`;
           subInput.value = subUrl;
-          subBox.style.display = 'flex';
           subBox.classList.remove('hidden');
         }
 
@@ -3575,7 +3621,6 @@ trojan://..." rows="4"></textarea>
       const linkInput = document.getElementById('batchGeneratedConfigLink');
       const qrCodeContainer = document.getElementById('batchQrCodeContainer');
 
-      linkBox.style.display = 'none';
       linkBox.classList.add('hidden');
       qrCodeContainer.classList.add('hidden');
 
@@ -3601,7 +3646,6 @@ trojan://..." rows="4"></textarea>
           }
           const subLink = \`\${WORKER_DOMAIN}/batch-configs/\${uuid}?\${linkParams}\`;
           linkInput.value = subLink;
-          linkBox.style.display = 'flex';
           linkBox.classList.remove('hidden');
     
           // Generate QR code
@@ -3757,7 +3801,6 @@ trojan://..." rows="4"></textarea>
       const l = \`\${WORKER_DOMAIN}/sub/\${u}\`; 
       const input = document.getElementById('manageSubUrlLink');
       input.value = l; 
-      document.getElementById('manageSubLinkDisplay').style.display = 'flex';
       document.getElementById('manageSubLinkDisplay').classList.remove('hidden');
 
       // 获取筛选参数
@@ -3785,7 +3828,7 @@ trojan://..." rows="4"></textarea>
         const r = await fetch(queryUrl);
         const c = document.getElementById('queryResultsContainer');
         if(r.status === 404){ 
-          c.innerHTML='<p style="padding:20px;text-align:center;color:#89949B">未找到配置，请直接添加。</p>'; 
+          c.innerHTML='<p class="p-5 text-center text-gray-500">未找到配置，请直接添加。</p>'; 
           document.getElementById('paginationContainer').classList.add('hidden');
           document.getElementById('bulkActionsBar').classList.add('hidden');
         } else {
@@ -3796,10 +3839,10 @@ trojan://..." rows="4"></textarea>
           currentTotalPages = d.pagination.totalPages;
     
           // 渲染表格
-          let h = '<div class="table-container"><table><thead><tr><th class="table-checkbox-cell"><input type="checkbox" id="selectAllCheckbox" class="select-all-checkbox" onclick="toggleSelectAll()"></th><th>备注</th><th>协议</th><th>域名托管</th><th>配置</th><th>操作</th></tr></thead><tbody>';
+          let h = '<div class="table-container"><table class="w-full"><thead><tr class="bg-gray-100"><th class="p-3 text-left"><input type="checkbox" id="selectAllCheckbox" class="mr-2" onclick="toggleSelectAll()">全选</th><th class="p-3 text-left">备注</th><th class="p-3 text-left">协议</th><th class="p-3 text-left">域名托管</th><th class="p-3 text-left">配置</th><th class="p-3 text-left">操作</th></tr></thead><tbody>';
     
           if (!d.configs || d.configs.length === 0) {
-            h += '<tr><td colspan="6" style="text-align:center;padding:20px;color:#89949B;">未找到符合条件的配置</td></tr>';
+            h += '<tr><td colspan="6" class="p-5 text-center text-gray-500">未找到符合条件的配置</td></tr>';
           } else {
             d.configs.forEach(Row=>{
               const sc = JSON.stringify(Row).replace(/"/g, '&quot;');
@@ -3807,15 +3850,15 @@ trojan://..." rows="4"></textarea>
               const hostingClass = hostingStyleMap[hosting] || 'hosting-other';
               const isSelected = selectedConfigs.has(Row.id) ? 'checked' : '';
         
-              h+=\`<tr>
-                <td class="table-checkbox-cell"><input type="checkbox" class="config-checkbox" data-id="\${Row.id}" \${isSelected} onchange="toggleConfigSelection(\${Row.id}, this.checked)"></td>
-                <td>\${Row.remark||'-'}</td>
-                <td>\${Row.protocol}</td>
-                <td class="domain-hosting-cell"><span class="hosting-badge \${hostingClass}">\${hosting}</span></td>
-                <td class="config-data-cell">\${Row.config_data.substring(0,40)}...</td>
-                <td class="actions-cell">
-                  <button class="nav-btn" data-config="\${sc}" onclick="openEditModal(JSON.parse(this.dataset.config))">编辑</button>
-                  <button class="nav-btn" style="background:#d44;color:#fff;border-color:#d44" onclick="delOne(\${Row.id})">删除</button>
+              h+=\`<tr class="border-t border-gray-200 hover:bg-gray-50">
+                <td class="p-3"><input type="checkbox" class="config-checkbox" data-id="\${Row.id}" \${isSelected} onchange="toggleConfigSelection(\${Row.id}, this.checked)"></td>
+                <td class="p-3">\${Row.remark||'-'}</td>
+                <td class="p-3 font-mono">\${Row.protocol}</td>
+                <td class="p-3"><span class="px-2 py-1 rounded text-xs \${hostingClass}">\${hosting}</span></td>
+                <td class="p-3 config-data-cell font-mono text-sm">\${Row.config_data.substring(0,40)}...</td>
+                <td class="p-3">
+                  <button class="px-3 py-1 border border-gray-300 text-gray-700 rounded hover:bg-gray-50 mr-2" data-config="\${sc}" onclick="openEditModal(JSON.parse(this.dataset.config))">编辑</button>
+                  <button class="px-3 py-1 bg-red-600 text-white rounded border border-red-600 hover:bg-red-700" onclick="delOne(\${Row.id})">删除</button>
                 </td>
               </tr>\`;
             });
@@ -4097,11 +4140,11 @@ trojan://..." rows="4"></textarea>
         alert('解析失败'); 
         return; 
       }
-      document.getElementById('editModalOverlay').classList.add('open');
+      document.getElementById('editModalOverlay').classList.remove('hidden');
     }
 
     function closeEditModal() { 
-      document.getElementById('editModalOverlay').classList.remove('open'); 
+      document.getElementById('editModalOverlay').classList.add('hidden'); 
     }
 
     async function saveEditedConfig() {
@@ -4146,7 +4189,7 @@ trojan://..." rows="4"></textarea>
         nL = u.toString();
       }
 
-      const b = document.querySelector('.modal .primary');
+      const b = document.querySelector('.modal .bg-gray-700');
       const o = b.innerHTML;
       setButtonLoading(b, true);
       try {
@@ -4189,9 +4232,9 @@ trojan://..." rows="4"></textarea>
         } else {
           showToast(data.error || '无法加载统计数据', 'error');
           document.getElementById('manageStatsSummary').innerHTML = \`
-            <div style="text-align: center; padding: 20px; color: #6b7280;">
+            <div class="text-center p-5 text-gray-500">
               <p>\${data.error || '无统计信息'}</p>
-              <p><small>请确保已升级到v2.0+版本并启用访问日志记录</small></p>
+              <p class="text-sm">请确保已升级到v2.0+版本并启用访问日志记录</p>
             </div>
           \`;
         }
@@ -4209,25 +4252,25 @@ trojan://..." rows="4"></textarea>
         Math.round(stats.apigen_count / stats.total_access * 100) : 0;
 
       container.innerHTML = \`
-        <div class="stat-box">
-          <span class="stat-num">\${stats.total_access}</span>
-          <span class="stat-label">总访问次数</span>
-          <span class="stat-sub">首次: \${stats.first_access ? formatDate(stats.first_access) : '从未'}</span>
+        <div class="bg-white border border-gray-200 rounded-lg p-4">
+          <div class="text-2xl font-bold text-blue-600">\${stats.total_access}</div>
+          <div class="text-sm text-gray-700">总访问次数</div>
+          <div class="text-xs text-gray-500 mt-1">首次: \${stats.first_access ? formatDate(stats.first_access) : '从未'}</div>
         </div>
-        <div class="stat-box">
-          <span class="stat-num">\${stats.today_total}</span>
-          <span class="stat-label">今日访问</span>
-          <span class="stat-sub">订阅:\${stats.today_subscription} | 网页:\${stats.today_apigen}</span>
+        <div class="bg-white border border-gray-200 rounded-lg p-4">
+          <div class="text-2xl font-bold text-green-600">\${stats.today_total}</div>
+          <div class="text-sm text-gray-700">今日访问</div>
+          <div class="text-xs text-gray-500 mt-1">订阅:\${stats.today_subscription} | 网页:\${stats.today_apigen}</div>
         </div>
-        <div class="stat-box">
-          <span class="stat-num">\${stats.subscription_count}</span>
-          <span class="stat-label">订阅访问</span>
-          <span class="stat-sub">占比 \${subscriptionPercent}%</span>
+        <div class="bg-white border border-gray-200 rounded-lg p-4">
+          <div class="text-2xl font-bold text-purple-600">\${stats.subscription_count}</div>
+          <div class="text-sm text-gray-700">订阅访问</div>
+          <div class="text-xs text-gray-500 mt-1">占比 \${subscriptionPercent}%</div>
         </div>
-        <div class="stat-box">
-          <span class="stat-num">\${stats.apigen_count}</span>
-          <span class="stat-label">网页生成</span>
-          <span class="stat-sub">占比 \${apigenPercent}%</span>
+        <div class="bg-white border border-gray-200 rounded-lg p-4">
+          <div class="text-2xl font-bold text-orange-600">\${stats.apigen_count}</div>
+          <div class="text-sm text-gray-700">网页生成</div>
+          <div class="text-xs text-gray-500 mt-1">占比 \${apigenPercent}%</div>
         </div>
       \`;
     }
@@ -4338,7 +4381,7 @@ trojan://..." rows="4"></textarea>
       const container = document.getElementById('manageRecentLogs');
 
       if (!logs || logs.length === 0) {
-        container.innerHTML = '<div style="text-align: center; padding: 20px; color: #6b7280;">暂无访问记录</div>';
+        container.innerHTML = '<div class="text-center py-8 text-gray-500">暂无访问记录</div>';
         return;
       }
 
@@ -4351,12 +4394,12 @@ trojan://..." rows="4"></textarea>
           '未知';
   
         html += \`
-          <div class="access-log-item">
-            <div>
-              <span class="timestamp">\${formatDateTime(log.created_at)}</span>
-              <span class="log-type \${typeClass}">\${typeText}</span>
+          <div class="flex justify-between items-center py-2 border-b border-gray-100 last:border-b-0">
+            <div class="flex items-center gap-2">
+              <span class="text-sm font-mono text-gray-600">\${formatDateTime(log.created_at)}</span>
+              <span class="px-2 py-1 rounded text-xs \${typeClass}">\${typeText}</span>
             </div>
-            <div style="color: #6b7280; font-size: 0.8rem;" title="\${log.user_agent || '未知'}">
+            <div class="text-xs text-gray-500 truncate max-w-[200px]" title="\${log.user_agent || '未知'}">
               \${userAgentShort}
             </div>
           </div>
@@ -4373,8 +4416,15 @@ trojan://..." rows="4"></textarea>
     }
 
     function updateChartButtons() {
-      document.getElementById('chartTotalBtn').classList.toggle('active', currentChartType === 'total');
-      document.getElementById('chartSplitBtn').classList.toggle('active', currentChartType === 'split');
+      document.getElementById('chartTotalBtn').classList.toggle('bg-gray-700', currentChartType === 'total');
+      document.getElementById('chartTotalBtn').classList.toggle('text-white', currentChartType === 'total');
+      document.getElementById('chartTotalBtn').classList.toggle('bg-gray-100', currentChartType !== 'total');
+      document.getElementById('chartTotalBtn').classList.toggle('text-gray-700', currentChartType !== 'total');
+      
+      document.getElementById('chartSplitBtn').classList.toggle('bg-gray-700', currentChartType === 'split');
+      document.getElementById('chartSplitBtn').classList.toggle('text-white', currentChartType === 'split');
+      document.getElementById('chartSplitBtn').classList.toggle('bg-gray-100', currentChartType !== 'split');
+      document.getElementById('chartSplitBtn').classList.toggle('text-gray-700', currentChartType !== 'split');
     }
 
     // ============================================
@@ -4404,7 +4454,6 @@ trojan://..." rows="4"></textarea>
       if (selectedValue === 'custom') {
         customTemplateInput.classList.remove('hidden');
         templateDescription.textContent = '使用自定义模板URL，请输入可公开访问的YAML配置文件URL。';
-        templateInfoBox.classList.add('hidden');
       } else if (selectedValue === '') {
         customTemplateInput.classList.add('hidden');
         templateDescription.textContent = '请从下拉列表中选择一个配置文件模板';
@@ -4716,19 +4765,24 @@ trojan://..." rows="4"></textarea>
         updateUuidInputs();
   
         // If current tab is manage, load the data
-        const activeTab = document.querySelector('.tab-content.active');
+        const activeTab = document.querySelector('.tab-content:not(.hidden)');
         if (activeTab && activeTab.id === 'manage-tab') {
           loadUuidData(storedUuid);
         }
       }
 
       // Load templates if clash tab is active
-      const activeTab = document.querySelector('.tab-content.active');
+      const activeTab = document.querySelector('.tab-content:not(.hidden)');
       if (activeTab && activeTab.id === 'clash-tab') {
         loadTemplates();
       }
+      
+      // 初始化Lucide图标
+      lucide.createIcons();
     });
   </script>
 </body>
 </html>
 `;
+
+
