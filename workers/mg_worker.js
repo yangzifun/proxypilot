@@ -1,18 +1,26 @@
 /* =================================================================
- * Cloudflare Worker: YZFN Configuration Management with MFA and Template Management
+ *  Cloudflare Worker: Configuration Management with MFA & Templates
+ *  功能：
+ *  1. 用户认证管理（JWT + MFA）
+ *  2. 配置生成和管理
+ *  3. 模板管理
+ *  4. 访问统计分析
+ *  5. 数据库操作
  * ================================================================= */
 
 // =================================================================
-//  1. 常量定义
+//  CONSTANTS (常量定义)
 // =================================================================
 const DEFAULT_JWT_SECRET = 'your-default-jwt-secret-change-this';
 const CACHE_CONTROL = 'no-cache, no-store, must-revalidate';
 
 // =================================================================
-//  2. 工具函数
+//  UTILITY FUNCTIONS (工具函数)
 // =================================================================
 
-// 密码哈希
+/**
+ * 使用SHA-256算法哈希密码
+ */
 async function hashPassword(password) {
     const msgBuffer = new TextEncoder().encode(password);
     const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
@@ -20,7 +28,9 @@ async function hashPassword(password) {
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-// JWT签名
+/**
+ * 签名JWT令牌
+ */
 async function signJwt(payload, secret = DEFAULT_JWT_SECRET) {
     const header = { alg: 'HS256', typ: 'JWT' };
     const encodedHeader = btoa(JSON.stringify(header)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
@@ -31,7 +41,9 @@ async function signJwt(payload, secret = DEFAULT_JWT_SECRET) {
     return `${encodedHeader}.${encodedPayload}.${encodedSignature}`;
 }
 
-// JWT验证
+/**
+ * 验证并解析JWT令牌
+ */
 async function verifyJwt(token, secret = DEFAULT_JWT_SECRET) {
     try {
         const [h, p, s] = token.split('.');
@@ -46,12 +58,14 @@ async function verifyJwt(token, secret = DEFAULT_JWT_SECRET) {
     } catch (e) { return false; }
 }
 
-// JSON响应
+/**
+ * 生成JSON响应
+ */
 function jsonResponse(data, status = 200, cacheControl = CACHE_CONTROL) {
-    return new Response(JSON.stringify(data), {
+    return new Response(JSON.stringify(data, null, 2), {
         status,
         headers: {
-            'Content-Type': 'application/json',
+            'Content-Type': 'application/json;charset=UTF-8',
             'Access-Control-Allow-Origin': '*',
             'Cache-Control': cacheControl,
             'X-Response-Time': Date.now().toString()
@@ -59,7 +73,9 @@ function jsonResponse(data, status = 200, cacheControl = CACHE_CONTROL) {
     });
 }
 
-// 防抖函数
+/**
+ * 防抖函数
+ */
 function debounce(func, wait) {
     let timeout;
     return function executedFunction(...args) {
@@ -72,7 +88,9 @@ function debounce(func, wait) {
     };
 }
 
-// 格式化日期
+/**
+ * 格式化时间戳为本地日期格式
+ */
 function formatDate(timestamp) {
     if (!timestamp || timestamp === 0) return '从未';
     const date = new Date(timestamp);
@@ -85,7 +103,9 @@ function formatDate(timestamp) {
     });
 }
 
-// 获取访问统计
+/**
+ * 获取访问统计摘要
+ */
 async function getAccessStatsSummary(env, days = 30) {
     try {
         const db = env.DB;
@@ -154,7 +174,9 @@ async function getAccessStatsSummary(env, days = 30) {
     }
 }
 
-// 获取时间段内的UUID访问详情
+/**
+ * 获取UUID的访问详情
+ */
 async function getUUIDAccessDetails(env, uuid, startDate, endDate) {
     try {
         const db = env.DB;
@@ -200,11 +222,13 @@ async function getUUIDAccessDetails(env, uuid, startDate, endDate) {
 }
 
 // =================================================================
-//  3. TOTP实现
+//  TOTP AUTHENTICATION CLASS
 // =================================================================
 
 class TOTP {
-    // 生成随机密钥
+    /**
+     * 生成随机密钥
+     */
     static generateSecret() {
         const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
         let secret = '';
@@ -214,13 +238,17 @@ class TOTP {
         return secret;
     }
 
-    // 生成OTP验证码
+    /**
+     * 生成OTP验证码
+     */
     static generateOTP(secret, window = 0) {
         const time = Math.floor(Date.now() / 30000) + window;
         return this.generateOTPWithTime(secret, time);
     }
 
-    // 使用指定时间生成OTP
+    /**
+     * 使用指定时间生成OTP
+     */
     static generateOTPWithTime(secret, time) {
         const key = this.base32ToBytes(secret);
         const timeBuffer = new ArrayBuffer(8);
@@ -247,7 +275,9 @@ class TOTP {
         });
     }
 
-    // Base32转换
+    /**
+     * Base32转换
+     */
     static base32ToBytes(base32) {
         const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
         const bytes = [];
@@ -272,7 +302,9 @@ class TOTP {
         return bytes;
     }
 
-    // 验证OTP码
+    /**
+     * 验证OTP码
+     */
     static async verify(secret, code, window = 1) {
         for (let i = -window; i <= window; i++) {
             const genCode = await this.generateOTP(secret, i);
@@ -281,7 +313,9 @@ class TOTP {
         return false;
     }
 
-    // 生成二维码URL
+    /**
+     * 生成二维码URL
+     */
     static generateOTPAuthURL(username, secret, issuer = 'YZFN Admin') {
         const encodedIssuer = encodeURIComponent(issuer);
         const encodedUsername = encodeURIComponent(username);
@@ -290,9 +324,12 @@ class TOTP {
 }
 
 // =================================================================
-//  4. IP获取和更新功能
+//  IP & ADDRESS UTILITIES
 // =================================================================
 
+/**
+ * 从HostMonit获取优化IPs
+ */
 async function fetchIpsFromHostMonit(type = 'v4') {
     try {
         const requestBody = { key: "iDetkOys" };
@@ -328,6 +365,9 @@ async function fetchIpsFromHostMonit(type = 'v4') {
     }
 }
 
+/**
+ * 从VPS789获取Cloudflare IPs
+ */
 async function fetchIpsFromVps789() {
     try {
         const res = await fetch('https://vps789.com/openApi/cfIpApi', {
@@ -698,10 +738,12 @@ async function initializeDatabaseSettings(env) {
 }
 
 // =================================================================
-//  5. API处理函数
+//  API HANDLERS (API处理函数)
 // =================================================================
 
-// 登录处理
+/**
+ * 处理用户登录请求（支持MFA）
+ */
 async function handleLogin(req, env) {
     try {
         const { username, password, totp_code, step } = await req.json();
@@ -777,7 +819,9 @@ async function handleLogin(req, env) {
     }
 }
 
-// MFA初始化
+/**
+ * 初始化MFA设置
+ */
 async function handleMfaInit(req, env) {
     try {
         const { username, password } = await req.json();
@@ -810,7 +854,9 @@ async function handleMfaInit(req, env) {
     }
 }
 
-// MFA首次验证
+/**
+ * 首次验证MFA代码
+ */
 async function handleMfaVerifyFirst(req, env) {
     try {
         const { username, totp_code, secret } = await req.json();
@@ -853,7 +899,9 @@ async function handleMfaVerifyFirst(req, env) {
     }
 }
 
-// 使用备份码登录
+/**
+ * 使用备份码进行MFA登录
+ */
 async function handleMfaLoginWithBackup(req, env) {
     try {
         const { username, password, backup_code } = await req.json();
@@ -907,7 +955,9 @@ async function handleMfaLoginWithBackup(req, env) {
     }
 }
 
-// 修改密码
+/**
+ * 处理更改密码请求
+ */
 async function handleChangePassword(req, env, currentUser) {
     try {
         const { oldPassword, newPassword } = await req.json();
@@ -955,7 +1005,9 @@ async function handleMfaStatus(req, env, currentUser) {
     }
 }
 
-// 禁用MFA
+/**
+ * 禁用MFA认证
+ */
 async function handleMfaDisable(req, env, currentUser) {
     try {
         const { password } = await req.json();
@@ -1030,7 +1082,9 @@ async function handleMfaRegenerateBackupCodes(req, env, currentUser) {
     }
 }
 
-// 获取自动更新设置
+/**
+ * 获取自动更新设置
+ */
 async function handleGetAutoUpdateSettings(req, env) {
     try {
         const settings = await env.DB.prepare(
@@ -1061,7 +1115,9 @@ async function handleGetAutoUpdateSettings(req, env) {
     }
 }
 
-// 设置自动更新配置
+/**
+ * 设置自动更新配置
+ */
 async function handleSetAutoUpdateSettings(req, env) {
     try {
         const { global_enabled, hostmonit_v4, hostmonit_v6, vps789 } = await req.json();
@@ -1088,7 +1144,9 @@ async function handleSetAutoUpdateSettings(req, env) {
     }
 }
 
-// 直接执行IP更新
+/**
+ * 直接执行IP更新
+ */
 async function handleDirectIpUpdate(req, env) {
     try {
         const { global_enabled, hostmonit_v4, hostmonit_v6, vps789 } = await req.json();
@@ -1127,7 +1185,9 @@ async function handleDirectIpUpdate(req, env) {
     }
 }
 
-// 获取统计数据
+/**
+ * 获取访问统计数据
+ */
 async function handleGetStats(req, env) {
     try {
         const url = new URL(req.url);
@@ -1197,7 +1257,9 @@ async function handleGetUUIDAccessDetails(req, env) {
     }
 }
 
-// 域名管理
+/**
+ * 处理域名管理API
+ */
 async function handleDomains(req, env, method) {
     try {
         const url = new URL(req.url);
@@ -1315,7 +1377,9 @@ async function handleDomains(req, env, method) {
     }
 }
 
-// IP管理
+/**
+ * 处理IP管理API
+ */
 async function handleIps(req, env, method) {
     try {
         const url = new URL(req.url);
@@ -1363,7 +1427,9 @@ async function handleIps(req, env, method) {
     }
 }
 
-// UUID管理
+/**
+ * 处理UUID管理API
+ */
 async function handleUuids(req, env, method) {
     try {
         const url = new URL(req.url);
@@ -1508,10 +1574,12 @@ async function handleUuids(req, env, method) {
 }
 
 // =================================================================
-//  6. 模板管理API (新增)
+//  TEMPLATE MANAGEMENT API (模板管理)
 // =================================================================
 
-// 模板管理API
+/**
+ * 处理模板管理API
+ */
 async function handleTemplates(req, env, method) {
     try {
         const url = new URL(req.url);
@@ -1650,7 +1718,9 @@ async function handleTemplates(req, env, method) {
     }
 }
 
-// 设置默认模板API
+/**
+ * 设置默认模板
+ */
 async function handleSetDefaultTemplate(req, env) {
     try {
         const { id } = await req.json();
@@ -1673,9 +1743,12 @@ async function handleSetDefaultTemplate(req, env) {
 }
 
 // =================================================================
-//  7. 主API路由处理
+//  MAIN ROUTE HANDLERS (主路由处理)
 // =================================================================
 
+/**
+ * 主API路由处理
+ */
 async function handleApi(req, env) {
     const url = new URL(req.url);
     const path = url.pathname;
@@ -1783,23 +1856,11 @@ async function handleApi(req, env) {
 }
 
 // =================================================================
-//  8. HTML模板
+//  HTML TEMPLATES (HTML模板)
 // =================================================================
 
 const globalCss = `
-/* ============ 全局基础样式 ============ */
-:root {
-    --primary-color: #5a666d;
-    --secondary-color: #89949B;
-    --success-color: #10b981;
-    --danger-color: #ef4444;
-    --warning-color: #f59e0b;
-    --info-color: #3b82f6;
-    --light-color: #f8f9fa;
-    --dark-color: #3d474d;
-    --border-color: #E8EBED;
-    --shadow-color: rgba(0,0,0,0.1);
-}
+@import url('https://cdn.jsdelivr.net/npm/tailwindcss@3.4.1/tailwind.min.css');
 
 * {
     margin: 0;
@@ -1818,7 +1879,20 @@ body, html {
     min-height: 100vh; 
     background-color: #fff; 
     line-height: 1.5;
-    color: var(--dark-color);
+    color: #3d474d;
+}
+
+:root {
+    --primary-color: #5a666d;
+    --secondary-color: #89949B;
+    --success-color: #10b981;
+    --danger-color: #ef4444;
+    --warning-color: #f59e0b;
+    --info-color: #3b82f6;
+    --light-color: #f8f9fa;
+    --dark-color: #3d474d;
+    --border-color: #E8EBED;
+    --shadow-color: rgba(0,0,0,0.1);
 }
 
 /* ============ 容器和布局 ============ */
@@ -1828,7 +1902,7 @@ body, html {
     display: flex; 
     flex-direction: column; 
     align-items: center; 
-    padding: 20px 20px 40px; 
+    padding: 20px; 
 }
 
 .content-group { 
@@ -1950,9 +2024,9 @@ body, html {
 .card { 
     background: var(--light-color); 
     border: 1px solid var(--border-color); 
-    border-radius: 8px; 
-    padding: 24px; 
-    margin-bottom: 24px; 
+    border-radius: 8px;
+    padding: 24px;
+    margin-bottom: 24px;
     text-align: left; 
     display: none; 
     animation: fadeIn 0.3s ease; 
@@ -2741,6 +2815,8 @@ const loginHtml = `
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <link rel="icon" href="https://s3.yangzifun.org/logo.ico">
     <title>优选配置管理后台 - 登录</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lucide@latest/dist/lucide.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
     <style>
         ${globalCss}
         body { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; min-height: 500px; background: #f9fafb; }
@@ -2755,9 +2831,18 @@ const loginHtml = `
         <div id="msg" style="color:#ef4444; font-size:0.9rem; margin-bottom:10px; display:none;"></div>
         
         <form id="loginForm" onsubmit="event.preventDefault(); doLogin();">
-            <input type="text" id="username" placeholder="管理员账号" required autocomplete="username">
-            <input type="password" id="password" placeholder="访问密码" required autocomplete="current-password">
-            <button type="submit" id="loginBtn" class="nav-btn active" style="width:100%; margin-top:15px;">登 录</button>
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+                <svg class="lucide-user" width="20" height="20"></svg>
+                <input type="text" id="username" placeholder="管理员账号" required autocomplete="username" style="flex: 1; margin: 0;">
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 15px;">
+                <svg class="lucide-lock" width="20" height="20"></svg>
+                <input type="password" id="password" placeholder="访问密码" required autocomplete="current-password" style="flex: 1; margin: 0;">
+            </div>
+            <button type="submit" id="loginBtn" class="nav-btn active" style="width:100%; margin-top:15px;">
+                <svg class="lucide-arrow-right" width="16" height="16"></svg>
+                登 录
+            </button>
         </form>
         
         <div style="margin-top: 15px; font-size: 0.8rem; color: #9ca3af;">
@@ -2785,8 +2870,14 @@ const loginHtml = `
             </div>
             
             <div style="display: flex; gap: 10px;">
-                <button type="button" class="nav-btn" onclick="goBackToPassword()" style="flex: 1;">返回</button>
-                <button type="button" class="nav-btn active" onclick="verifyTOTP()" id="verifyTOTPBtn" style="flex: 2;">验证</button>
+                <button type="button" class="nav-btn" onclick="goBackToPassword()" style="flex: 1;">
+                    <svg class="lucide-arrow-left" width="16" height="16"></svg>
+                    返回
+                </button>
+                <button type="button" class="nav-btn active" onclick="verifyTOTP()" id="verifyTOTPBtn" style="flex: 2;">
+                    <svg class="lucide-check" width="16" height="16"></svg>
+                    验证
+                </button>
             </div>
         </div>
         
@@ -2806,8 +2897,14 @@ const loginHtml = `
         </div>
         
         <div style="display: flex; gap: 10px; margin-top: 20px;">
-            <button type="button" class="nav-btn" onclick="cancelBackupLogin()" style="flex: 1;">取消</button>
-            <button type="button" class="nav-btn active" onclick="verifyBackupCode()" id="verifyBackupBtn" style="flex: 2;">验证备份码</button>
+            <button type="button" class="nav-btn" onclick="cancelBackupLogin()" style="flex: 1;">
+                <svg class="lucide-x" width="16" height="16"></svg>
+                取消
+            </button>
+            <button type="button" class="nav-btn active" onclick="verifyBackupCode()" id="verifyBackupBtn" style="flex: 2;">
+                <svg class="lucide-check" width="16" height="16"></svg>
+                验证备份码
+            </button>
         </div>
         
         <div style="margin-top: 15px; font-size: 0.8rem; color: #6b7280; text-align: left;">
@@ -3027,6 +3124,10 @@ const loginHtml = `
                 window.location.href = '/';
             }
             document.getElementById('username').focus();
+            // 初始化 Lucide 图标
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
         });
     </script>
 </body>
@@ -3041,6 +3142,8 @@ const adminHtml = `
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <link rel="icon" href="https://s3.yangzifun.org/logo.ico">
     <title>优选配置管理后台</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lucide@latest/dist/lucide.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
     <style>${globalCss}</style>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
@@ -3056,20 +3159,44 @@ const adminHtml = `
                 <span id="mfaBadge" style="margin-left:10px; display:none;" class="mfa-status-badge"></span>
             </div>
             <div>
-                <a class="action-link" onclick="openPwdModal()">修改密码</a>
-                <a class="action-link logout" onclick="logout()">安全退出</a>
+                <a class="action-link" onclick="openPwdModal()">
+                    <svg class="lucide-key" width="16" height="16"></svg>
+                    修改密码
+                </a>
+                <a class="action-link logout" onclick="logout()">
+                    <svg class="lucide-log-out" width="16" height="16"></svg>
+                    安全退出
+                </a>
             </div>
         </div>
 
         <div class="content-group">
             <h1 class="profile-name">管理后台</h1>
             <div class="nav-grid">
-                <button class="nav-btn active" onclick="switchTab('dash', this)">系统概览</button>
-                <button class="nav-btn" onclick="switchTab('dom', this)">优选域名</button>
-                <button class="nav-btn" onclick="switchTab('ips', this)">IP 资源池</button>
-                <button class="nav-btn" onclick="switchTab('uuids', this)">配置分组</button>
-                <button class="nav-btn" onclick="switchTab('templates', this)">配置模板</button>
-                <button class="nav-btn" onclick="switchTab('security', this)">安全中心</button>
+                <button class="nav-btn active" onclick="switchTab('dash', this)">
+                    <svg class="lucide-chart-line" width="16" height="16"></svg>
+                    系统概览
+                </button>
+                <button class="nav-btn" onclick="switchTab('dom', this)">
+                    <svg class="lucide-globe" width="16" height="16"></svg>
+                    优选域名
+                </button>
+                <button class="nav-btn" onclick="switchTab('ips', this)">
+                    <svg class="lucide-network" width="16" height="16"></svg>
+                    IP 资源池
+                </button>
+                <button class="nav-btn" onclick="switchTab('uuids', this)">
+                    <svg class="lucide-key" width="16" height="16"></svg>
+                    配置分组
+                </button>
+                <button class="nav-btn" onclick="switchTab('templates', this)">
+                    <svg class="lucide-layers" width="16" height="16"></svg>
+                    配置模板
+                </button>
+                <button class="nav-btn" onclick="switchTab('security', this)">
+                    <svg class="lucide-shield" width="16" height="16"></svg>
+                    安全中心
+                </button>
             </div>
 
             <div id="dash" class="card active">
@@ -3113,7 +3240,10 @@ const adminHtml = `
                         <option value="30">最近30天</option>
                         <option value="60">最近60天</option>
                     </select>
-                    <button class="nav-btn" onclick="loadAccessStats()">刷新数据</button>
+                    <button class="nav-btn" onclick="loadAccessStats()">
+                        <svg class="lucide-refresh-cw" width="16" height="16"></svg>
+                        刷新数据
+                    </button>
                     <button class="nav-btn" onclick="switchChartType('total')" id="chartTotalBtn">总访问量</button>
                     <button class="nav-btn" onclick="switchChartType('split')" id="chartSplitBtn">订阅/网页</button>
                     <button class="nav-btn" onclick="switchChartType('uuids')" id="chartUuidsBtn">活跃UUID数</button>
@@ -3165,7 +3295,10 @@ const adminHtml = `
                         <option value="Cloudflare">Cloudflare</option>
                         <option value="腾讯云EdgeOne">腾讯云EdgeOne</option>
                     </select>
-                    <button class="nav-btn active" onclick="addDomain()" style="min-width: 100px;">添加域名</button>
+                    <button class="nav-btn active" onclick="addDomain()" style="min-width: 100px;">
+                        <svg class="lucide-plus" width="16" height="16"></svg>
+                        添加域名
+                    </button>
                 </div>
                 <div class="table-container">
                     <table>
@@ -3236,8 +3369,14 @@ const adminHtml = `
                             <span class="slider"></span>
                         </div>
                     </label>
-                    <button class="nav-btn" onclick="saveAutoUpdateSettings()">保存设置</button>
-                    <button class="nav-btn active" onclick="refreshIps()">立即更新</button>
+                    <button class="nav-btn" onclick="saveAutoUpdateSettings()">
+                        <svg class="lucide-save" width="16" height="16"></svg>
+                        保存设置
+                    </button>
+                    <button class="nav-btn active" onclick="refreshIps()">
+                        <svg class="lucide-refresh-cw" width="16" height="16"></svg>
+                        立即更新
+                    </button>
                 </div>
                 
                 <div class="table-container">
@@ -3335,7 +3474,10 @@ const adminHtml = `
                             设为默认
                         </label>
                     </div>
-                    <button class="nav-btn active" onclick="addTemplate()" style="min-width: 100px;">添加模板</button>
+                    <button class="nav-btn active" onclick="addTemplate()" style="min-width: 100px;">
+                        <svg class="lucide-plus" width="16" height="16"></svg>
+                        添加模板
+                    </button>
                 </div>
                 
                 <div class="table-container">
@@ -3381,8 +3523,14 @@ const adminHtml = `
                         <h3>双重验证状态</h3>
                         <div id="mfaStatusContent">加载中...</div>
                         <div id="mfaActions" style="margin-top: 15px;">
-                            <button class="nav-btn active" onclick="startMfaSetup()" id="enableMfaBtn">启用双重验证</button>
-                            <button class="nav-btn danger" onclick="disableMfaConfirm()" id="disableMfaBtn" style="display:none;">禁用双重验证</button>
+                            <button class="nav-btn active" onclick="startMfaSetup()" id="enableMfaBtn">
+                                <svg class="lucide-shield-plus" width="16" height="16"></svg>
+                                启用双重验证
+                            </button>
+                            <button class="nav-btn danger" onclick="disableMfaConfirm()" id="disableMfaBtn" style="display:none;">
+                                <svg class="lucide-shield-off" width="16" height="16"></svg>
+                                禁用双重验证
+                            </button>
                         </div>
                     </div>
                     
@@ -3407,8 +3555,14 @@ const adminHtml = `
                 <input type="password" id="confirmP" placeholder="确认新密码" autocomplete="new-password">
             </div>
             <div style="display:flex; justify-content:flex-end; gap:10px;">
-                <button class="nav-btn" onclick="document.getElementById('pwdModal').style.display='none'">取消</button>
-                <button class="nav-btn active" onclick="changePwd()">确认修改</button>
+                <button class="nav-btn" onclick="document.getElementById('pwdModal').style.display='none'">
+                    <svg class="lucide-x" width="16" height="16"></svg>
+                    取消
+                </button>
+                <button class="nav-btn active" onclick="changePwd()">
+                    <svg class="lucide-check" width="16" height="16"></svg>
+                    确认修改
+                </button>
             </div>
         </div>
     </div>
@@ -3426,8 +3580,14 @@ const adminHtml = `
                 <input type="text" id="editRemark">
             </div>
             <div style="display:flex; justify-content:flex-end; gap:10px;">
-                <button class="nav-btn" onclick="document.getElementById('editDomModal').style.display='none'">取消</button>
-                <button class="nav-btn active" onclick="updateDomain()">保存修改</button>
+                <button class="nav-btn" onclick="document.getElementById('editDomModal').style.display='none'">
+                    <svg class="lucide-x" width="16" height="16"></svg>
+                    取消
+                </button>
+                <button class="nav-btn active" onclick="updateDomain()">
+                    <svg class="lucide-check" width="16" height="16"></svg>
+                    保存修改
+                </button>
             </div>
         </div>
     </div>
@@ -3441,8 +3601,14 @@ const adminHtml = `
                 <div id="mfaAuthError" style="color:#ef4444; margin-top:8px; display:none;"></div>
             </div>
             <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
-                <button class="nav-btn" onclick="document.getElementById('mfaAuthModal').style.display='none'; window._mfaAuthCallback=null;">取消</button>
-                <button class="nav-btn active" onclick="submitMfaAuthModal()">继续</button>
+                <button class="nav-btn" onclick="document.getElementById('mfaAuthModal').style.display='none'; window._mfaAuthCallback=null;">
+                    <svg class="lucide-x" width="16" height="16"></svg>
+                    取消
+                </button>
+                <button class="nav-btn active" onclick="submitMfaAuthModal()">
+                    <svg class="lucide-arrow-right" width="16" height="16"></svg>
+                    继续
+                </button>
             </div>
         </div>
     </div>
@@ -3463,8 +3629,14 @@ const adminHtml = `
                 <div id="backupCodesList" class="backup-codes-box" style="font-size: 1rem; line-height: 2.5;"></div>
                 
                 <div style="margin-top: 20px;">
-                    <button class="nav-btn active" onclick="printBackupCodes()" style="margin-right: 10px;">🖨️ 打印</button>
-                    <button class="nav-btn" onclick="copyBackupCodes()">📋 复制</button>
+                    <button class="nav-btn active" onclick="printBackupCodes()" style="margin-right: 10px;">
+                        <svg class="lucide-printer" width="16" height="16"></svg>
+                        打印
+                    </button>
+                    <button class="nav-btn" onclick="copyBackupCodes()">
+                        <svg class="lucide-clipboard-copy" width="16" height="16"></svg>
+                        复制
+                    </button>
                 </div>
                 
                 <div style="margin-top: 20px; font-size: 0.9rem; color: #6b7280;">
@@ -3564,8 +3736,14 @@ const adminHtml = `
             </div>
             
             <div style="display:flex; justify-content:flex-end; gap:10px;">
-                <button class="nav-btn" onclick="document.getElementById('editTemplateModal').style.display='none'">取消</button>
-                <button class="nav-btn active" onclick="updateTemplate()" id="updateTemplateBtn">保存修改</button>
+                <button class="nav-btn" onclick="document.getElementById('editTemplateModal').style.display='none'">
+                    <svg class="lucide-x" width="16" height="16"></svg>
+                    取消
+                </button>
+                <button class="nav-btn active" onclick="updateTemplate()" id="updateTemplateBtn">
+                    <svg class="lucide-check" width="16" height="16"></svg>
+                    保存修改
+                </button>
             </div>
         </div>
     </div>
@@ -3592,8 +3770,14 @@ const adminHtml = `
                 <textarea id="editUuidRemark" rows="3"></textarea>
             </div>
             <div style="display:flex; justify-content:flex-end; gap:10px;">
-                <button class="nav-btn" onclick="document.getElementById('editUuidModal').style.display='none'">取消</button>
-                <button class="nav-btn active" onclick="saveUuidInfo()">保存</button>
+                <button class="nav-btn" onclick="document.getElementById('editUuidModal').style.display='none'">
+                    <svg class="lucide-x" width="16" height="16"></svg>
+                    取消
+                </button>
+                <button class="nav-btn active" onclick="saveUuidInfo()">
+                    <svg class="lucide-check" width="16" height="16"></svg>
+                    保存
+                </button>
             </div>
         </div>
     </div>
@@ -3601,6 +3785,13 @@ const adminHtml = `
     <script>
         const token = localStorage.getItem('token');
         if (!token) window.location.href = '/login';
+
+        // 初始化后刷新 Lucide 图标
+        function refreshLucideIcons() {
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
+        }
 
         // ============ 工具函数 ============
         function toast(message, type = 'info') { 
@@ -3700,6 +3891,10 @@ const adminHtml = `
             
             try {
                 await init(); 
+                // 初始化 Lucide 图标
+                if (typeof lucide !== 'undefined') {
+                    lucide.createIcons();
+                }
             } catch (error) {
                 document.getElementById('loader').innerHTML = \`
                     <div style="text-align:center; color:#ef4444;">
@@ -3756,6 +3951,9 @@ const adminHtml = `
             if (id === 'uuids') loadUuid();
             if (id === 'templates') loadTemplates();
             if (id === 'security') updateSecurityTab();
+            
+            // 刷新 Lucide 图标
+            setTimeout(refreshLucideIcons, 100);
         }
 
         // ============ 加载统计信息 ============
@@ -5213,7 +5411,7 @@ const adminHtml = `
 `;
 
 // =================================================================
-//  8. 主入口
+//  WORKER ENTRY POINT (主入口)
 // =================================================================
 
 export default {
