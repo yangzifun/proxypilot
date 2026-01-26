@@ -1859,954 +1859,6 @@ async function handleApi(req, env) {
 //  HTML TEMPLATES (HTML模板)
 // =================================================================
 
-const globalCss = `
-@import url('https://cdn.jsdelivr.net/npm/tailwindcss@3.4.1/tailwind.min.css');
-
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
-
-html { 
-    font-size: 14px; 
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-}
-
-body, html { 
-    margin: 0; 
-    padding: 0; 
-    min-height: 100vh; 
-    background-color: #fff; 
-    line-height: 1.5;
-    color: #3d474d;
-}
-
-:root {
-    --primary-color: #5a666d;
-    --secondary-color: #89949B;
-    --success-color: #10b981;
-    --danger-color: #ef4444;
-    --warning-color: #f59e0b;
-    --info-color: #3b82f6;
-    --light-color: #f8f9fa;
-    --dark-color: #3d474d;
-    --border-color: #E8EBED;
-    --shadow-color: rgba(0,0,0,0.1);
-}
-
-/* ============ 容器和布局 ============ */
-.container { 
-    width: 100%; 
-    min-height: 100vh; 
-    display: flex; 
-    flex-direction: column; 
-    align-items: center; 
-    padding: 20px; 
-}
-
-.content-group { 
-    width: 100%; 
-    max-width: 1200px; 
-    text-align: center; 
-    margin-top: 20px; 
-}
-
-/* ============ 顶部栏 ============ */
-.top-bar { 
-    width: 100%; 
-    max-width: 1200px; 
-    display: flex; 
-    justify-content: space-between; 
-    margin-bottom: 20px; 
-    align-items: center; 
-    padding: 0 5px; 
-}
-
-/* ============ 标题和描述 ============ */
-.profile-name { 
-    font-size: 2rem; 
-    color: var(--dark-color); 
-    margin-bottom: 5px; 
-    font-weight: bold;
-}
-
-.profile-quote { 
-    color: var(--secondary-color); 
-    margin-bottom: 10px; 
-    min-height: 1em; 
-}
-
-/* ============ 操作链接 ============ */
-.action-link { 
-    font-size: 0.9rem; 
-    color: var(--secondary-color); 
-    cursor: pointer; 
-    text-decoration: none; 
-    margin-right: 15px; 
-    transition: color 0.2s; 
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-}
-
-.action-link:hover { 
-    color: var(--primary-color); 
-    text-decoration: underline; 
-}
-
-.action-link.logout { 
-    color: var(--danger-color); 
-}
-
-.action-link.logout:hover { 
-    color: #d32f2f; 
-}
-
-/* ============ 导航栏 ============ */
-.nav-grid { 
-    display: flex; 
-    flex-wrap: wrap; 
-    justify-content: center; 
-    gap: 8px; 
-    margin-bottom: 25px; 
-    border-bottom: 1px solid var(--border-color); 
-    padding-bottom: 20px; 
-}
-
-.nav-btn { 
-    display: inline-flex; 
-    align-items: center; 
-    justify-content: center; 
-    padding: 8px 16px; 
-    background: var(--border-color); 
-    border: 2px solid var(--secondary-color); 
-    border-radius: 4px; 
-    color: var(--primary-color); 
-    font-weight: 500; 
-    font-size: 0.95rem; 
-    cursor: pointer; 
-    transition: all 0.2s; 
-    white-space: nowrap; 
-    text-decoration: none; 
-    outline: none;
-}
-
-.nav-btn:hover { 
-    background: var(--secondary-color); 
-    color: white; 
-    border-color: var(--secondary-color);
-}
-
-.nav-btn.active { 
-    background-color: var(--primary-color); 
-    color: white; 
-    border-color: var(--primary-color); 
-}
-
-.nav-btn.danger { 
-    border-color: var(--danger-color); 
-    color: var(--danger-color); 
-    background: #fee2e2; 
-}
-
-.nav-btn.danger:hover { 
-    background: var(--danger-color); 
-    color: white; 
-}
-
-.nav-btn.small { 
-    padding: 4px 10px; 
-    font-size: 0.85rem; 
-}
-
-/* ============ 卡片 ============ */
-.card { 
-    background: var(--light-color); 
-    border: 1px solid var(--border-color); 
-    border-radius: 8px;
-    padding: 24px;
-    margin-bottom: 24px;
-    text-align: left; 
-    display: none; 
-    animation: fadeIn 0.3s ease; 
-    width: 100%;
-}
-
-.card.active { 
-    display: block; 
-}
-
-.card h2 { 
-    font-size: 1.4rem; 
-    color: var(--dark-color); 
-    margin-top: 0; 
-    margin-bottom: 20px; 
-    padding-bottom: 10px; 
-    border-bottom: 2px solid var(--border-color); 
-}
-
-@keyframes fadeIn { 
-    from { opacity: 0; transform: translateY(5px); } 
-    to { opacity: 1; transform: translateY(0); } 
-}
-
-/* ============ 表单元素 ============ */
-input[type="text"], 
-input[type="password"], 
-input[type="number"], 
-input[type="email"], 
-select, 
-textarea { 
-    width: 100%; 
-    padding: 10px; 
-    border: 2px solid var(--secondary-color); 
-    border-radius: 4px; 
-    background: #fff; 
-    font-size: 0.9rem; 
-    box-sizing: border-box; 
-    margin-bottom: 10px; 
-    font-family: inherit;
-    transition: border-color 0.2s;
-}
-
-input:focus, 
-select:focus, 
-textarea:focus { 
-    outline: none; 
-    border-color: var(--primary-color); 
-}
-
-/* ============ 表格 ============ */
-.table-container { 
-    overflow-x: auto; 
-    border: 2px solid var(--secondary-color); 
-    border-radius: 4px; 
-    background: #fff; 
-    margin-bottom: 15px;
-}
-
-table { 
-    width: 100%; 
-    border-collapse: collapse; 
-    font-size: 0.9rem; 
-    min-width: 600px;
-}
-
-th, td { 
-    padding: 10px 14px; 
-    text-align: left; 
-    border-bottom: 1px solid var(--border-color); 
-}
-
-th { 
-    font-weight: 600; 
-    color: var(--dark-color); 
-    background-color: #f0f2f5; 
-    cursor: pointer; 
-    user-select: none; 
-    position: relative;
-}
-
-th:hover { 
-    background-color: #e2e6ea; 
-}
-
-th.sortable::after {
-    content: '↕';
-    margin-left: 5px;
-    opacity: 0.5;
-    font-size: 0.8em;
-}
-
-/* ============ 分页 ============ */
-.pagination-bar { 
-    display: flex; 
-    justify-content: space-between; 
-    align-items: center; 
-    padding-top: 15px; 
-    font-size: 0.9rem; 
-    color: var(--primary-color);
-    min-height: 40px;
-}
-
-.page-ctrl { 
-    display: flex; 
-    gap: 5px; 
-    align-items: center; 
-}
-
-.page-info { 
-    margin: 0 10px; 
-    white-space: nowrap;
-    min-width: 120px;
-    text-align: center;
-}
-
-select.page-size { 
-    padding: 4px 8px; 
-    border: 1px solid var(--secondary-color); 
-    border-radius: 4px; 
-    background: #fff; 
-    font-size: 0.85rem;
-}
-
-/* ============ 页脚 ============ */
-.footer { 
-    margin-top: auto; 
-    padding-top: 40px; 
-    color: var(--secondary-color); 
-    font-size: 0.8rem; 
-    text-align: center; 
-    width: 100%; 
-    border-top: 1px solid #f0f0f0; 
-}
-
-.footer a { 
-    color: var(--primary-color); 
-    text-decoration: none; 
-}
-
-.footer a:hover { 
-    text-decoration: underline; 
-}
-
-/* ============ 开关控件 ============ */
-.switch-group { 
-    display: flex; 
-    flex-wrap: wrap; 
-    gap: 20px; 
-    align-items: center; 
-    margin-bottom: 15px; 
-    background: var(--border-color); 
-    padding: 15px; 
-    border-radius: 4px; 
-}
-
-.switch-label { 
-    font-weight: 500; 
-    color: var(--primary-color); 
-    display: flex; 
-    align-items: center; 
-    gap: 8px;
-    cursor: pointer;
-}
-
-.switch { 
-    position: relative; 
-    display: inline-block; 
-    width: 40px; 
-    height: 22px; 
-}
-
-.switch input { 
-    opacity: 0; 
-    width: 0; 
-    height: 0; 
-}
-
-.slider { 
-    position: absolute; 
-    cursor: pointer; 
-    top: 0; 
-    left: 0; 
-    right: 0; 
-    bottom: 0; 
-    background-color: #ccc; 
-    transition: .4s; 
-    border-radius: 34px; 
-}
-
-.slider:before { 
-    position: absolute; 
-    content: ""; 
-    height: 16px; 
-    width: 16px; 
-    left: 3px; 
-    bottom: 3px; 
-    background-color: white; 
-    transition: .4s; 
-    border-radius: 50%; 
-}
-
-input:checked + .slider { 
-    background-color: var(--success-color); 
-}
-
-input:checked + .slider:before { 
-    transform: translateX(18px); 
-}
-
-/* ============ 自动更新状态 ============ */
-.auto-update-header { 
-    display: flex; 
-    justify-content: space-between; 
-    align-items: center; 
-    margin-bottom: 15px; 
-}
-
-.auto-update-status { 
-    font-size: 0.9rem; 
-    color: var(--dark-color); 
-    padding: 5px 10px; 
-    background: var(--border-color); 
-    border-radius: 4px; 
-    display: inline-flex; 
-    align-items: center; 
-    gap: 8px; 
-}
-
-.status-indicator { 
-    width: 8px; 
-    height: 8px; 
-    border-radius: 50%; 
-    display: inline-block; 
-}
-
-.status-on { 
-    background-color: var(--success-color); 
-}
-
-.status-off { 
-    background-color: var(--danger-color); 
-}
-
-.status-warning { 
-    background-color: var(--warning-color); 
-}
-
-/* ============ MFA相关样式 ============ */
-.mfa-status-badge { 
-    display: inline-flex; 
-    align-items: center; 
-    padding: 4px 12px; 
-    border-radius: 20px; 
-    font-size: 0.85rem; 
-    font-weight: 500; 
-    gap: 6px; 
-}
-
-.mfa-active { 
-    background-color: #d1fae5; 
-    color: #065f46; 
-}
-
-.mfa-inactive { 
-    background-color: #fee2e2; 
-    color: #9f1239; 
-}
-
-/* ============ 二维码和备份码 ============ */
-.qr-code-container { 
-    text-align: center; 
-    margin: 20px 0; 
-    padding: 15px; 
-    background: #f9fafb; 
-    border-radius: 8px; 
-    border: 1px solid #e5e7eb; 
-}
-
-.qr-instructions { 
-    font-size: 0.9rem; 
-    color: #6b7280; 
-    margin-top: 15px; 
-    line-height: 1.5; 
-}
-
-.backup-codes-box { 
-    background: #f3f4f6; 
-    border: 1px dashed #d1d5db; 
-    padding: 15px; 
-    border-radius: 6px; 
-    margin: 15px 0; 
-    font-family: monospace; 
-    text-align: center; 
-    line-height: 2; 
-}
-
-.backup-code { 
-    display: inline-block; 
-    margin: 5px; 
-    padding: 5px 10px; 
-    background: white; 
-    border: 1px solid #e5e7eb; 
-    border-radius: 4px; 
-    font-weight: bold; 
-}
-
-/* ============ 安全步骤 ============ */
-.security-step { 
-    background: #f0f9ff; 
-    border: 1px solid #bae6fd; 
-    padding: 15px; 
-    border-radius: 8px; 
-    margin: 15px 0; 
-}
-
-.security-step h4 { 
-    color: #0369a1; 
-    margin-top: 0; 
-}
-
-.security-step ol, 
-.security-step ul { 
-    padding-left: 20px; 
-}
-
-/* ============ Toast消息 ============ */
-#toast-container { 
-    position: fixed; 
-    top: 20px; 
-    right: 20px; 
-    z-index: 9999; 
-    display: flex; 
-    flex-direction: column; 
-    gap: 10px; 
-}
-
-.toast { 
-    padding: 12px 18px; 
-    border-radius: 4px; 
-    border: 2px solid var(--secondary-color); 
-    background: #fff; 
-    color: var(--dark-color); 
-    font-weight: 500; 
-    font-size: 0.9rem; 
-    box-shadow: 0 4px 12px var(--shadow-color); 
-    animation: slideIn 0.3s forwards, fadeOut 0.5s 3.5s forwards; 
-    min-width: 250px;
-    max-width: 350px;
-}
-
-@keyframes slideIn { 
-    from { transform: translateX(100%); opacity: 0; } 
-    to { transform: translateX(0); opacity: 1; } 
-}
-
-@keyframes fadeOut { 
-    to { opacity: 0; transform: translateX(100%); } 
-}
-
-/* ============ 模态框 ============ */
-.modal-overlay { 
-    position: fixed; 
-    top: 0; 
-    left: 0; 
-    width: 100%; 
-    height: 100%; 
-    background: rgba(0,0,0,0.5); 
-    z-index: 1000; 
-    display: none; 
-    align-items: center; 
-    justify-content: center; 
-    padding: 20px;
-    overflow-y: auto;
-}
-
-.modal { 
-    background: #fff; 
-    width: 90%; 
-    max-width: 500px; 
-    padding: 25px; 
-    border-radius: 8px; 
-    box-shadow: 0 10px 25px rgba(0,0,0,0.2); 
-    max-height: 90vh; 
-    overflow-y: auto; 
-}
-
-.modal h3 { 
-    margin-top: 0; 
-    color: var(--dark-color); 
-    margin-bottom: 15px;
-}
-
-/* ============ 统计卡片 ============ */
-.stat-grid { 
-    display: grid; 
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); 
-    gap: 15px; 
-    margin-bottom: 20px; 
-}
-
-.stat-box { 
-    background: var(--border-color); 
-    padding: 20px; 
-    border-radius: 8px; 
-    text-align: center; 
-    transition: transform 0.2s;
-}
-
-.stat-box:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px var(--shadow-color);
-}
-
-.stat-num { 
-    font-size: 2rem; 
-    color: var(--primary-color); 
-    font-weight: bold; 
-    display: block; 
-    margin-bottom: 5px;
-}
-
-.stat-label { 
-    font-size: 0.85rem; 
-    color: var(--secondary-color); 
-}
-
-.last-update-info { 
-    margin-top: 10px; 
-    font-size: 0.85rem; 
-    color: var(--dark-color); 
-    background: var(--border-color);
-    padding: 10px 15px;
-    border-radius: 4px;
-}
-
-/* ============ 安全区域 ============ */
-.security-section { 
-    background: #f9fafb; 
-    border-left: 4px solid #3b82f6; 
-    padding: 15px; 
-    margin: 20px 0; 
-    border-radius: 0 8px 8px 0; 
-}
-
-.security-section h3 { 
-    margin-top: 0; 
-    color: #1e40af; 
-}
-
-.mfa-container { 
-    max-width: 600px; 
-    margin: 0 auto; 
-}
-
-.secret-display { 
-    background: #1f2937; 
-    color: #fbbf24; 
-    padding: 15px; 
-    border-radius: 6px; 
-    font-family: monospace; 
-    text-align: center; 
-    margin: 15px 0; 
-    font-size: 1.1rem; 
-    letter-spacing: 1px; 
-    word-break: break-all;
-}
-
-.copy-btn { 
-    margin-left: 10px; 
-    padding: 5px 10px; 
-    background: #4b5563; 
-    color: white; 
-    border: none; 
-    border-radius: 4px; 
-    cursor: pointer; 
-    font-size: 0.8rem; 
-    transition: background 0.2s;
-}
-
-.copy-btn:hover { 
-    background: #374151; 
-}
-
-/* ============ 登录页面 ============ */
-.login-box { 
-    width: 100%; 
-    max-width: 400px; 
-    padding: 40px 30px; 
-    border: 2px solid var(--secondary-color); 
-    border-radius: 8px; 
-    background: #fff; 
-    text-align: center; 
-    margin: auto; 
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08); 
-}
-
-.login-step { 
-    display: block; 
-}
-
-.totp-input-container { 
-    display: flex; 
-    gap: 10px; 
-    margin: 20px 0; 
-}
-
-.totp-input { 
-    flex: 1; 
-    text-align: center; 
-    font-size: 1.5rem; 
-    letter-spacing: 10px; 
-    font-weight: bold; 
-    padding: 10px;
-}
-
-.backup-link { 
-    display: block; 
-    margin-top: 15px; 
-    font-size: 0.9rem; 
-    color: #6b7280; 
-    text-decoration: underline; 
-    cursor: pointer; 
-}
-
-/* ============ 图表 ============ */
-.chart-container { 
-    position: relative; 
-    width: 100%; 
-    height: 400px; 
-    margin: 20px 0; 
-}
-
-.chart-controls { 
-    display: flex; 
-    flex-wrap: wrap;
-    gap: 10px; 
-    margin-bottom: 15px; 
-    align-items: center; 
-}
-
-.chart-controls select { 
-    padding: 5px 10px; 
-    border: 2px solid var(--secondary-color); 
-    border-radius: 4px; 
-    background: #fff; 
-    min-width: 120px;
-}
-
-/* ============ 访问统计 ============ */
-.access-stat-grid { 
-    display: grid; 
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); 
-    gap: 15px; 
-    margin-bottom: 20px; 
-}
-
-.access-stat-box { 
-    background: #f0f4f8; 
-    padding: 15px; 
-    border-radius: 8px; 
-    border-left: 4px solid #3b82f6; 
-    transition: transform 0.2s;
-}
-
-.access-stat-box:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px var(--shadow-color);
-}
-
-.access-stat-num { 
-    font-size: 1.8rem; 
-    color: #1e3a8a; 
-    font-weight: bold; 
-    display: block; 
-}
-
-.access-stat-label { 
-    font-size: 0.85rem; 
-    color: #4b5563; 
-    margin-top: 5px; 
-}
-
-.access-stat-sub { 
-    font-size: 0.75rem; 
-    color: #6b7280; 
-    margin-top: 3px; 
-}
-
-.access-detail-table { 
-    width: 100%; 
-    font-size: 0.85rem; 
-    border-collapse: collapse;
-}
-
-.access-detail-table th { 
-    background: #f8fafc; 
-    font-weight: 600; 
-    position: sticky;
-    top: 0;
-}
-
-.access-detail-table td { 
-    padding: 8px 10px; 
-    border-bottom: 1px solid #e5e7eb;
-}
-
-.access-detail-table .type-badge { 
-    display: inline-block; 
-    padding: 2px 6px; 
-    border-radius: 10px; 
-    font-size: 0.75rem; 
-    font-weight: 500; 
-}
-
-.type-subscription { 
-    background: #dbeafe; 
-    color: #1e40af; 
-}
-
-.type-apigen { 
-    background: #d1fae5; 
-    color: #065f46; 
-}
-
-/* ============ 热门UUID列表 ============ */
-.popular-uuids-list { 
-    max-height: 200px; 
-    overflow-y: auto; 
-    border: 1px solid #e5e7eb; 
-    border-radius: 4px; 
-    padding: 10px; 
-}
-
-.popular-uuids-item { 
-    display: flex; 
-    justify-content: space-between; 
-    padding: 8px; 
-    border-bottom: 1px solid #f3f4f6; 
-    cursor: pointer;
-    transition: background 0.2s;
-}
-
-.popular-uuids-item:hover { 
-    background: #f8fafc; 
-}
-
-.popular-uuids-item:last-child { 
-    border-bottom: none; 
-}
-
-.popular-uuids-uuid { 
-    font-family: monospace; 
-    font-size: 0.85rem; 
-    word-break: break-all;
-}
-
-.popular-uuids-count { 
-    font-weight: bold; 
-    color: #1e40af; 
-}
-
-/* ============ 徽章样式 ============ */
-.hosting-badge { 
-    display: inline-block; 
-    padding: 4px 10px; 
-    border-radius: 12px; 
-    font-size: 0.75rem; 
-    font-weight: 500; 
-    line-height: 1.4;
-    white-space: nowrap;
-}
-
-.hosting-cloudflare { 
-    background: #F6821F; 
-    color: #fff; 
-    border: 1px solid #F6821F; 
-}
-
-.hosting-tencent { 
-    background: #4A86FF; 
-    color: #fff; 
-    border: 1px solid #4A86FF; 
-}
-
-/* 模板专用徽章 */
-.template-badge { 
-    display: inline-block; 
-    padding: 4px 10px; 
-    border-radius: 12px; 
-    font-size: 0.75rem; 
-    font-weight: 500; 
-    line-height: 1.4;
-}
-
-.badge-default { 
-    background-color: var(--success-color); 
-    color: #fff; 
-    border: 1px solid var(--success-color); 
-}
-
-.badge-normal { 
-    background-color: #6b7280; 
-    color: #fff; 
-    border: 1px solid #6b7280; 
-}
-
-/* ============ 模板URL单元格 ============ */
-.template-url-cell {
-    max-width: 300px;
-    word-break: break-all;
-    white-space: normal;
-}
-
-/* ============ 加载器 ============ */
-.loader {
-    display: inline-block;
-    width: 50px;
-    height: 50px;
-    border: 3px solid var(--border-color);
-    border-radius: 50%;
-    border-top-color: var(--primary-color);
-    animation: spin 1s ease-in-out infinite;
-}
-
-@keyframes spin {
-    to { transform: rotate(360deg); }
-}
-
-/* ============ 响应式设计 ============ */
-@media (max-width: 768px) {
-    html { font-size: 13px; }
-    
-    .container { padding: 15px; }
-    
-    .content-group { max-width: 100%; }
-    
-    .nav-grid { flex-direction: column; }
-    .nav-btn { width: 100%; }
-    
-    .stat-grid { grid-template-columns: repeat(2, 1fr); }
-    
-    .access-stat-grid { grid-template-columns: repeat(2, 1fr); }
-    
-    .switch-group { flex-direction: column; align-items: flex-start; }
-    
-    .auto-update-header { flex-direction: column; align-items: flex-start; gap: 10px; }
-    
-    .pagination-bar { flex-direction: column; gap: 10px; }
-    .page-ctrl { width: 100%; justify-content: center; }
-    
-    .modal { width: 95%; padding: 15px; }
-}
-
-@media (max-width: 480px) {
-    html { font-size: 12px; }
-    
-    .profile-name { font-size: 1.5rem; }
-    
-    .stat-grid { grid-template-columns: 1fr; }
-    
-    .access-stat-grid { grid-template-columns: 1fr; }
-    
-    .card { padding: 15px; }
-    
-    .top-bar { flex-direction: column; gap: 10px; align-items: flex-start; }
-    
-    /* 分页按钮在移动端优化 */
-    .page-ctrl button {
-        padding: 8px 12px;
-        font-size: 0.9rem;
-    }
-    
-    .page-info {
-        font-size: 0.8rem;
-        min-width: 80px;
-    }
-}
-`;
-
 const loginHtml = `
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -2815,106 +1867,315 @@ const loginHtml = `
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <link rel="icon" href="https://s3.yangzifun.org/logo.ico">
     <title>优选配置管理后台 - 登录</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lucide@latest/dist/lucide.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#5a666d',
+                        secondary: '#89949B',
+                        success: '#10b981',
+                        danger: '#ef4444',
+                        warning: '#f59e0b',
+                        info: '#3b82f6',
+                        light: '#f8f9fa',
+                        dark: '#3d474d',
+                        border: '#E8EBED',
+                    }
+                }
+            }
+        }
+    </script>
     <style>
-        ${globalCss}
-        body { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; min-height: 500px; background: #f9fafb; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        
+        @keyframes fadeOut {
+            to { opacity: 0; transform: translateX(100%); }
+        }
+        
+        .totp-input {
+            text-align: center;
+            letter-spacing: 10px;
+            font-weight: bold;
+        }
+        
+        .backup-code {
+            display: inline-block;
+            margin: 0.25rem;
+            padding: 0.5rem 1rem;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.25rem;
+            font-weight: bold;
+            font-family: monospace;
+        }
+        
+        .type-badge {
+            display: inline-block;
+            padding: 0.125rem 0.5rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        
+        .type-subscription {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+        
+        .type-apigen {
+            background: #d1fae5;
+            color: #065f46;
+        }
+        
+        .hosting-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+        
+        .hosting-cloudflare {
+            background: #F6821F;
+            color: white;
+        }
+        
+        .hosting-tencent {
+            background: #4A86FF;
+            color: white;
+        }
+        
+        .template-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        
+        .badge-default {
+            background-color: #10b981;
+            color: white;
+        }
+        
+        .badge-normal {
+            background-color: #6b7280;
+            color: white;
+        }
+        
+        .mfa-status-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            gap: 0.375rem;
+        }
+        
+        .mfa-active {
+            background-color: #d1fae5;
+            color: #065f46;
+        }
+        
+        .mfa-inactive {
+            background-color: #fee2e2;
+            color: #9f1239;
+        }
+        
+        .status-indicator {
+            width: 0.5rem;
+            height: 0.5rem;
+            border-radius: 9999px;
+            display: inline-block;
+        }
+        
+        .status-on {
+            background-color: #10b981;
+        }
+        
+        .status-off {
+            background-color: #ef4444;
+        }
+        
+        .status-warning {
+            background-color: #f59e0b;
+        }
+        
+        .secret-display {
+            background: #1f2937;
+            color: #fbbf24;
+            padding: 1rem;
+            border-radius: 0.375rem;
+            font-family: monospace;
+            text-align: center;
+            margin: 1rem 0;
+            font-size: 1.1rem;
+            letter-spacing: 1px;
+            word-break: break-all;
+        }
+        
+        .backup-codes-box {
+            background: #f3f4f6;
+            border: 1px dashed #d1d5db;
+            padding: 1rem;
+            border-radius: 0.375rem;
+            margin: 1rem 0;
+            font-family: monospace;
+            text-align: center;
+            line-height: 2;
+        }
+        
+        .security-step {
+            background: #f0f9ff;
+            border: 1px solid #bae6fd;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin: 1rem 0;
+        }
+        
+        .qr-code-container {
+            text-align: center;
+            margin: 1.25rem 0;
+            padding: 1rem;
+            background: #f9fafb;
+            border-radius: 0.5rem;
+            border: 1px solid #e5e7eb;
+        }
+        
+        .toast {
+            padding: 0.75rem 1.125rem;
+            border-radius: 0.25rem;
+            border: 2px solid #89949B;
+            background: #fff;
+            color: #3d474d;
+            font-weight: 500;
+            font-size: 0.9rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            animation: slideIn 0.3s forwards, fadeOut 0.5s 3.5s forwards;
+            min-width: 250px;
+            max-width: 350px;
+        }
     </style>
 </head>
-<body>
-    <div id="toast-container"></div>
+<body class="bg-gray-50 flex flex-col justify-center items-center min-h-screen p-4">
+    <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-2.5"></div>
     
-    <div class="login-box" id="passwordStep">
-        <h2 class="profile-name">优选配置管理后台</h2>
-        <p class="profile-quote" id="loginStatus">请先验证身份</p>
-        <div id="msg" style="color:#ef4444; font-size:0.9rem; margin-bottom:10px; display:none;"></div>
+    <div id="passwordStep" class="w-full max-w-md bg-white p-8 rounded-lg border-2 border-secondary shadow-lg">
+        <h2 class="text-2xl font-bold text-dark mb-2">优选配置管理后台</h2>
+        <p class="text-secondary mb-4 min-h-[1em]" id="loginStatus">请先验证身份</p>
+        <div id="msg" class="text-danger text-sm mb-4 hidden"></div>
         
         <form id="loginForm" onsubmit="event.preventDefault(); doLogin();">
-            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
-                <svg class="lucide-user" width="20" height="20"></svg>
-                <input type="text" id="username" placeholder="管理员账号" required autocomplete="username" style="flex: 1; margin: 0;">
+            <div class="flex items-center gap-2 mb-4">
+                <i data-lucide="user" class="w-5 h-5 text-secondary"></i>
+                <input type="text" id="username" placeholder="管理员账号" required autocomplete="username"
+                       class="flex-1 px-3 py-2 border-2 border-secondary rounded focus:outline-none focus:border-primary">
             </div>
-            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 15px;">
-                <svg class="lucide-lock" width="20" height="20"></svg>
-                <input type="password" id="password" placeholder="访问密码" required autocomplete="current-password" style="flex: 1; margin: 0;">
+            <div class="flex items-center gap-2 mb-6">
+                <i data-lucide="lock" class="w-5 h-5 text-secondary"></i>
+                <input type="password" id="password" placeholder="访问密码" required autocomplete="current-password"
+                       class="flex-1 px-3 py-2 border-2 border-secondary rounded focus:outline-none focus:border-primary">
             </div>
-            <button type="submit" id="loginBtn" class="nav-btn active" style="width:100%; margin-top:15px;">
-                <svg class="lucide-arrow-right" width="16" height="16"></svg>
+            <button type="submit" id="loginBtn"
+                    class="w-full bg-primary text-white py-2.5 px-4 rounded border-2 border-primary font-medium hover:bg-opacity-90 transition flex items-center justify-center gap-2">
+                <i data-lucide="arrow-right" class="w-4 h-4"></i>
                 登 录
             </button>
         </form>
         
-        <div style="margin-top: 15px; font-size: 0.8rem; color: #9ca3af;">
+        <div class="mt-4 text-sm text-gray-400">
             首次登录请确保网络连接正常
         </div>
     </div>
 
-    <div class="login-box" id="totpStep" style="display: none;">
-        <h2 class="profile-name">双重验证</h2>
-        <p class="profile-quote" id="mfaUsername"></p>
+    <div id="totpStep" class="w-full max-w-md bg-white p-8 rounded-lg border-2 border-secondary shadow-lg hidden">
+        <h2 class="text-2xl font-bold text-dark mb-2">双重验证</h2>
+        <p class="text-secondary mb-6" id="mfaUsername"></p>
         
-        <div style="text-align: center; margin: 20px 0;">
-            <div style="font-size: 0.95rem; color: #4b5563; margin-bottom: 15px;">
+        <div class="text-center mb-6">
+            <div class="text-gray-600 mb-4">
                 请输入您的6位验证码
             </div>
             
-            <div class="totp-input-container">
-                <input type="text" id="totpCode" maxlength="6" class="totp-input" 
-                       pattern="[0-9]{6}" inputmode="numeric" 
-                       placeholder="000000" required autocomplete="one-time-code">
+            <div class="flex gap-2.5 mb-4">
+                <input type="text" id="totpCode" maxlength="6" class="totp-input flex-1 px-3 py-2 border-2 border-secondary rounded focus:outline-none focus:border-primary"
+                       pattern="[0-9]{6}" inputmode="numeric" placeholder="000000" required autocomplete="one-time-code">
             </div>
             
-            <div style="color: #6b7280; font-size: 0.85rem; margin-bottom: 15px;">
+            <div class="text-gray-400 text-sm mb-6">
                 请从身份验证器App获取验证码
             </div>
             
-            <div style="display: flex; gap: 10px;">
-                <button type="button" class="nav-btn" onclick="goBackToPassword()" style="flex: 1;">
-                    <svg class="lucide-arrow-left" width="16" height="16"></svg>
+            <div class="flex gap-2.5">
+                <button type="button" onclick="goBackToPassword()"
+                        class="flex-1 bg-gray-100 text-primary py-2.5 px-4 rounded border-2 border-secondary font-medium hover:bg-secondary hover:text-white transition flex items-center justify-center gap-2">
+                    <i data-lucide="arrow-left" class="w-4 h-4"></i>
                     返回
                 </button>
-                <button type="button" class="nav-btn active" onclick="verifyTOTP()" id="verifyTOTPBtn" style="flex: 2;">
-                    <svg class="lucide-check" width="16" height="16"></svg>
+                <button type="button" onclick="verifyTOTP()" id="verifyTOTPBtn"
+                        class="flex-2 bg-primary text-white py-2.5 px-4 rounded border-2 border-primary font-medium hover:bg-opacity-90 transition flex items-center justify-center gap-2">
+                    <i data-lucide="check" class="w-4 h-4"></i>
                     验证
                 </button>
             </div>
         </div>
         
-        <a class="backup-link" onclick="showBackupLogin()">使用备份码登录</a>
+        <a class="block text-center text-gray-500 text-sm underline cursor-pointer hover:text-gray-700" onclick="showBackupLogin()">使用备份码登录</a>
     </div>
 
-    <div class="login-box" id="backupStep" style="display: none;">
-        <h2 class="profile-name">备份码登录</h2>
-        <p class="profile-quote">请输入8位备份码</p>
+    <div id="backupStep" class="w-full max-w-md bg-white p-8 rounded-lg border-2 border-secondary shadow-lg hidden">
+        <h2 class="text-2xl font-bold text-dark mb-2">备份码登录</h2>
+        <p class="text-secondary mb-6">请输入8位备份码</p>
         
-        <input type="text" id="backupUsername" style="display:none;">
-        <input type="password" id="backupPassword" style="display:none;">
+        <input type="text" id="backupUsername" class="hidden">
+        <input type="password" id="backupPassword" class="hidden">
         
-        <div style="text-align: left; margin: 15px 0;">
-            <label style="display:block; margin-bottom:5px; font-size:0.9rem; color:#4b5563;">备份码:</label>
-            <input type="text" id="backupCode" placeholder="例如：A1B2C3D4" maxlength="8" style="text-transform: uppercase;" required>
+        <div class="mb-6">
+            <label class="block text-gray-600 text-sm mb-2">备份码:</label>
+            <input type="text" id="backupCode" placeholder="例如：A1B2C3D4" maxlength="8" style="text-transform: uppercase;" required
+                   class="w-full px-3 py-2 border-2 border-secondary rounded focus:outline-none focus:border-primary">
         </div>
         
-        <div style="display: flex; gap: 10px; margin-top: 20px;">
-            <button type="button" class="nav-btn" onclick="cancelBackupLogin()" style="flex: 1;">
-                <svg class="lucide-x" width="16" height="16"></svg>
+        <div class="flex gap-2.5 mb-6">
+            <button type="button" onclick="cancelBackupLogin()"
+                    class="flex-1 bg-gray-100 text-primary py-2.5 px-4 rounded border-2 border-secondary font-medium hover:bg-secondary hover:text-white transition flex items-center justify-center gap-2">
+                <i data-lucide="x" class="w-4 h-4"></i>
                 取消
             </button>
-            <button type="button" class="nav-btn active" onclick="verifyBackupCode()" id="verifyBackupBtn" style="flex: 2;">
-                <svg class="lucide-check" width="16" height="16"></svg>
+            <button type="button" onclick="verifyBackupCode()" id="verifyBackupBtn"
+                    class="flex-2 bg-primary text-white py-2.5 px-4 rounded border-2 border-primary font-medium hover:bg-opacity-90 transition flex items-center justify-center gap-2">
+                <i data-lucide="check" class="w-4 h-4"></i>
                 验证备份码
             </button>
         </div>
         
-        <div style="margin-top: 15px; font-size: 0.8rem; color: #6b7280; text-align: left;">
-            <p>• 备份码为一次性使用，用后失效</p>
+        <div class="text-gray-400 text-sm">
+            <p class="mb-1">• 备份码为一次性使用，用后失效</p>
             <p>• 请确保备份码准确无误</p>
         </div>
     </div>
 
-    <footer class="footer" style="border:none; width:auto; margin-top: 30px;">
-        <p>Powered by <a href="https://www.yangzihome.space" target="_blank">YZFN</a></p>
+    <footer class="mt-8 text-secondary text-sm">
+        <p>Powered by <a href="https://www.yangzihome.space" target="_blank" class="text-primary hover:underline">YZFN</a></p>
     </footer>
     
     <script>
@@ -2935,13 +2196,13 @@ const loginHtml = `
             
             if (!username || !password) {
                 msg.innerText = '请输入用户名和密码';
-                msg.style.display = 'block';
+                msg.classList.remove('hidden');
                 return;
             }
             
             btn.disabled = true;
-            btn.innerText = '验证中...';
-            msg.style.display = 'none';
+            btn.innerHTML = '<i data-lucide="loader" class="w-4 h-4 animate-spin"></i>验证中...';
+            msg.classList.add('hidden');
             
             try {
                 const response = await fetch('/api/login', {
@@ -2960,10 +2221,10 @@ const loginHtml = `
                         sessionStorage.setItem('mfa_username', username);
                         sessionStorage.setItem('mfa_password', password);
                         
-                        document.getElementById('passwordStep').style.display = 'none';
-                        document.getElementById('totpStep').style.display = 'block';
+                        document.getElementById('passwordStep').classList.add('hidden');
+                        document.getElementById('totpStep').classList.remove('hidden');
                         document.getElementById('mfaUsername').innerText = username;
-                        document.getElementById('msg').style.display = 'none';
+                        msg.classList.add('hidden');
                         
                         setTimeout(() => document.getElementById('totpCode').focus(), 100);
                     } else {
@@ -2973,22 +2234,22 @@ const loginHtml = `
                     }
                 } else {
                     msg.innerText = data.error || '登录失败';
-                    msg.style.display = 'block';
+                    msg.classList.remove('hidden');
                 }
             } catch (error) {
                 msg.innerText = '连接服务器失败';
-                msg.style.display = 'block';
+                msg.classList.remove('hidden');
             } finally {
                 btn.disabled = false;
-                btn.innerText = '登 录';
+                btn.innerHTML = '<i data-lucide="arrow-right" class="w-4 h-4"></i>登 录';
             }
         }
         
         function goBackToPassword() {
-            document.getElementById('passwordStep').style.display = 'block';
-            document.getElementById('totpStep').style.display = 'none';
-            document.getElementById('backupStep').style.display = 'none';
-            document.getElementById('msg').style.display = 'none';
+            document.getElementById('passwordStep').classList.remove('hidden');
+            document.getElementById('totpStep').classList.add('hidden');
+            document.getElementById('backupStep').classList.add('hidden');
+            document.getElementById('msg').classList.add('hidden');
             document.getElementById('password').value = '';
             document.getElementById('password').focus();
         }
@@ -3005,7 +2266,7 @@ const loginHtml = `
             }
             
             btn.disabled = true;
-            btn.innerText = '验证中...';
+            btn.innerHTML = '<i data-lucide="loader" class="w-4 h-4 animate-spin"></i>验证中...';
             
             try {
                 const response = await fetch('/api/login', {
@@ -3037,7 +2298,7 @@ const loginHtml = `
                 toast('验证失败，请重试', 'error');
             } finally {
                 btn.disabled = false;
-                btn.innerText = '验证';
+                btn.innerHTML = '<i data-lucide="check" class="w-4 h-4"></i>验证';
             }
         }
         
@@ -3054,14 +2315,14 @@ const loginHtml = `
             document.getElementById('backupUsername').value = username;
             document.getElementById('backupPassword').value = password;
             
-            document.getElementById('totpStep').style.display = 'none';
-            document.getElementById('backupStep').style.display = 'block';
+            document.getElementById('totpStep').classList.add('hidden');
+            document.getElementById('backupStep').classList.remove('hidden');
             document.getElementById('backupCode').focus();
         }
         
         function cancelBackupLogin() {
-            document.getElementById('backupStep').style.display = 'none';
-            document.getElementById('totpStep').style.display = 'block';
+            document.getElementById('backupStep').classList.add('hidden');
+            document.getElementById('totpStep').classList.remove('hidden');
             document.getElementById('totpCode').focus();
         }
         
@@ -3077,7 +2338,7 @@ const loginHtml = `
             }
             
             btn.disabled = true;
-            btn.innerText = '验证中...';
+            btn.innerHTML = '<i data-lucide="loader" class="w-4 h-4 animate-spin"></i>验证中...';
             
             try {
                 const response = await fetch('/api/mfa/login-with-backup', {
@@ -3108,7 +2369,7 @@ const loginHtml = `
                 toast('验证失败，请重试', 'error');
             } finally {
                 btn.disabled = false;
-                btn.innerText = '验证备份码';
+                btn.innerHTML = '<i data-lucide="check" class="w-4 h-4"></i>验证备份码';
             }
         }
         
@@ -3124,10 +2385,7 @@ const loginHtml = `
                 window.location.href = '/';
             }
             document.getElementById('username').focus();
-            // 初始化 Lucide 图标
-            if (typeof lucide !== 'undefined') {
-                lucide.createIcons();
-            }
+            lucide.createIcons();
         });
     </script>
 </body>
@@ -3142,106 +2400,541 @@ const adminHtml = `
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <link rel="icon" href="https://s3.yangzifun.org/logo.ico">
     <title>优选配置管理后台</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lucide@latest/dist/lucide.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
-    <style>${globalCss}</style>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#5a666d',
+                        secondary: '#89949B',
+                        success: '#10b981',
+                        danger: '#ef4444',
+                        warning: '#f59e0b',
+                        info: '#3b82f6',
+                        light: '#f8f9fa',
+                        dark: '#3d474d',
+                        border: '#E8EBED',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        
+        @keyframes fadeOut {
+            to { opacity: 0; transform: translateX(100%); }
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .nav-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.5rem 1rem;
+            background: #E8EBED;
+            border: 2px solid #89949B;
+            border-radius: 0.25rem;
+            color: #5a666d;
+            font-weight: 500;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+            text-decoration: none;
+            outline: none;
+        }
+        
+        .nav-btn:hover {
+            background: #89949B;
+            color: white;
+            border-color: #89949B;
+        }
+        
+        .nav-btn.active {
+            background-color: #5a666d;
+            color: white;
+            border-color: #5a666d;
+        }
+        
+        .nav-btn.danger {
+            border-color: #ef4444;
+            color: #ef4444;
+            background: #fee2e2;
+        }
+        
+        .nav-btn.danger:hover {
+            background: #ef4444;
+            color: white;
+        }
+        
+        .nav-btn.small {
+            padding: 0.25rem 0.625rem;
+            font-size: 0.85rem;
+        }
+        
+        .card {
+            background: #f8f9fa;
+            border: 1px solid #E8EBED;
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            text-align: left;
+            display: none;
+            animation: fadeIn 0.3s ease;
+            width: 100%;
+        }
+        
+        .card.active {
+            display: block;
+        }
+        
+        .table-container {
+            overflow-x: auto;
+            border: 2px solid #89949B;
+            border-radius: 0.25rem;
+            background: #fff;
+            margin-bottom: 1rem;
+        }
+        
+        .toast {
+            padding: 0.75rem 1.125rem;
+            border-radius: 0.25rem;
+            border: 2px solid #89949B;
+            background: #fff;
+            color: #3d474d;
+            font-weight: 500;
+            font-size: 0.9rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            animation: slideIn 0.3s forwards, fadeOut 0.5s 3.5s forwards;
+            min-width: 250px;
+            max-width: 350px;
+        }
+        
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 50;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 1.25rem;
+            overflow-y: auto;
+        }
+        
+        .modal {
+            background: #fff;
+            width: 90%;
+            max-width: 500px;
+            padding: 1.5rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 2.5rem;
+            height: 1.375rem;
+        }
+        
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 2.125rem;
+        }
+        
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 1rem;
+            width: 1rem;
+            left: 0.1875rem;
+            bottom: 0.1875rem;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        
+        input:checked + .slider {
+            background-color: #10b981;
+        }
+        
+        input:checked + .slider:before {
+            transform: translateX(1.125rem);
+        }
+        
+        .mfa-status-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            gap: 0.375rem;
+        }
+        
+        .mfa-active {
+            background-color: #d1fae5;
+            color: #065f46;
+        }
+        
+        .mfa-inactive {
+            background-color: #fee2e2;
+            color: #9f1239;
+        }
+        
+        .status-indicator {
+            width: 0.5rem;
+            height: 0.5rem;
+            border-radius: 9999px;
+            display: inline-block;
+        }
+        
+        .status-on {
+            background-color: #10b981;
+        }
+        
+        .status-off {
+            background-color: #ef4444;
+        }
+        
+        .secret-display {
+            background: #1f2937;
+            color: #fbbf24;
+            padding: 1rem;
+            border-radius: 0.375rem;
+            font-family: monospace;
+            text-align: center;
+            margin: 1rem 0;
+            font-size: 1.1rem;
+            letter-spacing: 1px;
+            word-break: break-all;
+        }
+        
+        .backup-codes-box {
+            background: #f3f4f6;
+            border: 1px dashed #d1d5db;
+            padding: 1rem;
+            border-radius: 0.375rem;
+            margin: 1rem 0;
+            font-family: monospace;
+            text-align: center;
+            line-height: 2;
+        }
+        
+        .backup-code {
+            display: inline-block;
+            margin: 0.3125rem;
+            padding: 0.3125rem 0.625rem;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.25rem;
+            font-weight: bold;
+        }
+        
+        .security-step {
+            background: #f0f9ff;
+            border: 1px solid #bae6fd;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin: 1rem 0;
+        }
+        
+        .qr-code-container {
+            text-align: center;
+            margin: 1.25rem 0;
+            padding: 1rem;
+            background: #f9fafb;
+            border-radius: 0.5rem;
+            border: 1px solid #e5e7eb;
+        }
+        
+        .type-badge {
+            display: inline-block;
+            padding: 0.125rem 0.5rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        
+        .type-subscription {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+        
+        .type-apigen {
+            background: #d1fae5;
+            color: #065f46;
+        }
+        
+        .hosting-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+        
+        .hosting-cloudflare {
+            background: #F6821F;
+            color: white;
+        }
+        
+        .hosting-tencent {
+            background: #4A86FF;
+            color: white;
+        }
+        
+        .template-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        
+        .badge-default {
+            background-color: #10b981;
+            color: white;
+        }
+        
+        .badge-normal {
+            background-color: #6b7280;
+            color: white;
+        }
+        
+        .template-url-cell {
+            max-width: 300px;
+            word-break: break-all;
+            white-space: normal;
+        }
+        
+        .loader {
+            display: inline-block;
+            width: 3.125rem;
+            height: 3.125rem;
+            border: 3px solid #E8EBED;
+            border-radius: 50%;
+            border-top-color: #5a666d;
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        .chart-container {
+            position: relative;
+            width: 100%;
+            height: 400px;
+            margin: 1.25rem 0;
+        }
+        
+        .access-stat-box {
+            background: #f0f4f8;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            border-left: 4px solid #3b82f6;
+            transition: transform 0.2s;
+        }
+        
+        .access-stat-box:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .popular-uuids-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem;
+            border-bottom: 1px solid #f3f4f6;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .popular-uuids-item:hover {
+            background: #f8fafc;
+        }
+        
+        .popular-uuids-item:last-child {
+            border-bottom: none;
+        }
+        
+        .popular-uuids-uuid {
+            font-family: monospace;
+            font-size: 0.85rem;
+            word-break: break-all;
+        }
+        
+        .popular-uuids-count {
+            font-weight: bold;
+            color: #1e40af;
+        }
+        
+        .access-detail-table {
+            width: 100%;
+            font-size: 0.85rem;
+            border-collapse: collapse;
+        }
+        
+        .access-detail-table th {
+            background: #f8fafc;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+        }
+        
+        .access-detail-table td {
+            padding: 0.5rem 0.625rem;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        
+        .sortable::after {
+            content: '↕';
+            margin-left: 0.3125rem;
+            opacity: 0.5;
+            font-size: 0.8em;
+        }
+    </style>
 </head>
-<body>
-    <div id="toast-container"></div>
-    <div id="loader" style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);color:#89949B">系统加载中...</div>
+<body class="bg-white min-h-screen">
+    <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-2.5"></div>
+    <div id="loader" class="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-secondary">系统加载中...</div>
 
-    <div class="container" id="app" style="display:none">
-        <div class="top-bar">
+    <div class="container mx-auto p-5 min-h-screen flex flex-col items-center" id="app" style="display:none">
+        <div class="w-full max-w-6xl flex justify-between items-center mb-5 px-1">
             <div>
-                <span style="font-weight:bold; color:#5a666d;">CF 优选配置管理</span> 
-                <span style="color:#89949B; font-size:0.9rem;">| Admin</span>
-                <span id="mfaBadge" style="margin-left:10px; display:none;" class="mfa-status-badge"></span>
+                <span class="font-bold text-dark">CF 优选配置管理</span> 
+                <span class="text-secondary text-sm">| Admin</span>
+                <span id="mfaBadge" class="mfa-status-badge ml-2.5 hidden"></span>
             </div>
-            <div>
-                <a class="action-link" onclick="openPwdModal()">
-                    <svg class="lucide-key" width="16" height="16"></svg>
+            <div class="flex items-center gap-2">
+                <a class="text-secondary text-sm cursor-pointer hover:text-primary transition flex items-center gap-1" onclick="openPwdModal()">
+                    <i data-lucide="key" class="w-4 h-4"></i>
                     修改密码
                 </a>
-                <a class="action-link logout" onclick="logout()">
-                    <svg class="lucide-log-out" width="16" height="16"></svg>
+                <a class="text-danger text-sm cursor-pointer hover:text-red-700 transition flex items-center gap-1 ml-3.5" onclick="logout()">
+                    <i data-lucide="log-out" class="w-4 h-4"></i>
                     安全退出
                 </a>
             </div>
         </div>
 
-        <div class="content-group">
-            <h1 class="profile-name">管理后台</h1>
-            <div class="nav-grid">
+        <div class="w-full max-w-6xl text-center mt-5">
+            <h1 class="text-3xl font-bold text-dark mb-1">管理后台</h1>
+            <div class="flex flex-wrap justify-center gap-2 mb-6 pb-5 border-b border-border">
                 <button class="nav-btn active" onclick="switchTab('dash', this)">
-                    <svg class="lucide-chart-line" width="16" height="16"></svg>
+                    <i data-lucide="chart-line" class="w-4 h-4 mr-1"></i>
                     系统概览
                 </button>
                 <button class="nav-btn" onclick="switchTab('dom', this)">
-                    <svg class="lucide-globe" width="16" height="16"></svg>
+                    <i data-lucide="globe" class="w-4 h-4 mr-1"></i>
                     优选域名
                 </button>
                 <button class="nav-btn" onclick="switchTab('ips', this)">
-                    <svg class="lucide-network" width="16" height="16"></svg>
+                    <i data-lucide="network" class="w-4 h-4 mr-1"></i>
                     IP 资源池
                 </button>
                 <button class="nav-btn" onclick="switchTab('uuids', this)">
-                    <svg class="lucide-key" width="16" height="16"></svg>
+                    <i data-lucide="key" class="w-4 h-4 mr-1"></i>
                     配置分组
                 </button>
                 <button class="nav-btn" onclick="switchTab('templates', this)">
-                    <svg class="lucide-layers" width="16" height="16"></svg>
+                    <i data-lucide="layers" class="w-4 h-4 mr-1"></i>
                     配置模板
                 </button>
                 <button class="nav-btn" onclick="switchTab('security', this)">
-                    <svg class="lucide-shield" width="16" height="16"></svg>
+                    <i data-lucide="shield" class="w-4 h-4 mr-1"></i>
                     安全中心
                 </button>
             </div>
 
             <div id="dash" class="card active">
-                <h2>系统状态</h2>
-                <div class="stat-grid">
-                    <div class="stat-box"><span class="stat-num" id="s-dom">-</span><span class="stat-label">优选域名</span></div>
-                    <div class="stat-box"><span class="stat-num" id="s-ip">-</span><span class="stat-label">活跃 IP</span></div>
-                    <div class="stat-box"><span class="stat-num" id="s-uuid">-</span><span class="stat-label">配置分组</span></div>
-                    <div class="stat-box"><span class="stat-num" id="s-template">-</span><span class="stat-label">配置模板</span></div>
-                </div>
-                
-                <div class="access-stat-grid" id="accessStatsGrid" style="display:none;">
-                    <div class="access-stat-box">
-                        <span class="access-stat-num" id="as-total">0</span>
-                        <span class="access-stat-label">总访问次数</span>
-                        <span class="access-stat-sub" id="as-unique">0个独立UUID</span>
+                <h2 class="text-xl font-semibold text-dark mb-5 pb-2.5 border-b-2 border-border">系统状态</h2>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                    <div class="bg-border p-5 rounded-lg text-center transition-transform hover:-translate-y-1">
+                        <span class="text-3xl font-bold text-primary block mb-1" id="s-dom">-</span>
+                        <span class="text-sm text-secondary">优选域名</span>
                     </div>
-                    <div class="access-stat-box">
-                        <span class="access-stat-num" id="as-today">0</span>
-                        <span class="access-stat-label">今日访问</span>
-                        <span class="access-stat-sub" id="as-today-split">订阅:0 | 网页:0</span>
+                    <div class="bg-border p-5 rounded-lg text-center transition-transform hover:-translate-y-1">
+                        <span class="text-3xl font-bold text-primary block mb-1" id="s-ip">-</span>
+                        <span class="text-sm text-secondary">活跃 IP</span>
                     </div>
-                    <div class="access-stat-box">
-                        <span class="access-stat-num" id="as-subscription">0</span>
-                        <span class="access-stat-label">订阅访问</span>
-                        <span class="access-stat-sub">通过订阅链接访问</span>
+                    <div class="bg-border p-5 rounded-lg text-center transition-transform hover:-translate-y-1">
+                        <span class="text-3xl font-bold text-primary block mb-1" id="s-uuid">-</span>
+                        <span class="text-sm text-secondary">配置分组</span>
                     </div>
-                    <div class="access-stat-box">
-                        <span class="access-stat-num" id="as-apigen">0</span>
-                        <span class="access-stat-label">网页生成</span>
-                        <span class="access-stat-sub">通过网页工具生成</span>
+                    <div class="bg-border p-5 rounded-lg text-center transition-transform hover:-translate-y-1">
+                        <span class="text-3xl font-bold text-primary block mb-1" id="s-template">-</span>
+                        <span class="text-sm text-secondary">配置模板</span>
                     </div>
                 </div>
                 
-                <h3 style="margin-top: 30px; margin-bottom: 15px;">📊 订阅访问趋势分析 (多指标视图)</h3>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6" id="accessStatsGrid" style="display:none;">
+                    <div class="access-stat-box">
+                        <span class="text-2xl font-bold text-blue-800 block" id="as-total">0</span>
+                        <span class="text-sm text-gray-600">总访问次数</span>
+                        <span class="text-xs text-gray-500 block mt-1" id="as-unique">0个独立UUID</span>
+                    </div>
+                    <div class="access-stat-box">
+                        <span class="text-2xl font-bold text-blue-800 block" id="as-today">0</span>
+                        <span class="text-sm text-gray-600">今日访问</span>
+                        <span class="text-xs text-gray-500 block mt-1" id="as-today-split">订阅:0 | 网页:0</span>
+                    </div>
+                    <div class="access-stat-box">
+                        <span class="text-2xl font-bold text-blue-800 block" id="as-subscription">0</span>
+                        <span class="text-sm text-gray-600">订阅访问</span>
+                        <span class="text-xs text-gray-500 block mt-1">通过订阅链接访问</span>
+                    </div>
+                    <div class="access-stat-box">
+                        <span class="text-2xl font-bold text-blue-800 block" id="as-apigen">0</span>
+                        <span class="text-sm text-gray-600">网页生成</span>
+                        <span class="text-xs text-gray-500 block mt-1">通过网页工具生成</span>
+                    </div>
+                </div>
                 
-                <div class="chart-controls">
-                    <select id="chartDays" onchange="loadAccessStats()">
+                <h3 class="text-lg font-semibold text-dark mt-8 mb-4">📊 订阅访问趋势分析 (多指标视图)</h3>
+                
+                <div class="flex flex-wrap gap-2.5 items-center mb-4">
+                    <select id="chartDays" onchange="loadAccessStats()"
+                            class="px-3 py-1.5 border-2 border-secondary rounded bg-white focus:outline-none focus:border-primary">
                         <option value="7">最近7天</option>
                         <option value="14" selected>最近14天</option>
                         <option value="30">最近30天</option>
                         <option value="60">最近60天</option>
                     </select>
                     <button class="nav-btn" onclick="loadAccessStats()">
-                        <svg class="lucide-refresh-cw" width="16" height="16"></svg>
+                        <i data-lucide="refresh-cw" class="w-4 h-4 mr-1"></i>
                         刷新数据
                     </button>
                     <button class="nav-btn" onclick="switchChartType('total')" id="chartTotalBtn">总访问量</button>
@@ -3254,281 +2947,288 @@ const adminHtml = `
                     <canvas id="accessChart"></canvas>
                 </div>
                 
-                <div style="margin-top: 20px; display: flex; gap: 20px;">
-                    <div style="flex: 1;">
-                        <h3 style="margin-top: 0; font-size: 1.1rem;">热门 UUID 排行</h3>
-                        <div class="popular-uuids-list" id="popularUUIDsList">
-                            <div style="text-align: center; padding: 20px; color: #6b7280;">加载中...</div>
+                <div class="flex flex-col lg:flex-row gap-5 mt-5">
+                    <div class="lg:w-1/3">
+                        <h3 class="text-base font-semibold text-dark mb-3">热门 UUID 排行</h3>
+                        <div class="popular-uuids-list border border-gray-200 rounded max-h-48 overflow-y-auto p-2.5" id="popularUUIDsList">
+                            <div class="text-center py-5 text-gray-500">加载中...</div>
                         </div>
                     </div>
                     
-                    <div style="flex: 2;">
-                        <h3 style="margin-top: 0; font-size: 1.1rem;">访问趋势说明</h3>
-                        <div style="background: #f8fafc; padding: 15px; border-radius: 4px; font-size: 0.9rem; color: #4b5563;">
-                            <p><strong>订阅访问：</strong>用户通过订阅链接（/batch-configs/{uuid}）访问配置</p>
-                            <p><strong>网页生成：</strong>用户通过网页工具（/generate）生成配置</p>
-                            <p><strong>独立用户：</strong>按UUID统计的每日活跃用户数</p>
-                            <p style="margin-top: 10px; color: #6b7280;">
-                                <small>数据统计基于 config_access_logs 表，记录所有UUID配置生成请求</small>
+                    <div class="lg:w-2/3">
+                        <h3 class="text-base font-semibold text-dark mb-3">访问趋势说明</h3>
+                        <div class="bg-gray-50 p-4 rounded text-sm text-gray-600">
+                            <p class="mb-2"><strong>订阅访问：</strong>用户通过订阅链接（/batch-configs/{uuid}）访问配置</p>
+                            <p class="mb-2"><strong>网页生成：</strong>用户通过网页工具（/generate）生成配置</p>
+                            <p class="mb-2"><strong>独立用户：</strong>按UUID统计的每日活跃用户数</p>
+                            <p class="mt-3 text-gray-500 text-xs">
+                                <i>数据统计基于 config_access_logs 表，记录所有UUID配置生成请求</i>
                             </p>
                         </div>
                     </div>
                 </div>
                 
-                <div class="last-update-info">
+                <div class="mt-6 p-3 bg-border rounded text-sm text-dark">
                     自动更新状态: <span id="autoUpdateStatus">加载中...</span>
                     <br>最后执行时间: <span id="lastExecuted">未知</span>
                 </div>
                 
-                <div class="security-section" id="mfaStatusSection" style="display:none;">
-                    <h3>⛑️ 账户安全状态</h3>
+                <div class="mt-6 p-4 bg-blue-50 border-l-4 border-blue-500 rounded-r" id="mfaStatusSection" style="display:none;">
+                    <h3 class="text-base font-semibold text-blue-800 mb-3">⛑️ 账户安全状态</h3>
                     <div id="mfaStatusDetails">加载中...</div>
                 </div>
             </div>
 
             <div id="dom" class="card">
-                <h2>优选域名管理</h2>
-                <div style="display:flex; gap:10px; margin-bottom:15px; flex-wrap: wrap;">
-                    <input type="text" id="newD" placeholder="域名 (例如: cf.example.com)" style="flex:2; min-width: 200px; margin:0">
-                    <input type="text" id="newR" placeholder="自定义备注" style="flex:1; min-width: 150px; margin:0">
-                    <select id="newSource" style="flex:1; min-width: 150px; margin:0; padding: 10px; border: 2px solid #89949B; border-radius: 4px; background: #fff; font-size: 0.9rem; box-sizing: border-box; color: #3d474d; cursor: pointer; transition: border-color 0.2s; font-family: inherit;">
+                <h2 class="text-xl font-semibold text-dark mb-5 pb-2.5 border-b-2 border-border">优选域名管理</h2>
+                <div class="flex flex-wrap gap-2.5 mb-4">
+                    <input type="text" id="newD" placeholder="域名 (例如: cf.example.com)" 
+                           class="flex-1 min-w-[200px] px-3 py-2 border-2 border-secondary rounded focus:outline-none focus:border-primary">
+                    <input type="text" id="newR" placeholder="自定义备注" 
+                           class="flex-1 min-w-[150px] px-3 py-2 border-2 border-secondary rounded focus:outline-none focus:border-primary">
+                    <select id="newSource"
+                           class="flex-1 min-w-[150px] px-3 py-2 border-2 border-secondary rounded bg-white focus:outline-none focus:border-primary text-dark cursor-pointer">
                         <option value="Cloudflare">Cloudflare</option>
                         <option value="腾讯云EdgeOne">腾讯云EdgeOne</option>
                     </select>
-                    <button class="nav-btn active" onclick="addDomain()" style="min-width: 100px;">
-                        <svg class="lucide-plus" width="16" height="16"></svg>
+                    <button class="nav-btn active min-w-[100px]" onclick="addDomain()">
+                        <i data-lucide="plus" class="w-4 h-4 mr-1"></i>
                         添加域名
                     </button>
                 </div>
                 <div class="table-container">
-                    <table>
+                    <table class="w-full border-collapse text-sm">
                         <thead>
                             <tr>
-                                <th class="sortable" onclick="sortDom('domain')">域名 ↕</th>
-                                <th class="sortable" onclick="sortDom('remark')">备注 ↕</th>
-                                <th class="sortable" onclick="sortDom('source')">来源 ↕</th>
-                                <th class="sortable" onclick="sortDom('created_at')">创建时间 ↕</th>
-                                <th style="width: 150px;">操作</th>
+                                <th class="p-3 text-left bg-gray-50 text-dark font-semibold cursor-pointer sortable" onclick="sortDom('domain')">域名 ↕</th>
+                                <th class="p-3 text-left bg-gray-50 text-dark font-semibold cursor-pointer sortable" onclick="sortDom('remark')">备注 ↕</th>
+                                <th class="p-3 text-left bg-gray-50 text-dark font-semibold cursor-pointer sortable" onclick="sortDom('source')">来源 ↕</th>
+                                <th class="p-3 text-left bg-gray-50 text-dark font-semibold cursor-pointer sortable" onclick="sortDom('created_at')">创建时间 ↕</th>
+                                <th class="p-3 text-left bg-gray-50 text-dark font-semibold w-36">操作</th>
                             </tr>
                         </thead>
                         <tbody id="domList">
-                            <tr><td colspan="5" style="text-align:center; padding:20px;">加载中...</td></tr>
+                            <tr><td colspan="5" class="p-5 text-center">加载中...</td></tr>
                         </tbody>
                     </table>
                 </div>
-                <div class="pagination-bar" id="domPager" style="display: flex;">
-                    <div class="page-ctrl">
-                        <select class="page-size" id="domSize" onchange="changeDomSize()">
+                <div class="flex flex-col sm:flex-row justify-between items-center pt-4 text-sm text-primary min-h-10" id="domPager">
+                    <div class="flex items-center gap-2 mb-3 sm:mb-0">
+                        <select class="page-size px-2 py-1 border border-secondary rounded bg-white" id="domSize" onchange="changeDomSize()">
                             <option value="5">5条/页</option>
                             <option value="10" selected>10条/页</option>
                             <option value="20">20条/页</option>
                             <option value="50">50条/页</option>
                         </select>
                     </div>
-                    <div class="page-ctrl">
+                    <div class="flex items-center gap-2">
                         <button class="nav-btn small" onclick="changeDomPage(-1)" id="domPrevBtn">上一页</button>
-                        <span class="page-info" id="domPageInfo">1 / 1</span>
+                        <span class="page-info px-3 whitespace-nowrap min-w-28 text-center" id="domPageInfo">1 / 1</span>
                         <button class="nav-btn small" onclick="changeDomPage(1)" id="domNextBtn">下一页</button>
                     </div>
                 </div>
             </div>
 
             <div id="ips" class="card">
-                <div class="auto-update-header">
-                    <h2>IP 资源池管理</h2>
-                    <div style="display: flex; align-items: center; gap: 15px;">
-                        <div class="auto-update-status">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
+                    <h2 class="text-xl font-semibold text-dark mb-3 sm:mb-0">IP 资源池管理</h2>
+                    <div class="flex items-center gap-3.5">
+                        <div class="px-2.5 py-1.5 bg-border rounded text-sm text-dark flex items-center gap-2">
                             <span class="status-indicator" id="globalStatusIndicator"></span>
                             <span id="globalStatusText">自动更新: 关闭</span>
                         </div>
                     </div>
                 </div>
                 
-                <div class="switch-group">
-                    <label class="switch-label">主开关
+                <div class="flex flex-wrap gap-5 items-center mb-6 p-4 bg-border rounded">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <span class="font-medium text-primary">主开关</span>
                         <div class="switch">
                             <input type="checkbox" id="sw-global" checked>
                             <span class="slider"></span>
                         </div>
                     </label>
-                    <label class="switch-label">HostMonit IPv4接口
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <span class="font-medium text-primary">HostMonit IPv4接口</span>
                         <div class="switch">
                             <input type="checkbox" id="sw-hm-v4" checked>
                             <span class="slider"></span>
                         </div>
                     </label>
-                    <label class="switch-label">HostMonit IPv6接口
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <span class="font-medium text-primary">HostMonit IPv6接口</span>
                         <div class="switch">
                             <input type="checkbox" id="sw-hm-v6">
                             <span class="slider"></span>
                         </div>
                     </label>
-                    <label class="switch-label">Vps789接口
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <span class="font-medium text-primary">Vps789接口</span>
                         <div class="switch">
                             <input type="checkbox" id="sw-v7" checked>
                             <span class="slider"></span>
                         </div>
                     </label>
                     <button class="nav-btn" onclick="saveAutoUpdateSettings()">
-                        <svg class="lucide-save" width="16" height="16"></svg>
+                        <i data-lucide="save" class="w-4 h-4 mr-1"></i>
                         保存设置
                     </button>
                     <button class="nav-btn active" onclick="refreshIps()">
-                        <svg class="lucide-refresh-cw" width="16" height="16"></svg>
+                        <i data-lucide="refresh-cw" class="w-4 h-4 mr-1"></i>
                         立即更新
                     </button>
                 </div>
                 
                 <div class="table-container">
-                    <table>
+                    <table class="w-full border-collapse text-sm">
                         <thead>
                             <tr>
-                                <th class="sortable" onclick="sortIp('ip')">IP 地址 ↕</th>
-                                <th class="sortable" onclick="sortIp('ip_type')">类型 ↕</th>
-                                <th class="sortable" onclick="sortIp('carrier')">运营商 ↕</th>
-                                <th class="sortable" onclick="sortIp('source')">来源 ↕</th>
-                                <th class="sortable" onclick="sortIp('created_at')">入库时间 ↕</th>
-                                <th style="width: 100px;">操作</th>
+                                <th class="p-3 text-left bg-gray-50 text-dark font-semibold cursor-pointer sortable" onclick="sortIp('ip')">IP 地址 ↕</th>
+                                <th class="p-3 text-left bg-gray-50 text-dark font-semibold cursor-pointer sortable" onclick="sortIp('ip_type')">类型 ↕</th>
+                                <th class="p-3 text-left bg-gray-50 text-dark font-semibold cursor-pointer sortable" onclick="sortIp('carrier')">运营商 ↕</th>
+                                <th class="p-3 text-left bg-gray-50 text-dark font-semibold cursor-pointer sortable" onclick="sortIp('source')">来源 ↕</th>
+                                <th class="p-3 text-left bg-gray-50 text-dark font-semibold cursor-pointer sortable" onclick="sortIp('created_at')">入库时间 ↕</th>
+                                <th class="p-3 text-left bg-gray-50 text-dark font-semibold w-24">操作</th>
                             </tr>
                         </thead>
                         <tbody id="ipList">
-                            <tr><td colspan="6" style="text-align:center; padding:20px;">加载中...</td></tr>
+                            <tr><td colspan="6" class="p-5 text-center">加载中...</td></tr>
                         </tbody>
                     </table>
                 </div>
-                <div class="pagination-bar" id="ipPager" style="display: flex;">
-                    <div class="page-ctrl">
-                        <select class="page-size" id="ipSize" onchange="changeIpSize()">
+                <div class="flex flex-col sm:flex-row justify-between items-center pt-4 text-sm text-primary min-h-10" id="ipPager">
+                    <div class="flex items-center gap-2 mb-3 sm:mb-0">
+                        <select class="page-size px-2 py-1 border border-secondary rounded bg-white" id="ipSize" onchange="changeIpSize()">
                             <option value="10" selected>10条/页</option>
                             <option value="20">20条/页</option>
                             <option value="50">50条/页</option>
                             <option value="100">100条/页</option>
                         </select>
                     </div>
-                    <div class="page-ctrl">
+                    <div class="flex items-center gap-2">
                         <button class="nav-btn small" onclick="changeIpPage(-1)" id="ipPrevBtn">上一页</button>
-                        <span class="page-info" id="ipPageInfo">1 / 1</span>
+                        <span class="page-info px-3 whitespace-nowrap min-w-28 text-center" id="ipPageInfo">1 / 1</span>
                         <button class="nav-btn small" onclick="changeIpPage(1)" id="ipNextBtn">下一页</button>
                     </div>
                 </div>
             </div>
 
             <div id="uuids" class="card">
-                <h2>UUID 配置分组</h2>
+                <h2 class="text-xl font-semibold text-dark mb-5 pb-2.5 border-b-2 border-border">UUID 配置分组</h2>
                 <div class="table-container">
-                    <table>
+                    <table class="w-full border-collapse text-sm">
                         <thead>
                             <tr>
-                                <th class="sortable" onclick="sortUuid('uuid')">UUID ↕</th>
-                                <th class="sortable" onclick="sortUuid('owner')">所有者 ↕</th>
-                                <th class="sortable" onclick="sortUuid('email')">邮箱 ↕</th>
-                                <th class="sortable" onclick="sortUuid('status')">状态 ↕</th>
-                                <th class="sortable" onclick="sortUuid('count')">节点数 ↕</th>
-                                <th class="sortable" onclick="sortUuid('updated_at')">最近更新 ↕</th>
-                                <th style="width: 200px;">操作</th>
+                                <th class="p-3 text-left bg-gray-50 text-dark font-semibold cursor-pointer sortable" onclick="sortUuid('uuid')">UUID ↕</th>
+                                <th class="p-3 text-left bg-gray-50 text-dark font-semibold cursor-pointer sortable" onclick="sortUuid('owner')">所有者 ↕</th>
+                                <th class="p-3 text-left bg-gray-50 text-dark font-semibold cursor-pointer sortable" onclick="sortUuid('email')">邮箱 ↕</th>
+                                <th class="p-3 text-left bg-gray-50 text-dark font-semibold cursor-pointer sortable" onclick="sortUuid('status')">状态 ↕</th>
+                                <th class="p-3 text-left bg-gray-50 text-dark font-semibold cursor-pointer sortable" onclick="sortUuid('count')">节点数 ↕</th>
+                                <th class="p-3 text-left bg-gray-50 text-dark font-semibold cursor-pointer sortable" onclick="sortUuid('updated_at')">最近更新 ↕</th>
+                                <th class="p-3 text-left bg-gray-50 text-dark font-semibold w-48">操作</th>
                             </tr>
                         </thead>
                         <tbody id="uuidList">
-                            <tr><td colspan="7" style="text-align:center; padding:20px;">加载中...</td></tr>
+                            <tr><td colspan="7" class="p-5 text-center">加载中...</td></tr>
                         </tbody>
                     </table>
                 </div>
-                <div class="pagination-bar" id="uuidPager" style="display: flex;">
-                    <div class="page-ctrl">
-                        <select class="page-size" id="uuidSize" onchange="changeUuidSize()">
+                <div class="flex flex-col sm:flex-row justify-between items-center pt-4 text-sm text-primary min-h-10" id="uuidPager">
+                    <div class="flex items-center gap-2 mb-3 sm:mb-0">
+                        <select class="page-size px-2 py-1 border border-secondary rounded bg-white" id="uuidSize" onchange="changeUuidSize()">
                             <option value="5">5条/页</option>
                             <option value="10" selected>10条/页</option>
                             <option value="20">20条/页</option>
                             <option value="50">50条/页</option>
                         </select>
                     </div>
-                    <div class="page-ctrl">
+                    <div class="flex items-center gap-2">
                         <button class="nav-btn small" onclick="changeUuidPage(-1)" id="uuidPrevBtn">上一页</button>
-                        <span class="page-info" id="uuidPageInfo">1 / 1</span>
+                        <span class="page-info px-3 whitespace-nowrap min-w-28 text-center" id="uuidPageInfo">1 / 1</span>
                         <button class="nav-btn small" onclick="changeUuidPage(1)" id="uuidNextBtn">下一页</button>
                     </div>
                 </div>
             </div>
             
             <div id="templates" class="card">
-                <h2>📋 配置模板管理</h2>
-                <div style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 6px;">
-                    <p style="margin: 0; font-size: 0.9rem; color: #6b7280;">
+                <h2 class="text-xl font-semibold text-dark mb-5 pb-2.5 border-b-2 border-border">📋 配置模板管理</h2>
+                <div class="mb-5 p-4 bg-gray-50 rounded">
+                    <p class="text-sm text-gray-600 m-0">
                         配置模板用于存储常用的配置格式，方便快速生成和统一管理配置。
                     </p>
                 </div>
                 
-                <div class="template-form" style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
+                <div class="flex flex-wrap gap-2.5 mb-5">
                     <input type="text" id="newTemplateName" placeholder="模板名称（必填）" 
-                           style="flex: 1; min-width: 150px;" 
+                           class="flex-1 min-w-[150px] px-3 py-2 border-2 border-secondary rounded focus:outline-none focus:border-primary"
                            title="模板名称，必须唯一">
                     <input type="text" id="newTemplateUrl" placeholder="模板URL（必填）" 
-                           style="flex: 2; min-width: 200px;"
+                           class="flex-2 min-w-[200px] px-3 py-2 border-2 border-secondary rounded focus:outline-none focus:border-primary"
                            title="配置模板的URL地址">
                     <input type="text" id="newTemplateDesc" placeholder="模板描述" 
-                           style="flex: 1; min-width: 150px;"
+                           class="flex-1 min-w-[150px] px-3 py-2 border-2 border-secondary rounded focus:outline-none focus:border-primary"
                            title="模板描述信息，可选">
-                    <div style="display: flex; align-items: center; gap: 8px; padding: 0 10px;">
-                        <input type="checkbox" id="newTemplateDefault" style="width: 16px; height: 16px;">
-                        <label for="newTemplateDefault" style="font-size: 0.9rem; color: #5a666d; cursor: pointer;">
+                    <div class="flex items-center gap-2 px-2.5">
+                        <input type="checkbox" id="newTemplateDefault" class="w-4 h-4">
+                        <label for="newTemplateDefault" class="text-sm text-primary cursor-pointer">
                             设为默认
                         </label>
                     </div>
-                    <button class="nav-btn active" onclick="addTemplate()" style="min-width: 100px;">
-                        <svg class="lucide-plus" width="16" height="16"></svg>
+                    <button class="nav-btn active min-w-[100px]" onclick="addTemplate()">
+                        <i data-lucide="plus" class="w-4 h-4 mr-1"></i>
                         添加模板
                     </button>
                 </div>
                 
                 <div class="table-container">
-                    <table>
+                    <table class="w-full border-collapse text-sm">
                         <thead>
                             <tr>
-                                <th class="sortable" onclick="sortTemplate('name')">模板名称 ↕</th>
-                                <th class="sortable" onclick="sortTemplate('url')">模板URL ↕</th>
-                                <th class="sortable" onclick="sortTemplate('description')">描述 ↕</th>
-                                <th class="sortable" onclick="sortTemplate('is_default')">状态 ↕</th>
-                                <th class="sortable" onclick="sortTemplate('created_at')">创建时间 ↕</th>
-                                <th style="width: 200px;">操作</th>
+                                <th class="p-3 text-left bg-gray-50 text-dark font-semibold cursor-pointer sortable" onclick="sortTemplate('name')">模板名称 ↕</th>
+                                <th class="p-3 text-left bg-gray-50 text-dark font-semibold cursor-pointer sortable" onclick="sortTemplate('url')">模板URL ↕</th>
+                                <th class="p-3 text-left bg-gray-50 text-dark font-semibold cursor-pointer sortable" onclick="sortTemplate('description')">描述 ↕</th>
+                                <th class="p-3 text-left bg-gray-50 text-dark font-semibold cursor-pointer sortable" onclick="sortTemplate('is_default')">状态 ↕</th>
+                                <th class="p-3 text-left bg-gray-50 text-dark font-semibold cursor-pointer sortable" onclick="sortTemplate('created_at')">创建时间 ↕</th>
+                                <th class="p-3 text-left bg-gray-50 text-dark font-semibold w-48">操作</th>
                             </tr>
                         </thead>
                         <tbody id="templateList">
-                            <tr><td colspan="6" style="text-align:center; padding:20px;">加载中...</td></tr>
+                            <tr><td colspan="6" class="p-5 text-center">加载中...</td></tr>
                         </tbody>
                     </table>
                 </div>
                 
-                <div class="pagination-bar" id="templatePager" style="display: flex;">
-                    <div class="page-ctrl">
-                        <select class="page-size" id="templateSize" onchange="changeTemplateSize()">
+                <div class="flex flex-col sm:flex-row justify-between items-center pt-4 text-sm text-primary min-h-10" id="templatePager">
+                    <div class="flex items-center gap-2 mb-3 sm:mb-0">
+                        <select class="page-size px-2 py-1 border border-secondary rounded bg-white" id="templateSize" onchange="changeTemplateSize()">
                             <option value="5">5条/页</option>
                             <option value="10" selected>10条/页</option>
                             <option value="20">20条/页</option>
                             <option value="50">50条/页</option>
                         </select>
                     </div>
-                    <div class="page-ctrl">
+                    <div class="flex items-center gap-2">
                         <button class="nav-btn small" onclick="changeTemplatePage(-1)" id="templatePrevBtn">上一页</button>
-                        <span class="page-info" id="templatePageInfo">1 / 1</span>
+                        <span class="page-info px-3 whitespace-nowrap min-w-28 text-center" id="templatePageInfo">1 / 1</span>
                         <button class="nav-btn small" onclick="changeTemplatePage(1)" id="templateNextBtn">下一页</button>
                     </div>
                 </div>
             </div>
 
             <div id="security" class="card">
-                <div class="mfa-container">
-                    <h2>🛡️ 账户安全</h2>
+                <div class="max-w-2xl mx-auto">
+                    <h2 class="text-xl font-semibold text-dark mb-5 pb-2.5 border-b-2 border-border">🛡️ 账户安全</h2>
                     
                     <div class="security-section" id="mfaCurrentStatus">
-                        <h3>双重验证状态</h3>
+                        <h3 class="text-lg font-semibold text-blue-800 mb-3">双重验证状态</h3>
                         <div id="mfaStatusContent">加载中...</div>
-                        <div id="mfaActions" style="margin-top: 15px;">
+                        <div id="mfaActions" class="mt-4">
                             <button class="nav-btn active" onclick="startMfaSetup()" id="enableMfaBtn">
-                                <svg class="lucide-shield-plus" width="16" height="16"></svg>
+                                <i data-lucide="shield-plus" class="w-4 h-4 mr-1"></i>
                                 启用双重验证
                             </button>
                             <button class="nav-btn danger" onclick="disableMfaConfirm()" id="disableMfaBtn" style="display:none;">
-                                <svg class="lucide-shield-off" width="16" height="16"></svg>
+                                <i data-lucide="shield-off" class="w-4 h-4 mr-1"></i>
                                 禁用双重验证
                             </button>
                         </div>
@@ -3540,27 +3240,30 @@ const adminHtml = `
 
         </div>
 
-        <footer class="footer">
-            <p>Powered by <a href="https://www.yangzihome.space" target="_blank">YZFN</a></p>
+        <footer class="mt-auto pt-10 pb-5 text-secondary text-sm text-center w-full border-t border-gray-100">
+            <p>Powered by <a href="https://www.yangzihome.space" target="_blank" class="text-primary hover:underline">YZFN</a></p>
         </footer>
     </div>
 
     <!-- 修改密码弹窗 -->
     <div class="modal-overlay" id="pwdModal" onclick="event.target===this && (this.style.display='none')">
         <div class="modal">
-            <h3 style="margin-top:0; color:#3d474d">修改管理员密码</h3>
-            <div style="margin-bottom:15px;">
-                <input type="password" id="oldP" placeholder="当前旧密码" autocomplete="current-password">
-                <input type="password" id="newP" placeholder="新密码" autocomplete="new-password">
-                <input type="password" id="confirmP" placeholder="确认新密码" autocomplete="new-password">
+            <h3 class="text-lg font-semibold text-dark mb-4">修改管理员密码</h3>
+            <div class="mb-4">
+                <input type="password" id="oldP" placeholder="当前旧密码" autocomplete="current-password"
+                       class="w-full mb-3 px-3 py-2 border-2 border-secondary rounded focus:outline-none focus:border-primary">
+                <input type="password" id="newP" placeholder="新密码" autocomplete="new-password"
+                       class="w-full mb-3 px-3 py-2 border-2 border-secondary rounded focus:outline-none focus:border-primary">
+                <input type="password" id="confirmP" placeholder="确认新密码" autocomplete="new-password"
+                       class="w-full px-3 py-2 border-2 border-secondary rounded focus:outline-none focus:border-primary">
             </div>
-            <div style="display:flex; justify-content:flex-end; gap:10px;">
+            <div class="flex justify-end gap-2.5">
                 <button class="nav-btn" onclick="document.getElementById('pwdModal').style.display='none'">
-                    <svg class="lucide-x" width="16" height="16"></svg>
+                    <i data-lucide="x" class="w-4 h-4 mr-1"></i>
                     取消
                 </button>
                 <button class="nav-btn active" onclick="changePwd()">
-                    <svg class="lucide-check" width="16" height="16"></svg>
+                    <i data-lucide="check" class="w-4 h-4 mr-1"></i>
                     确认修改
                 </button>
             </div>
@@ -3570,22 +3273,22 @@ const adminHtml = `
     <!-- 域名编辑弹窗 -->
     <div class="modal-overlay" id="editDomModal" onclick="event.target===this && (this.style.display='none')">
         <div class="modal">
-            <h3 style="margin-top:0; color:#3d474d">编辑域名</h3>
+            <h3 class="text-lg font-semibold text-dark mb-4">编辑域名</h3>
             <input type="hidden" id="editId">
             <input type="hidden" id="editSource">
-            <div style="margin-bottom:15px;">
-                <label style="display:block;margin-bottom:5px;font-size:0.9rem;color:#5a666d;">域名:</label>
-                <input type="text" id="editDomain">
-                <label style="display:block;margin-bottom:5px;font-size:0.9rem;color:#5a666d;">备注:</label>
-                <input type="text" id="editRemark">
+            <div class="mb-4">
+                <label class="block text-sm text-primary mb-1.5">域名:</label>
+                <input type="text" id="editDomain" class="w-full mb-3 px-3 py-2 border-2 border-secondary rounded focus:outline-none focus:border-primary">
+                <label class="block text-sm text-primary mb-1.5">备注:</label>
+                <input type="text" id="editRemark" class="w-full px-3 py-2 border-2 border-secondary rounded focus:outline-none focus:border-primary">
             </div>
-            <div style="display:flex; justify-content:flex-end; gap:10px;">
+            <div class="flex justify-end gap-2.5">
                 <button class="nav-btn" onclick="document.getElementById('editDomModal').style.display='none'">
-                    <svg class="lucide-x" width="16" height="16"></svg>
+                    <i data-lucide="x" class="w-4 h-4 mr-1"></i>
                     取消
                 </button>
                 <button class="nav-btn active" onclick="updateDomain()">
-                    <svg class="lucide-check" width="16" height="16"></svg>
+                    <i data-lucide="check" class="w-4 h-4 mr-1"></i>
                     保存修改
                 </button>
             </div>
@@ -3595,18 +3298,19 @@ const adminHtml = `
     <!-- MFA 验证密码弹窗 -->
     <div class="modal-overlay" id="mfaAuthModal" onclick="event.target===this && (this.style.display='none')">
         <div class="modal">
-            <h3 style="margin-top:0; color:#3d474d">验证身份以启用双重验证</h3>
-            <div style="margin-top:10px;">
-                <input type="password" id="mfaAuthPassword" placeholder="请输入当前密码" autocomplete="current-password" onkeydown="if(event.key==='Enter') submitMfaAuthModal()">
-                <div id="mfaAuthError" style="color:#ef4444; margin-top:8px; display:none;"></div>
+            <h3 class="text-lg font-semibold text-dark mb-4">验证身份以启用双重验证</h3>
+            <div class="mt-2.5">
+                <input type="password" id="mfaAuthPassword" placeholder="请输入当前密码" autocomplete="current-password" onkeydown="if(event.key==='Enter') submitMfaAuthModal()"
+                       class="w-full px-3 py-2 border-2 border-secondary rounded focus:outline-none focus:border-primary">
+                <div id="mfaAuthError" class="text-danger mt-2 hidden"></div>
             </div>
-            <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+            <div class="flex justify-end gap-2.5 mt-5">
                 <button class="nav-btn" onclick="document.getElementById('mfaAuthModal').style.display='none'; window._mfaAuthCallback=null;">
-                    <svg class="lucide-x" width="16" height="16"></svg>
+                    <i data-lucide="x" class="w-4 h-4 mr-1"></i>
                     取消
                 </button>
                 <button class="nav-btn active" onclick="submitMfaAuthModal()">
-                    <svg class="lucide-arrow-right" width="16" height="16"></svg>
+                    <i data-lucide="arrow-right" class="w-4 h-4 mr-1"></i>
                     继续
                 </button>
             </div>
@@ -3616,37 +3320,37 @@ const adminHtml = `
     <!-- 备份码显示弹窗 -->
     <div class="modal-overlay" id="backupCodesModal" onclick="event.target===this && (this.style.display='none')">
         <div class="modal">
-            <div style="max-height: 80vh; overflow-y: auto;">
-                <h3 style="margin-top:0; color:#3d474d; position: sticky; top: 0; background: white; padding-bottom: 10px; border-bottom: 1px solid #eee;">🔐 备份码</h3>
+            <div class="max-h-[80vh] overflow-y-auto">
+                <h3 class="text-lg font-semibold text-dark sticky top-0 bg-white pb-2.5 border-b mb-4">🔐 备份码</h3>
                 
-                <div style="color: #dc2626; background: #fee2e2; padding: 10px; border-radius: 6px; margin: 15px 0; font-size: 0.9rem;">
+                <div class="text-red-600 bg-red-50 p-3 rounded mb-4 text-sm">
                     <strong>重要提示：</strong>
-                    <p>• 请立即保存这些备份码！</p>
+                    <p class="mt-1">• 请立即保存这些备份码！</p>
                     <p>• 每个备份码只能使用一次</p>
                     <p>• 保存后无法再次查看完整列表</p>
                 </div>
                 
-                <div id="backupCodesList" class="backup-codes-box" style="font-size: 1rem; line-height: 2.5;"></div>
+                <div id="backupCodesList" class="backup-codes-box text-base"></div>
                 
-                <div style="margin-top: 20px;">
-                    <button class="nav-btn active" onclick="printBackupCodes()" style="margin-right: 10px;">
-                        <svg class="lucide-printer" width="16" height="16"></svg>
+                <div class="mt-5">
+                    <button class="nav-btn active mr-2.5" onclick="printBackupCodes()">
+                        <i data-lucide="printer" class="w-4 h-4 mr-1"></i>
                         打印
                     </button>
                     <button class="nav-btn" onclick="copyBackupCodes()">
-                        <svg class="lucide-clipboard-copy" width="16" height="16"></svg>
+                        <i data-lucide="clipboard-copy" class="w-4 h-4 mr-1"></i>
                         复制
                     </button>
                 </div>
                 
-                <div style="margin-top: 20px; font-size: 0.9rem; color: #6b7280;">
-                    <p><strong>如何使用备份码：</strong></p>
+                <div class="mt-5 text-sm text-gray-500">
+                    <p class="font-medium mb-1">如何使用备份码：</p>
                     <p>• 登录时选择"使用备份码登录"</p>
                     <p>• 输入完整的8位备份码</p>
                     <p>• 使用后该备份码将立即失效</p>
                 </div>
                 
-                <div style="display:flex; justify-content:flex-end; margin-top: 20px;">
+                <div class="flex justify-end mt-5">
                     <button class="nav-btn active" onclick="document.getElementById('backupCodesModal').style.display='none'">我已保存</button>
                 </div>
             </div>
@@ -3655,37 +3359,37 @@ const adminHtml = `
 
     <!-- UUID访问详情弹窗 -->
     <div class="modal-overlay" id="uuidDetailsModal" onclick="event.target===this && (this.style.display='none')">
-        <div class="modal" style="max-width: 800px;">
-            <div style="max-height: 80vh; overflow-y: auto;">
-                <h3 style="margin-top:0; color:#3d474d; position: sticky; top: 0; background: white; padding-bottom: 10px; border-bottom: 1px solid #eee;">📋 UUID访问详情: <span id="modalUUID"></span></h3>
+        <div class="modal max-w-4xl">
+            <div class="max-h-[80vh] overflow-y-auto">
+                <h3 class="text-lg font-semibold text-dark sticky top-0 bg-white pb-2.5 border-b mb-4">📋 UUID访问详情: <span id="modalUUID"></span></h3>
                 
-                <div id="uuidStats" style="margin: 15px 0; font-size: 0.9rem;">
-                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 15px;">
-                        <div style="background: #f0f4f8; padding: 10px; border-radius: 4px;">
-                            <div style="font-size: 1.2rem; font-weight: bold; color: #1e40af;" id="modalTotalAccess">0</div>
-                            <div style="font-size: 0.8rem; color: #6b7280;">总访问次数</div>
+                <div id="uuidStats" class="my-4 text-sm">
+                    <div class="grid grid-cols-3 gap-2.5 mb-4">
+                        <div class="bg-blue-50 p-3 rounded">
+                            <div class="text-xl font-bold text-blue-800" id="modalTotalAccess">0</div>
+                            <div class="text-xs text-gray-500">总访问次数</div>
                         </div>
-                        <div style="background: #f0f4f8; padding: 10px; border-radius: 4px;">
-                            <div style="font-size: 1rem; font-weight: bold; color: #3d474d;" id="modalFirstAccess">-</div>
-                            <div style="font-size: 0.8rem; color: #6b7280;">首次访问</div>
+                        <div class="bg-blue-50 p-3 rounded">
+                            <div class="text-base font-bold text-dark" id="modalFirstAccess">-</div>
+                            <div class="text-xs text-gray-500">首次访问</div>
                         </div>
-                        <div style="background: #f0f4f8; padding: 10px; border-radius: 4px;">
-                            <div style="font-size: 1rem; font-weight: bold; color: #3d474d;" id="modalLastAccess">-</div>
-                            <div style="font-size: 0.8rem; color: #6b7280;">最后访问</div>
+                        <div class="bg-blue-50 p-3 rounded">
+                            <div class="text-base font-bold text-dark" id="modalLastAccess">-</div>
+                            <div class="text-xs text-gray-500">最后访问</div>
                         </div>
                     </div>
                 </div>
                 
-                <div style="margin: 15px 0;">
-                    <h4 style="margin: 0 0 10px 0; font-size: 1rem;">最近访问记录</h4>
-                    <div style="max-height: 300px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 4px;">
-                        <table class="access-detail-table">
+                <div class="my-4">
+                    <h4 class="text-base font-semibold text-dark mb-2.5">最近访问记录</h4>
+                    <div class="max-h-72 overflow-y-auto border border-gray-200 rounded">
+                        <table class="access-detail-table w-full">
                             <thead>
                                 <tr>
-                                    <th>时间</th>
-                                    <th>访问类型</th>
-                                    <th>客户端IP</th>
-                                    <th>User Agent</th>
+                                    <th class="p-2 bg-gray-50">时间</th>
+                                    <th class="p-2 bg-gray-50">访问类型</th>
+                                    <th class="p-2 bg-gray-50">客户端IP</th>
+                                    <th class="p-2 bg-gray-50">User Agent</th>
                                 </tr>
                             </thead>
                             <tbody id="modalAccessLogs"></tbody>
@@ -3693,7 +3397,7 @@ const adminHtml = `
                     </div>
                 </div>
                 
-                <div style="display:flex; justify-content:flex-end; margin-top: 20px;">
+                <div class="flex justify-end mt-5">
                     <button class="nav-btn active" onclick="document.getElementById('uuidDetailsModal').style.display='none'">关闭</button>
                 </div>
             </div>
@@ -3703,45 +3407,48 @@ const adminHtml = `
     <!-- 模板编辑弹窗 -->
     <div class="modal-overlay" id="editTemplateModal" onclick="event.target===this && (this.style.display='none')">
         <div class="modal">
-            <h3>✏️ 编辑模板</h3>
+            <h3 class="text-lg font-semibold text-dark mb-4">✏️ 编辑模板</h3>
             <input type="hidden" id="editTemplateId">
-            <div style="margin-bottom: 20px;">
-                <div style="margin-bottom: 15px;">
-                    <label style="display:block; margin-bottom:5px; font-size:0.9rem; color:#5a666d; font-weight: 500;">
-                        模板名称 <span style="color:#ef4444;">*</span>
+            <div class="mb-5">
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-primary mb-1.5">
+                        模板名称 <span class="text-danger">*</span>
                     </label>
-                    <input type="text" id="editTemplateName" placeholder="请输入模板名称" required>
+                    <input type="text" id="editTemplateName" placeholder="请输入模板名称" required
+                           class="w-full px-3 py-2 border-2 border-secondary rounded focus:outline-none focus:border-primary">
                 </div>
                 
-                <div style="margin-bottom: 15px;">
-                    <label style="display:block; margin-bottom:5px; font-size:0.9rem; color:#5a666d; font-weight: 500;">
-                        模板URL <span style="color:#ef4444;">*</span>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-primary mb-1.5">
+                        模板URL <span class="text-danger">*</span>
                     </label>
-                    <input type="text" id="editTemplateUrl" placeholder="请输入模板URL" required>
+                    <input type="text" id="editTemplateUrl" placeholder="请输入模板URL" required
+                           class="w-full px-3 py-2 border-2 border-secondary rounded focus:outline-none focus:border-primary">
                 </div>
                 
-                <div style="margin-bottom: 15px;">
-                    <label style="display:block; margin-bottom:5px; font-size:0.9rem; color:#5a666d; font-weight: 500;">
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-primary mb-1.5">
                         模板描述
                     </label>
-                    <input type="text" id="editTemplateDesc" placeholder="请输入模板描述（可选）">
+                    <input type="text" id="editTemplateDesc" placeholder="请输入模板描述（可选）"
+                           class="w-full px-3 py-2 border-2 border-secondary rounded focus:outline-none focus:border-primary">
                 </div>
                 
-                <div style="display: flex; align-items: center; gap: 8px; margin-top: 10px;">
-                    <input type="checkbox" id="editTemplateDefault" style="width: 16px; height: 16px;">
-                    <label for="editTemplateDefault" style="font-size: 0.9rem; color: #5a666d; cursor: pointer;">
+                <div class="flex items-center gap-2 mt-2.5">
+                    <input type="checkbox" id="editTemplateDefault" class="w-4 h-4">
+                    <label for="editTemplateDefault" class="text-sm text-primary cursor-pointer">
                         设为默认模板（只能有一个默认模板）
                     </label>
                 </div>
             </div>
             
-            <div style="display:flex; justify-content:flex-end; gap:10px;">
+            <div class="flex justify-end gap-2.5">
                 <button class="nav-btn" onclick="document.getElementById('editTemplateModal').style.display='none'">
-                    <svg class="lucide-x" width="16" height="16"></svg>
+                    <i data-lucide="x" class="w-4 h-4 mr-1"></i>
                     取消
                 </button>
                 <button class="nav-btn active" onclick="updateTemplate()" id="updateTemplateBtn">
-                    <svg class="lucide-check" width="16" height="16"></svg>
+                    <i data-lucide="check" class="w-4 h-4 mr-1"></i>
                     保存修改
                 </button>
             </div>
@@ -3751,31 +3458,36 @@ const adminHtml = `
     <!-- 编辑UUID信息弹窗 -->
     <div class="modal-overlay" id="editUuidModal" onclick="event.target===this && (this.style.display='none')">
         <div class="modal">
-            <h3 style="margin-top:0; color:#3d474d">编辑UUID信息</h3>
+            <h3 class="text-lg font-semibold text-dark mb-4">编辑UUID信息</h3>
             <input type="hidden" id="editUuid">
-            <div style="margin-bottom:15px;">
-                <label style="display:block;margin-bottom:5px;font-size:0.9rem;color:#5a666d;">所属人姓名/标识:</label>
-                <input type="text" id="editOwner" required>
-                <label style="display:block;margin-bottom:5px;font-size:0.9rem;color:#5a666d;">邮箱地址:</label>
-                <input type="email" id="editEmail" required>
-                <label style="display:block;margin-bottom:5px;font-size:0.9rem;color:#5a666d;">其他联系信息:</label>
-                <input type="text" id="editContactInfo">
-                <label style="display:block;margin-bottom:5px;font-size:0.9rem;color:#5a666d;">状态:</label>
-                <select id="editStatus">
+            <div class="mb-4">
+                <label class="block text-sm text-primary mb-1.5">所属人姓名/标识:</label>
+                <input type="text" id="editOwner" required
+                       class="w-full mb-3 px-3 py-2 border-2 border-secondary rounded focus:outline-none focus:border-primary">
+                <label class="block text-sm text-primary mb-1.5">邮箱地址:</label>
+                <input type="email" id="editEmail" required
+                       class="w-full mb-3 px-3 py-2 border-2 border-secondary rounded focus:outline-none focus:border-primary">
+                <label class="block text-sm text-primary mb-1.5">其他联系信息:</label>
+                <input type="text" id="editContactInfo"
+                       class="w-full mb-3 px-3 py-2 border-2 border-secondary rounded focus:outline-none focus:border-primary">
+                <label class="block text-sm text-primary mb-1.5">状态:</label>
+                <select id="editStatus"
+                       class="w-full mb-3 px-3 py-2 border-2 border-secondary rounded bg-white focus:outline-none focus:border-primary">
                     <option value="active">活跃</option>
                     <option value="inactive">停用</option>
                     <option value="suspended">暂停</option>
                 </select>
-                <label style="display:block;margin-bottom:5px;font-size:0.9rem;color:#5a666d;">备注:</label>
-                <textarea id="editUuidRemark" rows="3"></textarea>
+                <label class="block text-sm text-primary mb-1.5">备注:</label>
+                <textarea id="editUuidRemark" rows="3"
+                         class="w-full px-3 py-2 border-2 border-secondary rounded focus:outline-none focus:border-primary"></textarea>
             </div>
-            <div style="display:flex; justify-content:flex-end; gap:10px;">
+            <div class="flex justify-end gap-2.5">
                 <button class="nav-btn" onclick="document.getElementById('editUuidModal').style.display='none'">
-                    <svg class="lucide-x" width="16" height="16"></svg>
+                    <i data-lucide="x" class="w-4 h-4 mr-1"></i>
                     取消
                 </button>
                 <button class="nav-btn active" onclick="saveUuidInfo()">
-                    <svg class="lucide-check" width="16" height="16"></svg>
+                    <i data-lucide="check" class="w-4 h-4 mr-1"></i>
                     保存
                 </button>
             </div>
@@ -3897,8 +3609,8 @@ const adminHtml = `
                 }
             } catch (error) {
                 document.getElementById('loader').innerHTML = \`
-                    <div style="text-align:center; color:#ef4444;">
-                        <p>初始化失败</p>
+                    <div class="text-center text-danger">
+                        <p class="mb-2">初始化失败</p>
                         <button onclick="location.reload()" class="nav-btn">重试</button>
                     </div>
                 \`;
@@ -3912,7 +3624,7 @@ const adminHtml = `
                 await checkMfaStatus();
                 
                 // 初始化时显示所有分页容器
-                document.querySelectorAll('.pagination-bar').forEach(pager => {
+                document.querySelectorAll('#domPager, #ipPager, #uuidPager, #templatePager').forEach(pager => {
                     pager.style.display = 'flex';
                 });
                 
@@ -3929,7 +3641,7 @@ const adminHtml = `
         // ============ 标签页切换 ============
         function switchTab(id, btn) {
             if (!btn) {
-                const activeBtn = document.querySelector('.nav-grid .nav-btn.active');
+                const activeBtn = document.querySelector('.nav-btn.active');
                 if (activeBtn) {
                     activeBtn.classList.remove('active');
                 }
@@ -3938,7 +3650,7 @@ const adminHtml = `
                     newBtn.classList.add('active');
                 }
             } else {
-                document.querySelectorAll('.nav-grid .nav-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
             }
             
@@ -3967,8 +3679,8 @@ const adminHtml = `
                 document.getElementById('s-template').innerText = data.templates;
                 
                 const statusText = data.autoUpdate === 1 ? 
-                    '<span style="color:#10b981">已启用</span>' : 
-                    '<span style="color:#ef4444">已关闭</span>';
+                    '<span class="text-success">已启用</span>' : 
+                    '<span class="text-danger">已关闭</span>';
                 document.getElementById('autoUpdateStatus').innerHTML = statusText;
                 
                 if (data.lastExecuted > 0) {
@@ -4202,7 +3914,7 @@ const adminHtml = `
             const container = document.getElementById('popularUUIDsList');
             
             if (!uuids || uuids.length === 0) {
-                container.innerHTML = '<div style="text-align: center; padding: 20px; color: #6b7280;">暂无访问数据</div>';
+                container.innerHTML = '<div class="text-center py-5 text-gray-500">暂无访问数据</div>';
                 return;
             }
             
@@ -4214,16 +3926,16 @@ const adminHtml = `
                     Math.round(item.apigen_count / item.access_count * 100) : 0;
                 
                 html += \`
-                    <div class="popular-uuids-item" onclick="showUUIDDetails('\${item.uuid}')" style="cursor: pointer;">
+                    <div class="popular-uuids-item" onclick="showUUIDDetails('\${item.uuid}')">
                         <div>
                             <span class="popular-uuids-uuid" title="\${item.uuid}">\${item.uuid}</span>
-                            <div style="font-size: 0.75rem; color: #6b7280; margin-top: 2px;">
+                            <div class="text-xs text-gray-500 mt-0.5">
                                 \${subscriptionPercent}%订阅 | \${apigenPercent}%网页
                             </div>
                         </div>
                         <div>
                             <span class="popular-uuids-count">\${item.access_count}</span>
-                            <span style="font-size: 0.8rem; color: #9ca3af;">次</span>
+                            <span class="text-sm text-gray-400">次</span>
                         </div>
                     </div>
                 \`;
@@ -4258,7 +3970,7 @@ const adminHtml = `
             modalTotalAccess.textContent = '加载中...';
             modalFirstAccess.textContent = '-';
             modalLastAccess.textContent = '-';
-            modalAccessLogs.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:20px;">加载中...</td></tr>';
+            modalAccessLogs.innerHTML = '<tr><td colspan="4" class="p-5 text-center">加载中...</td></tr>';
             
             modal.style.display = 'flex';
             
@@ -4277,21 +3989,21 @@ const adminHtml = `
                         
                         logsHTML += \`
                             <tr>
-                                <td>\${fmtDate(log.created_at)}</td>
-                                <td><span class="type-badge \${typeClass}">\${typeText}</span></td>
-                                <td>\${log.client_ip || '未知'}</td>
-                                <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis;" title="\${log.user_agent}">\${log.user_agent || '未知'}</td>
+                                <td class="p-2">\${fmtDate(log.created_at)}</td>
+                                <td class="p-2"><span class="type-badge \${typeClass}">\${typeText}</span></td>
+                                <td class="p-2">\${log.client_ip || '未知'}</td>
+                                <td class="p-2 max-w-[200px] truncate" title="\${log.user_agent}">\${log.user_agent || '未知'}</td>
                             </tr>
                         \`;
                     });
                     modalAccessLogs.innerHTML = logsHTML;
                 } else {
-                    modalAccessLogs.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:20px;">暂无访问记录</td></tr>';
+                    modalAccessLogs.innerHTML = '<tr><td colspan="4" class="p-5 text-center">暂无访问记录</td></tr>';
                 }
             } else {
                 toast('无法加载UUID详情', 'error');
                 modalTotalAccess.textContent = '0';
-                modalAccessLogs.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:20px;">加载失败</td></tr>';
+                modalAccessLogs.innerHTML = '<tr><td colspan="4" class="p-5 text-center">加载失败</td></tr>';
             }
         }
 
@@ -4369,7 +4081,7 @@ const adminHtml = `
                 
                 mfaStatusSection.style.display = 'block';
                 document.getElementById('mfaStatusDetails').innerHTML = \`
-                    <div>双重验证: <span style="color:#10b981">已启用</span></div>
+                    <div>双重验证: <span class="text-success">已启用</span></div>
                     <div>\${lastLogin}</div>
                     <div>\${backupCount}</div>
                 \`;
@@ -4394,13 +4106,13 @@ const adminHtml = `
                     fmtDate(mfaStatus.last_login) : '从未';
                 
                 mfaStatusContent.innerHTML = \`
-                    <div style="color:#10b981; font-weight:bold; margin-bottom:10px;">
+                    <div class="text-success font-bold mb-2.5">
                         ✅ 双重验证已启用
                     </div>
-                    <div>上次双重验证登录: \${lastLogin}</div>
-                    <div>剩余备份码: <span style="font-weight:bold;">\${mfaStatus.backup_codes}</span> 个</div>
-                    <div style="margin-top:15px;">
-                        <button class="nav-btn small active" onclick="showBackupCodes()" \${mfaStatus.backup_codes === 0 ? 'disabled' : ''}>
+                    <div class="mb-1">上次双重验证登录: \${lastLogin}</div>
+                    <div class="mb-3">剩余备份码: <span class="font-bold">\${mfaStatus.backup_codes}</span> 个</div>
+                    <div class="mt-4">
+                        <button class="nav-btn small active mr-2" onclick="showBackupCodes()" \${mfaStatus.backup_codes === 0 ? 'disabled' : ''}>
                             查看备份码
                         </button>
                         <button class="nav-btn small" onclick="regenerateBackupCodes()">
@@ -4415,10 +4127,10 @@ const adminHtml = `
                 setupSteps.innerHTML = '';
             } else {
                 mfaStatusContent.innerHTML = \`
-                    <div style="color:#ef4444; font-weight:bold; margin-bottom:10px;">
+                    <div class="text-danger font-bold mb-2.5">
                         ⚠️ 双重验证未启用
                     </div>
-                    <p style="font-size:0.9rem; color:#6b7280; margin:10px 0;">
+                    <p class="text-sm text-gray-500 my-2.5">
                         双重验证（MFA）可为您的账户提供额外保护。
                         启用后，登录时需要密码和动态验证码。
                     </p>
@@ -4460,19 +4172,19 @@ const adminHtml = `
             setupSteps.style.display = 'block';
             setupSteps.innerHTML = \`
                 <div class="security-step">
-                    <h4>步骤 1: 输入密钥</h4>
-                    <p style="font-size:0.9rem; color:#6b7280;">
+                    <h4 class="font-semibold text-blue-800 mb-2">步骤 1: 输入密钥</h4>
+                    <p class="text-sm text-gray-500 mb-3">
                         使用身份验证器App（如Google Authenticator、Microsoft Authenticator、Authy等）：
                     </p>
                     
                     <div class="qr-code-container">
                         <div class="secret-display">
                             \${currentMfaSecret} 
-                            <button class="copy-btn" onclick="copyToClipboard('\${currentMfaSecret}')">复制</button>
+                            <button class="ml-2.5 px-2 py-1 bg-gray-700 text-white border-none rounded text-xs cursor-pointer hover:bg-gray-600 transition" onclick="copyToClipboard('\${currentMfaSecret}')">复制</button>
                         </div>
                         
-                        <div class="qr-instructions">
-                            <ol>
+                        <div class="qr-instructions text-sm text-gray-600 mt-3">
+                            <ol class="list-decimal pl-5 space-y-1">
                                 <li>打开身份验证器App</li>
                                 <li>点击"添加账户"或"+"按钮</li>
                                 <li>选择"手动输入密钥"</li>
@@ -4485,8 +4197,8 @@ const adminHtml = `
                         </div>
                     </div>
                     
-                    <div style="text-align:center; margin:20px 0;">
-                        <button class="nav-btn active" onclick="showMfaSetupStep2()">我已添加账户，继续</button>
+                    <div class="text-center my-5">
+                        <button class="nav-btn active mr-2" onclick="showMfaSetupStep2()">我已添加账户，继续</button>
                         <button class="nav-btn" onclick="cancelMfaSetup()">取消</button>
                     </div>
                 </div>
@@ -4499,20 +4211,20 @@ const adminHtml = `
             const setupSteps = document.getElementById('mfaSetupSteps');
             setupSteps.innerHTML = \`
                 <div class="security-step">
-                    <h4>步骤 2: 验证</h4>
-                    <p style="font-size:0.9rem; color:#6b7280;">
+                    <h4 class="font-semibold text-blue-800 mb-2">步骤 2: 验证</h4>
+                    <p class="text-sm text-gray-500 mb-3">
                         请在输入框中输入身份验证器App生成的6位验证码：
                     </p>
                     
-                    <div style="text-align: center; margin: 20px 0;">
-                        <div style="display:flex; gap:10px; justify-content:center; margin:20px 0;">
+                    <div class="text-center my-5">
+                        <div class="flex gap-2.5 justify-center my-5">
                             <input type="text" id="verifyTOTPInput" maxlength="6" 
                                    pattern="[0-9]{6}" inputmode="numeric" 
-                                   style="font-size:1.5rem; text-align:center; letter-spacing:10px; width:150px;"
+                                   class="totp-input w-36 px-3 py-2 border-2 border-secondary rounded focus:outline-none focus:border-primary text-xl"
                                    placeholder="000000">
                         </div>
                         
-                        <div style="display:flex; gap:10px; justify-content:center;">
+                        <div class="flex gap-2.5 justify-center">
                             <button class="nav-btn" onclick="showMfaSetupStep1()">返回上一步</button>
                             <button class="nav-btn active" onclick="verifyMfaSetup()">验证并完成</button>
                         </div>
@@ -4653,11 +4365,11 @@ const adminHtml = `
                 <head>
                     <title>MFA备份码 - \${getCurrentUsername()}</title>
                     <style>
-                        body { font-family: Arial, sans-serif; padding: 20px; }
+                        body { font-family: Arial, sans-serif; padding: 1.25rem; }
                         h1 { color: #333; }
                         .codes { font-family: monospace; font-size: 1.2em; line-height: 2; }
-                        .code { display: inline-block; margin: 5px; padding: 5px 10px; border: 1px solid #ccc; }
-                        .warning { color: #d00; background: #fee; padding: 10px; border-radius: 5px; margin: 20px 0; }
+                        .code { display: inline-block; margin: 0.3125rem; padding: 0.3125rem 0.625rem; border: 1px solid #ccc; }
+                        .warning { color: #d00; background: #fee; padding: 0.625rem; border-radius: 0.3125rem; margin: 1.25rem 0; }
                     </style>
                 </head>
                 <body>
@@ -4713,7 +4425,7 @@ const adminHtml = `
             if (!pwd) {
                 const err = document.getElementById('mfaAuthError');
                 err.textContent = '请输入当前密码';
-                err.style.display = '';
+                err.style.display = 'block';
                 return;
             }
             const cb = window._mfaAuthCallback;
@@ -4772,17 +4484,17 @@ const adminHtml = `
                     const sourceSafe = (i.source || '').replace(/"/g, '\\"');
                     
                     h += '<tr>' +
-                         '<td>' + i.domain + '</td>' +
-                         '<td>' + (i.remark || '<span style="color:#ccc">无</span>') + '</td>' +
-                         '<td><span class="hosting-badge ' + (i.source === 'Cloudflare' ? 'hosting-cloudflare' : i.source === '腾讯云EdgeOne' ? 'hosting-tencent' : '') + '">' + i.source + '</span></td>' +
-                         '<td>' + fmtDate(i.created_at) + '</td>' +
-                         '<td>' +
-                         '<button class="nav-btn small" onclick="editD(' + index + ', \\'' + domainSafe + '\\', \\'' + remarkSafe + '\\', \\'' + sourceSafe + '\\')">编辑</button>' +
+                         '<td class="p-3">' + i.domain + '</td>' +
+                         '<td class="p-3">' + (i.remark || '<span class="text-gray-300">无</span>') + '</td>' +
+                         '<td class="p-3"><span class="hosting-badge ' + (i.source === 'Cloudflare' ? 'hosting-cloudflare' : i.source === '腾讯云EdgeOne' ? 'hosting-tencent' : '') + '">' + i.source + '</span></td>' +
+                         '<td class="p-3">' + fmtDate(i.created_at) + '</td>' +
+                         '<td class="p-3">' +
+                         '<button class="nav-btn small mr-1" onclick="editD(' + index + ', \\'' + domainSafe + '\\', \\'' + remarkSafe + '\\', \\'' + sourceSafe + '\\')">编辑</button>' +
                          '<button class="nav-btn danger small" onclick="delD(' + index + ', \\'' + sourceSafe + '\\', \\'' + domainSafe + '\\')">删除</button>' +
                          '</td>' +
                          '</tr>';
                 });
-                document.getElementById('domList').innerHTML = h || '<tr><td colspan="5" style="text-align:center">无数据</td></tr>';
+                document.getElementById('domList').innerHTML = h || '<tr><td colspan="5" class="p-3 text-center">无数据</td></tr>';
                 domState.total = d.total || 0;
                 updatePager('dom', domState);
                 refreshLucideIcons();
@@ -4888,15 +4600,15 @@ const adminHtml = `
                     }).join(' | ');
 
                     h += \`<tr>
-                        <td>\${i.ip}</td>
-                        <td>\${i.ip_type}</td>
-                        <td>\${i.carrier}</td>
-                        <td>\${sourceDisplay}</td>
-                        <td>\${fmtDate(i.created_at)}</td>
-                        <td><button class="nav-btn danger small" onclick="delI('\${i.ip}')">删除</button></td>
+                        <td class="p-3">\${i.ip}</td>
+                        <td class="p-3">\${i.ip_type}</td>
+                        <td class="p-3">\${i.carrier}</td>
+                        <td class="p-3">\${sourceDisplay}</td>
+                        <td class="p-3">\${fmtDate(i.created_at)}</td>
+                        <td class="p-3"><button class="nav-btn danger small" onclick="delI('\${i.ip}')">删除</button></td>
                     </tr>\`;
                 });
-                document.getElementById('ipList').innerHTML = h || '<tr><td colspan="6" style="text-align:center">无数据</td></tr>';
+                document.getElementById('ipList').innerHTML = h || '<tr><td colspan="6" class="p-3 text-center">无数据</td></tr>';
                 ipState.total = d.total || 0;
                 updatePager('ip', ipState);
                 refreshLucideIcons();
@@ -4967,20 +4679,20 @@ const adminHtml = `
                 let h = '';
                 d.data.forEach(i => {
                     // 处理所有者信息（可能为空）
-                    const owner = i.owner || '<span style="color:#ccc">未设置</span>';
-                    const email = i.email || '<span style="color:#ccc">未设置</span>';
+                    const owner = i.owner || '<span class="text-gray-300">未设置</span>';
+                    const email = i.email || '<span class="text-gray-300">未设置</span>';
                     const status = i.status || 'active';
                     
                     // 状态显示样式
                     let statusBadge = '';
                     if (status === 'active') {
-                        statusBadge = '<span style="background:#10b981; color:white; padding:2px 8px; border-radius:12px; font-size:0.8rem;">活跃</span>';
+                        statusBadge = '<span class="bg-success text-white px-2 py-0.5 rounded-full text-xs">活跃</span>';
                     } else if (status === 'inactive') {
-                        statusBadge = '<span style="background:#6b7280; color:white; padding:2px 8px; border-radius:12px; font-size:0.8rem;">停用</span>';
+                        statusBadge = '<span class="bg-gray-500 text-white px-2 py-0.5 rounded-full text-xs">停用</span>';
                     } else if (status === 'suspended') {
-                        statusBadge = '<span style="background:#ef4444; color:white; padding:2px 8px; border-radius:12px; font-size:0.8rem;">暂停</span>';
+                        statusBadge = '<span class="bg-danger text-white px-2 py-0.5 rounded-full text-xs">暂停</span>';
                     } else {
-                        statusBadge = \`<span style="background:#ccc; color:white; padding:2px 8px; border-radius:12px; font-size:0.8rem;">\${status}</span>\`;
+                        statusBadge = \`<span class="bg-gray-300 text-white px-2 py-0.5 rounded-full text-xs">\${status}</span>\`;
                     }
                     
                     const safeUUID = (i.uuid || '').replace(/'/g, "&#39;").replace(/"/g, "&quot;");
@@ -4992,27 +4704,27 @@ const adminHtml = `
                     
                     h += \`
                     <tr>
-                        <td style="font-family:monospace; font-size:0.85rem;">\${i.uuid}</td>
-                        <td>\${owner}</td>
-                        <td>\${email}</td>
-                        <td>\${statusBadge}</td>
-                        <td>\${i.count} 个配置</td>
-                        <td>\${fmtDate(i.updated_at)}</td>
-                        <td>
-                            <div style="display:flex; gap:5px;">
+                        <td class="p-3 font-mono text-sm">\${i.uuid}</td>
+                        <td class="p-3">\${owner}</td>
+                        <td class="p-3">\${email}</td>
+                        <td class="p-3">\${statusBadge}</td>
+                        <td class="p-3">\${i.count} 个配置</td>
+                        <td class="p-3">\${fmtDate(i.updated_at)}</td>
+                        <td class="p-3">
+                            <div class="flex gap-1 flex-wrap">
                                 <button class="nav-btn small" onclick="editUuidInfo('\${safeUUID}', '\${safeOwner}', '\${safeEmail}', '\${safeContactInfo}', '\${safeStatus}', '\${safeRemark}')">编辑信息</button>
                                 <button class="nav-btn danger small" onclick="delU('\${i.uuid}')">删除整组</button>
                             </div>
                         </td>
                     </tr>\`;
                 });
-                document.getElementById('uuidList').innerHTML = h || '<tr><td colspan="7" style="text-align:center">无数据</td></tr>';
+                document.getElementById('uuidList').innerHTML = h || '<tr><td colspan="7" class="p-3 text-center">无数据</td></tr>';
                 uuidState.total = d.total || 0;
                 updatePager('uuid', uuidState);
                 refreshLucideIcons();
             } else {
                 // 即使加载失败，也更新分页信息
-                document.getElementById('uuidList').innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px;">加载失败，请刷新重试</td></tr>';
+                document.getElementById('uuidList').innerHTML = '<tr><td colspan="7" class="p-5 text-center">加载失败，请刷新重试</td></tr>';
                 updatePager('uuid', uuidState);
             }
         }
@@ -5093,20 +4805,20 @@ const adminHtml = `
                                 '<span class="template-badge badge-default">默认</span>' : 
                                 '<span class="template-badge badge-normal">普通</span>';
                             
-                            const description = i.description ? i.description : '<span style="color:#ccc">无描述</span>';
+                            const description = i.description ? i.description : '<span class="text-gray-300">无描述</span>';
                             
                             const safeName = (i.name || '').replace(/'/g, "&#39;").replace(/"/g, "&quot;");
                             const safeUrl = (i.url || '').replace(/'/g, "&#39;").replace(/"/g, "&quot;");
                             const safeDesc = (i.description || '').replace(/'/g, "&#39;").replace(/"/g, "&quot;");
                             
                             html += \`<tr>
-                                <td><strong>\${i.name}</strong></td>
-                                <td class="template-url-cell" title="\${i.url}">\${i.url}</td>
-                                <td>\${description}</td>
-                                <td>\${defaultBadge}</td>
-                                <td>\${createdAt}</td>
-                                <td>
-                                    <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+                                <td class="p-3"><strong>\${i.name}</strong></td>
+                                <td class="p-3 template-url-cell" title="\${i.url}">\${i.url}</td>
+                                <td class="p-3">\${description}</td>
+                                <td class="p-3">\${defaultBadge}</td>
+                                <td class="p-3">\${createdAt}</td>
+                                <td class="p-3">
+                                    <div class="flex gap-1 flex-wrap">
                                         <button class="nav-btn small" onclick="editTemplate(\${i.id}, '\${safeName}', '\${safeUrl}', '\${safeDesc}', \${i.is_default})">
                                             编辑
                                         </button>
@@ -5127,16 +4839,16 @@ const adminHtml = `
                         updatePager('template', templateState);
                         refreshLucideIcons();
                     } else {
-                        list.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px; color:#89949B;">暂无模板数据，请添加第一个模板</td></tr>';
+                        list.innerHTML = '<tr><td colspan="6" class="p-5 text-center text-secondary">暂无模板数据，请添加第一个模板</td></tr>';
                         updatePager('template', templateState);
                     }
                 } else {
-                    list.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:#ef4444;">加载失败，请刷新重试</td></tr>';
+                    list.innerHTML = '<tr><td colspan="6" class="p-5 text-center text-danger">加载失败，请刷新重试</td></tr>';
                     updatePager('template', templateState);
                 }
             } catch (error) {
                 console.error('加载模板失败:', error);
-                list.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:#ef4444;">加载失败：' + error.message + '</td></tr>';
+                list.innerHTML = '<tr><td colspan="6" class="p-5 text-center text-danger">加载失败：' + error.message + '</td></tr>';
                 updatePager('template', templateState);
             } finally {
                 templateState.loading = false;
@@ -5236,7 +4948,7 @@ const adminHtml = `
             
             try {
                 btn.disabled = true;
-                btn.innerHTML = '保存中...';
+                btn.innerHTML = '<i data-lucide="loader" class="w-4 h-4 animate-spin mr-1"></i>保存中...';
                 
                 const response = await api('templates', 'PUT', {
                     id,
