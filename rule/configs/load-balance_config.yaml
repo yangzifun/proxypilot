@@ -114,10 +114,10 @@ proxy-groups:
   # [一致性哈希]：相同域名走相同节点，防止跳IP，适合日常使用
   - {name: ⚖️ 全球均衡, type: load-balance, strategy: consistent-hashing, include-all: true, filter: "^((?!(直连)).)*$", url: 'http://www.gstatic.com/generate_204', interval: 300}
   
-  - {name: 🇭🇰 香港均衡, type: load-balance, strategy: consistent-hashing, include-all: true, filter: "(?i)香港|HK|Hong Kong|HongKong|HKSAR|HKG", url: 'http://www.google.com.hk/generate_204', interval: 300}
-  - {name: 🇯🇵 日本均衡, type: load-balance, strategy: consistent-hashing, include-all: true, filter: "(?i)日本|JP|Japan|Tokyo|Osaka", url: 'http://www.google.co.jp/generate_204', interval: 300}
-  - {name: 🇺🇸 美国均衡, type: load-balance, strategy: consistent-hashing, include-all: true, filter: "(?i)美国|US|USA|United States", url: 'http://www.gstatic.com/generate_204', interval: 300}
-  - {name: 🇸🇬 新加坡均衡, type: load-balance, strategy: consistent-hashing, include-all: true, filter: "(?i)新加坡|SG|Singapore", url: 'http://cp.cloudflare.com/generate_204', interval: 300}
+  - {name: 🇭🇰 香港均衡, type: load-balance, strategy: consistent-hashing, include-all: true, filter: "(?i)香港|HK|Hong Kong|HongKong|HKSAR|HKG|Hkg|Hk", url: 'http://www.google.com.hk/generate_204', interval: 300}
+  - {name: 🇯🇵 日本均衡, type: load-balance, strategy: consistent-hashing, include-all: true, filter: "(?i)日本|JP|Japan|Tokyo|Osaka|Saitama|Kyoto|JP-|Japan|TYO|OSA|东京|大阪|埼玉|京都", url: 'http://www.google.co.jp/generate_204', interval: 300}
+  - {name: 🇺🇸 美国均衡, type: load-balance, strategy: consistent-hashing, include-all: true, filter: "(?i)美国|US|USA|United States|America|States|US-|Virginia|VA|Ashburn|弗吉尼亚|维吉尼亚|阿什本|California|CA|Los Angeles|San Francisco|San Jose|Santa Clara|Santa Monica|Sacramento|Fremont|洛杉矶|旧金山|圣何塞|加州|New York|NY|New Jersey|NJ|纽约|新泽西|Texas|TX|Dallas|Houston|Austin|德克萨斯|德州|达拉斯|休斯顿|Washington|WA|Seattle|西雅图|Chicago|IL|芝加哥|Florida|FL|Miami|佛罗里达|迈阿密|Oregon|OR|Portland|波特兰|Nevada|NV|Las Vegas|拉斯维加斯|Arizona|AZ|Phoenix|凤凰城|Georgia|Atlanta|亚特兰大|Utah|Salt Lake|盐湖城|Boston|波士顿", url: 'http://www.gstatic.com/generate_204', interval: 300}
+  - {name: 🇸🇬 新加坡均衡, type: load-balance, strategy: consistent-hashing, include-all: true, filter: "(?i)新加坡|SG|Singapore|Lion City|SGP|SIN|SGP|狮城", url: 'http://cp.cloudflare.com/generate_204', interval: 300}
 
   # [轮询策略]：适合纯下载工具（IDM, BitTorrent），不考虑IP一致性，只求速度叠加
   - {name: 📥 极速下载, type: load-balance, strategy: round-robin, include-all: true, filter: "^((?!(直连|剩余|到期|重置)).)*$", url: 'http://www.gstatic.com/generate_204', interval: 300}
@@ -134,7 +134,7 @@ proxy-groups:
   
   # --- 4. 传统自动选优 (保留作为备用) ---
   - {name: ⚡ 自动选择, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连)).)*$"}
-  - {name: 🇹🇼 台湾自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)台湾|TW|Taiwan"} # 台湾节点通常较少，做均衡意义不大，保留自动测速
+  - {name: 🇹🇼 台湾自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)台湾|TW|Taiwan|Taipei|TPE|Taichung|Hsinchu|Republic of China|ROC|TW-|台北|台中|新竹"} # 台湾节点通常较少，做均衡意义不大，保留自动测速
 
 # ==========================================================
 # 规则匹配 (Rules)

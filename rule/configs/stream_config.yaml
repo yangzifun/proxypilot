@@ -99,19 +99,19 @@ proxy-groups:
   - {name: 🐟 漏网之鱼, type: select, proxies: [🚀 默认代理, 🎯 直连]}
 
   # 4. 底层影视测速池 (Tolerance 设为 50ms 防止视频播放中频繁跳节点)
-  - {name: 🇭🇰 香港流媒体, type: url-test, include-all: true, tolerance: 50, filter: "(?i)香港|HK|Hong Kong"}
-  - {name: 🇹🇼 台湾流媒体, type: url-test, include-all: true, tolerance: 50, filter: "(?i)台湾|TW|Taiwan"}
-  - {name: 🇯🇵 日本流媒体, type: url-test, include-all: true, tolerance: 50, filter: "(?i)日本|JP|Japan"}
-  - {name: 🇸🇬 新加坡流媒体, type: url-test, include-all: true, tolerance: 50, filter: "(?i)新加坡|SG|Singapore"}
-  - {name: 🇺🇸 美国流媒体, type: url-test, include-all: true, tolerance: 50, filter: "(?i)美国|US|USA|United States"}
+  - {name: 🇭🇰 香港流媒体, type: url-test, include-all: true, tolerance: 50, filter: "(?i)香港|HK|Hong Kong|HongKong|HKSAR|HKG|Hkg|Hk"}
+  - {name: 🇹🇼 台湾流媒体, type: url-test, include-all: true, tolerance: 50, filter: "(?i)台湾|TW|Taiwan|Taipei|TPE|Taichung|Hsinchu|Republic of China|ROC|TW-|台北|台中|新竹"}
+  - {name: 🇯🇵 日本流媒体, type: url-test, include-all: true, tolerance: 50, filter: "(?i)日本|JP|Japan|Tokyo|Osaka|Saitama|Kyoto|JP-|Japan|TYO|OSA|东京|大阪|埼玉|京都"}
+  - {name: 🇸🇬 新加坡流媒体, type: url-test, include-all: true, tolerance: 50, filter: "(?i)新加坡|SG|Singapore|Lion City|SGP|SIN|SGP|狮城"}
+  - {name: 🇺🇸 美国流媒体, type: url-test, include-all: true, tolerance: 50, filter: "(?i)美国|US|USA|United States|America|States|US-|Virginia|VA|Ashburn|弗吉尼亚|维吉尼亚|阿什本|California|CA|Los Angeles|San Francisco|San Jose|Santa Clara|Santa Monica|Sacramento|Fremont|洛杉矶|旧金山|圣何塞|加州|New York|NY|New Jersey|NJ|纽约|新泽西|Texas|TX|Dallas|Houston|Austin|德克萨斯|德州|达拉斯|休斯顿|Washington|WA|Seattle|西雅图|Chicago|IL|芝加哥|Florida|FL|Miami|佛罗里达|迈阿密|Oregon|OR|Portland|波特兰|Nevada|NV|Las Vegas|拉斯维加斯|Arizona|AZ|Phoenix|凤凰城|Georgia|Atlanta|亚特兰大|Utah|Salt Lake|盐湖城|Boston|波士顿"}
   
   # 基础地区分组 (沿用)
   - {name: ⚡ 自动选择, type: url-test, include-all: true, tolerance: 20}
-  - {name: 🇭🇰 香港自动, type: url-test, include-all: true, filter: "(?i)香港|HK"}
-  - {name: 🇺🇸 美国自动, type: url-test, include-all: true, filter: "(?i)美国|US"}
-  - {name: 🇯🇵 日本自动, type: url-test, include-all: true, filter: "(?i)日本|JP"}
-  - {name: 🇸🇬 新加坡自动, type: url-test, include-all: true, filter: "(?i)新加坡|SG"}
-  - {name: 🇹🇼 台湾自动, type: url-test, include-all: true, filter: "(?i)台湾|TW"}
+  - {name: 🇭🇰 香港自动, type: url-test, include-all: true, filter: "(?i)香港|HK|Hong Kong|HongKong|HKSAR|HKG|Hkg|Hk"}
+  - {name: 🇺🇸 美国自动, type: url-test, include-all: true, filter: "(?i)美国|US|USA|United States|America|States|US-|Virginia|VA|Ashburn|弗吉尼亚|维吉尼亚|阿什本|California|CA|Los Angeles|San Francisco|San Jose|Santa Clara|Santa Monica|Sacramento|Fremont|洛杉矶|旧金山|圣何塞|加州|New York|NY|New Jersey|NJ|纽约|新泽西|Texas|TX|Dallas|Houston|Austin|德克萨斯|德州|达拉斯|休斯顿|Washington|WA|Seattle|西雅图|Chicago|IL|芝加哥|Florida|FL|Miami|佛罗里达|迈阿密|Oregon|OR|Portland|波特兰|Nevada|NV|Las Vegas|拉斯维加斯|Arizona|AZ|Phoenix|凤凰城|Georgia|Atlanta|亚特兰大|Utah|Salt Lake|盐湖城|Boston|波士顿"}
+  - {name: 🇯🇵 日本自动, type: url-test, include-all: true, filter: "(?i)日本|JP|Japan|Tokyo|Osaka|Saitama|Kyoto|JP-|Japan|TYO|OSA|东京|大阪|埼玉|京都"}
+  - {name: 🇸🇬 新加坡自动, type: url-test, include-all: true, filter: "(?i新加坡|SG|Singapore|Lion City|SGP|SIN|SGP|狮城"}
+  - {name: 🇹🇼 台湾自动, type: url-test, include-all: true, filter: "(?i)台湾|TW|Taiwan|Taipei|TPE|Taichung|Hsinchu|Republic of China|ROC|TW-|台北|台中|新竹"}
 
 # ==========================================================
 # 规则匹配 (影视增强版 - 每个服务独立规则)
