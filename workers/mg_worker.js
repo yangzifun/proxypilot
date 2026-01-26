@@ -4230,6 +4230,7 @@ const adminHtml = `
             });
             
             container.innerHTML = html;
+            refreshLucideIcons();
         }
         
         function switchChartType(type) {
@@ -4784,6 +4785,7 @@ const adminHtml = `
                 document.getElementById('domList').innerHTML = h || '<tr><td colspan="5" style="text-align:center">无数据</td></tr>';
                 domState.total = d.total || 0;
                 updatePager('dom', domState);
+                refreshLucideIcons();
             } else {
                 // 即使加载失败，也更新分页信息
                 updatePager('dom', domState);
@@ -4897,6 +4899,7 @@ const adminHtml = `
                 document.getElementById('ipList').innerHTML = h || '<tr><td colspan="6" style="text-align:center">无数据</td></tr>';
                 ipState.total = d.total || 0;
                 updatePager('ip', ipState);
+                refreshLucideIcons();
             } else {
                 // 即使加载失败，也更新分页信息
                 updatePager('ip', ipState);
@@ -5006,6 +5009,7 @@ const adminHtml = `
                 document.getElementById('uuidList').innerHTML = h || '<tr><td colspan="7" style="text-align:center">无数据</td></tr>';
                 uuidState.total = d.total || 0;
                 updatePager('uuid', uuidState);
+                refreshLucideIcons();
             } else {
                 // 即使加载失败，也更新分页信息
                 document.getElementById('uuidList').innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px;">加载失败，请刷新重试</td></tr>';
@@ -5121,6 +5125,7 @@ const adminHtml = `
                         });
                         list.innerHTML = html;
                         updatePager('template', templateState);
+                        refreshLucideIcons();
                     } else {
                         list.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px; color:#89949B;">暂无模板数据，请添加第一个模板</td></tr>';
                         updatePager('template', templateState);
