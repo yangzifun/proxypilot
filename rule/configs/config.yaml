@@ -161,7 +161,7 @@ proxy-groups:
   - {name: 🇸🇬 新加坡自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)新加坡|SG|Singapore|Lion City|SGP|SIN|SGP|狮城"}
   - {name: 🇹🇼 台湾自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)台湾|TW|Taiwan|Taipei|TPE|Taichung|Hsinchu|Republic of China|ROC|TW-|台北|台中|新竹"}
   - {name: 🇩🇪 德国自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)德国|法兰克福|DE|Germany|Deutschland|Frankfurt|Berlin|Munich|FRG|DE-"}
-  - {name: 🇨🇳 中国自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH"}
+  - {name: 🇨🇳 中国自动, type: url-test, url: 'https://www.apple.com/library/test/success.html', include-all: true, tolerance: 20, interval: 300, filter: "(?i)上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH"}
 
 
 # ==========================================================

@@ -1,14 +1,11 @@
-# ==========================================================
-# 完整配置文件 - 2026-01-27 优化版
-# 图标库: Orz-3/mini (Color)
-# 适用内核: Mihomo (Clash Meta)
-# ==========================================================
+# 生成时间: 2026-01-13
+# 模板类型: 默认模板 - 基础配置模板，适用于简单场景
 
 # ==========================================================
-# 节点信息 (此处请替换为您真实的节点订阅)
+# 节点信息
 # ==========================================================
 proxies:
-  - {name: 示例节点, type: direct}
+  - {name: 直连, type: direct}
 
 # ==========================================================
 # 全局配置 
@@ -33,18 +30,28 @@ profile:
   store-selected: true
   store-fake-ip: true
 
+
 # ==========================================================
-# 嗅探与入站
+# 嗅探
 # ==========================================================
 sniffer:
   enable: true
   sniff:
-    HTTP: {ports: [80, 8080-8880], override-destination: true}
-    TLS: {ports: [443, 8443]}
-    QUIC: {ports: [443, 8443]}
-  force-domain: ["+.v2ex.com"]
-  skip-domain: ["+.baidu.com"]
+    HTTP:
+      ports: [80, 8080-8880]
+      override-destination: true
+    TLS:
+      ports: [443, 8443]
+    QUIC:
+      ports: [443, 8443]
+  force-domain:
+    - "+.v2ex.com"
+  skip-domain:
+    - "+.baidu.com"
 
+# ==========================================================
+# 入站
+# ==========================================================  
 tun:
   enable: true
   stack: mixed
@@ -54,7 +61,7 @@ tun:
   auto-detect-interface: true
 
 # ==========================================================
-# DNS 模块
+# DNS模块
 # ==========================================================
 dns:
   enable: true
@@ -69,12 +76,17 @@ dns:
     - "+.msftncsi.com"
     - "time.*.com"
     - "+.market.xiaomi.com"
-  default-nameserver: [223.5.5.5, 223.6.6.6]
+  default-nameserver:
+   - 223.5.5.5
+   - 223.6.6.6
   proxy-server-nameserver:
     - https://dns.alidns.com/dns-query
     - https://doh.pub/dns-query
-  nameserver: [8.8.8.8, 1.1.1.1]
-
+  # namesever尽量用运营商提供的DNS
+  nameserver:
+    - 8.8.8.8
+    - 1.1.1.1
+ 
 # ==========================================================
 # 锚点配置
 # ==========================================================
@@ -84,64 +96,73 @@ rule-anchor:
   class: &class {type: http, interval: 86400, behavior: classical, format: text}
 
 # ==========================================================
-# 出站策略 (Proxy Groups) - 集成 Orz-3/mini 图标
+# 出站策略 (Proxy Groups)
 # ==========================================================
 proxy-groups:
-  # --- 1. 默认代理 ---
-  - {name: 🚀 默认代理, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动, 🌐 全部节点], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Proxy.png"}
+  # --- 1. 默认代理 (总开关) ---
+  # 兜底使用的代理组，如果下方具体服务没命中，则默认走这里
+  - {name: 🚀 默认代理, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动, 🌐 全部节点]}
   
-  # --- 2. AI 服务 ---
-  - {name: 🤖 OpenAI, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/OpenAI.png"}
-  - {name: ✨ Gemini, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Gemini.png"}
-  - {name: 🧠 Claude, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇩🇪 德国自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Claude.png"}
-  - {name: 🌌 常用 AI, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Bot.png"}
+  # --- 2. AI 服务 (对 IP 纯净度要求极高) ---
+  - {name: 🤖 OpenAI, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]} # 严禁香港
+  - {name: ✨ Gemini, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
+  - {name: 🧠 Claude, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇩🇪 德国自动]}
+  - {name: 🌌 常用 AI, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}  # 聚合其他 AI 规则
   
-  # --- 3. 社交与办公 ---
-  - {name: 📲 Telegram, type: select, include-all: true, filter: "(?i)香港|东京|洛杉矶|弗吉尼亚|新加坡|台湾|德国", proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Telegram.png"}
-  - {name: 🌏 Meta, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇺🇸 美国自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Facebook.png"}
-  - {name: 🐦 Twitter, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Twitter.png"}
-  - {name: 💬 Discord, type: select, proxies: [🚀 默认代理, 🇺🇸 美国自动, 🇭🇰 香港自动, 🇩🇪 德国自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Discord.png"}
-  - {name: 🐱 GitHub, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇩🇪 德国自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Github.png"}
-  - {name: 🟦 Microsoft, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Microsoft.png"}
+  # --- 3. 社交与办公 (注重低延迟和可用性) ---
+  - {name: 📲 Telegram, type: select, include-all: true, filter: "(?i)香港|东京|洛杉矶|弗吉尼亚|新加坡|台湾|德国", proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
+  - {name: 🌏 Meta, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇺🇸 美国自动]} # 包含 Facebook, Instagram, WhatsApp
+  - {name: 🐦 Twitter, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动]}
+  - {name: 💬 Discord, type: select, proxies: [🚀 默认代理, 🇺🇸 美国自动, 🇭🇰 香港自动, 🇩🇪 德国自动]}
+  - {name: 🐱 GitHub, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇩🇪 德国自动]} # 提升代码拉取速度
+  - {name: 🟦 Microsoft, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动]} # 解决 Outlook 或系统更新转圈
 
-  # --- 4. 流媒体与娱乐 ---
-  - {name: 🎬 YouTube, type: select, include-all: true, filter: "(?i)香港|东京|洛杉矶|弗吉尼亚|新加坡|台湾|德国", proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/YouTube.png"}
-  - {name: 🎥 Netflix, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Netflix.png"}
-  - {name: 🎞️ Disney+, type: select, proxies: [🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Disney.png"}
-  - {name: 🎵 TikTok, type: select,  proxies: [🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/TikTok.png"}
-  - {name: 📺 更多流媒体, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇺🇸 美国自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Streaming.png"}
-  - {name: 🎧 Spotify, type: select, proxies: [🚀 默认代理, ⚡ 自动选择, 🎯 直连], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Spotify.png"}
+# --- 4. 流媒体与娱乐 (注重带宽和地区版权) ---
+  - {name: 🎬 YouTube, type: select, include-all: true, filter: "(?i)香港|东京|洛杉矶|弗吉尼亚|新加坡|台湾|德国", proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
+  - {name: 🎥 Netflix, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
+  - {name: 🎞️ Disney+, type: select, proxies: [🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
+  - {name: 🎵 TikTok, type: select,  proxies: [🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
+  - {name: 📺 更多流媒体, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇺🇸 美国自动]} # Prime Video, Viu, TVB, 动画疯等
+  - {name: 🎧 Spotify, type: select, proxies: [🚀 默认代理, ⚡ 自动选择, 🎯 直连]} # 建议首选直连或默认代理
   
-  # --- 5. 游戏 ---
-  - {name: 🎮 Steam, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇭🇰 香港自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Steam.png"}
-  - {name: 🎮 Ubisoft, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择, 🇭🇰 香港自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Ubisoft.png"}
-  - {name: 🎮 Epic, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Epic.png"}
-  - {name: 🎮 EA, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Game.png"}
-  - {name: 🎮 PlayStation, type: select, proxies: [🎯 直连, 🚀 默认代理, 🇯🇵 日本自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Playstation.png"}
+  
+ # --- 5. 流媒体与游戏 (建议：下载选直连，联机选代理) ---
+  - {name: 🎮 Steam, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇭🇰 香港自动]}
+  - {name: 🎮 Ubisoft, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择, 🇭🇰 香港自动]} # 原 Uplay 平台
+  - {name: 🎮 Epic, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择]}
+  - {name: 🎮 EA, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择]} # EA App / Origin
+  - {name: 🎮 PlayStation, type: select, proxies: [🎯 直连, 🚀 默认代理, 🇯🇵 日本自动]} # PSN 商店与更新
 
-  # --- 6. 中国大陆服务 ---
-  - {name: 🎬 大陆视频, type: select, proxies: [🎯 直连, 🚀 默认代理, 🇨🇳 中国自动, 🇭🇰 香港自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Bilibili.png"}
-  - {name: 🍎 Apple, type: select, proxies: [🎯 直连, 🚀 默认代理, 🇨🇳 中国自动, 🇭🇰 香港自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Apple.png"}
-  - {name: 🇨🇳 中国大陆, type: select, proxies: [🎯 直连, 🇨🇳 中国自动, 🚀 默认代理, 🇭🇰 香港自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/CN.png"}
+ # --- 6. 中国大陆服务 (保持国内访问速度) ---
+  
+  - {name: 🎬 大陆视频, type: select, proxies: [🎯 直连, 🚀 默认代理, 🇨🇳 中国自动, 🇭🇰 香港自动]} # 哔哩哔哩、爱奇艺等
+  - {name: 🍎 Apple, type: select, proxies: [🎯 直连, 🚀 默认代理, 🇨🇳 中国自动, 🇭🇰 香港自动]}  # App Store 与 iCloud 加速
+  - {name: 🇨🇳 中国大陆, type: select, proxies: [🎯 直连, 🇨🇳 中国自动, 🚀 默认代理, 🇭🇰 香港自动]}  # 中国大陆地区域名及IP
 
   # --- 7. 基础工具 ---
-  - {name: 🔍 Google, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Google.png"}
-  - {name: 🚀 Speedtest, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Speedtest.png"}
-  - {name: 💳 PayPal, type: select, proxies: [⚡ 自动选择, 🇺🇸 美国自动, 🇭🇰 香港自动, 🇩🇪 德国自动, 🎯 直连], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/PayPal.png"}
-  - {name: 🚫 广告拦截, type: select, proxies: [REJECT, DIRECT], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Ads.png"}
-  - {name: 🎯 直连, type: select, proxies: [DIRECT, 🚀 默认代理], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Direct.png"} 
-  - {name: 🐟 漏网之鱼, type: select, proxies: [🚀 默认代理, 🎯 直连, ⚡ 自动选择, 🇭🇰 香港自动, 🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Final.png"}
+  - {name: 🔍 Google, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
+  - {name: 🚀 Speedtest, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择]}
+  - {name: 💳 PayPal, type: select, proxies: [⚡ 自动选择, 🇺🇸 美国自动, 🇭🇰 香港自动, 🇩🇪 德国自动, 🎯 直连]} # 建议固定一个地区防止风控
+  - {name: 🚫 广告拦截, type: select, proxies: [REJECT, DIRECT]}
+  - {name: 🎯 直连, type: select, proxies: [DIRECT, 🚀 默认代理]} 
+  - {name: 🐟 漏网之鱼, type: select, proxies: [🚀 默认代理, 🎯 直连, ⚡ 自动选择, 🇭🇰 香港自动, 🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
 
-  # --- 8. 底层策略 ---
-  - {name: ⚡ 自动选择, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Urltest.png"}
-  - {name: 🌐 全部节点, type: select, include-all: true, icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Global.png"}
-  - {name: 🇭🇰 香港自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, filter: "(?i)香港|HK|Hong Kong|HongKong|HKSAR|HKG|Hkg|Hk", icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/HK.png"}
-  - {name: 🇯🇵 日本自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, filter: "(?i)日本|JP", icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/JP.png"}
-  - {name: 🇺🇸 美国自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, filter: "(?i)美国|US", icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/US.png"}
-  - {name: 🇸🇬 新加坡自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, filter: "(?i)新加坡|SG", icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/SG.png"}
-  - {name: 🇹🇼 台湾自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, filter: "(?i)台湾|TW", icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/TW.png"}
-  - {name: 🇩🇪 德国自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, filter: "(?i)德国|DE", icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/DE.png"}
-  - {name: 🇨🇳 中国自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, filter: "(?i)中国|CN", icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/CN.png"}
+
+
+
+  # --- 8. 底层自动选优策略 (供上方调用)  ---
+  - {name: ⚡ 自动选择, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
+  - {name: 🌐 全部节点, type: select, include-all: true}
+ 
+  # 地区分组自动筛选 (基于正则匹配节点名)
+  - {name: 🇭🇰 香港自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)香港|HK|Hong Kong|HongKong|HKSAR|HKG|Hkg|Hk"}
+  - {name: 🇯🇵 日本自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)日本|JP|Japan|Tokyo|Osaka|Saitama|Kyoto|JP-|Japan|TYO|OSA|东京|大阪|埼玉|京都"}
+  - {name: 🇺🇸 美国自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)美国|US|USA|United States|America|States|US-|Virginia|VA|Ashburn|弗吉尼亚|维吉尼亚|阿什本|California|CA|Los Angeles|San Francisco|San Jose|Santa Clara|Santa Monica|Sacramento|Fremont|洛杉矶|旧金山|圣何塞|加州|New York|NY|New Jersey|NJ|纽约|新泽西|Texas|TX|Dallas|Houston|Austin|德克萨斯|德州|达拉斯|休斯顿|Washington|WA|Seattle|西雅图|Chicago|IL|芝加哥|Florida|FL|Miami|佛罗里达|迈阿密|Oregon|OR|Portland|波特兰|Nevada|NV|Las Vegas|拉斯维加斯|Arizona|AZ|Phoenix|凤凰城|Georgia|Atlanta|亚特兰大|Utah|Salt Lake|盐湖城|Boston|波士顿"}
+  - {name: 🇸🇬 新加坡自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)新加坡|SG|Singapore|Lion City|SGP|SIN|SGP|狮城"}
+  - {name: 🇹🇼 台湾自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)台湾|TW|Taiwan|Taipei|TPE|Taichung|Hsinchu|Republic of China|ROC|TW-|台北|台中|新竹"}
+  - {name: 🇩🇪 德国自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)德国|法兰克福|DE|Germany|Deutschland|Frankfurt|Berlin|Munich|FRG|DE-"}
+  - {name: 🇨🇳 中国自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH"}
+
 
 # ==========================================================
 # 规则匹配 (Rules)
