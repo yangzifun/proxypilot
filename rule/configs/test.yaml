@@ -147,12 +147,19 @@ proxy-groups:
 # 规则匹配 (Rules)
 # ==========================================================
 rules:
+# 1. 广告拦截
   - RULE-SET,category-ads-all,🚫 广告拦截
+
+# 2. 代理补充列表
   - RULE-SET,proxylite,🚀 默认代理
+
+# 3. AI 规则
   - RULE-SET,openai,🤖 OpenAI
   - RULE-SET,gemini,✨ Gemini
   - RULE-SET,claude,🧠 Claude
   - RULE-SET,ai,🌌 常用 AI
+  
+# 4. 社交与视频
   - RULE-SET,telegram_domain,📲 Telegram
   - RULE-SET,telegram_ip,📲 Telegram,no-resolve
   - RULE-SET,facebook_domain,🌏 Meta
@@ -168,6 +175,10 @@ rules:
   - RULE-SET,bahamut_domain,📺 更多流媒体
   - RULE-SET,viu_domain,📺 更多流媒体
   - RULE-SET,spotify_domain,🎧 Spotify
+  
+
+  
+# 5. 通用服务
   - RULE-SET,github_domain,🐱 GitHub
   - RULE-SET,google_domain,🔍 Google
   - RULE-SET,google_ip,🔍 Google,no-resolve
@@ -176,17 +187,23 @@ rules:
   - RULE-SET,apple_domain,🍎 Apple
   - RULE-SET,speedtest_domain,🚀 Speedtest
   - RULE-SET,paypal_domain,💳 PayPal
+  
+# 6. 游戏规则
   - RULE-SET,steam_domain,🎮 Steam
   - RULE-SET,ubisoft_domain,🎮 Ubisoft
   - RULE-SET,epic_domain,🎮 Epic
   - RULE-SET,ea_domain,🎮 EA
   - RULE-SET,sony_domain,🎮 PlayStation
+
+# 7.地区分流直接调用自动选择分组
   - GEOIP,HK,🇭🇰 香港自动
   - GEOIP,TW,🇹🇼 台湾自动
   - GEOIP,JP,🇯🇵 日本自动
   - GEOIP,SG,🇸🇬 新加坡自动
   - GEOIP,US,🇺🇸 美国自动
   - GEOIP,DE,🇩🇪 德国自动
+
+# 8.中国大陆分流
   - RULE-SET,bilibili_domain,🎬 大陆视频
   - RULE-SET,iqiyi_domain,🎬 大陆视频
   - RULE-SET,sina_domain,🇨🇳 中国大陆
@@ -194,24 +211,34 @@ rules:
   - RULE-SET,alibaba_domain,🇨🇳 中国大陆
   - RULE-SET,cn_domain,🇨🇳 中国大陆
   - RULE-SET,cn_ip,🇨🇳 中国大陆,no-resolve
+
+# 9.直连补充
   - RULE-SET,private_domain,🎯 直连
   - RULE-SET,custom_direct,🎯 直连
-  - GEOIP,LAN,🎯 直连
+  - GEOIP,LAN,🎯 直连  
+
+# 10.兜底
+
   - RULE-SET,gfw_domain,🚀 默认代理
   - MATCH,🐟 漏网之鱼
 
 # ==========================================================
-# 规则源 (Rule Providers)
+# 规则源
 # ==========================================================
 rule-providers:
+  # 基础与系统
   private_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs"}
   proxylite: { <<: *class, url: "https://github.com/yangzifun/proxypilot/raw/refs/heads/main/rule/proxy.list"}
   category-ads-all: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ads-all.mrs"}
   custom_direct: { <<: *class, url: "https://github.com/yangzifun/proxypilot/raw/refs/heads/main/rule/direct.list"}
+
+  # AI 规则
   openai: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/openai.mrs" }
   gemini: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/google-gemini.mrs" }
   claude: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/anthropic.mrs" }
   ai: { <<: *domain, url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/category-ai-!cn.mrs" }
+  
+  # 社交与娱乐
   telegram_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/telegram.mrs"}
   discord_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/discord.mrs"}
   youtube_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/youtube.mrs"}
@@ -230,6 +257,7 @@ rule-providers:
   primevideo_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/primevideo.mrs"}
   bahamut_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/bahamut.mrs"}
   viu_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/viu.mrs"}
+  # 通用服务
   google_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/google.mrs"}
   github_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/github.mrs"}
   onedrive_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/onedrive.mrs"}
@@ -239,10 +267,14 @@ rule-providers:
   speedtest_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/ookla-speedtest.mrs"}
   gfw_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/gfw.mrs"}
   cn_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs"}
+  
+  # IP 规则
   cn_ip: { <<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs"}
   google_ip: { <<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/google.mrs"}
   telegram_ip: { <<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/telegram.mrs"}
   netflix_ip: { <<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/netflix.mrs"}
+  
+  # 中国大陆服务相关
   bilibili_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/bilibili.mrs"}
   iqiyi_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/iqiyi.mrs"}
   sina_domain: { <<: *domain, url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/sina.mrs"}
