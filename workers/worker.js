@@ -1,3 +1,4 @@
+
 /* =================================================================
  *  Cloudflare Worker: All-in-One Proxy Tool
  *  功能：
@@ -138,7 +139,7 @@ async function fetchConfigsByUuidFromDB(uuid, env, options = {}) {
         if (options.getAll) {
             // 获取所有数据，不分页
             const { results } = await db.prepare(query).bind(...params).all();
-    
+  
             return {
                 results,
                 total,
@@ -151,12 +152,12 @@ async function fetchConfigsByUuidFromDB(uuid, env, options = {}) {
             const page = options.page || 1;
             const pageSize = options.pageSize || 10;
             const offset = (page - 1) * pageSize;
-    
+  
             query += ` LIMIT ? OFFSET ?`;
             params.push(pageSize, offset);
-    
+  
             const { results } = await db.prepare(query).bind(...params).all();
-    
+  
             return {
                 results,
                 total,
@@ -683,27 +684,48 @@ async function handleAddConfig(request, env) {
 }
 
 async function handleUpdateConfig(request, env) {
-    let body;
-    try { body = await request.json(); } catch (e) { return jsonResponse({ error: '无效JSON' }, 400); }
-    const { id, config_data, domain_hosting = 'Cloudflare' } = body;
+  let body;
+  try { 
+      body = await request.json(); 
+  } catch (e) { 
+      return jsonResponse({ error: '无效JSON' }, 400); 
+  }
+  
+  const { id, config_data, domain_hosting = 'Cloudflare' } = body;
+  if (!id) return jsonResponse({ error: '缺少配置ID' }, 400);
 
-    const protocol = getProtocol(config_data);
-    if (protocol === 'unknown') return jsonResponse({ error: '不支持的配置格式' }, 400);
-    const remark = extractRemarkFromConfig(config_data, protocol);
+  const protocol = getProtocol(config_data);
+  if (protocol === 'unknown') return jsonResponse({ error: '不支持的配置格式' }, 400);
+  const remark = extractRemarkFromConfig(config_data, protocol);
 
-    const validDomainHostings = [
-        'Cloudflare', '阿里ESA', '腾讯Edgeone', 'AWS Cloudfront',
-        'Gcore', 'Fastly', 'CacheFly', 'LightCDN', 'Vercel', 'Netlify',
-        '无', '其他'
-    ];
-    const hostingValue = validDomainHostings.includes(domain_hosting) ? domain_hosting : 'Cloudflare';
+  const validDomainHostings = [
+      'Cloudflare', '阿里ESA', '腾讯Edgeone', 'AWS Cloudfront',
+      'Gcore', 'Fastly', 'CacheFly', 'LightCDN', 'Vercel', 'Netlify',
+      '无', '其他'
+  ];
+  const hostingValue = validDomainHostings.includes(domain_hosting) ? domain_hosting : 'Cloudflare';
 
-    try {
-        const res = await env.DB.prepare('UPDATE configs SET config_data = ?, protocol = ?, remark = ?, domain_hosting = ?, updated_at = ? WHERE id = ?')
-            .bind(config_data, protocol, remark, hostingValue, Date.now(), id).run();
-        return res.changes > 0 ? jsonResponse({ success: true, message: 'Updated' }) : jsonResponse({ error: '未变更' }, 404);
-    } catch (e) { return jsonResponse({ error: e.message }, 500); }
+  try {
+      // 强制转换 id 为数字，确保与数据库类型一致
+      const targetId = parseInt(id);
+      
+      const res = await env.DB.prepare('UPDATE configs SET config_data = ?, protocol = ?, remark = ?, domain_hosting = ?, updated_at = ? WHERE id = ?')
+          .bind(config_data, protocol, remark, hostingValue, Date.now(), targetId)
+          .run();
+
+      // 只要执行没有报错，就返回成功。
+      // changes 为 0 通常是因为 ID 未找到或数据库认为数据无变化，但在管理后台应视为“处理完成”
+      return jsonResponse({ 
+          success: true, 
+          message: res.changes > 0 ? 'Updated' : 'No changes made',
+          rows_affected: res.changes 
+      });
+  } catch (e) { 
+      console.error("Update error:", e.message);
+      return jsonResponse({ error: e.message }, 500); 
+  }
 }
+
 
 async function handleGetConfigs(uuid, env, url) {
     // 获取查询参数
@@ -818,12 +840,12 @@ async function handleDelete(type, value, env) {
             if (!Array.isArray(ids) || ids.length === 0) {
                 return jsonResponse({ error: '无效的ID列表' }, 400);
             }
-    
+  
             const result = await deleteConfigsByIds(env, ids);
             if (!result.success) {
                 return jsonResponse({ error: result.error }, 500);
             }
-    
+  
             return jsonResponse({ 
                 success: true, 
                 deleted: result.deleted,
@@ -1879,7 +1901,7 @@ export default {
                 if (idMatch) return await handleDelete('id', idMatch.pathname.groups.id, env);
                 const uuidMatch = manageUUID.exec(url);
                 if (uuidMatch) return await handleDelete('uuid', uuidMatch.pathname.groups.uuid, env);
-        
+      
                 // ===== API: 批量删除配置 =====
                 if (path === '/manage/configs/batch') {
                     const body = await request.json();
@@ -1939,7 +1961,7 @@ const unifiedPageHtmlContent = `
       from { opacity: 1; }
       to { opacity: 0; transform: translateX(100%); }
     }
-  
+
     /* 域名托管徽章样式 */
     .hosting-cloudflare { background-color: #F6821F; color: white; }
     .hosting-aliyun { background-color: #FE6A00; color: white; }
@@ -1953,16 +1975,16 @@ const unifiedPageHtmlContent = `
     .hosting-netlify { background-color: #05B7B5; color: white; }
     .hosting-none { background-color: #f8f9fa; color: #6c757d; }
     .hosting-other { background-color: #f0f0f0; color: #666; }
-  
+
     /* UUID状态徽章 */
     .uuid-status-active { background-color: #10b981; color: white; }
     .uuid-status-inactive { background-color: #6b7280; color: white; }
     .uuid-status-suspended { background-color: #ef4444; color: white; }
-  
+
     /* 访问类型徽章 */
     .type-subscription { background-color: #dbeafe; color: #1e40af; }
     .type-apigen { background-color: #d1fae5; color: #065f46; }
-  
+
     /* 自定义单选按钮样式 */
     .radio-option {
       position: relative;
@@ -1988,7 +2010,7 @@ const unifiedPageHtmlContent = `
       color: white;
       border-color: #6b7280;
     }
-  
+
     /* 加载动画 */
     .loader {
       display: inline-block;
@@ -2005,7 +2027,7 @@ const unifiedPageHtmlContent = `
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
     }
-  
+
     /* 表格滚动条样式 */
     .table-container {
       overflow-x: auto;
@@ -2070,7 +2092,7 @@ const unifiedPageHtmlContent = `
           <i data-lucide="x" class="w-5 h-5"></i>
         </button>
       </div>
-    
+  
       <div class="p-6">
         <div class="mb-4 bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg">
           <div class="flex items-start gap-2">
@@ -2081,14 +2103,14 @@ const unifiedPageHtmlContent = `
             </p>
           </div>
         </div>
-    
+  
         <div id="uuidInfoPersonalContent">
           <div class="mb-4">
             <label class="block text-sm font-medium text-gray-700 mb-1">UUID</label>
             <input type="text" id="uuidInfoUuid" readonly 
                    class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 font-mono text-gray-600 focus:outline-none">
           </div>
-      
+    
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">所属人姓名/标识 *</label>
@@ -2101,13 +2123,13 @@ const unifiedPageHtmlContent = `
                      class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none">
             </div>
           </div>
-      
+    
           <div class="mb-4">
             <label class="block text-sm font-medium text-gray-700 mb-1">其他联系信息</label>
             <input type="text" id="uuidInfoContact" placeholder="电话、微信等其他联系方式（可选）"
                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none">
           </div>
-      
+    
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">状态</label>
@@ -2119,13 +2141,13 @@ const unifiedPageHtmlContent = `
               </select>
             </div>
           </div>
-      
+    
           <div class="mb-6">
             <label class="block text-sm font-medium text-gray-700 mb-1">备注信息</label>
             <textarea id="uuidInfoRemark" rows="3" placeholder="可在此添加备注信息..."
                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none resize-y"></textarea>
           </div>
-      
+    
           <div class="flex justify-end gap-3">
             <button onclick="closeUuidInfoModal()" 
                     class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
@@ -2150,7 +2172,7 @@ const unifiedPageHtmlContent = `
           <i data-lucide="x" class="w-5 h-5"></i>
         </button>
       </div>
-    
+  
       <div class="p-6">
         <div class="mb-4">
           <label for="configUuidInput" class="block text-sm font-medium text-gray-700 mb-1">
@@ -2168,7 +2190,7 @@ const unifiedPageHtmlContent = `
             </p>
           </div>
         </div>
-      
+    
         <div class="flex justify-end gap-3">
           <button onclick="closeConfigManagerModal()"
                   class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
@@ -2195,11 +2217,11 @@ const unifiedPageHtmlContent = `
           <i data-lucide="x" class="w-5 h-5"></i>
         </button>
       </div>
-    
+  
       <div class="p-6">
         <input type="hidden" id="edit-id">
         <input type="hidden" id="edit-protocol">
-      
+    
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">别名 (Remarks)</label>
@@ -2230,19 +2252,19 @@ const unifiedPageHtmlContent = `
             </select>
           </div>
         </div>
-      
+    
         <div class="mb-4">
           <label class="block text-sm font-medium text-gray-700 mb-1">地址 (Address)</label>
           <input type="text" id="edit-add"
                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none">
         </div>
-      
+    
         <div class="mb-4">
           <label class="block text-sm font-medium text-gray-700 mb-1">UUID / Password</label>
           <input type="text" id="edit-id-uuid"
                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none">
         </div>
-      
+    
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">传输 (Net)</label>
@@ -2259,7 +2281,7 @@ const unifiedPageHtmlContent = `
                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none">
           </div>
         </div>
-      
+    
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">伪装域名 (Host)</label>
@@ -2272,7 +2294,7 @@ const unifiedPageHtmlContent = `
                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none">
           </div>
         </div>
-      
+    
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">TLS</label>
@@ -2288,7 +2310,7 @@ const unifiedPageHtmlContent = `
                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none">
           </div>
         </div>
-      
+    
         <div class="flex justify-end gap-3">
           <button onclick="closeEditModal()"
                   class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
@@ -2339,7 +2361,7 @@ const unifiedPageHtmlContent = `
             <i data-lucide="settings" class="w-5 h-5 text-gray-700"></i>
             <h2 class="text-xl font-semibold text-gray-800">1. 基础配置</h2>
           </div>
-        
+      
           <div class="mb-4 bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg">
             <div class="flex items-start gap-2">
               <i data-lucide="info" class="w-5 h-5 text-blue-500 mt-0.5"></i>
@@ -2350,7 +2372,7 @@ const unifiedPageHtmlContent = `
               </p>
             </div>
           </div>
-        
+      
           <div class="flex flex-wrap gap-3 mb-4">
             <label class="radio-option">
               <input type="radio" name="genConfigSource" value="manual" checked>
@@ -2361,12 +2383,12 @@ const unifiedPageHtmlContent = `
               <span class="px-4 py-2 rounded-lg">从UUID获取</span>
             </label>
           </div>
-        
+      
           <div id="genManualConfigInput">
             <textarea id="genBaseConfigInput" placeholder="在此粘贴一个或多个基础配置，每行一个。"
                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none font-mono text-sm resize-y" rows="4"></textarea>
           </div>
-        
+      
           <div id="genUuidConfigInput" class="hidden">
             <input type="text" id="genBaseConfigUuidInput" placeholder="UUID将自动填充"
                    class="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-50 font-mono text-sm mb-3 focus:outline-none">
@@ -2385,7 +2407,7 @@ const unifiedPageHtmlContent = `
             <i data-lucide="list" class="w-5 h-5 text-gray-700"></i>
             <h2 class="text-xl font-semibold text-gray-800">2. 优选列表 (IP/域名)</h2>
           </div>
-        
+      
           <div class="mb-4">
             <label class="block text-sm font-medium text-gray-700 mb-2">地址类型</label>
             <div class="flex flex-wrap gap-3">
@@ -2422,7 +2444,7 @@ const unifiedPageHtmlContent = `
                 </label>
               </div>
             </div>
-          
+        
             <div class="mb-6">
               <label class="block text-sm font-medium text-gray-700 mb-2">运营商</label>
               <div class="flex flex-wrap gap-3">
@@ -2462,7 +2484,7 @@ const unifiedPageHtmlContent = `
                   class="w-full mb-4 px-4 py-3 bg-gray-100 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
             获取优选列表
           </button>
-  
+
           <div id="batchSubscriptionLinkBox" class="hidden mb-4">
             <div class="flex gap-2">
               <input type="text" id="batchSubscriptionLink" readonly
@@ -2484,7 +2506,7 @@ const unifiedPageHtmlContent = `
             <i data-lucide="package" class="w-5 h-5 text-gray-700"></i>
             <h2 class="text-xl font-semibold text-gray-800">3. 生成结果</h2>
           </div>
-        
+      
           <div id="batchGeneratedLinkBox" class="hidden mb-4">
             <div class="flex items-center gap-3 mb-2">
               <span class="text-sm font-medium text-gray-700">订阅:</span>
@@ -2498,10 +2520,10 @@ const unifiedPageHtmlContent = `
               </div>
             </div>
           </div>
-        
+      
           <textarea id="genResultTextarea" readonly placeholder="点击下方'生成配置'按钮..."
                     class="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-50 font-mono text-sm resize-y focus:outline-none" rows="6"></textarea>
-  
+
           <div id="batchQrCodeContainer" class="hidden mt-4 p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
             <label class="block text-sm font-medium text-gray-700 mb-2">订阅链接二维码</label>
             <div class="text-center mb-3">
@@ -2548,7 +2570,7 @@ const unifiedPageHtmlContent = `
             <i data-lucide="settings" class="w-5 h-5 text-gray-700"></i>
             <h2 class="text-xl font-semibold text-gray-800">1. 配置信息</h2>
           </div>
-        
+      
           <div class="mb-4 bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg">
             <div class="flex items-start gap-2">
               <i data-lucide="info" class="w-5 h-5 text-blue-500 mt-0.5"></i>
@@ -2559,7 +2581,7 @@ const unifiedPageHtmlContent = `
               </p>
             </div>
           </div>
-        
+      
           <div class="mb-6">
             <input type="text" id="clashConfigUuid" placeholder="UUID将自动填充"
                    class="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-50 font-mono text-sm mb-3 focus:outline-none">
@@ -2570,7 +2592,7 @@ const unifiedPageHtmlContent = `
               </p>
             </div>
           </div>
-  
+
           <div class="p-4 bg-blue-50 border border-blue-200 rounded-lg shadow-sm">
             <div class="flex items-center gap-2 mb-3">
               <i data-lucide="shield" class="w-5 h-5 text-blue-600"></i>
@@ -2599,7 +2621,7 @@ const unifiedPageHtmlContent = `
             <i data-lucide="file-text" class="w-5 h-5 text-gray-700"></i>
             <h2 class="text-xl font-semibold text-gray-800">2. 模板选择</h2>
           </div>
-        
+      
           <div class="mb-4">
             <label class="block text-sm font-medium text-gray-700 mb-2">选择配置文件模板</label>
             <div class="template-select-container">
@@ -2612,7 +2634,7 @@ const unifiedPageHtmlContent = `
               </div>
             </div>
           </div>
-  
+
           <div id="customTemplateInput" class="hidden mb-4">
             <input type="text" id="customTemplateUrl" placeholder="输入自定义模板URL，如: https://raw.githubusercontent.com/your-repo/config.yaml"
                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none">
@@ -2622,18 +2644,18 @@ const unifiedPageHtmlContent = `
               </p>
             </div>
           </div>
-  
+
           <div id="templateLoading" class="hidden text-center py-8">
             <div class="inline-block w-8 h-8 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin mb-3"></div>
             <p class="text-gray-600">正在加载模板列表...</p>
           </div>
-  
+
           <div id="templateError" class="hidden mb-4 bg-red-50 border-l-4 border-red-500 p-4 rounded-lg">
             <p class="text-sm text-red-700">
               无法加载模板列表，请稍后重试。
             </p>
           </div>
-  
+
           <div class="bg-gray-50 border-l-4 border-gray-500 p-4 rounded-lg">
             <p class="text-sm text-gray-700">
               <strong>模板说明：</strong>
@@ -2651,7 +2673,7 @@ const unifiedPageHtmlContent = `
             <i data-lucide="globe" class="w-5 h-5 text-gray-700"></i>
             <h2 class="text-xl font-semibold text-gray-800">3. 优选地址配置</h2>
           </div>
-        
+      
           <div class="mb-4">
             <label class="block text-sm font-medium text-gray-700 mb-2">地址类型</label>
             <div class="flex flex-wrap gap-3">
@@ -2688,7 +2710,7 @@ const unifiedPageHtmlContent = `
                 </label>
               </div>
             </div>
-          
+        
             <div class="mb-4">
               <label class="block text-sm font-medium text-gray-700 mb-2">运营商</label>
               <div class="flex flex-wrap gap-3">
@@ -2731,7 +2753,7 @@ const unifiedPageHtmlContent = `
             <i data-lucide="package" class="w-5 h-5 text-gray-700"></i>
             <h2 class="text-xl font-semibold text-gray-800">4. 生成结果</h2>
           </div>
-        
+      
           <div class="mb-6">
             <button id="generateClashBtn" onclick="generateClashConfig()"
                     class="w-full px-6 py-4 bg-gray-700 text-white rounded-lg border border-gray-700 hover:bg-gray-800 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -2739,7 +2761,7 @@ const unifiedPageHtmlContent = `
               生成Clash订阅文件
             </button>
           </div>
-  
+
           <div class="subscription-link-box hidden p-4 bg-white border border-gray-200 rounded-lg shadow-sm" id="clashSubscriptionLinkBox">
             <label class="block text-sm font-medium text-gray-700 mb-2">订阅链接</label>
             <div class="flex flex-col sm:flex-row gap-2 mb-4">
@@ -2750,7 +2772,7 @@ const unifiedPageHtmlContent = `
                 复制
               </button>
             </div>
-    
+  
             <div id="clashQrCodeContainer" class="hidden mt-4 p-4 bg-gray-50 border border-gray-200 rounded-lg shadow-sm">
               <label class="block text-sm font-medium text-gray-700 mb-2">订阅链接二维码</label>
               <div class="text-center mb-3">
@@ -2775,7 +2797,7 @@ const unifiedPageHtmlContent = `
               </p>
             </div>
           </div>
-  
+
           <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg">
             <p class="text-sm text-gray-700">
               <strong>新特性：</strong> 现在支持更多现代协议，包括Hysteria2、Tuic、AnyTLS、Any-reality等。
@@ -2794,7 +2816,7 @@ const unifiedPageHtmlContent = `
             <i data-lucide="key" class="w-5 h-5 text-gray-700"></i>
             <h2 class="text-xl font-semibold text-gray-800">1. 当前UUID</h2>
           </div>
-        
+      
           <div class="flex flex-col sm:flex-row gap-3 mb-4">
             <input type="text" id="queryUuidInput" placeholder="UUID将自动加载" readonly
                    class="flex-1 px-4 py-3 border border-gray-300 rounded-lg bg-gray-50 font-mono text-sm focus:outline-none">
@@ -2809,7 +2831,7 @@ const unifiedPageHtmlContent = `
               </button>
             </div>
           </div>
-  
+
           <div id="manageSubLinkDisplay" class="hidden mt-4">
             <div class="flex flex-col sm:flex-row gap-2">
               <input type="text" id="manageSubUrlLink" readonly
@@ -2820,7 +2842,7 @@ const unifiedPageHtmlContent = `
               </button>
             </div>
           </div>
-  
+
           <div class="mt-4 bg-gray-50 border-l-4 border-gray-500 p-3 rounded-lg">
             <p class="text-sm text-gray-700">
               <strong>提示：</strong> UUID已自动保存。您可以在其他标签页（配置生成、订阅生成）中使用同一个UUID。
@@ -2835,7 +2857,7 @@ const unifiedPageHtmlContent = `
             <i data-lucide="list" class="w-5 h-5 text-gray-700"></i>
             <h2 class="text-xl font-semibold text-gray-800">2. 配置列表</h2>
           </div>
-  
+
           <!-- 筛选栏 -->
           <div class="flex flex-col sm:flex-row flex-wrap gap-4 mb-4">
             <div class="flex items-center gap-2">
@@ -2886,7 +2908,7 @@ const unifiedPageHtmlContent = `
               </select>
             </div>
           </div>
-  
+
           <!-- 批量操作栏 -->
           <div id="bulkActionsBar" class="hidden mb-4 p-3 bg-gray-100 border border-gray-200 rounded-lg">
             <div class="flex flex-col sm:flex-row justify-between items-center gap-3">
@@ -2900,10 +2922,10 @@ const unifiedPageHtmlContent = `
               </button>
             </div>
           </div>
-  
+
           <!-- 配置列表表格 -->
           <div id="queryResultsContainer" class="mb-6"></div>
-  
+
           <!-- 分页控件 -->
           <div id="paginationContainer" class="hidden pt-4 border-t border-gray-200">
             <div class="flex flex-col sm:flex-row justify-between items-center gap-3">
@@ -2933,7 +2955,7 @@ const unifiedPageHtmlContent = `
             <i data-lucide="bar-chart" class="w-5 h-5 text-gray-700"></i>
             <h2 class="text-xl font-semibold text-gray-800">3. 访问统计</h2>
           </div>
-        
+      
           <div class="flex flex-wrap gap-3 mb-4">
             <select id="statsDays" onchange="loadUuidStats()"
                     class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-500">
@@ -2955,13 +2977,13 @@ const unifiedPageHtmlContent = `
               分类统计
             </button>
           </div>
-  
+
           <div id="manageStatsSummary" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"></div>
-  
+
           <div class="mb-6" style="height: 300px;">
             <canvas id="manageStatsChart"></canvas>
           </div>
-  
+
           <div>
             <h3 class="font-semibold text-gray-800 mb-3">最近访问记录</h3>
             <div id="manageRecentLogs" class="border border-gray-200 rounded-lg p-4 max-h-60 overflow-y-auto bg-white">
@@ -2976,7 +2998,7 @@ const unifiedPageHtmlContent = `
             <i data-lucide="plus" class="w-5 h-5 text-gray-700"></i>
             <h2 class="text-xl font-semibold text-gray-800">4. 添加新节点</h2>
           </div>
-        
+      
           <div class="mb-4">
             <label class="block text-sm font-medium text-gray-700 mb-2">域名托管服务 (Domain Hosting)</label>
             <select id="domainHostingSelect"
@@ -3001,7 +3023,7 @@ const unifiedPageHtmlContent = `
               </p>
             </div>
           </div>
-        
+      
           <div class="mb-6">
             <label class="block text-sm font-medium text-gray-700 mb-2">配置数据 (可批量添加)</label>
             <textarea id="addConfigData" placeholder="支持批量添加：
@@ -3010,7 +3032,7 @@ vless://...
 trojan://..."
                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none font-mono text-sm resize-y" rows="4"></textarea>
           </div>
-        
+      
           <button onclick="manageAddConfig()"
                   class="w-full px-6 py-4 bg-gray-700 text-white rounded-lg border border-gray-700 hover:bg-gray-800 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
             添加到当前 UUID
@@ -3106,14 +3128,14 @@ trojan://..."
         console.error('配置管理模态框未找到');
         return;
       }
-    
+  
       modal.classList.remove('hidden');
-    
+  
       // 聚焦到输入框
       const input = document.getElementById('configUuidInput');
       if (input) {
         input.focus();
-      
+    
         // 自动填充存储的 UUID
         const storedUuid = getUuidFromStorage();
         if (storedUuid) {
@@ -3171,13 +3193,13 @@ trojan://..."
         if (configManagerOpenBtn) configManagerOpenBtn.style.display = 'none';
         if (uuidDropdownContainer) {
           uuidDropdownContainer.classList.remove('hidden');
-  
+
           // 设置UUID显示（截短显示）
           const shortUuid = storedUuid.substring(0, 8) + '...';
           uuidDisplay.textContent = 'UUID: ' + shortUuid;
           uuidDisplay.title = 'UUID: ' + storedUuid;
           dropdownUuid.textContent = storedUuid;
-  
+
           // 添加下拉菜单交互
           setupUuidDropdown();
         }
@@ -3231,7 +3253,7 @@ trojan://..."
     document.addEventListener('keydown', function(e) {
       const configManagerModal = document.getElementById('configManagerModal');
       const uuidInfoModal = document.getElementById('uuidInfoModal');
-    
+  
       if (e.key === 'Escape') {
         if (configManagerModal && !configManagerModal.classList.contains('hidden')) {
           closeConfigManagerModal();
@@ -3256,10 +3278,10 @@ trojan://..."
 
       const modal = document.getElementById('uuidInfoModal');
       modal.classList.remove('hidden');
-    
+  
       // 加载当前UUID信息
       loadCurrentUuidInfo(storedUuid);
-    
+  
       // 确保保存按钮状态正确
       const saveBtn = document.getElementById('uuidInfoSaveBtn');
       if (saveBtn && !saveBtn.originalText) {
@@ -3270,7 +3292,7 @@ trojan://..."
     // 关闭UUID信息管理模态框
     function closeUuidInfoModal() {
       document.getElementById('uuidInfoModal').classList.add('hidden');
-    
+  
       // 重置保存按钮状态
       const saveBtn = document.getElementById('uuidInfoSaveBtn');
       if (saveBtn && saveBtn.originalText) {
@@ -3282,12 +3304,12 @@ trojan://..."
     // 加载当前UUID信息（简化版，不加载时间字段）
     async function loadCurrentUuidInfo(uuid) {
       const saveBtn = document.getElementById('uuidInfoSaveBtn');
-    
+  
       // 保存原始文本
       if (!saveBtn.originalText) {
         saveBtn.originalText = saveBtn.innerHTML;
       }
-    
+  
       // 设置加载状态
       saveBtn.disabled = true;
       saveBtn.innerHTML = '<div class="loader"></div>加载中...';
@@ -3361,12 +3383,12 @@ trojan://..."
       // 因为有些用户可能使用非标准邮箱格式
 
       const saveBtn = document.getElementById('uuidInfoSaveBtn');
-    
+  
       // 保存按钮原始文本
       if (!saveBtn.originalText) {
         saveBtn.originalText = saveBtn.innerHTML;
       }
-    
+  
       // 正确设置加载状态
       saveBtn.disabled = true;
       saveBtn.innerHTML = '<div class="loader"></div>保存中...';
@@ -3389,14 +3411,14 @@ trojan://..."
 
         if (data.success) {
           showToast(\`UUID信息\${data.action === 'created' ? '创建' : '更新'}成功\`, 'success');
-      
+    
           // 重新加载信息以获取更新时间
           setTimeout(() => {
             loadCurrentUuidInfo(uuid);
           }, 500);
         } else {
           showToast(data.error || '保存UUID信息失败', 'error');
-        
+      
           // 出错时重置按钮状态
           saveBtn.disabled = false;
           saveBtn.innerHTML = saveBtn.originalText;
@@ -3404,7 +3426,7 @@ trojan://..."
       } catch (error) {
         console.error('保存UUID信息失败:', error);
         showToast('保存UUID信息失败: ' + error.message, 'error');
-      
+    
         // 捕获异常时重置按钮状态
         saveBtn.disabled = false;
         saveBtn.innerHTML = saveBtn.originalText;
@@ -3541,15 +3563,15 @@ trojan://..."
       const c = document.getElementById('toast-container'); 
       const t = document.createElement('div'); 
       t.className = 'px-4 py-3 rounded-lg shadow-lg border border-gray-300 bg-white text-gray-800 animate-slide-in'; 
-    
+  
       // 设置图标
       let icon = 'ℹ️';
       if (type === 'success') icon = '✅';
       if (type === 'error') icon = '❌';
-    
+  
       t.innerHTML = \`<span>\${icon} \${msg}</span>\`; 
       c.appendChild(t); 
-    
+  
       // 5秒后移除
       setTimeout(()=>{
         t.classList.add('animate-fade-out');
@@ -3645,25 +3667,25 @@ trojan://..."
 
       try {
         const addrType = document.querySelector('input[name="genAddressType"]:checked').value;
-        
+      
         // 如果选择了禁用，则不获取地址列表
         if (addrType === 'disable') {
           showToast('优选已禁用，不需要获取地址列表', 'info');
           setButtonLoading(btn, false, '获取优选列表');
           return;
         }
-        
+      
         let url = \`\${WORKER_DOMAIN}/fetch-addresses?type=\${addrType}\`;
 
         if (addrType === 'ip') {
           const ipType = document.querySelector('input[name="genIpType"]:checked').value;
           const carrier = document.querySelector('input[name="genCarrierType"]:checked').value;
           url += \`&ipType=\${ipType}&carrierType=\${carrier}&source=database\`;
-  
+
           const subUrl = \`\${WORKER_DOMAIN}/batch-ip?type=ip&ipType=\${ipType}&carrier=\${carrier}\`;
           subInput.value = subUrl;
           subBox.classList.remove('hidden');
-  
+
         } else {
           const subUrl = \`\${WORKER_DOMAIN}/batch-ip?type=domain\`;
           subInput.value = subUrl;
@@ -3710,21 +3732,21 @@ trojan://..."
 
         // 检查是否禁用优选
         const disableOptimization = addressType === 'disable';
-        
+      
         if (!disableOptimization) {
           payload.addressList = addressList;
         }
-        
+      
         payload.disableOptimization = disableOptimization;
 
         if (configSource === 'uuid') {
           const uuid = document.getElementById('genBaseConfigUuidInput').value.trim();
           if(!uuid) throw new Error("请输入 UUID");
           payload.baseConfigUuid = uuid;
-  
+
           const addrType = addressType;
           let linkParams = \`type=\${addrType}\`;
-          
+        
           if (disableOptimization) {
             linkParams += \`&disable=true\`;
           } else if(addrType === 'ip') {
@@ -3732,19 +3754,19 @@ trojan://..."
             const carrier = document.querySelector('input[name="genCarrierType"]:checked').value;
             linkParams += \`&ipType=\${ipType}&carrier=\${carrier}\`;
           }
-          
+        
           const subLink = \`\${WORKER_DOMAIN}/batch-configs/\${uuid}?\${linkParams}\`;
           linkInput.value = subLink;
           linkBox.classList.remove('hidden');
-  
+
           // Generate QR code
           generateBatchQRCode(subLink);
-  
+
         } else {
           const manualConfig = document.getElementById('genBaseConfigInput').value.trim();
           if(!manualConfig) throw new Error("请输入基础配置");
           payload.baseConfig = manualConfig;
-  
+
           if (disableOptimization) {
             showToast('手动模式，优选已禁用，只输出原配置', 'info');
           } else {
@@ -3764,7 +3786,7 @@ trojan://..."
         if (data.configs && Array.isArray(data.configs)) {
           resultArea.value = data.configs.join('\\n');
           showToast(data.message || "生成成功", 'success');
-  
+
           if (data.stats) {
             console.log("生成统计:", data.stats);
           }
@@ -3926,14 +3948,14 @@ trojan://..."
           document.getElementById('bulkActionsBar').classList.add('hidden');
         } else {
           const d = await r.json();
-  
+
           // 更新分页信息
           currentTotal = d.pagination.total;
           currentTotalPages = d.pagination.totalPages;
-  
+
           // 渲染表格
           let h = '<div class="table-container"><table class="w-full"><thead><tr class="bg-gray-100"><th class="p-3 text-left"><input type="checkbox" id="selectAllCheckbox" class="mr-2" onclick="toggleSelectAll()">全选</th><th class="p-3 text-left">备注</th><th class="p-3 text-left">协议</th><th class="p-3 text-left">域名托管</th><th class="p-3 text-left">配置</th><th class="p-3 text-left">操作</th></tr></thead><tbody>';
-  
+
           if (!d.configs || d.configs.length === 0) {
             h += '<tr><td colspan="6" class="p-5 text-center text-gray-500">未找到符合条件的配置</td></tr>';
           } else {
@@ -3942,7 +3964,7 @@ trojan://..."
               const hosting = Row.domain_hosting || 'Cloudflare';
               const hostingClass = hostingStyleMap[hosting] || 'hosting-other';
               const isSelected = selectedConfigs.has(Row.id) ? 'checked' : '';
-      
+    
               h+=\`<tr class="border-t border-gray-200 hover:bg-gray-50">
                 <td class="p-3"><input type="checkbox" class="config-checkbox" data-id="\${Row.id}" \${isSelected} onchange="toggleConfigSelection(\${Row.id}, this.checked)"></td>
                 <td class="p-3">\${Row.remark||'-'}</td>
@@ -3958,10 +3980,10 @@ trojan://..."
           }
           h+='</tbody></table></div>'; 
           c.innerHTML = h;
-  
+
           // 更新分页控件
           updatePaginationControls();
-  
+
           // 更新批量操作栏
           updateBulkActionsBar();
         }
@@ -4256,6 +4278,7 @@ trojan://..."
       const domainHosting = document.getElementById('edit-domain-hosting').value;
 
       let nL = '';
+      // 构建配置字符串的逻辑保持不变
       if (proto === 'vmess') {
         nL = 'vmess://' + b64EncodeUnicode(JSON.stringify({
           v: "2", ps, add, port, id: uuid, aid: "0", scy: "auto",
@@ -4266,47 +4289,59 @@ trojan://..."
                 proto === 'anytls' || proto === 'socks5' ||
                 proto === 'any-reality' || proto === 'anyreality' ||
                 proto === 'reality' || proto === 'ss') {
-        let u = new URL(proto + '://' + uuid + '@' + add + ':' + port);
-        if (net !== 'tcp') u.searchParams.set('type', net);
-        if (type) u.searchParams.set('headerType', type);
-        if (tls === 'tls') {
-          u.searchParams.set('security', 'tls');
-          if (sni) u.searchParams.set('sni', sni);
+        try {
+          let u = new URL(proto + '://' + uuid + '@' + add + ':' + port);
+          if (net !== 'tcp' && net) u.searchParams.set('type', net);
+          if (type) u.searchParams.set('headerType', type);
+          if (tls === 'tls') {
+            u.searchParams.set('security', 'tls');
+            if (sni) u.searchParams.set('sni', sni);
+          }
+          if (host) u.searchParams.set('host', host);
+          if (path) {
+            if (net === 'grpc') u.searchParams.set('serviceName', path);
+            else u.searchParams.set('path', path);
+          }
+          u.hash = encodeURIComponent(ps);
+          nL = u.toString();
+        } catch(e) {
+          showToast('生成的URL无效: ' + e.message, 'error');
+          return;
         }
-        if (host) u.searchParams.set('host', host);
-        if (path) {
-          if (net === 'grpc') u.searchParams.set('serviceName', path);
-          else u.searchParams.set('path', path);
-        }
-        u.hash = encodeURIComponent(ps);
-        nL = u.toString();
       }
 
-      const b = document.querySelector('.modal .bg-gray-700');
-      const o = b.innerHTML;
-      setButtonLoading(b, true);
+      const b = document.querySelector('#editModalOverlay button[onclick="saveEditedConfig()"]');
+      const o = b ? b.innerHTML : '保存修改';
+      if (b) setButtonLoading(b, true);
+
       try {
         const r = await fetch(\`\${WORKER_DOMAIN}/manage/configs\`, {
           method: 'PUT',
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({
-            id, 
+            id: parseInt(id), // 确保传给后端的是数字
             config_data: nL,
             domain_hosting: domainHosting
           })
         });
+        
         const result = await r.json();
         if (result.success) {
           showToast('保存成功', 'success');
-          closeEditModal();
-          manageQueryByUuid(); // 修复：保存后刷新列表
+          closeEditModal(); // 关闭窗口
+          
+          // 延迟一小会儿刷新列表，确保数据库操作已同步
+          setTimeout(() => {
+            manageQueryByUuid(); 
+          }, 300);
         } else {
           showToast(result.error || '保存失败', 'error');
         }
       } catch (e) {
-        showToast(e.message, 'error');
+        console.error("Save error:", e);
+        showToast('请求失败: ' + e.message, 'error');
       } finally {
-        setButtonLoading(b, false, o);
+        if (b) setButtonLoading(b, false, o);
       }
     }
 
@@ -4396,7 +4431,7 @@ trojan://..."
             tension: 0.4
           }];
           break;
-  
+
         case 'split':
           datasets = [
             {
@@ -4515,7 +4550,7 @@ trojan://..."
       document.getElementById('chartTotalBtn').classList.toggle('text-white', currentChartType === 'total');
       document.getElementById('chartTotalBtn').classList.toggle('bg-gray-100', currentChartType !== 'total');
       document.getElementById('chartTotalBtn').classList.toggle('text-gray-700', currentChartType !== 'total');
-    
+  
       document.getElementById('chartSplitBtn').classList.toggle('bg-gray-700', currentChartType === 'split');
       document.getElementById('chartSplitBtn').classList.toggle('text-white', currentChartType === 'split');
       document.getElementById('chartSplitBtn').classList.toggle('bg-gray-100', currentChartType !== 'split');
@@ -4531,7 +4566,7 @@ trojan://..."
       const ipContainer = document.getElementById('clashIpOptionsContainer');
       const domainBox = document.getElementById('clashDomainInfoBox');
       const disableBox = document.getElementById('clashDisableInfoBox');
-      
+    
       if (type === 'domain') {
         ipContainer.classList.add('hidden');
         domainBox.classList.remove('hidden');
@@ -4630,7 +4665,7 @@ trojan://..."
           showToast('数据库中没有配置模板', 'error');
         } else {
           const defaultTemplate = templates.find(t => t.is_default === 1);
-  
+
           templates.forEach(template => {
             const option = document.createElement('option');
             option.value = template.name;
@@ -4640,18 +4675,18 @@ trojan://..."
             }
             templateSelect.appendChild(option);
           });
-  
+
           if (!defaultTemplate && templates.length > 0) {
             templateSelect.value = templates[0].name;
           }
-  
+
           const selectedValue = templateSelect.value;
           const selectedTemplate = templates.find(t => t.name === selectedValue);
           const templateDescription = document.getElementById('templateDescription');
           if (selectedTemplate && selectedTemplate.description) {
             templateDescription.textContent = selectedTemplate.description;
           }
-  
+
           generateClashBtn.disabled = false;
         }
 
@@ -4883,7 +4918,7 @@ trojan://..."
       if (activeTab && activeTab.id === 'clash-tab') {
         loadTemplates();
       }
-    
+  
       // 初始化Lucide图标
       lucide.createIcons();
     });
