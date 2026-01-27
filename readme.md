@@ -1,6 +1,6 @@
 # 代理配置管理优选工具 
 
-![JavaScript](https://img.shields.io/badge/JavaScript-ES6+-yellow?logo=javascript&logoColor=white) ![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white)  ![Node.js](https://img.shields.io/badge/Node.js-18+-339933?logo=node.js&logoColor=white)  ![Chart.js](https://img.shields.io/badge/Chart.js-4.0+-FF6384?logo=chart.js&logoColor=white) ![Version](https://img.shields.io/badge/Version-V4.0-blue.svg) ![MIT License](https://img.shields.io/badge/License-MIT-green.svg)
+![JavaScript](https://img.shields.io/badge/JavaScript-ES6+-yellow?logo=javascript&logoColor=white) ![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white)  ![Node.js](https://img.shields.io/badge/Node.js-18+-339933?logo=node.js&logoColor=white)  ![Chart.js](https://img.shields.io/badge/Chart.js-4.0+-FF6384?logo=chart.js&logoColor=white) ![Version](https://img.shields.io/badge/Version-V5.0-blue.svg) ![MIT License](https://img.shields.io/badge/License-MIT-green.svg)
 
 ## 📦 系统组成
 
@@ -9,7 +9,7 @@
 - **`worker.js`** - 主服务（综合配置管理器与生成器）：处理 IP/域名优选、配置管理 CRUD、订阅生成、批量配置替换、Clash 配置文件生成、访问日志与统计等功能（已合并原 `config_worker.js` / `subs_worker.js` 的功能）。
 - **`mg_worker.js`** - 管理后台：JWT 认证、域名/IP/UUID 管理、模板与系统统计、IP 更新、订阅访问统计分析、管理 UI。
 
-**说明**：仓库中目前主要包含 `worker.js` 和 `mg_worker.js`；`config_worker.js` 在代码库中已移除或作为可选模块。**V4.0** 的目标是将功能一体化，简化部署与维护。
+**说明**：仓库中目前主要包含 `worker.js` 和 `mg_worker.js`；`config_worker.js` 在代码库中已移除或作为可选模块。**V5.0** 的目标是将功能一体化，简化部署与维护，并增加UUID信息管理和优选禁用功能。
 
 ## ✨ 主要特性
 
@@ -20,7 +20,7 @@
 *   **`worker.js`（主服务）** - 负责综合配置管理、优选替换、订阅和 Clash 配置生成、批量替换、访问日志与 UUID 统计。
 *   **`mg_worker.js`（管理后台）** - 提供管理 UI、JWT 认证、域名/IP/UUID 管理、模板管理、系统统计、IP 更新任务与订阅分析。
 
-**V4.0 优化**：通过功能整合，减少部署复杂度并提升维护效率。新版部署服务域名示例：`https://proxypilot.yangzifun.org/`
+**V5.0 优化**：通过功能整合，减少部署复杂度并提升维护效率，增加UUID信息管理和优选禁用功能。新版部署服务域名示例：`https://proxypilot.yangzifun.org/`
 
 ### 2. **域名托管属性管理**
 
@@ -111,7 +111,20 @@
 *   **即时预览**：保存后立即在配置列表中显示更新后的配置内容，无需重新查询
 *   **统一编辑界面**：所有协议类型使用统一的编辑界面，简化操作流程
 
-### 12. **安全特性**
+### 12. **V5.0 新增特性**
+
+*   **配置编辑功能增强**：支持更精细的配置参数编辑，包括服务器地址、端口、UUID、传输协议等，编辑后立即生效无需刷新页面
+*   **UI重构与界面优化**：重新设计了用户界面，提供更直观的操作流程、更好的响应式设计，提升了用户体验
+*   **UUID信息管理功能**：
+    - 新增 `uuid_info` 表，用于存储UUID的详细信息（所属人、联系方式、状态等）
+    - 支持UUID的分组管理和统计追踪
+    - 提供UUID信息查询和管理API接口
+*   **优选禁用功能**：
+    - 用户可以选择禁用优选功能，只输出原配置而不进行地址替换
+    - 支持在批量生成器和Clash配置生成中独立控制优选开关
+    - 提供灵活的配置输出选项，满足不同使用场景
+
+### 13. **安全特性**
 
 *   JWT 认证系统，保障管理后台安全
 *   **MFA双重验证**：
@@ -151,6 +164,7 @@
 | **config_templates**     | 存储 Clash/模板信息（name/url/描述）     | `worker.js`, `mg_worker.js` | **推荐** | **已使用**           |
 | **auto_update_settings** | 存储自动更新配置设置                     | `mg_worker.js`              | **必需** | **已使用**           |
 | **api_keys**             | 存储用于 IP 更新等接口的 API 密钥        | `mg_worker.js`              | 可选     | **已使用（若启用）** |
+| **uuid_info**           | 存储UUID的详细信息（所属人、联系方式、状态等） | `worker.js`, `mg_worker.js` | 可选 | **新增** |
 | **mfa_backup_codes**     | 存储 MFA 备份码                          | `mg_worker.js`              | **必需** | **已使用**           |
 
 **说明：**
@@ -158,8 +172,8 @@
 - **已使用表单**：在当前代码中有实际读写操作的表单
 - **已移除表单**：`users`, `uuids`, `system_logs`, `api_access_stats` 等未使用的表已从数据库文件中移除
 - **程序依赖关系**：
-  - `worker.js`：读取 `configs`, `cfips`, `cf_domains`, `config_templates`，写入 `config_access_logs`
-  - `mg_worker.js`：读写 `admin_users`, `cf_domains`, `edgeone_domains`, `cfips`, `auto_update_settings`, `api_keys`, `mfa_backup_codes`，读取 `configs`, `config_access_logs`
+  - `worker.js`：读取 `configs`, `cfips`, `cf_domains`, `config_templates`, `uuid_info`，写入 `config_access_logs`
+  - `mg_worker.js`：读写 `admin_users`, `cf_domains`, `edgeone_domains`, `cfips`, `auto_update_settings`, `api_keys`, `mfa_backup_codes`, `uuid_info`，读取 `configs`, `config_access_logs`
 
 要初始化数据库，请复制 `init_database.sql` 中的完整 SQL 语句到 D1 Console 中执行：
 
@@ -271,7 +285,7 @@ CREATE INDEX IF NOT EXISTS idx_config_templates_is_default ON config_templates(i
 | `proxy-main` | `worker.js`    | `DB`           | `proxy.yangzifun.org`（或 `cfst.yangzifun.org`）             | 主服务，包含优选生成、配置管理、订阅生成功能、Clash 生成等 |
 | `proxy-mg`   | `mg_worker.js` | `DB`           | `mg.proxy.yangzifun.org`（或 `mg.proxypilot.yangzifun.org`） | 管理后台，提供 UI、模板管理、IP 更新、统计与安全管理       |
 
-**V4.0 更新说明**：`worker.js` 已整合原 `config_worker.js` / `subs_worker.js` 的功能，默认只需部署两类 Worker 即可满足大多数场景；如果需要可额外部署备用或只读实例用于高可用。**新版部署服务域名示例：** `https://proxypilot.yangzifun.org/`
+**V5.0 更新说明**：`worker.js` 已整合原 `config_worker.js` / `subs_worker.js` 的功能，默认只需部署两类 Worker 即可满足大多数场景；如果需要可额外部署备用或只读实例用于高可用。**新版部署服务域名示例：** `https://proxypilot.yangzifun.org/`
 
 绑定步骤：
 
@@ -324,6 +338,7 @@ INSERT INTO cf_domains (domain, remark, created_at) VALUES
 *   **生成配置**：点击按钮，底部文本框将显示替换后的节点列表。
 *   **访问日志**：使用UUID生成配置会自动记录访问日志，用于后台统计。
 *   **域名托管属性过滤**：只有域名托管属性为"Cloudflare"的配置会进行优选替换，非Cloudflare配置只输出原配置。
+*   **优选禁用功能**：可以选择禁用优选功能，直接输出原配置而不进行地址替换。
 
 ### 2. 配置管理页
 
@@ -446,7 +461,7 @@ graph TD
 | 用户浏览器  | `worker.js`    | `/manage/configs/:uuid`             | 配置管理、统计查询            |
 | 用户浏览器  | `worker.js`    | `/clash-config`                     | Clash配置文件生成             |
 
-**V4.0更新：** 所有配置管理、统计查询、Clash配置生成功能都已集成到`worker.js`中。
+**V5.0更新：** 所有配置管理、统计查询、Clash配置生成功能都已集成到`worker.js`中，并增加了UUID信息管理和优选禁用功能。
 
 ## 📡 API 接口文档
 
@@ -489,12 +504,17 @@ graph TD
 | `GET`    | `/api/templates`         | 获取模板列表                                       | -                                                            |
 | `GET`    | `/clash-config`          | 生成Clash配置文件（基于模板，`template` 参数必填） | `?uuid=xxx&type=ip&ipType=v4&carrier=CT&template=template-name` |
 | `GET`    | `/sub/:uuid`             | 原始订阅输出（返回 Base64 编码的节点列表）         | -                                                            |
+| `GET`    | `/manage/uuid-info/:uuid` | 获取特定UUID的详细信息                         | -                                                            |
+| `GET`    | `/manage/all-uuid-info`   | 获取所有UUID信息列表                           | `?page=1&size=10&sort=owner&order=asc`                       |
+| `POST`   | `/manage/uuid-info`       | 添加或更新UUID信息                             | `{"uuid":"xxx", "owner":"张三", "email":"zhangsan@example.com", "status":"active"}` |
+| `DELETE` | `/manage/uuid-info/:uuid` | 删除UUID信息                                 | -                                                            |
 
 **说明**：`/sub/:uuid` 订阅响应包含 `Subscription-User-Info` 头，用于客户端订阅流量/配额信息展示。
 
-**V4.0新接口：**
+**V5.0新接口：**
 - `/clash-config`：支持 Clash/Mihomo 配置文件生成，基于模板创建完整配置。**注意**：`template` 参数必填（可以是数据库中的模板名或一个 URL）。响应会返回 `Content-Disposition` 下载头以及若干调试头，如 `X-Template-Used`, `X-Supported-Protocols`, `X-Cloudflare-Configs` 等。
 - `/api/templates`：获取模板列表，用于 Clash 配置生成（返回 `name`, `url`, `description`, `is_default`）。
+- UUID信息管理接口：`/manage/uuid-info/:uuid`, `/manage/all-uuid-info`, `/manage/uuid-info`, `/manage/uuid-info/:uuid` (DELETE)
 
 **已整合的接口**：原`config_worker.js`的配置管理接口和原`subs_worker.js`的Clash生成接口
 
@@ -646,10 +666,12 @@ graph TD
 7.  **Clash配置文件生成**：基于模板生成完整的Clash/Mihomo配置文件
 8.  **模板管理**：统一管理多个配置文件模板，支持一键切换配置
 
-**V4.0新增场景：**
+**V5.0新增场景：**
 - **配置模板化部署**：通过模板管理功能，可以快速部署不同场景的Clash配置文件
 - **一体化配置管理**：所有功能集成在一个界面，简化用户操作流程
 - **服务整合**：减少部署复杂度，提高系统维护效率
+- **UUID精细化管理**：通过UUID信息管理功能，更好地组织和追踪不同用户组的使用情况
+- **灵活的输出控制**：通过优选禁用功能，提供更灵活的配置输出选项，满足不同使用需求
 
 ## 🔧 技术栈
 
