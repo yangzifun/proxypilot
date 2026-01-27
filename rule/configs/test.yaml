@@ -1,12 +1,14 @@
-# 生成时间: 2026-01-13
-# 模板类型: 高级图标集成模板 - 基于 MetaCubeX 图标库
+# ==========================================================
+# 完整配置文件 - 2026-01-27 优化版
+# 图标库: Orz-3/mini (Color)
 # 适用内核: Mihomo (Clash Meta)
+# ==========================================================
 
 # ==========================================================
-# 节点信息
+# 节点信息 (此处请替换为您真实的节点订阅)
 # ==========================================================
 proxies:
-  - {name: 直连, type: direct}
+  - {name: 示例节点, type: direct}
 
 # ==========================================================
 # 全局配置 
@@ -82,64 +84,64 @@ rule-anchor:
   class: &class {type: http, interval: 86400, behavior: classical, format: text}
 
 # ==========================================================
-# 出站策略 (Proxy Groups) - 已集成 MetaCubeX 图标
+# 出站策略 (Proxy Groups) - 集成 Orz-3/mini 图标
 # ==========================================================
 proxy-groups:
   # --- 1. 默认代理 ---
-  - {name: 🚀 默认代理, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动, 🌐 全部节点], icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/proxy.png"}
+  - {name: 🚀 默认代理, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动, 🌐 全部节点], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Proxy.png"}
   
   # --- 2. AI 服务 ---
-  - {name: 🤖 OpenAI, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动], icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/openai.png"}
-  - {name: ✨ Gemini, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动], icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/google-gemini.png"}
-  - {name: 🧠 Claude, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇩🇪 德国自动], icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/anthropic.png"}
-  - {name: 🌌 常用 AI, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动], icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/ai.png"}
+  - {name: 🤖 OpenAI, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/OpenAI.png"}
+  - {name: ✨ Gemini, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Gemini.png"}
+  - {name: 🧠 Claude, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇩🇪 德国自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Claude.png"}
+  - {name: 🌌 常用 AI, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Bot.png"}
   
   # --- 3. 社交与办公 ---
-  - {name: 📲 Telegram, type: select, include-all: true, filter: "(?i)香港|东京|洛杉矶|弗吉尼亚|新加坡|台湾|德国", proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动], icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/telegram.png"}
-  - {name: 🌏 Meta, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇺🇸 美国自动], icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/facebook.png"}
-  - {name: 🐦 Twitter, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动], icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/twitter.png"}
-  - {name: 💬 Discord, type: select, proxies: [🚀 默认代理, 🇺🇸 美国自动, 🇭🇰 香港自动, 🇩🇪 德国自动], icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/discord.png"}
-  - {name: 🐱 GitHub, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇩🇪 德国自动], icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/github.png"}
-  - {name: 🟦 Microsoft, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动], icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/microsoft.png"}
+  - {name: 📲 Telegram, type: select, include-all: true, filter: "(?i)香港|东京|洛杉矶|弗吉尼亚|新加坡|台湾|德国", proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Telegram.png"}
+  - {name: 🌏 Meta, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇺🇸 美国自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Facebook.png"}
+  - {name: 🐦 Twitter, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Twitter.png"}
+  - {name: 💬 Discord, type: select, proxies: [🚀 默认代理, 🇺🇸 美国自动, 🇭🇰 香港自动, 🇩🇪 德国自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Discord.png"}
+  - {name: 🐱 GitHub, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇩🇪 德国自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Github.png"}
+  - {name: 🟦 Microsoft, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Microsoft.png"}
 
   # --- 4. 流媒体与娱乐 ---
-  - {name: 🎬 YouTube, type: select, include-all: true, filter: "(?i)香港|东京|洛杉矶|弗吉尼亚|新加坡|台湾|德国", proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动], icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/youtube.png"}
-  - {name: 🎥 Netflix, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动], icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/netflix.png"}
-  - {name: 🎞️ Disney+, type: select, proxies: [🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动], icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/disney.png"}
-  - {name: 🎵 TikTok, type: select,  proxies: [🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动], icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/tiktok.png"}
-  - {name: 📺 更多流媒体, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇺🇸 美国自动], icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/streaming.png"}
-  - {name: 🎧 Spotify, type: select, proxies: [🚀 默认代理, ⚡ 自动选择, 🎯 直连], icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/spotify.png"}
+  - {name: 🎬 YouTube, type: select, include-all: true, filter: "(?i)香港|东京|洛杉矶|弗吉尼亚|新加坡|台湾|德国", proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/YouTube.png"}
+  - {name: 🎥 Netflix, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Netflix.png"}
+  - {name: 🎞️ Disney+, type: select, proxies: [🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Disney.png"}
+  - {name: 🎵 TikTok, type: select,  proxies: [🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/TikTok.png"}
+  - {name: 📺 更多流媒体, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇺🇸 美国自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Streaming.png"}
+  - {name: 🎧 Spotify, type: select, proxies: [🚀 默认代理, ⚡ 自动选择, 🎯 直连], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Spotify.png"}
   
   # --- 5. 游戏 ---
-  - {name: 🎮 Steam, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇭🇰 香港自动], icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/steam.png"}
-  - {name: 🎮 Ubisoft, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择, 🇭🇰 香港自动], icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/ubisoft.png"}
-  - {name: 🎮 Epic, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择], icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/epic.png"}
-  - {name: 🎮 EA, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择], icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/ea.png"}
-  - {name: 🎮 PlayStation, type: select, proxies: [🎯 直连, 🚀 默认代理, 🇯🇵 日本自动], icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/playstation.png"}
+  - {name: 🎮 Steam, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇭🇰 香港自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Steam.png"}
+  - {name: 🎮 Ubisoft, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择, 🇭🇰 香港自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Ubisoft.png"}
+  - {name: 🎮 Epic, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Epic.png"}
+  - {name: 🎮 EA, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Game.png"}
+  - {name: 🎮 PlayStation, type: select, proxies: [🎯 直连, 🚀 默认代理, 🇯🇵 日本自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Playstation.png"}
 
   # --- 6. 中国大陆服务 ---
-  - {name: 🎬 大陆视频, type: select, proxies: [🎯 直连, 🚀 默认代理, 🇨🇳 中国自动, 🇭🇰 香港自动], icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/bilibili.png"}
-  - {name: 🍎 Apple, type: select, proxies: [🎯 直连, 🚀 默认代理, 🇨🇳 中国自动, 🇭🇰 香港自动], icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/apple.png"}
-  - {name: 🇨🇳 中国大陆, type: select, proxies: [🎯 直连, 🇨🇳 中国自动, 🚀 默认代理, 🇭🇰 香港自动], icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/cn.png"}
+  - {name: 🎬 大陆视频, type: select, proxies: [🎯 直连, 🚀 默认代理, 🇨🇳 中国自动, 🇭🇰 香港自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Bilibili.png"}
+  - {name: 🍎 Apple, type: select, proxies: [🎯 直连, 🚀 默认代理, 🇨🇳 中国自动, 🇭🇰 香港自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Apple.png"}
+  - {name: 🇨🇳 中国大陆, type: select, proxies: [🎯 直连, 🇨🇳 中国自动, 🚀 默认代理, 🇭🇰 香港自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/CN.png"}
 
   # --- 7. 基础工具 ---
-  - {name: 🔍 Google, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动], icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/google.png"}
-  - {name: 🚀 Speedtest, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择], icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/speedtest.png"}
-  - {name: 💳 PayPal, type: select, proxies: [⚡ 自动选择, 🇺🇸 美国自动, 🇭🇰 香港自动, 🇩🇪 德国自动, 🎯 直连], icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/paypal.png"}
-  - {name: 🚫 广告拦截, type: select, proxies: [REJECT, DIRECT], icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/reject.png"}
-  - {name: 🎯 直连, type: select, proxies: [DIRECT, 🚀 默认代理], icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/direct.png"} 
-  - {name: 🐟 漏网之鱼, type: select, proxies: [🚀 默认代理, 🎯 直连, ⚡ 自动选择, 🇭🇰 香港自动, 🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动], icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/final.png"}
+  - {name: 🔍 Google, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Google.png"}
+  - {name: 🚀 Speedtest, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Speedtest.png"}
+  - {name: 💳 PayPal, type: select, proxies: [⚡ 自动选择, 🇺🇸 美国自动, 🇭🇰 香港自动, 🇩🇪 德国自动, 🎯 直连], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/PayPal.png"}
+  - {name: 🚫 广告拦截, type: select, proxies: [REJECT, DIRECT], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Ads.png"}
+  - {name: 🎯 直连, type: select, proxies: [DIRECT, 🚀 默认代理], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Direct.png"} 
+  - {name: 🐟 漏网之鱼, type: select, proxies: [🚀 默认代理, 🎯 直连, ⚡ 自动选择, 🇭🇰 香港自动, 🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动], icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Final.png"}
 
   # --- 8. 底层策略 ---
-  - {name: ⚡ 自动选择, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/urltest.png"}
-  - {name: 🌐 全部节点, type: select, include-all: true, icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/global.png"}
-  - {name: 🇭🇰 香港自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, filter: "(?i)香港|HK", icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/hk.png"}
-  - {name: 🇯🇵 日本自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, filter: "(?i)日本|JP", icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/jp.png"}
-  - {name: 🇺🇸 美国自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, filter: "(?i)美国|US", icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/us.png"}
-  - {name: 🇸🇬 新加坡自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, filter: "(?i)新加坡|SG", icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/sg.png"}
-  - {name: 🇹🇼 台湾自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, filter: "(?i)台湾|TW", icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/tw.png"}
-  - {name: 🇩🇪 德国自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, filter: "(?i)德国|DE", icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/de.png"}
-  - {name: 🇨🇳 中国自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, filter: "(?i)中国|CN", icon: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/icon/cn.png"}
+  - {name: ⚡ 自动选择, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Urltest.png"}
+  - {name: 🌐 全部节点, type: select, include-all: true, icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/Global.png"}
+  - {name: 🇭🇰 香港自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, filter: "(?i)香港|HK|Hong Kong|HongKong|HKSAR|HKG|Hkg|Hk", icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/HK.png"}
+  - {name: 🇯🇵 日本自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, filter: "(?i)日本|JP", icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/JP.png"}
+  - {name: 🇺🇸 美国自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, filter: "(?i)美国|US", icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/US.png"}
+  - {name: 🇸🇬 新加坡自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, filter: "(?i)新加坡|SG", icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/SG.png"}
+  - {name: 🇹🇼 台湾自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, filter: "(?i)台湾|TW", icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/TW.png"}
+  - {name: 🇩🇪 德国自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, filter: "(?i)德国|DE", icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/DE.png"}
+  - {name: 🇨🇳 中国自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, filter: "(?i)中国|CN", icon: "https://fastly.jsdelivr.net/gh/Orz-3/mini@master/Color/CN.png"}
 
 # ==========================================================
 # 规则匹配 (Rules)
