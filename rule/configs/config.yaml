@@ -223,6 +223,7 @@ rules:
   - GEOIP,SG,🇸🇬 新加坡自动
   - GEOIP,US,🇺🇸 美国自动
   - GEOIP,DE,🇩🇪 德国自动
+  - GEOIP,CN,🇨🇳 中国自动
 
 # 8.中国大陆分流
   - RULE-SET,bilibili_domain,🎬 大陆视频
