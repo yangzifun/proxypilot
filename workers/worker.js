@@ -1928,7 +1928,7 @@ export default {
 };
 
 // =================================================================
-//  UNIFIED FRONTEND PAGE (整合的前端页面) - Tailwind CSS + Lucide 版本
+//  UNIFIED FRONTEND PAGE (整合的前端页面) - 移动端适配优化版
 // =================================================================
 
 const unifiedPageHtmlContent = `
