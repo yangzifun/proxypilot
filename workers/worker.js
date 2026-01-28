@@ -1,4 +1,3 @@
-
 /* =================================================================
  *  Cloudflare Worker: All-in-One Proxy Tool
  *  功能：
@@ -708,13 +707,13 @@ const hostingValue = validDomainHostings.includes(domain_hosting) ? domain_hosti
 try {
     // 强制转换 id 为数字，确保与数据库类型一致
     const targetId = parseInt(id);
-    
+  
     const res = await env.DB.prepare('UPDATE configs SET config_data = ?, protocol = ?, remark = ?, domain_hosting = ?, updated_at = ? WHERE id = ?')
         .bind(config_data, protocol, remark, hostingValue, Date.now(), targetId)
         .run();
 
     // 只要执行没有报错，就返回成功。
-    // changes 为 0 通常是因为 ID 未找到或数据库认为数据无变化，但在管理后台应视为“处理完成”
+    // changes 为 0 通常是因为 ID 未找到或数据库认为数据无变化，但在管理后台应视为"处理完成"
     return jsonResponse({ 
         success: true, 
         message: res.changes > 0 ? 'Updated' : 'No changes made',
@@ -1901,7 +1900,7 @@ export default {
               if (idMatch) return await handleDelete('id', idMatch.pathname.groups.id, env);
               const uuidMatch = manageUUID.exec(url);
               if (uuidMatch) return await handleDelete('uuid', uuidMatch.pathname.groups.uuid, env);
-    
+  
               // ===== API: 批量删除配置 =====
               if (path === '/manage/configs/batch') {
                   const body = await request.json();
@@ -1936,7 +1935,10 @@ const unifiedPageHtmlContent = `
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#ffffff">
 <link rel="icon" href="https://s3.yangzifun.org/logo.ico" type="image/x-icon">
 <title>代理配置管理工具</title>
 <!-- Tailwind CSS -->
@@ -1945,18 +1947,120 @@ const unifiedPageHtmlContent = `
 <script src="https://unpkg.com/lucide@latest"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
+  /* 移动端适配的CSS样式 */
+  * {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  /* 移动端触摸优化 */
+  button, 
+  input[type="button"], 
+  input[type="submit"],
+  a.btn-like {
+    min-height: 44px;
+    min-width: 44px;
+    touch-action: manipulation;
+  }
+  
+  /* 移动端表单优化 */
+  input, 
+  select, 
+  textarea {
+    font-size: 16px !important; /* 防止iOS缩放 */
+    padding: 12px !important;
+  }
+  
+  /* 移动端滚动优化 */
+  .table-container {
+    -webkit-overflow-scrolling: touch;
+    overflow-x: auto;
+  }
+  
+  /* 移动端模态框优化 */
+  @media (max-width: 640px) {
+    .modal-content {
+      margin: 0;
+      border-radius: 0;
+      max-height: 100vh;
+      height: 100vh;
+      overflow-y: auto;
+    }
+    
+    .modal-header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: white;
+    }
+    
+    .modal-body {
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+  }
+  
+  /* 移动端标签页优化 */
+  .tab-btn {
+    min-width: 80px;
+    text-align: center;
+    padding: 12px 16px;
+  }
+  
+  /* 移动端卡片间距优化 */
+  @media (max-width: 640px) {
+    .mobile-card {
+      margin-bottom: 12px;
+      padding: 16px;
+    }
+    
+    .mobile-padding {
+      padding-left: 12px;
+      padding-right: 12px;
+    }
+  }
+  
+  /* 移动端按钮组优化 */
+  .mobile-btn-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  @media (min-width: 640px) {
+    .mobile-btn-group {
+      flex-direction: row;
+    }
+  }
+  
+  /* 安全区域适配 */
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top);
+  }
+  
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  
   /* 自定义样式补充 */
-  .config-data-cell { white-space: normal; word-break: break-all; max-width: 200px; }
+  .config-data-cell { 
+    white-space: normal; 
+    word-break: break-all; 
+    max-width: 200px; 
+  }
+  
   .animate-slide-in {
     animation: slideIn 0.5s forwards;
   }
+  
   @keyframes slideIn {
     from { transform: translateX(100%); opacity: 0; }
     to { transform: translateX(0); opacity: 1; }
   }
+  
   .animate-fade-out {
     animation: fadeOut 0.5s forwards;
   }
+  
   @keyframes fadeOut {
     from { opacity: 1; }
     to { opacity: 0; transform: translateX(100%); }
@@ -1988,23 +2092,37 @@ const unifiedPageHtmlContent = `
   /* 自定义单选按钮样式 */
   .radio-option {
     position: relative;
-    padding: 8px 16px;
+    padding: 12px 16px;
     background-color: #f3f4f6;
     border: 2px solid #d1d5db;
     border-radius: 0.375rem;
     color: #4b5563;
     cursor: pointer;
     transition: all 0.3s;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
+  
+  @media (max-width: 640px) {
+    .radio-option {
+      padding: 10px 12px;
+      font-size: 14px;
+    }
+  }
+  
   .radio-option:hover {
     background-color: #e5e7eb;
   }
+  
   .radio-option input[type="radio"] {
     position: absolute;
     opacity: 0;
     width: 0;
     height: 0;
   }
+  
   .radio-option input[type="radio"]:checked + span {
     background-color: #6b7280;
     color: white;
@@ -2023,6 +2141,7 @@ const unifiedPageHtmlContent = `
     margin-right: 8px;
     vertical-align: middle;
   }
+  
   @keyframes rotation {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
@@ -2034,48 +2153,78 @@ const unifiedPageHtmlContent = `
     border: 2px solid #d1d5db;
     border-radius: 0.375rem;
   }
+  
   .table-container::-webkit-scrollbar {
-    height: 8px;
+    height: 6px;
   }
+  
   .table-container::-webkit-scrollbar-track {
     background: #f1f1f1;
     border-radius: 4px;
   }
+  
   .table-container::-webkit-scrollbar-thumb {
     background: #c1c1c1;
     border-radius: 4px;
   }
+  
   .table-container::-webkit-scrollbar-thumb:hover {
     background: #a8a8a8;
+  }
+  
+  /* 移动端表格优化 */
+  @media (max-width: 640px) {
+    .mobile-table {
+      font-size: 12px;
+    }
+    
+    .mobile-table td,
+    .mobile-table th {
+      padding: 8px 4px;
+    }
+  }
+  
+  /* 移动端下拉菜单优化 */
+  @media (max-width: 640px) {
+    .mobile-dropdown {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      top: auto;
+      border-radius: 16px 16px 0 0;
+      max-height: 70vh;
+      overflow-y: auto;
+    }
   }
 </style>
 </head>
 <body class="bg-white min-h-screen font-sans text-gray-800">
 <!-- 配置管理按钮和UUID下拉菜单 -->
-<div id="configManagerBtn" class="fixed top-5 right-5 z-50 flex items-center gap-3">
+<div id="configManagerBtn" class="fixed top-3 right-3 z-50 flex items-center gap-2">
   <!-- 配置管理按钮（未登录时显示） -->
-  <button id="configManagerOpenBtn" class="flex items-center gap-2 px-4 py-2 bg-gray-700 text-white rounded-lg border border-gray-700 hover:bg-gray-800 transition-colors shadow-sm">
+  <button id="configManagerOpenBtn" class="flex items-center gap-1 px-3 py-2 bg-gray-700 text-white rounded-lg border border-gray-700 hover:bg-gray-800 transition-colors shadow-sm text-sm">
     <i data-lucide="settings" class="w-4 h-4"></i>
-    配置管理
+    <span class="hidden sm:inline">配置管理</span>
   </button>
 
   <!-- UUID显示和下拉菜单（登录后显示） -->
   <div id="uuidDropdownContainer" class="hidden relative">
-    <button id="uuidDropdownBtn" class="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg border border-teal-600 hover:bg-teal-700 transition-colors shadow-sm font-mono">
-      <span id="uuidDisplay" class="truncate max-w-[120px]">UUID: ...</span>
-      <i data-lucide="chevron-down" class="w-4 h-4"></i>
+    <button id="uuidDropdownBtn" class="flex items-center gap-1 px-3 py-2 bg-teal-600 text-white rounded-lg border border-teal-600 hover:bg-teal-700 transition-colors shadow-sm font-mono text-sm">
+      <span id="uuidDisplay" class="truncate max-w-[80px] sm:max-w-[120px]">UUID: ...</span>
+      <i data-lucide="chevron-down" class="w-3 h-3 sm:w-4 sm:h-4"></i>
     </button>
 
-    <div id="uuidDropdownMenu" class="hidden absolute right-0 top-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg min-w-[200px] z-50">
-      <div class="px-4 py-3 border-b border-gray-200 text-gray-700 text-sm font-mono break-all">
+    <div id="uuidDropdownMenu" class="hidden absolute right-0 top-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg min-w-[180px] z-50 mobile-dropdown">
+      <div class="px-3 py-2 border-b border-gray-200 text-gray-700 text-sm font-mono break-all">
         UUID: <span id="dropdownUuid"></span>
       </div>
-      <a href="javascript:void(0)" onclick="openUuidInfoModal()" class="flex items-center gap-2 px-4 py-3 text-gray-700 hover:bg-gray-100 transition-colors">
+      <a href="javascript:void(0)" onclick="openUuidInfoModal()" class="flex items-center gap-2 px-3 py-2 text-gray-700 hover:bg-gray-100 transition-colors">
         <i data-lucide="user" class="w-4 h-4"></i>
         编辑UUID信息
       </a>
       <hr class="border-gray-200 mx-2">
-      <a href="javascript:void(0)" onclick="logout()" class="flex items-center gap-2 px-4 py-3 text-red-600 hover:bg-red-50 transition-colors">
+      <a href="javascript:void(0)" onclick="logout()" class="flex items-center gap-2 px-3 py-2 text-red-600 hover:bg-red-50 transition-colors">
         <i data-lucide="log-out" class="w-4 h-4"></i>
         退出登录
       </a>
@@ -2084,17 +2233,17 @@ const unifiedPageHtmlContent = `
 </div>
 
 <!-- UUID信息管理模态框 -->
-<div id="uuidInfoModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-  <div class="bg-white rounded-xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
-    <div class="flex justify-between items-center border-b border-gray-200 px-6 py-4">
+<div id="uuidInfoModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4 safe-area-top safe-area-bottom">
+  <div class="bg-white rounded-xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto modal-content">
+    <div class="flex justify-between items-center border-b border-gray-200 px-4 py-3 sm:px-6 sm:py-4 modal-header">
       <h3 class="text-lg font-semibold text-gray-800">UUID信息管理</h3>
-      <button onclick="closeUuidInfoModal()" class="text-gray-500 hover:text-gray-700 transition-colors">
+      <button onclick="closeUuidInfoModal()" class="text-gray-500 hover:text-gray-700 transition-colors p-1">
         <i data-lucide="x" class="w-5 h-5"></i>
       </button>
     </div>
 
-    <div class="p-6">
-      <div class="mb-4 bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg">
+    <div class="p-4 sm:p-6 modal-body">
+      <div class="mb-4 bg-blue-50 border-l-4 border-blue-500 p-3 rounded-lg">
         <div class="flex items-start gap-2">
           <i data-lucide="info" class="w-5 h-5 text-blue-500 mt-0.5"></i>
           <p class="text-sm text-gray-700">
@@ -2108,10 +2257,10 @@ const unifiedPageHtmlContent = `
         <div class="mb-4">
           <label class="block text-sm font-medium text-gray-700 mb-1">UUID</label>
           <input type="text" id="uuidInfoUuid" readonly 
-                 class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 font-mono text-gray-600 focus:outline-none">
+                 class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 font-mono text-sm focus:outline-none">
         </div>
-  
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+
+        <div class="grid grid-cols-1 gap-4 mb-4">
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">所属人姓名/标识 *</label>
             <input type="text" id="uuidInfoOwner" placeholder="请输入所属人姓名或标识"
@@ -2123,14 +2272,14 @@ const unifiedPageHtmlContent = `
                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none">
           </div>
         </div>
-  
+
         <div class="mb-4">
           <label class="block text-sm font-medium text-gray-700 mb-1">其他联系信息</label>
           <input type="text" id="uuidInfoContact" placeholder="电话、微信等其他联系方式（可选）"
                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none">
         </div>
-  
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+
+        <div class="grid grid-cols-1 gap-4 mb-4">
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">状态</label>
             <select id="uuidInfoStatus" 
@@ -2141,20 +2290,20 @@ const unifiedPageHtmlContent = `
             </select>
           </div>
         </div>
-  
+
         <div class="mb-6">
           <label class="block text-sm font-medium text-gray-700 mb-1">备注信息</label>
           <textarea id="uuidInfoRemark" rows="3" placeholder="可在此添加备注信息..."
                     class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none resize-y"></textarea>
         </div>
-  
-        <div class="flex justify-end gap-3">
+
+        <div class="flex justify-end gap-3 mobile-btn-group">
           <button onclick="closeUuidInfoModal()" 
-                  class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+                  class="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
             取消
           </button>
           <button id="uuidInfoSaveBtn" onclick="saveUuidInfo()"
-                  class="px-4 py-2 bg-gray-700 text-white rounded-lg border border-gray-700 hover:bg-gray-800 transition-colors">
+                  class="flex-1 px-4 py-2 bg-gray-700 text-white rounded-lg border border-gray-700 hover:bg-gray-800 transition-colors">
             保存信息
           </button>
         </div>
@@ -2164,16 +2313,16 @@ const unifiedPageHtmlContent = `
 </div>
 
 <!-- 配置管理入口模态框 -->
-<div id="configManagerModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-  <div class="bg-white rounded-xl shadow-2xl max-w-md w-full">
-    <div class="flex justify-between items-center border-b border-gray-200 px-6 py-4">
+<div id="configManagerModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4 safe-area-top safe-area-bottom">
+  <div class="bg-white rounded-xl shadow-2xl max-w-md w-full modal-content">
+    <div class="flex justify-between items-center border-b border-gray-200 px-4 py-3 sm:px-6 sm:py-4 modal-header">
       <h3 class="text-lg font-semibold text-gray-800">配置管理入口</h3>
-      <button onclick="closeConfigManagerModal()" class="text-gray-500 hover:text-gray-700 transition-colors">
+      <button onclick="closeConfigManagerModal()" class="text-gray-500 hover:text-gray-700 transition-colors p-1">
         <i data-lucide="x" class="w-5 h-5"></i>
       </button>
     </div>
 
-    <div class="p-6">
+    <div class="p-4 sm:p-6 modal-body">
       <div class="mb-4">
         <label for="configUuidInput" class="block text-sm font-medium text-gray-700 mb-1">
           请输入您的 UUID：
@@ -2190,14 +2339,14 @@ const unifiedPageHtmlContent = `
           </p>
         </div>
       </div>
-  
-      <div class="flex justify-end gap-3">
+
+      <div class="flex justify-end gap-3 mobile-btn-group">
         <button onclick="closeConfigManagerModal()"
-                class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+                class="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
           取消
         </button>
         <button onclick="enterConfigManagement()"
-                class="px-4 py-2 bg-gray-700 text-white rounded-lg border border-gray-700 hover:bg-gray-800 transition-colors">
+                class="flex-1 px-4 py-2 bg-gray-700 text-white rounded-lg border border-gray-700 hover:bg-gray-800 transition-colors">
           进入配置管理
         </button>
       </div>
@@ -2206,23 +2355,23 @@ const unifiedPageHtmlContent = `
 </div>
 
 <!-- Toast 容器 -->
-<div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-3"></div>
+<div id="toast-container" class="fixed top-3 right-3 z-50 flex flex-col gap-2 max-w-[90vw]"></div>
 
 <!-- 编辑配置模态框 -->
-<div id="editModalOverlay" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-  <div class="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-    <div class="flex justify-between items-center border-b border-gray-200 px-6 py-4">
+<div id="editModalOverlay" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4 safe-area-top safe-area-bottom">
+  <div class="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto modal-content">
+    <div class="flex justify-between items-center border-b border-gray-200 px-4 py-3 sm:px-6 sm:py-4 modal-header">
       <h3 class="text-lg font-semibold text-gray-800">编辑配置 (Editor)</h3>
-      <button onclick="closeEditModal()" class="text-gray-500 hover:text-gray-700 transition-colors">
+      <button onclick="closeEditModal()" class="text-gray-500 hover:text-gray-700 transition-colors p-1">
         <i data-lucide="x" class="w-5 h-5"></i>
       </button>
     </div>
 
-    <div class="p-6">
+    <div class="p-4 sm:p-6 modal-body">
       <input type="hidden" id="edit-id">
       <input type="hidden" id="edit-protocol">
-  
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+
+      <div class="grid grid-cols-1 gap-4 mb-4">
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">别名 (Remarks)</label>
           <input type="text" id="edit-ps"
@@ -2252,20 +2401,20 @@ const unifiedPageHtmlContent = `
           </select>
         </div>
       </div>
-  
+
       <div class="mb-4">
         <label class="block text-sm font-medium text-gray-700 mb-1">地址 (Address)</label>
         <input type="text" id="edit-add"
                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none">
       </div>
-  
+
       <div class="mb-4">
         <label class="block text-sm font-medium text-gray-700 mb-1">UUID / Password</label>
         <input type="text" id="edit-id-uuid"
                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none">
       </div>
-  
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+
+      <div class="grid grid-cols-1 gap-4 mb-4">
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">传输 (Net)</label>
           <select id="edit-net"
@@ -2281,8 +2430,8 @@ const unifiedPageHtmlContent = `
                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none">
         </div>
       </div>
-  
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+
+      <div class="grid grid-cols-1 gap-4 mb-4">
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">伪装域名 (Host)</label>
           <input type="text" id="edit-host"
@@ -2294,8 +2443,8 @@ const unifiedPageHtmlContent = `
                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none">
         </div>
       </div>
-  
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+
+      <div class="grid grid-cols-1 gap-4 mb-6">
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">TLS</label>
           <select id="edit-tls"
@@ -2310,14 +2459,14 @@ const unifiedPageHtmlContent = `
                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none">
         </div>
       </div>
-  
-      <div class="flex justify-end gap-3">
+
+      <div class="flex justify-end gap-3 mobile-btn-group">
         <button onclick="closeEditModal()"
-                class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+                class="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
           取消
         </button>
         <button onclick="saveEditedConfig()"
-                class="px-4 py-2 bg-gray-700 text-white rounded-lg border border-gray-700 hover:bg-gray-800 transition-colors">
+                class="flex-1 px-4 py-2 bg-gray-700 text-white rounded-lg border border-gray-700 hover:bg-gray-800 transition-colors">
           保存修改
         </button>
       </div>
@@ -2326,43 +2475,43 @@ const unifiedPageHtmlContent = `
 </div>
 
 <!-- 主内容容器 -->
-<div class="min-h-screen flex flex-col items-center justify-center px-4 py-8 sm:px-6 lg:px-8">
+<div class="min-h-screen flex flex-col items-center justify-center px-3 py-6 sm:px-6 lg:px-8 mobile-padding safe-area-top safe-area-bottom">
   <div class="w-full max-w-6xl">
     <!-- 标题区域 -->
-    <div class="text-center mb-8">
-      <h1 class="text-3xl sm:text-4xl font-bold text-gray-800 mb-2">代理配置管理工具</h1>
-      <p class="text-gray-600 text-lg">一站式代理配置管理、生成与订阅服务</p>
+    <div class="text-center mb-6">
+      <h1 class="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-800 mb-2">代理配置管理工具</h1>
+      <p class="text-gray-600 text-base sm:text-lg">一站式代理配置管理、生成与订阅服务</p>
     </div>
 
     <!-- Tab 导航 -->
-    <div class="flex border-b border-gray-200 mb-8 overflow-x-auto">
+    <div class="flex border-b border-gray-200 mb-6 overflow-x-auto">
       <button onclick="switchTab('batch')" 
-              class="tab-btn px-6 py-3 font-medium text-gray-600 border-b-2 border-transparent hover:text-gray-800 transition-colors data-[active=true]:text-gray-800 data-[active=true]:border-gray-800 whitespace-nowrap"
+              class="tab-btn px-4 py-3 font-medium text-gray-600 border-b-2 border-transparent hover:text-gray-800 transition-colors data-[active=true]:text-gray-800 data-[active=true]:border-gray-800 whitespace-nowrap"
               data-active="true">
         配置生成
       </button>
       <button onclick="switchTab('clash')" 
-              class="tab-btn px-6 py-3 font-medium text-gray-600 border-b-2 border-transparent hover:text-gray-800 transition-colors data-[active=false]:text-gray-600 whitespace-nowrap"
+              class="tab-btn px-4 py-3 font-medium text-gray-600 border-b-2 border-transparent hover:text-gray-800 transition-colors data-[active=false]:text-gray-600 whitespace-nowrap"
               data-active="false">
         订阅生成
       </button>
       <button id="manageTabBtn" onclick="switchTab('manage')" 
-              class="tab-btn px-6 py-3 font-medium text-gray-600 border-b-2 border-transparent hover:text-gray-800 transition-colors hidden whitespace-nowrap"
+              class="tab-btn px-4 py-3 font-medium text-gray-600 border-b-2 border-transparent hover:text-gray-800 transition-colors hidden whitespace-nowrap"
               data-active="false">
         配置管理
       </button>
     </div>
 
     <!-- 配置生成 Tab -->
-    <div id="batch-tab" class="tab-content space-y-6">
+    <div id="batch-tab" class="tab-content space-y-4 sm:space-y-6">
       <!-- 基础配置卡片 -->
-      <div class="bg-gray-50 border border-gray-200 rounded-xl p-6 shadow-sm">
-        <div class="flex items-center gap-2 mb-4">
+      <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm mobile-card">
+        <div class="flex items-center gap-2 mb-3 sm:mb-4">
           <i data-lucide="settings" class="w-5 h-5 text-gray-700"></i>
           <h2 class="text-xl font-semibold text-gray-800">1. 基础配置</h2>
         </div>
-    
-        <div class="mb-4 bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg">
+  
+        <div class="mb-4 bg-blue-50 border-l-4 border-blue-500 p-3 sm:p-4 rounded-lg">
           <div class="flex items-start gap-2">
             <i data-lucide="info" class="w-5 h-5 text-blue-500 mt-0.5"></i>
             <p class="text-sm text-gray-700">
@@ -2372,26 +2521,26 @@ const unifiedPageHtmlContent = `
             </p>
           </div>
         </div>
-    
-        <div class="flex flex-wrap gap-3 mb-4">
+  
+        <div class="flex flex-wrap gap-2 sm:gap-3 mb-4">
           <label class="radio-option">
             <input type="radio" name="genConfigSource" value="manual" checked>
-            <span class="px-4 py-2 rounded-lg">手动粘贴</span>
+            <span class="px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base">手动粘贴</span>
           </label>
           <label class="radio-option">
             <input type="radio" name="genConfigSource" value="uuid">
-            <span class="px-4 py-2 rounded-lg">从UUID获取</span>
+            <span class="px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base">从UUID获取</span>
           </label>
         </div>
-    
+  
         <div id="genManualConfigInput">
           <textarea id="genBaseConfigInput" placeholder="在此粘贴一个或多个基础配置，每行一个。"
-                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none font-mono text-sm resize-y" rows="4"></textarea>
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none font-mono text-sm resize-y" rows="4"></textarea>
         </div>
-    
+  
         <div id="genUuidConfigInput" class="hidden">
           <input type="text" id="genBaseConfigUuidInput" placeholder="UUID将自动填充"
-                 class="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-50 font-mono text-sm mb-3 focus:outline-none">
+                 class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 font-mono text-sm mb-3 focus:outline-none">
           <div class="bg-gray-50 border-l-4 border-gray-500 p-3 rounded-lg">
             <p class="text-sm text-gray-700">
               在"配置管理"标签页添加和管理UUID。
@@ -2402,26 +2551,26 @@ const unifiedPageHtmlContent = `
       </div>
 
       <!-- 优选列表卡片 -->
-      <div class="bg-gray-50 border border-gray-200 rounded-xl p-6 shadow-sm">
-        <div class="flex items-center gap-2 mb-4">
+      <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm mobile-card">
+        <div class="flex items-center gap-2 mb-3 sm:mb-4">
           <i data-lucide="list" class="w-5 h-5 text-gray-700"></i>
           <h2 class="text-xl font-semibold text-gray-800">2. 优选列表 (IP/域名)</h2>
         </div>
-    
+  
         <div class="mb-4">
           <label class="block text-sm font-medium text-gray-700 mb-2">地址类型</label>
-          <div class="flex flex-wrap gap-3">
+          <div class="flex flex-wrap gap-2 sm:gap-3">
             <label class="radio-option">
               <input type="radio" name="genAddressType" value="ip" checked onchange="toggleBatchAddressOptions()">
-              <span class="px-4 py-2 rounded-lg">IP 地址</span>
+              <span class="px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base">IP 地址</span>
             </label>
             <label class="radio-option">
               <input type="radio" name="genAddressType" value="domain" onchange="toggleBatchAddressOptions()">
-              <span class="px-4 py-2 rounded-lg">优选域名</span>
+              <span class="px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base">优选域名</span>
             </label>
             <label class="radio-option">
               <input type="radio" name="genAddressType" value="disable" onchange="toggleBatchAddressOptions()">
-              <span class="px-4 py-2 rounded-lg">禁用优选</span>
+              <span class="px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base">禁用优选</span>
             </label>
           </div>
         </div>
@@ -2429,52 +2578,52 @@ const unifiedPageHtmlContent = `
         <div id="batchIpOptionsContainer">
           <div class="mb-4">
             <label class="block text-sm font-medium text-gray-700 mb-2">IP 类型</label>
-            <div class="flex flex-wrap gap-3">
+            <div class="flex flex-wrap gap-2 sm:gap-3">
               <label class="radio-option">
                 <input type="radio" name="genIpType" value="all" checked>
-                <span class="px-4 py-2 rounded-lg">全部</span>
+                <span class="px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base">全部</span>
               </label>
               <label class="radio-option">
                 <input type="radio" name="genIpType" value="v4">
-                <span class="px-4 py-2 rounded-lg">仅IPv4</span>
+                <span class="px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base">仅IPv4</span>
               </label>
               <label class="radio-option">
                 <input type="radio" name="genIpType" value="v6">
-                <span class="px-4 py-2 rounded-lg">仅IPv6</span>
+                <span class="px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base">仅IPv6</span>
               </label>
             </div>
           </div>
-      
-          <div class="mb-6">
+    
+          <div class="mb-4 sm:mb-6">
             <label class="block text-sm font-medium text-gray-700 mb-2">运营商</label>
-            <div class="flex flex-wrap gap-3">
+            <div class="flex flex-wrap gap-2 sm:gap-3">
               <label class="radio-option">
                 <input type="radio" name="genCarrierType" value="all" checked>
-                <span class="px-4 py-2 rounded-lg">全部</span>
+                <span class="px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base">全部</span>
               </label>
               <label class="radio-option">
                 <input type="radio" name="genCarrierType" value="CM">
-                <span class="px-4 py-2 rounded-lg">移动</span>
+                <span class="px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base">移动</span>
               </label>
               <label class="radio-option">
                 <input type="radio" name="genCarrierType" value="CU">
-                <span class="px-4 py-2 rounded-lg">联通</span>
+                <span class="px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base">联通</span>
               </label>
               <label class="radio-option">
                 <input type="radio" name="genCarrierType" value="CT">
-                <span class="px-4 py-2 rounded-lg">电信</span>
+                <span class="px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base">电信</span>
               </label>
             </div>
           </div>
         </div>
 
-        <div id="batchDomainInfoBox" class="hidden mb-6 bg-gray-50 border-l-4 border-gray-500 p-3 rounded-lg">
+        <div id="batchDomainInfoBox" class="hidden mb-4 bg-gray-50 border-l-4 border-gray-500 p-3 rounded-lg">
           <p class="text-sm text-gray-700">
             将使用数据库中存储的 Cloudflare 优选域名列表进行替换。
           </p>
         </div>
 
-        <div id="batchDisableInfoBox" class="hidden mb-6 bg-amber-50 border-l-4 border-amber-500 p-3 rounded-lg">
+        <div id="batchDisableInfoBox" class="hidden mb-4 bg-amber-50 border-l-4 border-amber-500 p-3 rounded-lg">
           <p class="text-sm text-gray-700">
             <strong>优选已禁用</strong>：将只输出原配置，不进行优选替换。
           </p>
@@ -2486,9 +2635,9 @@ const unifiedPageHtmlContent = `
         </button>
 
         <div id="batchSubscriptionLinkBox" class="hidden mb-4">
-          <div class="flex gap-2">
+          <div class="flex flex-col sm:flex-row gap-2">
             <input type="text" id="batchSubscriptionLink" readonly
-                   class="flex-1 px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 font-mono text-sm focus:outline-none">
+                   class="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 font-mono text-sm focus:outline-none">
             <button onclick="copyBatchSubscriptionLink()"
                     class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
               复制
@@ -2497,22 +2646,22 @@ const unifiedPageHtmlContent = `
         </div>
 
         <textarea id="genAddressListInput" placeholder="点击上方按钮获取，或在此手动粘贴 IP 或 域名 列表..."
-                  class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none font-mono text-sm resize-y" rows="4"></textarea>
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none font-mono text-sm resize-y" rows="4"></textarea>
       </div>
 
       <!-- 生成结果卡片 -->
-      <div class="bg-gray-50 border border-gray-200 rounded-xl p-6 shadow-sm">
-        <div class="flex items-center gap-2 mb-4">
+      <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm mobile-card">
+        <div class="flex items-center gap-2 mb-3 sm:mb-4">
           <i data-lucide="package" class="w-5 h-5 text-gray-700"></i>
           <h2 class="text-xl font-semibold text-gray-800">3. 生成结果</h2>
         </div>
-    
+  
         <div id="batchGeneratedLinkBox" class="hidden mb-4">
-          <div class="flex items-center gap-3 mb-2">
+          <div class="flex flex-col sm:flex-row items-center gap-2 mb-2">
             <span class="text-sm font-medium text-gray-700">订阅:</span>
-            <div class="flex-1 flex gap-2">
+            <div class="w-full sm:flex-1 flex flex-col sm:flex-row gap-2">
               <input type="text" id="batchGeneratedConfigLink" readonly
-                     class="flex-1 px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 font-mono text-sm focus:outline-none">
+                     class="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 font-mono text-sm focus:outline-none">
               <button onclick="copyBatchGeneratedLink()"
                       class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
                 复制
@@ -2520,26 +2669,26 @@ const unifiedPageHtmlContent = `
             </div>
           </div>
         </div>
-    
+  
         <textarea id="genResultTextarea" readonly placeholder="点击下方'生成配置'按钮..."
-                  class="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-50 font-mono text-sm resize-y focus:outline-none" rows="6"></textarea>
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 font-mono text-sm resize-y focus:outline-none" rows="6"></textarea>
 
         <div id="batchQrCodeContainer" class="hidden mt-4 p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
           <label class="block text-sm font-medium text-gray-700 mb-2">订阅链接二维码</label>
           <div class="text-center mb-3">
-            <img id="batchQrCodeImage" src="" alt="订阅链接二维码" class="inline-block border border-gray-300 rounded-lg max-w-[200px]">
+            <img id="batchQrCodeImage" src="" alt="订阅链接二维码" class="inline-block border border-gray-300 rounded-lg max-w-[150px] sm:max-w-[200px]">
           </div>
-          <div class="flex flex-wrap justify-center gap-3">
+          <div class="flex flex-wrap justify-center gap-2">
             <button onclick="downloadBatchQRCode()"
-                    class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
+                    class="px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 text-sm">
               下载二维码
             </button>
             <button onclick="shareBatchQRCode()"
-                    class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
+                    class="px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 text-sm">
               分享二维码
             </button>
             <button onclick="refreshBatchQRCode()"
-                    class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
+                    class="px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 text-sm">
               刷新
             </button>
           </div>
@@ -2550,28 +2699,28 @@ const unifiedPageHtmlContent = `
       </div>
 
       <!-- 操作按钮 -->
-      <div class="flex flex-col sm:flex-row gap-4">
+      <div class="flex flex-col sm:flex-row gap-3 mobile-btn-group">
         <button id="genGenerateButton" onclick="genGenerateConfigs()"
-                class="flex-1 px-6 py-3 bg-gray-700 text-white rounded-lg border border-gray-700 hover:bg-gray-800 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
+                class="flex-1 px-4 py-3 bg-gray-700 text-white rounded-lg border border-gray-700 hover:bg-gray-800 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
           生成配置
         </button>
         <button id="copyResultButton" onclick="copyResults()"
-                class="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
+                class="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
           复制结果 (Base64)
         </button>
       </div>
     </div>
 
     <!-- 订阅生成 Tab -->
-    <div id="clash-tab" class="tab-content hidden space-y-6">
+    <div id="clash-tab" class="tab-content hidden space-y-4 sm:space-y-6">
       <!-- 配置信息卡片 -->
-      <div class="bg-gray-50 border border-gray-200 rounded-xl p-6 shadow-sm">
-        <div class="flex items-center gap-2 mb-4">
+      <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm mobile-card">
+        <div class="flex items-center gap-2 mb-3 sm:mb-4">
           <i data-lucide="settings" class="w-5 h-5 text-gray-700"></i>
           <h2 class="text-xl font-semibold text-gray-800">1. 配置信息</h2>
         </div>
-    
-        <div class="mb-4 bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg">
+  
+        <div class="mb-4 bg-blue-50 border-l-4 border-blue-500 p-3 sm:p-4 rounded-lg">
           <div class="flex items-start gap-2">
             <i data-lucide="info" class="w-5 h-5 text-blue-500 mt-0.5"></i>
             <p class="text-sm text-gray-700">
@@ -2581,10 +2730,10 @@ const unifiedPageHtmlContent = `
             </p>
           </div>
         </div>
-    
-        <div class="mb-6">
+  
+        <div class="mb-4 sm:mb-6">
           <input type="text" id="clashConfigUuid" placeholder="UUID将自动填充"
-                 class="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-50 font-mono text-sm mb-3 focus:outline-none">
+                 class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 font-mono text-sm mb-3 focus:outline-none">
           <div class="bg-gray-50 border-l-4 border-gray-500 p-3 rounded-lg">
             <p class="text-sm text-gray-700">
               在"配置管理"标签页添加和管理配置，获取UUID后在此输入。
@@ -2593,21 +2742,21 @@ const unifiedPageHtmlContent = `
           </div>
         </div>
 
-        <div class="p-4 bg-blue-50 border border-blue-200 rounded-lg shadow-sm">
+        <div class="p-3 sm:p-4 bg-blue-50 border border-blue-200 rounded-lg shadow-sm">
           <div class="flex items-center gap-2 mb-3">
             <i data-lucide="shield" class="w-5 h-5 text-blue-600"></i>
             <h3 class="font-semibold text-gray-800">支持的协议类型</h3>
           </div>
-          <div class="flex flex-wrap gap-2 mb-3">
-            <span class="px-3 py-1 bg-blue-100 text-blue-700 border border-blue-200 rounded-full text-sm">VMess</span>
-            <span class="px-3 py-1 bg-blue-100 text-blue-700 border border-blue-200 rounded-full text-sm">VLESS</span>
-            <span class="px-3 py-1 bg-blue-100 text-blue-700 border border-blue-200 rounded-full text-sm">Trojan</span>
-            <span class="px-3 py-1 bg-blue-100 text-blue-700 border border-blue-200 rounded-full text-sm">Shadowsocks</span>
-            <span class="px-3 py-1 bg-orange-100 text-orange-700 border border-orange-200 rounded-full text-sm">Hysteria2</span>
-            <span class="px-3 py-1 bg-orange-100 text-orange-700 border border-orange-200 rounded-full text-sm">Tuic</span>
-            <span class="px-3 py-1 bg-orange-100 text-orange-700 border border-orange-200 rounded-full text-sm">AnyTLS</span>
-            <span class="px-3 py-1 bg-orange-100 text-orange-700 border border-orange-200 rounded-full text-sm">Any-reality</span>
-            <span class="px-3 py-1 bg-orange-100 text-orange-700 border border-orange-200 rounded-full text-sm">Reality</span>
+          <div class="flex flex-wrap gap-1 sm:gap-2 mb-3">
+            <span class="px-2 py-1 bg-blue-100 text-blue-700 border border-blue-200 rounded-full text-xs sm:text-sm">VMess</span>
+            <span class="px-2 py-1 bg-blue-100 text-blue-700 border border-blue-200 rounded-full text-xs sm:text-sm">VLESS</span>
+            <span class="px-2 py-1 bg-blue-100 text-blue-700 border border-blue-200 rounded-full text-xs sm:text-sm">Trojan</span>
+            <span class="px-2 py-1 bg-blue-100 text-blue-700 border border-blue-200 rounded-full text-xs sm:text-sm">Shadowsocks</span>
+            <span class="px-2 py-1 bg-orange-100 text-orange-700 border border-orange-200 rounded-full text-xs sm:text-sm">Hysteria2</span>
+            <span class="px-2 py-1 bg-orange-100 text-orange-700 border border-orange-200 rounded-full text-xs sm:text-sm">Tuic</span>
+            <span class="px-2 py-1 bg-orange-100 text-orange-700 border border-orange-200 rounded-full text-xs sm:text-sm">AnyTLS</span>
+            <span class="px-2 py-1 bg-orange-100 text-orange-700 border border-orange-200 rounded-full text-xs sm:text-sm">Any-reality</span>
+            <span class="px-2 py-1 bg-orange-100 text-orange-700 border border-orange-200 rounded-full text-xs sm:text-sm">Reality</span>
           </div>
           <p class="text-sm text-gray-600">
             现在支持更多现代协议，包括高速传输协议和最新的加密技术。
@@ -2616,17 +2765,17 @@ const unifiedPageHtmlContent = `
       </div>
 
       <!-- 模板选择卡片 -->
-      <div class="bg-gray-50 border border-gray-200 rounded-xl p-6 shadow-sm">
-        <div class="flex items-center gap-2 mb-4">
+      <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm mobile-card">
+        <div class="flex items-center gap-2 mb-3 sm:mb-4">
           <i data-lucide="file-text" class="w-5 h-5 text-gray-700"></i>
           <h2 class="text-xl font-semibold text-gray-800">2. 模板选择</h2>
         </div>
-    
+  
         <div class="mb-4">
           <label class="block text-sm font-medium text-gray-700 mb-2">选择配置文件模板</label>
           <div class="template-select-container">
             <select id="templateSelect" onchange="handleTemplateChange()"
-                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none mb-3">
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none mb-3">
               <option value="">正在加载模板...</option>
             </select>
             <div id="templateDescription" class="text-sm text-gray-600">
@@ -2637,7 +2786,7 @@ const unifiedPageHtmlContent = `
 
         <div id="customTemplateInput" class="hidden mb-4">
           <input type="text" id="customTemplateUrl" placeholder="输入自定义模板URL，如: https://raw.githubusercontent.com/your-repo/config.yaml"
-                 class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none">
+                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none">
           <div class="mt-2 bg-gray-50 border-l-4 border-gray-500 p-3 rounded-lg">
             <p class="text-sm text-gray-700">
               请输入可公开访问的YAML配置文件的完整URL地址。
@@ -2645,18 +2794,18 @@ const unifiedPageHtmlContent = `
           </div>
         </div>
 
-        <div id="templateLoading" class="hidden text-center py-8">
+        <div id="templateLoading" class="hidden text-center py-6 sm:py-8">
           <div class="inline-block w-8 h-8 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin mb-3"></div>
           <p class="text-gray-600">正在加载模板列表...</p>
         </div>
 
-        <div id="templateError" class="hidden mb-4 bg-red-50 border-l-4 border-red-500 p-4 rounded-lg">
+        <div id="templateError" class="hidden mb-4 bg-red-50 border-l-4 border-red-500 p-3 sm:p-4 rounded-lg">
           <p class="text-sm text-red-700">
             无法加载模板列表，请稍后重试。
           </p>
         </div>
 
-        <div class="bg-gray-50 border-l-4 border-gray-500 p-4 rounded-lg">
+        <div class="bg-gray-50 border-l-4 border-gray-500 p-3 sm:p-4 rounded-lg">
           <p class="text-sm text-gray-700">
             <strong>模板说明：</strong>
             <br>• 所有模板均从数据库读取
@@ -2669,26 +2818,26 @@ const unifiedPageHtmlContent = `
       </div>
 
       <!-- 优选地址配置卡片 -->
-      <div class="bg-gray-50 border border-gray-200 rounded-xl p-6 shadow-sm">
-        <div class="flex items-center gap-2 mb-4">
+      <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm mobile-card">
+        <div class="flex items-center gap-2 mb-3 sm:mb-4">
           <i data-lucide="globe" class="w-5 h-5 text-gray-700"></i>
           <h2 class="text-xl font-semibold text-gray-800">3. 优选地址配置</h2>
         </div>
-    
+  
         <div class="mb-4">
           <label class="block text-sm font-medium text-gray-700 mb-2">地址类型</label>
-          <div class="flex flex-wrap gap-3">
+          <div class="flex flex-wrap gap-2 sm:gap-3">
             <label class="radio-option">
               <input type="radio" name="clashAddressType" value="ip" checked onchange="toggleClashAddressOptions()">
-              <span class="px-4 py-2 rounded-lg">IP 地址</span>
+              <span class="px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base">IP 地址</span>
             </label>
             <label class="radio-option">
               <input type="radio" name="clashAddressType" value="domain" onchange="toggleClashAddressOptions()">
-              <span class="px-4 py-2 rounded-lg">优选域名</span>
+              <span class="px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base">优选域名</span>
             </label>
             <label class="radio-option">
               <input type="radio" name="clashAddressType" value="disable" onchange="toggleClashAddressOptions()">
-              <span class="px-4 py-2 rounded-lg">禁用优选</span>
+              <span class="px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base">禁用优选</span>
             </label>
           </div>
         </div>
@@ -2696,40 +2845,40 @@ const unifiedPageHtmlContent = `
         <div id="clashIpOptionsContainer">
           <div class="mb-4">
             <label class="block text-sm font-medium text-gray-700 mb-2">IP 类型</label>
-            <div class="flex flex-wrap gap-3">
+            <div class="flex flex-wrap gap-2 sm:gap-3">
               <label class="radio-option">
                 <input type="radio" name="clashIpType" value="all" checked>
-                <span class="px-4 py-2 rounded-lg">全部</span>
+                <span class="px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base">全部</span>
               </label>
               <label class="radio-option">
                 <input type="radio" name="clashIpType" value="v4">
-                <span class="px-4 py-2 rounded-lg">仅IPv4</span>
+                <span class="px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base">仅IPv4</span>
               </label>
               <label class="radio-option">
                 <input type="radio" name="clashIpType" value="v6">
-                <span class="px-4 py-2 rounded-lg">仅IPv6</span>
+                <span class="px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base">仅IPv6</span>
               </label>
             </div>
           </div>
-      
+    
           <div class="mb-4">
             <label class="block text-sm font-medium text-gray-700 mb-2">运营商</label>
-            <div class="flex flex-wrap gap-3">
+            <div class="flex flex-wrap gap-2 sm:gap-3">
               <label class="radio-option">
                 <input type="radio" name="clashCarrier" value="all" checked>
-                <span class="px-4 py-2 rounded-lg">全部</span>
+                <span class="px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base">全部</span>
               </label>
               <label class="radio-option">
                 <input type="radio" name="clashCarrier" value="CM">
-                <span class="px-4 py-2 rounded-lg">移动</span>
+                <span class="px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base">移动</span>
               </label>
               <label class="radio-option">
                 <input type="radio" name="clashCarrier" value="CU">
-                <span class="px-4 py-2 rounded-lg">联通</span>
+                <span class="px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base">联通</span>
               </label>
               <label class="radio-option">
                 <input type="radio" name="clashCarrier" value="CT">
-                <span class="px-4 py-2 rounded-lg">电信</span>
+                <span class="px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base">电信</span>
               </label>
             </div>
           </div>
@@ -2749,47 +2898,47 @@ const unifiedPageHtmlContent = `
       </div>
 
       <!-- 生成结果卡片 -->
-      <div class="bg-gray-50 border border-gray-200 rounded-xl p-6 shadow-sm">
-        <div class="flex items-center gap-2 mb-4">
+      <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm mobile-card">
+        <div class="flex items-center gap-2 mb-3 sm:mb-4">
           <i data-lucide="package" class="w-5 h-5 text-gray-700"></i>
           <h2 class="text-xl font-semibold text-gray-800">4. 生成结果</h2>
         </div>
-    
-        <div class="mb-6">
+  
+        <div class="mb-4 sm:mb-6">
           <button id="generateClashBtn" onclick="generateClashConfig()"
-                  class="w-full px-6 py-4 bg-gray-700 text-white rounded-lg border border-gray-700 hover:bg-gray-800 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="w-full px-4 py-3 bg-gray-700 text-white rounded-lg border border-gray-700 hover:bg-gray-800 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled>
             生成Clash订阅文件
           </button>
         </div>
 
-        <div class="subscription-link-box hidden p-4 bg-white border border-gray-200 rounded-lg shadow-sm" id="clashSubscriptionLinkBox">
+        <div class="subscription-link-box hidden p-3 sm:p-4 bg-white border border-gray-200 rounded-lg shadow-sm" id="clashSubscriptionLinkBox">
           <label class="block text-sm font-medium text-gray-700 mb-2">订阅链接</label>
           <div class="flex flex-col sm:flex-row gap-2 mb-4">
             <input type="text" id="clashGeneratedLink" readonly
-                   class="flex-1 px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 font-mono text-sm focus:outline-none">
+                   class="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 font-mono text-sm focus:outline-none">
             <button onclick="copyClashGeneratedLink()"
                     class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 whitespace-nowrap">
               复制
             </button>
           </div>
 
-          <div id="clashQrCodeContainer" class="hidden mt-4 p-4 bg-gray-50 border border-gray-200 rounded-lg shadow-sm">
+          <div id="clashQrCodeContainer" class="hidden mt-4 p-3 sm:p-4 bg-gray-50 border border-gray-200 rounded-lg shadow-sm">
             <label class="block text-sm font-medium text-gray-700 mb-2">订阅链接二维码</label>
             <div class="text-center mb-3">
-              <img id="clashQrCodeImage" src="" alt="订阅链接二维码" class="inline-block border border-gray-300 rounded-lg max-w-[200px]">
+              <img id="clashQrCodeImage" src="" alt="订阅链接二维码" class="inline-block border border-gray-300 rounded-lg max-w-[150px] sm:max-w-[200px]">
             </div>
-            <div class="flex flex-wrap justify-center gap-3">
+            <div class="flex flex-wrap justify-center gap-2">
               <button onclick="downloadClashQRCode()"
-                      class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
+                      class="px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 text-sm">
                 下载二维码
               </button>
               <button onclick="shareClashQRCode()"
-                      class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
+                      class="px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 text-sm">
                 分享
               </button>
               <button onclick="refreshClashQRCode()"
-                      class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
+                      class="px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 text-sm">
                 刷新
               </button>
             </div>
@@ -2799,7 +2948,7 @@ const unifiedPageHtmlContent = `
           </div>
         </div>
 
-        <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg">
+        <div class="bg-blue-50 border-l-4 border-blue-500 p-3 sm:p-4 rounded-lg">
           <p class="text-sm text-gray-700">
             <strong>新特性：</strong> 现在支持更多现代协议，包括Hysteria2、Tuic、AnyTLS、Any-reality等。
             <br>配置文件基于您选择的模板生成，包含完整的规则和策略组。
@@ -2810,24 +2959,24 @@ const unifiedPageHtmlContent = `
     </div>
 
     <!-- 配置管理 Tab -->
-    <div id="manage-tab" class="tab-content hidden space-y-6">
+    <div id="manage-tab" class="tab-content hidden space-y-4 sm:space-y-6">
       <!-- 当前UUID卡片 -->
-      <div class="bg-gray-50 border border-gray-200 rounded-xl p-6 shadow-sm">
-        <div class="flex items-center gap-2 mb-4">
+      <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm mobile-card">
+        <div class="flex items-center gap-2 mb-3 sm:mb-4">
           <i data-lucide="key" class="w-5 h-5 text-gray-700"></i>
           <h2 class="text-xl font-semibold text-gray-800">1. 当前UUID</h2>
         </div>
-    
+  
         <div class="flex flex-col sm:flex-row gap-3 mb-4">
           <input type="text" id="queryUuidInput" placeholder="UUID将自动加载" readonly
-                 class="flex-1 px-4 py-3 border border-gray-300 rounded-lg bg-gray-50 font-mono text-sm focus:outline-none">
-          <div class="flex gap-3">
+                 class="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 font-mono text-sm focus:outline-none">
+          <div class="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
             <button id="queryBtn" onclick="manageQueryByUuid()"
-                    class="flex-1 px-6 py-3 bg-gray-700 text-white rounded-lg border border-gray-700 hover:bg-gray-800 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
+                    class="flex-1 px-4 py-3 bg-gray-700 text-white rounded-lg border border-gray-700 hover:bg-gray-800 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
               刷新配置
             </button>
             <button onclick="openConfigManagerModal()"
-                    class="flex-1 px-6 py-3 bg-amber-500 text-white rounded-lg border border-amber-500 hover:bg-amber-600 transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500">
+                    class="flex-1 px-4 py-3 bg-amber-500 text-white rounded-lg border border-amber-500 hover:bg-amber-600 transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500">
               切换UUID
             </button>
           </div>
@@ -2836,7 +2985,7 @@ const unifiedPageHtmlContent = `
         <div id="manageSubLinkDisplay" class="hidden mt-4">
           <div class="flex flex-col sm:flex-row gap-2">
             <input type="text" id="manageSubUrlLink" readonly
-                   class="flex-1 px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 font-mono text-sm focus:outline-none">
+                   class="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 font-mono text-sm focus:outline-none">
             <button onclick="copyManageSubLink()"
                     class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 whitespace-nowrap">
               复制
@@ -2853,18 +3002,18 @@ const unifiedPageHtmlContent = `
       </div>
 
       <!-- 配置列表卡片 -->
-      <div id="manageResultCard" class="bg-gray-50 border border-gray-200 rounded-xl p-6 hidden shadow-sm">
-        <div class="flex items-center gap-2 mb-4">
+      <div id="manageResultCard" class="bg-gray-50 border border-gray-200 rounded-xl p-4 sm:p-6 hidden shadow-sm mobile-card">
+        <div class="flex items-center gap-2 mb-3 sm:mb-4">
           <i data-lucide="list" class="w-5 h-5 text-gray-700"></i>
           <h2 class="text-xl font-semibold text-gray-800">2. 配置列表</h2>
         </div>
 
         <!-- 筛选栏 -->
-        <div class="flex flex-col sm:flex-row flex-wrap gap-4 mb-4">
+        <div class="flex flex-col sm:flex-row flex-wrap gap-3 mb-4">
           <div class="flex items-center gap-2">
             <span class="text-sm font-medium text-gray-700">协议:</span>
             <select id="protocolFilter" onchange="applyFilters()"
-                    class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-500">
+                    class="flex-1 sm:w-auto px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-500">
               <option value="all">全部</option>
               <option value="vmess">VMess</option>
               <option value="vless">VLESS</option>
@@ -2881,7 +3030,7 @@ const unifiedPageHtmlContent = `
           <div class="flex items-center gap-2">
             <span class="text-sm font-medium text-gray-700">域名托管:</span>
             <select id="hostingFilter" onchange="applyFilters()"
-                    class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-500">
+                    class="flex-1 sm:w-auto px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-500">
               <option value="all">全部</option>
               <option value="Cloudflare">Cloudflare</option>
               <option value="阿里ESA">阿里ESA</option>
@@ -2900,7 +3049,7 @@ const unifiedPageHtmlContent = `
           <div class="flex items-center gap-2">
             <span class="text-sm font-medium text-gray-700">每页:</span>
             <select id="pageSizeSelect" onchange="changePageSize()"
-                    class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-500">
+                    class="flex-1 sm:w-auto px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-500">
               <option value="5">5条</option>
               <option value="10" selected>10条</option>
               <option value="20">20条</option>
@@ -2917,7 +3066,7 @@ const unifiedPageHtmlContent = `
               已选择 <span id="selectedCountNum" class="font-bold">0</span> 条
             </div>
             <button id="bulkDeleteBtn" onclick="deleteSelectedConfigs()"
-                    class="px-4 py-2 bg-red-600 text-white rounded-lg border border-red-600 hover:bg-red-700 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    class="w-full sm:w-auto px-4 py-2 bg-red-600 text-white rounded-lg border border-red-600 hover:bg-red-700 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
                     disabled>
               批量删除
             </button>
@@ -2930,18 +3079,18 @@ const unifiedPageHtmlContent = `
         <!-- 分页控件 -->
         <div id="paginationContainer" class="hidden pt-4 border-t border-gray-200">
           <div class="flex flex-col sm:flex-row justify-between items-center gap-3">
-            <div class="text-sm text-gray-600" id="paginationInfo">
+            <div class="text-sm text-gray-600 mb-2 sm:mb-0" id="paginationInfo">
               第 1 页，共 1 页，总计 0 条
             </div>
             <div class="flex gap-2">
               <button id="prevPageBtn" onclick="changePage(-1)"
-                      class="px-4 py-2 bg-gray-100 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                      class="px-3 py-2 bg-gray-100 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
                       disabled>
                 上一页
               </button>
-              <span id="currentPage" class="px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700">1</span>
+              <span id="currentPage" class="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 flex items-center justify-center min-w-[40px]">1</span>
               <button id="nextPageBtn" onclick="changePage(1)"
-                      class="px-4 py-2 bg-gray-100 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                      class="px-3 py-2 bg-gray-100 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
                       disabled>
                 下一页
               </button>
@@ -2951,59 +3100,59 @@ const unifiedPageHtmlContent = `
       </div>
 
       <!-- 访问统计卡片 -->
-      <div id="manageStatsCard" class="bg-gray-50 border border-gray-200 rounded-xl p-6 hidden shadow-sm">
-        <div class="flex items-center gap-2 mb-4">
+      <div id="manageStatsCard" class="bg-gray-50 border border-gray-200 rounded-xl p-4 sm:p-6 hidden shadow-sm mobile-card">
+        <div class="flex items-center gap-2 mb-3 sm:mb-4">
           <i data-lucide="bar-chart" class="w-5 h-5 text-gray-700"></i>
           <h2 class="text-xl font-semibold text-gray-800">3. 访问统计</h2>
         </div>
-    
-        <div class="flex flex-wrap gap-3 mb-4">
+  
+        <div class="flex flex-wrap gap-2 mb-4">
           <select id="statsDays" onchange="loadUuidStats()"
-                  class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-500">
+                  class="flex-1 sm:flex-none px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-500">
             <option value="7">最近7天</option>
             <option value="14">最近14天</option>
             <option value="30" selected>最近30天</option>
             <option value="60">最近60天</option>
           </select>
           <button onclick="loadUuidStats()"
-                  class="px-4 py-2 bg-gray-100 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
+                  class="flex-1 sm:flex-none px-3 py-2 bg-gray-100 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
             刷新
           </button>
           <button onclick="switchChartType('total')" id="chartTotalBtn"
-                  class="px-4 py-2 bg-gray-700 text-white rounded-lg border border-gray-700 hover:bg-gray-800 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
+                  class="flex-1 sm:flex-none px-3 py-2 bg-gray-700 text-white rounded-lg border border-gray-700 hover:bg-gray-800 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
             总访问
           </button>
           <button onclick="switchChartType('split')" id="chartSplitBtn"
-                  class="px-4 py-2 bg-gray-100 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
+                  class="flex-1 sm:flex-none px-3 py-2 bg-gray-100 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
             分类统计
           </button>
         </div>
 
-        <div id="manageStatsSummary" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"></div>
+        <div id="manageStatsSummary" class="grid grid-cols-2 gap-3 mb-6"></div>
 
-        <div class="mb-6" style="height: 300px;">
+        <div class="mb-6" style="height: 250px;">
           <canvas id="manageStatsChart"></canvas>
         </div>
 
         <div>
           <h3 class="font-semibold text-gray-800 mb-3">最近访问记录</h3>
-          <div id="manageRecentLogs" class="border border-gray-200 rounded-lg p-4 max-h-60 overflow-y-auto bg-white">
-            <div class="text-center py-8 text-gray-500">加载中...</div>
+          <div id="manageRecentLogs" class="border border-gray-200 rounded-lg p-3 max-h-48 overflow-y-auto bg-white">
+            <div class="text-center py-6 text-gray-500">加载中...</div>
           </div>
         </div>
       </div>
 
       <!-- 添加新节点卡片 -->
-      <div id="manageAddCard" class="bg-gray-50 border border-gray-200 rounded-xl p-6 hidden shadow-sm">
-        <div class="flex items-center gap-2 mb-4">
+      <div id="manageAddCard" class="bg-gray-50 border border-gray-200 rounded-xl p-4 sm:p-6 hidden shadow-sm mobile-card">
+        <div class="flex items-center gap-2 mb-3 sm:mb-4">
           <i data-lucide="plus" class="w-5 h-5 text-gray-700"></i>
           <h2 class="text-xl font-semibold text-gray-800">4. 添加新节点</h2>
         </div>
-    
+  
         <div class="mb-4">
           <label class="block text-sm font-medium text-gray-700 mb-2">域名托管服务 (Domain Hosting)</label>
           <select id="domainHostingSelect"
-                  class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none mb-3">
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none mb-3">
             <option value="Cloudflare" selected>Cloudflare</option>
             <option value="阿里ESA">阿里ESA</option>
             <option value="腾讯Edgeone">腾讯Edgeone</option>
@@ -3024,25 +3173,25 @@ const unifiedPageHtmlContent = `
             </p>
           </div>
         </div>
-    
-        <div class="mb-6">
+  
+        <div class="mb-4 sm:mb-6">
           <label class="block text-sm font-medium text-gray-700 mb-2">配置数据 (可批量添加)</label>
           <textarea id="addConfigData" placeholder="支持批量添加：
 vmess://...
 vless://...
 trojan://..."
-                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none font-mono text-sm resize-y" rows="4"></textarea>
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none font-mono text-sm resize-y" rows="4"></textarea>
         </div>
-    
+  
         <button onclick="manageAddConfig()"
-                class="w-full px-6 py-4 bg-gray-700 text-white rounded-lg border border-gray-700 hover:bg-gray-800 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
+                class="w-full px-4 py-3 bg-gray-700 text-white rounded-lg border border-gray-700 hover:bg-gray-800 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
           添加到当前 UUID
         </button>
       </div>
     </div>
 
     <!-- 页脚 -->
-    <footer class="mt-12 text-center text-gray-600 text-sm">
+    <footer class="mt-8 sm:mt-12 text-center text-gray-600 text-sm">
       <p>Powered by 
         <a href="https://www.yangzifun.org" class="text-gray-700 hover:text-gray-900 transition-colors">YZFN</a> | 
         <a href="https://www.yangzifun.org/security.html" class="text-gray-700 hover:text-gray-900 transition-colors">安全声明</a> | 
@@ -3136,7 +3285,7 @@ trojan://..."
     const input = document.getElementById('configUuidInput');
     if (input) {
       input.focus();
-  
+
       // 自动填充存储的 UUID
       const storedUuid = getUuidFromStorage();
       if (storedUuid) {
@@ -3412,14 +3561,14 @@ trojan://..."
 
       if (data.success) {
         showToast(\`UUID信息\${data.action === 'created' ? '创建' : '更新'}成功\`, 'success');
-  
+
         // 重新加载信息以获取更新时间
         setTimeout(() => {
           loadCurrentUuidInfo(uuid);
         }, 500);
       } else {
         showToast(data.error || '保存UUID信息失败', 'error');
-    
+  
         // 出错时重置按钮状态
         saveBtn.disabled = false;
         saveBtn.innerHTML = saveBtn.originalText;
@@ -3427,7 +3576,7 @@ trojan://..."
     } catch (error) {
       console.error('保存UUID信息失败:', error);
       showToast('保存UUID信息失败: ' + error.message, 'error');
-  
+
       // 捕获异常时重置按钮状态
       saveBtn.disabled = false;
       saveBtn.innerHTML = saveBtn.originalText;
@@ -3563,7 +3712,7 @@ trojan://..."
   function showToast(msg, type='info') { 
     const c = document.getElementById('toast-container'); 
     const t = document.createElement('div'); 
-    t.className = 'px-4 py-3 rounded-lg shadow-lg border border-gray-300 bg-white text-gray-800 animate-slide-in'; 
+    t.className = 'px-3 py-2 rounded-lg shadow-lg border border-gray-300 bg-white text-gray-800 animate-slide-in text-sm'; 
 
     // 设置图标
     let icon = 'ℹ️';
@@ -3668,14 +3817,14 @@ trojan://..."
 
     try {
       const addrType = document.querySelector('input[name="genAddressType"]:checked').value;
-    
+  
       // 如果选择了禁用，则不获取地址列表
       if (addrType === 'disable') {
         showToast('优选已禁用，不需要获取地址列表', 'info');
         setButtonLoading(btn, false, '获取优选列表');
         return;
       }
-    
+  
       let url = \`\${WORKER_DOMAIN}/fetch-addresses?type=\${addrType}\`;
 
       if (addrType === 'ip') {
@@ -3733,11 +3882,11 @@ trojan://..."
 
       // 检查是否禁用优选
       const disableOptimization = addressType === 'disable';
-    
+  
       if (!disableOptimization) {
         payload.addressList = addressList;
       }
-    
+  
       payload.disableOptimization = disableOptimization;
 
       if (configSource === 'uuid') {
@@ -3747,7 +3896,7 @@ trojan://..."
 
         const addrType = addressType;
         let linkParams = \`type=\${addrType}\`;
-      
+    
         if (disableOptimization) {
           linkParams += \`&disable=true\`;
         } else if(addrType === 'ip') {
@@ -3755,7 +3904,7 @@ trojan://..."
           const carrier = document.querySelector('input[name="genCarrierType"]:checked').value;
           linkParams += \`&ipType=\${ipType}&carrier=\${carrier}\`;
         }
-      
+    
         const subLink = \`\${WORKER_DOMAIN}/batch-configs/\${uuid}?\${linkParams}\`;
         linkInput.value = subLink;
         linkBox.classList.remove('hidden');
@@ -3955,7 +4104,7 @@ trojan://..."
         currentTotalPages = d.pagination.totalPages;
 
         // 渲染表格
-        let h = '<div class="table-container"><table class="w-full"><thead><tr class="bg-gray-100"><th class="p-3 text-left"><input type="checkbox" id="selectAllCheckbox" class="mr-2" onclick="toggleSelectAll()">全选</th><th class="p-3 text-left">备注</th><th class="p-3 text-left">协议</th><th class="p-3 text-left">域名托管</th><th class="p-3 text-left">配置</th><th class="p-3 text-left">操作</th></tr></thead><tbody>';
+        let h = '<div class="table-container"><table class="w-full mobile-table"><thead><tr class="bg-gray-100"><th class="p-2 sm:p-3 text-left"><input type="checkbox" id="selectAllCheckbox" class="mr-2" onclick="toggleSelectAll()">全选</th><th class="p-2 sm:p-3 text-left">备注</th><th class="p-2 sm:p-3 text-left">协议</th><th class="p-2 sm:p-3 text-left">域名托管</th><th class="p-2 sm:p-3 text-left">配置</th><th class="p-2 sm:p-3 text-left">操作</th></tr></thead><tbody>';
 
         if (!d.configs || d.configs.length === 0) {
           h += '<tr><td colspan="6" class="p-5 text-center text-gray-500">未找到符合条件的配置</td></tr>';
@@ -3965,16 +4114,16 @@ trojan://..."
             const hosting = Row.domain_hosting || 'Cloudflare';
             const hostingClass = hostingStyleMap[hosting] || 'hosting-other';
             const isSelected = selectedConfigs.has(Row.id) ? 'checked' : '';
-  
+
             h+=\`<tr class="border-t border-gray-200 hover:bg-gray-50">
-              <td class="p-3"><input type="checkbox" class="config-checkbox" data-id="\${Row.id}" \${isSelected} onchange="toggleConfigSelection(\${Row.id}, this.checked)"></td>
-              <td class="p-3">\${Row.remark||'-'}</td>
-              <td class="p-3 font-mono">\${Row.protocol}</td>
-              <td class="p-3"><span class="px-2 py-1 rounded text-xs \${hostingClass}">\${hosting}</span></td>
-              <td class="p-3 config-data-cell font-mono text-sm">\${Row.config_data.substring(0,40)}...</td>
-              <td class="p-3">
-                <button class="px-3 py-1 border border-gray-300 text-gray-700 rounded hover:bg-gray-50 mr-2" data-config="\${sc}" onclick="openEditModal(JSON.parse(this.dataset.config))">编辑</button>
-                <button class="px-3 py-1 bg-red-600 text-white rounded border border-red-600 hover:bg-red-700" onclick="delOne(\${Row.id})">删除</button>
+              <td class="p-2 sm:p-3"><input type="checkbox" class="config-checkbox" data-id="\${Row.id}" \${isSelected} onchange="toggleConfigSelection(\${Row.id}, this.checked)"></td>
+              <td class="p-2 sm:p-3">\${Row.remark||'-'}</td>
+              <td class="p-2 sm:p-3 font-mono text-sm">\${Row.protocol}</td>
+              <td class="p-2 sm:p-3"><span class="px-2 py-1 rounded text-xs \${hostingClass}">\${hosting}</span></td>
+              <td class="p-2 sm:p-3 config-data-cell font-mono text-xs sm:text-sm">\${Row.config_data.substring(0,30)}...</td>
+              <td class="p-2 sm:p-3">
+                <button class="px-2 py-1 border border-gray-300 text-gray-700 rounded hover:bg-gray-50 mr-1 sm:mr-2 text-xs sm:text-sm" data-config="\${sc}" onclick="openEditModal(JSON.parse(this.dataset.config))">编辑</button>
+                <button class="px-2 py-1 bg-red-600 text-white rounded border border-red-600 hover:bg-red-700 text-xs sm:text-sm" onclick="delOne(\${Row.id})">删除</button>
               </td>
             </tr>\`;
           });
@@ -4325,12 +4474,12 @@ trojan://..."
           domain_hosting: domainHosting
         })
       });
-      
+    
       const result = await r.json();
       if (result.success) {
         showToast('保存成功', 'success');
         closeEditModal(); // 关闭窗口
-        
+      
         // 延迟一小会儿刷新列表，确保数据库操作已同步
         setTimeout(() => {
           manageQueryByUuid(); 
@@ -4383,24 +4532,24 @@ trojan://..."
       Math.round(stats.apigen_count / stats.total_access * 100) : 0;
 
     container.innerHTML = \`
-      <div class="bg-white border border-gray-200 rounded-lg p-4">
-        <div class="text-2xl font-bold text-blue-600">\${stats.total_access}</div>
-        <div class="text-sm text-gray-700">总访问次数</div>
+      <div class="bg-white border border-gray-200 rounded-lg p-3">
+        <div class="text-xl sm:text-2xl font-bold text-blue-600">\${stats.total_access}</div>
+        <div class="text-xs sm:text-sm text-gray-700">总访问次数</div>
         <div class="text-xs text-gray-500 mt-1">首次: \${stats.first_access ? formatDate(stats.first_access) : '从未'}</div>
       </div>
-      <div class="bg-white border border-gray-200 rounded-lg p-4">
-        <div class="text-2xl font-bold text-green-600">\${stats.today_total}</div>
-        <div class="text-sm text-gray-700">今日访问</div>
+      <div class="bg-white border border-gray-200 rounded-lg p-3">
+        <div class="text-xl sm:text-2xl font-bold text-green-600">\${stats.today_total}</div>
+        <div class="text-xs sm:text-sm text-gray-700">今日访问</div>
         <div class="text-xs text-gray-500 mt-1">订阅:\${stats.today_subscription} | 网页:\${stats.today_apigen}</div>
       </div>
-      <div class="bg-white border border-gray-200 rounded-lg p-4">
-        <div class="text-2xl font-bold text-purple-600">\${stats.subscription_count}</div>
-        <div class="text-sm text-gray-700">订阅访问</div>
+      <div class="bg-white border border-gray-200 rounded-lg p-3">
+        <div class="text-xl sm:text-2xl font-bold text-purple-600">\${stats.subscription_count}</div>
+        <div class="text-xs sm:text-sm text-gray-700">订阅访问</div>
         <div class="text-xs text-gray-500 mt-1">占比 \${subscriptionPercent}%</div>
       </div>
-      <div class="bg-white border border-gray-200 rounded-lg p-4">
-        <div class="text-2xl font-bold text-orange-600">\${stats.apigen_count}</div>
-        <div class="text-sm text-gray-700">网页生成</div>
+      <div class="bg-white border border-gray-200 rounded-lg p-3">
+        <div class="text-xl sm:text-2xl font-bold text-orange-600">\${stats.apigen_count}</div>
+        <div class="text-xs sm:text-sm text-gray-700">网页生成</div>
         <div class="text-xs text-gray-500 mt-1">占比 \${apigenPercent}%</div>
       </div>
     \`;
@@ -4512,7 +4661,7 @@ trojan://..."
     const container = document.getElementById('manageRecentLogs');
 
     if (!logs || logs.length === 0) {
-      container.innerHTML = '<div class="text-center py-8 text-gray-500">暂无访问记录</div>';
+      container.innerHTML = '<div class="text-center py-6 text-gray-500">暂无访问记录</div>';
       return;
     }
 
@@ -4527,10 +4676,10 @@ trojan://..."
       html += \`
         <div class="flex justify-between items-center py-2 border-b border-gray-100 last:border-b-0">
           <div class="flex items-center gap-2">
-            <span class="text-sm font-mono text-gray-600">\${formatDateTime(log.created_at)}</span>
+            <span class="text-xs sm:text-sm font-mono text-gray-600">\${formatDateTime(log.created_at)}</span>
             <span class="px-2 py-1 rounded text-xs \${typeClass}">\${typeText}</span>
           </div>
-          <div class="text-xs text-gray-500 truncate max-w-[200px]" title="\${log.user_agent || '未知'}">
+          <div class="text-xs text-gray-500 truncate max-w-[120px] sm:max-w-[200px]" title="\${log.user_agent || '未知'}">
             \${userAgentShort}
           </div>
         </div>
@@ -4567,7 +4716,7 @@ trojan://..."
     const ipContainer = document.getElementById('clashIpOptionsContainer');
     const domainBox = document.getElementById('clashDomainInfoBox');
     const disableBox = document.getElementById('clashDisableInfoBox');
-  
+
     if (type === 'domain') {
       ipContainer.classList.add('hidden');
       domainBox.classList.remove('hidden');
@@ -4922,8 +5071,24 @@ trojan://..."
 
     // 初始化Lucide图标
     lucide.createIcons();
+    
+    // 移动端触摸优化：防止双击缩放
+    let lastTouchEnd = 0;
+    document.addEventListener('touchend', function(event) {
+      const now = Date.now();
+      if (now - lastTouchEnd <= 300) {
+        event.preventDefault();
+      }
+      lastTouchEnd = now;
+    }, false);
+    
+    // 移动端优化：防止300ms点击延迟
+    if ('touchAction' in document.documentElement.style) {
+      document.body.style.touchAction = 'manipulation';
+    }
   });
 </script>
 </body>
 </html>
 `;
+
