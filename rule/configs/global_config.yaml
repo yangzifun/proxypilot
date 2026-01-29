@@ -21,7 +21,6 @@ unified-delay: true
 tcp-concurrent: true
 log-level: warning
 find-process-mode: 'off'
-test-url: http://cp.cloudflare.com/generate_204
 global-client-fingerprint: chrome
 keep-alive-idle: 600
 keep-alive-interval: 15
@@ -100,16 +99,16 @@ rule-anchor:
 # ==========================================================
 proxy-groups:
   # --- 1. 默认代理 (总开关) ---
-  - {name: 🚀 默认代理, type: select, include-all: true, filter: "^((?!(直连)).)*$", proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 �[...]
+  - {name: 🚀 默认代理, type: select, include-all: true, filter: "^((?!(直连)).)*$", proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动, 🌐 全部节点]}
   
   # --- 2. AI 服务 ---
   - {name: 🤖 OpenAI, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
-  - {name: ✨ Gemini, type: select, include-all: true, filter: "(?i)洛杉矶|弗吉尼亚|东京|新加坡|台湾|德国", proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡�[...]
+  - {name: ✨ Gemini, type: select, include-all: true, filter: "(?i)洛杉矶|弗吉尼亚|东京|新加坡|台湾|德国", proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
   - {name: 🧠 Claude, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇩🇪 德国自动]}
   - {name: 🌌 常用 AI, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]} 
   
   # --- 3. 社交与办公 ---
-  - {name: 📲 Telegram, type: select, include-all: true, filter: "(?i)香港|东京|洛杉矶|弗吉尼亚|新加坡|台湾|德国", proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日��[...]
+  - {name: 📲 Telegram, type: select, include-all: true, filter: "(?i)香港|东京|洛杉矶|弗吉尼亚|新加坡|台湾|德国", proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
   - {name: 🌏 Meta, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇺🇸 美国自动]}
   - {name: 🐦 Twitter, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动]}
   - {name: 💬 Discord, type: select, proxies: [🚀 默认代理, 🇺🇸 美国自动, 🇭🇰 香港自动, 🇩🇪 德国自动]}
@@ -117,10 +116,10 @@ proxy-groups:
   - {name: 🟦 Microsoft, type: select, proxies: [DIRECT, 🚀 默认代理, ⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动]} 
 
   # --- 4. 流媒体与娱乐 ---
-  - {name: 🎬 YouTube, type: select, include-all: true, filter: "(?i)香港|东京|洛杉矶|弗吉尼亚|新加坡|台湾|德国", proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本[...]
-  - {name: 🎥 Netflix, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国[...]
+  - {name: 🎬 YouTube, type: select, include-all: true, filter: "(?i)香港|东京|洛杉矶|弗吉尼亚|新加坡|台湾|德国", proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
+  - {name: 🎥 Netflix, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
   - {name: 🎞️ Disney+, type: select, proxies: [🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
-  - {name: 🎵 TikTok, type: select, include-all: true, filter: "(?i)日本|JP|美国|US|新加坡|SG|台湾|TW|德国|DE", proxies: [🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡�[...]
+  - {name: 🎵 TikTok, type: select, include-all: true, filter: "(?i)日本|JP|美国|US|新加坡|SG|台湾|TW|德国|DE", proxies: [🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
   - {name: 📺 更多流媒体, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇺🇸 美国自动]}
   - {name: 🎧 Spotify, type: select, proxies: [DIRECT, 🚀 默认代理, ⚡ 自动选择]} 
   
@@ -132,7 +131,7 @@ proxy-groups:
   - {name: 🎮 PlayStation, type: select, proxies: [⚡ 自动选择, 🚀 默认代理, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇭🇰 香港自动]}
 
   # --- 6. 基础工具 ---
-  - {name: 🔍 Google, type: select, include-all: true, filter: "(?i)香港|东京|洛杉矶|弗吉尼亚|新加坡|台湾|德国", proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本�[...]
+  - {name: 🔍 Google, type: select, include-all: true, filter: "(?i)香港|东京|洛杉矶|弗吉尼亚|新加坡|台湾|德国", proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
   - {name: 🚀 Speedtest, type: select, proxies: [DIRECT, 🚀 默认代理, ⚡ 自动选择]}
   - {name: 💳 PayPal, type: select, proxies: [⚡ 自动选择, 🇺🇸 美国自动, 🇭🇰 香港自动, 🇩🇪 德国自动, DIRECT]}
   - {name: 🚫 广告拦截, type: select, proxies: [REJECT, DIRECT]}
@@ -143,10 +142,10 @@ proxy-groups:
   - {name: 🌐 全部节点, type: select, include-all: true}
   
   - {name: 🇭🇰 香港自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)香港|HK|Hong Kong|HongKong|HKSAR|HKG|Hkg|Hk"}
-  - {name: 🇯🇵 日本自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)日本|JP|Japan|Tokyo|Osaka|Saitama|Kyoto|JP-|Japan|TYO|OSA|东京|大阪|埼玉|京都"[...]
-  - {name: 🇺🇸 美国自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)美国|US|USA|United States|America|States|US-|Virginia|VA|Ashburn|弗吉尼亚|维吉��[...]
+  - {name: 🇯🇵 日本自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)日本|JP|Japan|Tokyo|Osaka|Saitama|Kyoto|JP-|Japan|TYO|OSA|东京|大阪|埼玉|京都"}
+  - {name: 🇺🇸 美国自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)美国|US|USA|United States|America|States|US-|Virginia|VA|Ashburn|弗吉尼亚|维吉尼亚|阿什本|California|CA|Los Angeles|San Francisco|San Jose|Santa Clara|Santa Monica|Sacramento|Fremont|洛杉矶|旧金山|圣何塞|加州|New York|NY|New Jersey|NJ|纽约|新泽西|Texas|TX|Dallas|Houston|Austin|德克萨斯|德州|达拉斯|休斯顿|Washington|WA|Seattle|西雅图|Chicago|IL|芝加哥|Florida|FL|Miami|佛罗里达|迈阿密|Oregon|OR|Portland|波特兰|Nevada|NV|Las Vegas|拉斯维加斯|Arizona|AZ|Phoenix|凤凰城|Georgia|Atlanta|亚特兰大|Utah|Salt Lake|盐湖城|Boston|波士顿"}
   - {name: 🇸🇬 新加坡自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)新加坡|SG|Singapore|Lion City|SGP|SIN|SGP|狮城"}
-  - {name: 🇹🇼 台湾自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)台湾|TW|Taiwan|Taipei|TPE|Taichung|Hsinchu|Republic of China|ROC|TW-|台北|台中|新[...]
+  - {name: 🇹🇼 台湾自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)台湾|TW|Taiwan|Taipei|TPE|Taichung|Hsinchu|Republic of China|ROC|TW-|台北|台中|新竹|彰化"}
   - {name: 🇩🇪 德国自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)德国|法兰克福|DE|Germany|Deutschland|Frankfurt|Berlin|Munich|FRG|DE-"}
 
 # ==========================================================
