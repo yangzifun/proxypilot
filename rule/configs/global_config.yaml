@@ -174,10 +174,6 @@ rules:
   - RULE-SET,bahamut_domain,📺 更多流媒体
   - RULE-SET,viu_domain,📺 更多流媒体
   - RULE-SET,spotify_domain,🎧 Spotify
-  
-  # 中国大陆服务全部走 DIRECT
-  - RULE-SET,cn_domain,DIRECT
-  - RULE-SET,cn_ip,DIRECT,no-resolve
 
   - RULE-SET,github_domain,🐱 GitHub
   - RULE-SET,google_domain,🔍 Google
@@ -205,6 +201,11 @@ rules:
   - RULE-SET,google_ip,🔍 Google,no-resolve
   - RULE-SET,telegram_ip,📲 Telegram,no-resolve
   - RULE-SET,netflix_ip,🎥 Netflix,no-resolve
+
+  # 中国大陆服务全部走 DIRECT
+  - RULE-SET,cn_domain,DIRECT
+  - RULE-SET,cn_ip,DIRECT,no-resolve
+
   - MATCH,🐟 漏网之鱼
 
 # ==========================================================
