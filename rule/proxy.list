@@ -34,3 +34,6 @@ DOMAIN-SUFFIX,msftconnecttest.com
 # 必应
 DOMAIN-SUFFIX,bing.com
 DOMAIN-SUFFIX,cn.bing.com
+# 视频下载
+DOMAIN-SUFFIX,ssvid.app
+DOMAIN-SUFFIX,ssstwitter.com
