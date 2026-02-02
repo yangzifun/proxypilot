@@ -1,5 +1,5 @@
-# 生成时间: 2026-01-13
-# 模板类型: 增强版 GEOIP 配置模板
+# 生成时间: 2026-02-02
+# 模板类型: 极致极致内存优化版 (MRS 驱动)
 
 # ==========================================================
 # 全局配置
@@ -15,54 +15,34 @@ ipv6: false
 unified-delay: true
 tcp-concurrent: true
 log-level: warning
-find-process-mode: 'off'
-global-client-fingerprint: chrome
-keep-alive-idle: 600
-keep-alive-interval: 15
-disable-keep-alive: false
 
-# 增强 GEOIP 处理能力
-geodata-mode: true
-geox-url:
-  geoip: "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.dat"
-  geosite: "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat"
-  mmdb: "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.metadb"
+# 【关键优化】关闭 geodata 模式，不加载 geoip.dat 和 geosite.dat
+geodata-mode: false 
+# 既然关闭了 geodata-mode，下面这些 URL 可以注释掉以节省空间
+# geox-url:
+#   geoip: "..."
+#   geosite: "..."
+
+find-process-mode: 'off' # 减少进程扫描的 CPU 和内存占用
+global-client-fingerprint: chrome
 
 profile:
   store-selected: true
   store-fake-ip: true
 
 # ==========================================================
-# 节点信息
-# ==========================================================
-proxies:
-  - {name: 直连, type: direct}
-
-# ==========================================================
-# 嗅探
+# 嗅探与入站
 # ==========================================================
 sniffer:
   enable: true
   sniff:
-    HTTP:
-      ports: [80, 8080-8880]
-      override-destination: true
-    TLS:
-      ports: [443, 8443]
-    QUIC:
-      ports: [443, 8443]
-  force-domain:
-    - "+.v2ex.com"
-  skip-domain:
-    - "+.baidu.com"
+    HTTP: { ports: [80, 8080-8880], override-destination: true }
+    TLS: { ports: [443, 8443] }
+    QUIC: { ports: [443, 8443] }
 
-# ==========================================================
-# 入站
-# ==========================================================  
 tun:
   enable: true
   stack: mixed
-  dns-hijack: ["any:53", "tcp://any:53"]
   auto-route: true
   auto-redirect: true
   auto-detect-interface: true
@@ -76,63 +56,47 @@ dns:
   ipv6: false
   respect-rules: true
   fake-ip-range: 28.0.0.1/8
-  fake-ip-filter-mode: blacklist
   fake-ip-filter:
     - "rule-set:private_domain,cn_domain"
     - "+.msftconnecttest.com"
     - "+.msftncsi.com"
-    - "time.*.com"
-    - "+.market.xiaomi.com"
-  default-nameserver:
-    - 223.5.5.5
-    - 223.6.6.6
-  proxy-server-nameserver:
-    - https://dns.alidns.com/dns-query
-    - https://doh.pub/dns-query
   nameserver:
+    - 223.5.5.5
     - 8.8.8.8
-    - 1.1.1.1
 
 # ==========================================================
-# 锚点配置
+# 锚点配置 (统一 MRS 格式)
 # ==========================================================
 rule-anchor:
   ip: &ip {type: http, interval: 86400, behavior: ipcidr, format: mrs}
   domain: &domain {type: http, interval: 86400, behavior: domain, format: mrs}
-  class: &class {type: http, interval: 86400, behavior: classical, format: text}
 
 # ==========================================================
-# 出站策略 (Proxy Groups)
+# 策略组 (保持您原有的逻辑)
 # ==========================================================
 proxy-groups:
   - {name: 🚀 默认代理, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动, 🌐 全部节点]}
-  
   - {name: 🤖 OpenAI, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
   - {name: ✨ Gemini, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
   - {name: 🧠 Claude, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇩🇪 德国自动]}
   - {name: 🌌 常用 AI, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
-  
   - {name: 📲 Telegram, type: select, include-all: true, filter: "(?i)香港|东京|洛杉矶|弗吉尼亚|新加坡|台湾|德国", proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
   - {name: 🌏 Meta, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇺🇸 美国自动]}
   - {name: 🐦 Twitter, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动]}
   - {name: 💬 Discord, type: select, proxies: [🚀 默认代理, 🇺🇸 美国自动, 🇭🇰 香港自动, 🇩🇪 德国自动]}
   - {name: 🐱 GitHub, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇩🇪 德国自动]}
   - {name: 🟦 Microsoft, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择]}
-
   - {name: 🎬 YouTube, type: select, include-all: true, filter: "(?i)香港|东京|洛杉矶|弗吉尼亚|新加坡|台湾|德国", proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
   - {name: 🎥 Netflix, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动]}
   - {name: 🎞️ Disney+, type: select, proxies: [🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动]}
   - {name: 🎵 TikTok, type: select, proxies: [🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动]}
   - {name: 📺 更多流媒体, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇹🇼 台湾自动, 🇯🇵 日本自动]}
   - {name: 🎧 Spotify, type: select, proxies: [🚀 默认代理, ⚡ 自动选择, 🎯 直连]}
-  
   - {name: 🎮 Steam, type: select, proxies: [🎯 直连, 🚀 默认代理]}
   - {name: 🎮 PlayStation, type: select, proxies: [🎯 直连, 🚀 默认代理, 🇯🇵 日本自动]}
-
   - {name: 🎬 大陆视频, type: select, proxies: [🎯 直连, 🇨🇳 中国自动]}
   - {name: 🍎 Apple, type: select, proxies: [🎯 直连, 🚀 默认代理]}
   - {name: 🇨🇳 中国大陆, type: select, proxies: [🎯 直连, 🇨🇳 中国自动]}
-
   - {name: 🔍 Google, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动]}
   - {name: 🚀 Speedtest, type: select, proxies: [🎯 直连, 🚀 默认代理]}
   - {name: 💳 PayPal, type: select, proxies: [⚡ 自动选择, 🇺🇸 美国自动, 🎯 直连]}
@@ -142,7 +106,6 @@ proxy-groups:
 
   - {name: ⚡ 自动选择, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN)).)*$"}
   - {name: 🌐 全部节点, type: select, include-all: true}
-  
   - {name: 🇭🇰 香港自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)香港|HK|Hong Kong"}
   - {name: 🇯🇵 日本自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)日本|JP|Japan"}
   - {name: 🇺🇸 美国自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)美国|US|USA"}
@@ -152,12 +115,12 @@ proxy-groups:
   - {name: 🇨🇳 中国自动, type: url-test, url: 'https://www.apple.com/library/test/success.html', include-all: true, tolerance: 20, interval: 300, filter: "(?i)上海|北京|广州|深圳|中国|CN"}
 
 # ==========================================================
-# 规则匹配 (Rules)
+# 规则匹配 (Rules) - 全部转向 RULE-SET
 # ==========================================================
 rules:
   - RULE-SET,category-ads-all,🚫 广告拦截
 
-  # AI 与 社交 (优先匹配域名)
+  # AI 与 社交
   - RULE-SET,openai,🤖 OpenAI
   - RULE-SET,gemini,✨ Gemini
   - RULE-SET,claude,🧠 Claude
@@ -182,20 +145,13 @@ rules:
   - RULE-SET,microsoft_domain,🟦 Microsoft
   - RULE-SET,apple_domain,🍎 Apple
   
-  # 地区分流 (核心修改：增加自定义 GEOIP Rule-Set 匹配)
+  # 【关键修改】地区分流全部使用 MRS Rule-Set，不再调用内置 GEOIP
   - RULE-SET,geoip_hk,🇭🇰 香港自动,no-resolve
+  - RULE-SET,geoip_tw,🇹🇼 台湾自动,no-resolve
   - RULE-SET,geoip_jp,🇯🇵 日本自动,no-resolve
-  - RULE-SET,geoip_us,🇺🇸 美国自动,no-resolve
   - RULE-SET,geoip_sg,🇸🇬 新加坡自动,no-resolve
-
-  # 备用内置 GEOIP
-  - GEOIP,HK,🇭🇰 香港自动
-  - GEOIP,TW,🇹🇼 台湾自动
-  - GEOIP,JP,🇯🇵 日本自动
-  - GEOIP,SG,🇸🇬 新加坡自动
-  - GEOIP,US,🇺🇸 美国自动
-  - GEOIP,DE,🇩🇪 德国自动
-  - GEOIP,CN,🇨🇳 中国自动
+  - RULE-SET,geoip_us,🇺🇸 美国自动,no-resolve
+  - RULE-SET,geoip_de,🇩🇪 德国自动,no-resolve
 
   # 中国大陆分流
   - RULE-SET,cn_domain,🇨🇳 中国大陆
@@ -203,12 +159,13 @@ rules:
 
   # 兜底
   - RULE-SET,private_domain,🎯 直连
-  - GEOIP,LAN,🎯 直连
+  # 局域网也使用 RULE-SET 替代
+  - RULE-SET,geoip_lan,🎯 直连,no-resolve
   - RULE-SET,gfw_domain,🚀 默认代理
   - MATCH,🐟 漏网之鱼
 
 # ==========================================================
-# 规则源
+# 规则源 (Rule Providers)
 # ==========================================================
 rule-providers:
   # 自定义 GEOIP (MRS 格式)
@@ -216,6 +173,9 @@ rule-providers:
   geoip_jp: { <<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/jp.mrs"}
   geoip_us: { <<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/us.mrs"}
   geoip_sg: { <<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/sg.mrs"}
+  geoip_tw: { <<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/tw.mrs"}
+  geoip_de: { <<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/de.mrs"}
+  geoip_lan: { <<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/private.mrs"}
 
   # 基础与系统
   private_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs"}
