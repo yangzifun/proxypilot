@@ -1,4 +1,4 @@
-# 生成时间: 2026-01-13
+# 生成时间: 2026-02-04
 # 模板类型: 默认模板 - 基础配置模板，适用于简单场景
 
 # ==========================================================
@@ -101,7 +101,7 @@ rule-anchor:
 proxy-groups:
   # --- 1. 默认代理 (总开关) ---
   # 兜底使用的代理组，如果下方具体服务没命中，则默认走这里
-  - {name: 🚀 默认代理, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动 , 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动, 🌐 全部节点]}
+  - {name: 🚀 默认代理, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动, 🌐 全部节点]}
   
   # --- 2. AI 服务 (对 IP 纯净度要求极高) ---
   - {name: 🤖 OpenAI, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]} # 严禁香港
@@ -110,42 +110,42 @@ proxy-groups:
   - {name: 🌌 常用 AI, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}  # 聚合其他 AI 规则
   
   # --- 3. 社交与办公 (注重低延迟和可用性) ---
-  - {name: 📲 Telegram, type: select, include-all: true, filter: "(?i)香港|东京|洛杉矶|弗吉尼亚|新加坡|台湾|德国", proxies: [⚡ 自动选择, 🇭🇰 香港自动 , 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
-  - {name: 🌏 Meta, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动 , 🇲🇴 澳门自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇺🇸 美国自动]} # 包含 Facebook, Instagram, WhatsApp
-  - {name: 🐦 Twitter, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动 , 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动]}
-  - {name: 💬 Discord, type: select, proxies: [🚀 默认代理, 🇺🇸 美国自动, 🇭🇰 香港自动 , 🇲🇴 澳门自动, 🇩🇪 德国自动]}
-  - {name: 🐱 GitHub, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动 , 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇩🇪 德国自动]} # 提升代码拉取速度
-  - {name: 🟦 Microsoft, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择, 🇭🇰 香港自动 , 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动]} # 解决 Outlook 或系统更新转圈
+  - {name: 📲 Telegram, type: select, include-all: true, filter: "(?i)香港|东京|洛杉矶|弗吉尼亚|新加坡|台湾|德国", proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
+  - {name: 🌏 Meta, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇺🇸 美国自动]} # 包含 Facebook, Instagram, WhatsApp
+  - {name: 🐦 Twitter, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动]}
+  - {name: 💬 Discord, type: select, proxies: [🚀 默认代理, 🇺🇸 美国自动, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇩🇪 德国自动]}
+  - {name: 🐱 GitHub, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇩🇪 德国自动]} # 提升代码拉取速度
+  - {name: 🟦 Microsoft, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动]} # 解决 Outlook 或系统更新转圈
 
 # --- 4. 流媒体与娱乐 (注重带宽和地区版权) ---
-  - {name: 🎬 YouTube, type: select, include-all: true, filter: "(?i)香港|东京|洛杉矶|弗吉尼亚|新加坡|台湾|德国", proxies: [⚡ 自动选择, 🇭🇰 香港自动 , 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
-  - {name: 🎥 Netflix, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动 , 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
+  - {name: 🎬 YouTube, type: select, include-all: true, filter: "(?i)香港|东京|洛杉矶|弗吉尼亚|新加坡|台湾|德国", proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
+  - {name: 🎥 Netflix, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
   - {name: 🎞️ Disney+, type: select, proxies: [🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
   - {name: 🎵 TikTok, type: select,  proxies: [🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
-  - {name: 📺 更多流媒体, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动 , 🇲🇴 澳门自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇺🇸 美国自动]} # Prime Video, Viu, TVB, 动画疯等
+  - {name: 📺 更多流媒体, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇺🇸 美国自动]} # Prime Video, Viu, TVB, 动画疯等
   - {name: 🎧 Spotify, type: select, proxies: [🚀 默认代理, ⚡ 自动选择, 🎯 直连]} # 建议首选直连或默认代理
   
   
  # --- 5. 流媒体与游戏 (建议：下载选直连，联机选代理) ---
-  - {name: 🎮 Steam, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇭🇰 香港自动 , 🇲🇴 澳门自动]}
-  - {name: 🎮 Ubisoft, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择, 🇭🇰 香港自动 , 🇲🇴 澳门自动]} # 原 Uplay 平台
+  - {name: 🎮 Steam, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇭🇰 香港自动, 🇲🇴 澳门自动]}
+  - {name: 🎮 Ubisoft, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择, 🇭🇰 香港自动, 🇲🇴 澳门自动]} # 原 Uplay 平台
   - {name: 🎮 Epic, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择]}
   - {name: 🎮 EA, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择]} # EA App / Origin
   - {name: 🎮 PlayStation, type: select, proxies: [🎯 直连, 🚀 默认代理, 🇯🇵 日本自动]} # PSN 商店与更新
 
  # --- 6. 中国大陆服务 (保持国内访问速度) ---
   
-  - {name: 🎬 大陆视频, type: select, proxies: [🎯 直连, 🚀 默认代理, 🇨🇳 中国自动, 🇭🇰 香港自动 , 🇲🇴 澳门自动]} # 哔哩哔哩、爱奇艺等
-  - {name: 🍎 Apple, type: select, proxies: [🎯 直连, 🚀 默认代理, 🇨🇳 中国自动, 🇭🇰 香港自动 , 🇲🇴 澳门自动]}  # App Store 与 iCloud 加速
-  - {name: 🇨🇳 中国大陆, type: select, proxies: [🎯 直连, 🇨🇳 中国自动, 🚀 默认代理, 🇭🇰 香港自动 , 🇲🇴 澳门自动]}  # 中国大陆地区域名及IP
+  - {name: 🎬 大陆视频, type: select, proxies: [🎯 直连, 🚀 默认代理, 🇨🇳 中国自动, 🇭🇰 香港自动, 🇲🇴 澳门自动]} # 哔哩哔哩、爱奇艺等
+  - {name: 🍎 Apple, type: select, proxies: [🎯 直连, 🚀 默认代理, 🇨🇳 中国自动, 🇭🇰 香港自动, 🇲🇴 澳门自动]}  # App Store 与 iCloud 加速
+  - {name: 🇨🇳 中国大陆, type: select, proxies: [🎯 直连, 🇨🇳 中国自动, 🚀 默认代理, 🇭🇰 香港自动, 🇲🇴 澳门自动]}  # 中国大陆地区域名及IP
 
   # --- 7. 基础工具 ---
-  - {name: 🔍 Google, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动 , 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
+  - {name: 🔍 Google, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
   - {name: 🚀 Speedtest, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择]}
-  - {name: 💳 PayPal, type: select, proxies: [⚡ 自动选择, 🇺🇸 美国自动, 🇭🇰 香港自动 , 🇲🇴 澳门自动, 🇩🇪 德国自动, 🎯 直连]} # 建议固定一个地区防止风控
+  - {name: 💳 PayPal, type: select, proxies: [⚡ 自动选择, 🇺🇸 美国自动, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇩🇪 德国自动, 🎯 直连]} # 建议固定一个地区防止风控
   - {name: 🚫 广告拦截, type: select, proxies: [REJECT, DIRECT]}
   - {name: 🎯 直连, type: select, proxies: [DIRECT, 🚀 默认代理]} 
-  - {name: 🐟 漏网之鱼, type: select, proxies: [🚀 默认代理, 🎯 直连, ⚡ 自动选择, 🇭🇰 香港自动 , 🇲🇴 澳门自动, 🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
+  - {name: 🐟 漏网之鱼, type: select, proxies: [🚀 默认代理, 🎯 直连, ⚡ 自动选择, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
 
 
 
