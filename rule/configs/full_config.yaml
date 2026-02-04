@@ -224,7 +224,7 @@ rules:
   - GEOIP,SG,🇸🇬 新加坡自动,no-resolve
   - GEOIP,US,🇺🇸 美国自动,no-resolve
   - GEOIP,DE,🇩🇪 德国自动,no-resolve
-  - GEOIP,CN,🇨🇳 中国自动,no-resolve
+  - GEOIP,CN,🇨🇳 🇨🇳 中国大陆,no-resolve
 
 # 8.中国大陆分流
   - RULE-SET,bilibili_domain,🎬 大陆视频
