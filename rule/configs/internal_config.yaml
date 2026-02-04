@@ -152,7 +152,7 @@ proxy-groups:
   # --- 8. 底层自动选优策略 (供上方调用)  ---
   - {name: ⚡ 自动选择, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
   - {name: 🌐 全部节点, type: select, include-all: true}
-  - {name: 🏠 内网转发, type: select, include-all: true} #选择内网节点代理进入内网
+  - {name: 🏠 内网转发, type: select, include-all: true, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择]} #选择内网节点代理进入内网
  
   # 地区分组自动筛选 (基于正则匹配节点名)
   - {name: 🇭🇰 香港自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)香港"}
@@ -173,7 +173,7 @@ rules:
   - IP-CIDR,192.168.0.0/16,🏠 内网转发,no-resolve
   - IP-CIDR,10.0.0.0/8,🏠 内网转发,no-resolve
   - IP-CIDR,172.16.0.0/12,🏠 内网转发,no-resolve
-  
+
 # 1. 广告拦截
   - RULE-SET,category-ads-all,🚫 广告拦截
 
