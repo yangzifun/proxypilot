@@ -112,31 +112,31 @@ proxy-groups:
   - {name: 📲 Telegram, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
   - {name: 🌏 Meta, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇺🇸 美国自动]} # 包含 Facebook, Instagram, WhatsApp
   - {name: 🐦 Twitter, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动]}
-  - {name: 💬 Discord, type: select, proxies: [🚀 默认代理, 🇺🇸 美国自动, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇩🇪 德国自动]}
+  - {name: 💬 Discord, type: select, proxies: [🚀 默认代理, 🇺🇸 美国自动, 🇲🇴 澳门自动, 🇭🇰 香港自动, 🇩🇪 德国自动]}
   - {name: 🐱 GitHub, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇩🇪 德国自动]} # 提升代码拉取速度
   - {name: 🟦 Microsoft, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动]} # 解决 Outlook 或系统更新转圈
 
 # --- 4. 流媒体与娱乐 (注重带宽和地区版权) ---
   - {name: 🎬 YouTube, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
   - {name: 🎥 Netflix, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
-  - {name: 🎞️ Disney+, type: select, proxies: [🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
+  - {name: 🎞️ Disney+, type: select, proxies: [🇭🇰 香港自动, 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
   - {name: 🎵 TikTok, type: select,  proxies: [🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
   - {name: 📺 更多流媒体, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇺🇸 美国自动]} # Prime Video, Viu, TVB, 动画疯等
   - {name: 🎧 Spotify, type: select, proxies: [🚀 默认代理, ⚡ 自动选择, 🎯 直连]} # 建议首选直连或默认代理
   
   
  # --- 5. 流媒体与游戏 (建议：下载选直连，联机选代理) ---
-  - {name: 🎮 Steam, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇭🇰 香港自动, 🇲🇴 澳门自动]}
-  - {name: 🎮 Ubisoft, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择, 🇭🇰 香港自动, 🇲🇴 澳门自动]} # 原 Uplay 平台
+  - {name: 🎮 Steam, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇭🇰 香港自动]}
+  - {name: 🎮 Ubisoft, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择, 🇭🇰 香港自动]} # 原 Uplay 平台
   - {name: 🎮 Epic, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择]}
   - {name: 🎮 EA, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择]} # EA App / Origin
   - {name: 🎮 PlayStation, type: select, proxies: [🎯 直连, 🚀 默认代理, 🇯🇵 日本自动]} # PSN 商店与更新
 
  # --- 6. 中国大陆服务 (保持国内访问速度) ---
   
-  - {name: 🎬 大陆视频, type: select, proxies: [🎯 直连, 🚀 默认代理, 🇨🇳 中国自动, 🇭🇰 香港自动, 🇲🇴 澳门自动]} # 哔哩哔哩、爱奇艺等
-  - {name: 🍎 Apple, type: select, proxies: [🎯 直连, 🚀 默认代理, 🇨🇳 中国自动, 🇭🇰 香港自动, 🇲🇴 澳门自动]}  # App Store 与 iCloud 加速
-  - {name: 🇨🇳 中国大陆, type: select, proxies: [🎯 直连, 🇨🇳 中国自动, 🚀 默认代理, 🇭🇰 香港自动, 🇲🇴 澳门自动]}  # 中国大陆地区域名及IP
+  - {name: 🎬 大陆视频, type: select, proxies: [🎯 直连, 🚀 默认代理, 🇨🇳 中国自动, 🇭🇰 香港自动]} # 哔哩哔哩、爱奇艺等
+  - {name: 🍎 Apple, type: select, proxies: [🎯 直连, 🚀 默认代理, 🇨🇳 中国自动, 🇭🇰 香港自动]}  # App Store 与 iCloud 加速
+  - {name: 🇨🇳 中国大陆, type: select, proxies: [🎯 直连, 🇨🇳 中国自动, 🚀 默认代理, 🇭🇰 香港自动]}  # 中国大陆地区域名及IP
 
   # --- 7. 基础工具 ---
   - {name: 🔍 Google, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
@@ -155,7 +155,7 @@ proxy-groups:
  
   # 地区分组自动筛选 (基于正则匹配节点名)
   - {name: 🇭🇰 香港自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)香港"}
-  - {name: 🇲🇴 澳门自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)澳门|澳門"}
+  - {name: 🇲🇴 澳门自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)澳门|MO|Macau|Macao"}
   - {name: 🇯🇵 日本自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)日本|东京|大阪|埼玉|京都|福冈|名古屋|札幌"}
   - {name: 🇺🇸 美国自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)美国|弗吉尼亚|维吉尼亚|阿什本|洛杉矶|旧金山|圣何塞|加州|纽约|新泽西|德克萨斯|德州|达拉斯|休斯顿|西雅图|芝加哥|佛罗里达|迈阿密|波特兰|拉斯维加斯|凤凰城|亚特兰大|盐湖城|波士顿"}
   - {name: 🇸🇬 新加坡自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)新加坡|狮城"}
