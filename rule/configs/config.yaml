@@ -217,13 +217,13 @@ rules:
   - RULE-SET,sony_domain,🎮 PlayStation
 
 # 7.地区分流直接调用自动选择分组
-  - GEOIP,HK,🇭🇰 香港自动
-  - GEOIP,TW,🇹🇼 台湾自动
-  - GEOIP,JP,🇯🇵 日本自动
-  - GEOIP,SG,🇸🇬 新加坡自动
-  - GEOIP,US,🇺🇸 美国自动
-  - GEOIP,DE,🇩🇪 德国自动
-  - GEOIP,CN,🇨🇳 中国自动
+  - GEOIP,HK,🇭🇰 香港自动,no-resolve
+  - GEOIP,TW,🇹🇼 台湾自动,no-resolve
+  - GEOIP,JP,🇯🇵 日本自动,no-resolve
+  - GEOIP,SG,🇸🇬 新加坡自动,no-resolve
+  - GEOIP,US,🇺🇸 美国自动,no-resolve
+  - GEOIP,DE,🇩🇪 德国自动,no-resolve
+  - GEOIP,CN,🇨🇳 中国自动,no-resolve
 
 # 8.中国大陆分流
   - RULE-SET,bilibili_domain,🎬 大陆视频
