@@ -155,7 +155,7 @@ proxy-groups:
   - {name: 🌐 全部节点, type: select, include-all: true}
  
   # 地区分组自动筛选 (基于正则匹配节点名)
-  - {name: 🇭🇰 香港自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)香港|HK|Hong Kong|HongKong|HKSAR|HKG|Hkg|Hk"}
+  - {name: 🇭🇰 香港自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)香港|HK|Hong Kong|HongKong|HKSAR|HKG|Hkg|Hk|澳门|MO"}
   - {name: 🇯🇵 日本自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)日本|JP|Japan|Tokyo|Osaka|Saitama|Kyoto|JP-|Japan|TYO|OSA|东京|大阪|埼玉|京都"}
   - {name: 🇺🇸 美国自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)美国|US|USA|United States|America|States|US-|Virginia|VA|Ashburn|弗吉尼亚|维吉尼亚|阿什本|California|CA|Los Angeles|San Francisco|San Jose|Santa Clara|Santa Monica|Sacramento|Fremont|洛杉矶|旧金山|圣何塞|加州|New York|NY|New Jersey|NJ|纽约|新泽西|Texas|TX|Dallas|Houston|Austin|德克萨斯|德州|达拉斯|休斯顿|Washington|WA|Seattle|西雅图|Chicago|IL|芝加哥|Florida|FL|Miami|佛罗里达|迈阿密|Oregon|OR|Portland|波特兰|Nevada|NV|Las Vegas|拉斯维加斯|Arizona|AZ|Phoenix|凤凰城|Georgia|Atlanta|亚特兰大|Utah|Salt Lake|盐湖城|Boston|波士顿"}
   - {name: 🇸🇬 新加坡自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)新加坡|SG|Singapore|Lion City|SGP|SIN|SGP|狮城"}
