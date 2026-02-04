@@ -75,7 +75,7 @@ proxy-groups:
   
   - {name: 🇩🇪 德国自动, type: url-test, include-all: true, url: 'http://cp.cloudflare.com/generate_204', interval: 300, filter: "(?i)德国|Germany|DE|法兰克福|柏林|慕尼黑"}
   
-  - {name: 🇨🇳 中国自动, type: url-test, include-all: true, url: 'https://www.apple.com/library/test/success.html', interval: 300, filter: "(?i)中国|China|CN|回国|北京|京|上海|沪|广州|穗|深圳|深|杭州|杭|成都|蓉|南京|宁|武汉|汉|重庆|渝|陕西|陕|江苏|苏|浙江|浙|广东|粤|山东|鲁|福建|闽"}
+  - {name: 🇨🇳 中国自动, type: url-test, include-all: true, url: 'https://www.apple.com/library/test/success.html', interval: 300, filter: "(?i)中国|China|CN|回国|北京|上海|广州|深圳|杭州|成都|南京|武汉|天津|重庆|西安|苏州|江苏|浙江|广东|山东|福建|安徽|河南|湖北|湖南|江西|河北|山西|辽宁|吉林|黑龙江|海南|四川|贵州|云南|甘肃|青海|内蒙古|广西|西藏|宁夏|新疆"}
 
   - {name: 🌐 全部节点, type: select, include-all: true}
 

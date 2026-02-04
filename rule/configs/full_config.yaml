@@ -161,7 +161,7 @@ proxy-groups:
   - {name: 🇸🇬 新加坡自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)新加坡|狮城"}
   - {name: 🇹🇼 台湾自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)台湾|台北|新北|台中|高雄|台南|桃园|新竹|基隆|嘉义|彰化|屏东|宜兰|花莲|台东|苗栗|南投|云林|澎湖|金门|马祖"}
   - {name: 🇩🇪 德国自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)德国|法兰克福|柏林|慕尼黑|汉堡|杜塞尔多夫|科隆|斯图加特|纽伦堡|莱比锡"}
-  - {name: 🇨🇳 中国自动, type: url-test, url: 'https://www.apple.com/library/test/success.html', include-all: true, tolerance: 20, interval: 300, filter: "(?i)中国|China|CN|回国|北京|京|PEK|PKX|上海|沪|广州|穗|CAN|深圳|深|杭州|杭|成都|蓉|南京|宁|武汉|汉|天津|津|重庆|渝|西安|陕|苏州|苏|江苏|浙|浙江|广东|粤|山东|鲁|福建|闽|安徽|皖|河南|豫|湖北|鄂|湖南|湘|江西|赣|河北|冀|山西|晋|辽宁|辽|吉林|吉|黑龙江|黑|海南|琼|四川|川|蜀|贵州|黔|贵|云南|滇|云|甘肃|陇|甘|青海|青|内蒙古|蒙|广西|桂|西藏|藏|宁夏|宁|新疆|新"}
+  - {name: 🇨🇳 中国自动, type: url-test, url: 'https://www.apple.com/library/test/success.html', include-all: true, tolerance: 20, interval: 300, filter: "(?i)中国|China|CN|回国|北京|上海|广州|深圳|杭州|成都|南京|武汉|天津|重庆|西安|苏州|江苏|浙江|广东|山东|福建|安徽|河南|湖北|湖南|江西|河北|山西|辽宁|吉林|黑龙江|海南|四川|贵州|云南|甘肃|青海|内蒙古|广西|西藏|宁夏|新疆"}
 
 
 # ==========================================================
