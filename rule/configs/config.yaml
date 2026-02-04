@@ -110,7 +110,7 @@ proxy-groups:
   - {name: 🌌 常用 AI, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}  # 聚合其他 AI 规则
   
   # --- 3. 社交与办公 (注重低延迟和可用性) ---
-  - {name: 📲 Telegram, type: select, include-all: true, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
+  - {name: 📲 Telegram, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
   - {name: 🌏 Meta, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇺🇸 美国自动]} # 包含 Facebook, Instagram, WhatsApp
   - {name: 🐦 Twitter, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动]}
   - {name: 💬 Discord, type: select, proxies: [🚀 默认代理, 🇺🇸 美国自动, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇩🇪 德国自动]}
@@ -118,7 +118,7 @@ proxy-groups:
   - {name: 🟦 Microsoft, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动]} # 解决 Outlook 或系统更新转圈
 
 # --- 4. 流媒体与娱乐 (注重带宽和地区版权) ---
-  - {name: 🎬 YouTube, type: select, include-all: true, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
+  - {name: 🎬 YouTube, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
   - {name: 🎥 Netflix, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
   - {name: 🎞️ Disney+, type: select, proxies: [🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
   - {name: 🎵 TikTok, type: select,  proxies: [🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
@@ -155,14 +155,14 @@ proxy-groups:
   - {name: 🌐 全部节点, type: select, include-all: true}
  
   # 地区分组自动筛选 (基于正则匹配节点名)
-  - {name: 🇭🇰 香港自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)香港|HK|Hong Kong|HongKong|HKSAR|HKG|Hkg|Hk"}
-  - {name: 🇲🇴 澳门自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)澳门|澳門|Macau|Macao|MO|MO-"}
-  - {name: 🇯🇵 日本自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)日本|JP|Japan|Tokyo|Osaka|Saitama|Kyoto|JP-|Japan|TYO|OSA|东京|大阪|埼玉|京都"}
-  - {name: 🇺🇸 美国自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)美国|US|USA|United States|America|States|US-|Virginia|VA|Ashburn|弗吉尼亚|维吉尼亚|阿什本|California|CA|Los Angeles|San Francisco|San Jose|Santa Clara|Santa Monica|Sacramento|Fremont|洛杉矶|旧金山|圣何塞|加州|New York|NY|New Jersey|NJ|纽约|新泽西|Texas|TX|Dallas|Houston|Austin|德克萨斯|德州|达拉斯|休斯顿|Washington|WA|Seattle|西雅图|Chicago|IL|芝加哥|Florida|FL|Miami|佛罗里达|迈阿密|Oregon|OR|Portland|波特兰|Nevada|NV|Las Vegas|拉斯维加斯|Arizona|AZ|Phoenix|凤凰城|Georgia|Atlanta|亚特兰大|Utah|Salt Lake|盐湖城|Boston|波士顿"}
-  - {name: 🇸🇬 新加坡自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)新加坡|SG|Singapore|Lion City|SGP|SIN|SGP|狮城"}
-  - {name: 🇹🇼 台湾自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)台湾|TW|Taiwan|Taipei|TPE|Taichung|Hsinchu|Republic of China|ROC|TW-|台北|台中|新竹|彰化"}
-  - {name: 🇩🇪 德国自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)德国|法兰克福|DE|Germany|Deutschland|Frankfurt|Berlin|Munich|FRG|DE-"}
-  - {name: 🇨🇳 中国自动, type: url-test, url: 'https://www.apple.com/library/test/success.html', include-all: true, tolerance: 20, interval: 300, filter: "(?i)上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH"}
+  - {name: 🇭🇰 香港自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)香港"}
+  - {name: 🇲🇴 澳门自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)澳门|澳門"}
+  - {name: 🇯🇵 日本自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)日本|东京|大阪|埼玉|京都|福冈|名古屋|札幌"}
+  - {name: 🇺🇸 美国自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)美国|弗吉尼亚|维吉尼亚|阿什本|洛杉矶|旧金山|圣何塞|加州|纽约|新泽西|德克萨斯|德州|达拉斯|休斯顿|西雅图|芝加哥|佛罗里达|迈阿密|波特兰|拉斯维加斯|凤凰城|亚特兰大|盐湖城|波士顿"}
+  - {name: 🇸🇬 新加坡自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)新加坡|狮城"}
+  - {name: 🇹🇼 台湾自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)台湾|台北|新北|台中|高雄|台南|桃园|新竹|基隆|嘉义|彰化|屏东|宜兰|花莲|台东|苗栗|南投|云林|澎湖|金门|马祖"}
+  - {name: 🇩🇪 德国自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)德国|法兰克福|柏林|慕尼黑|汉堡|杜塞尔多夫|科隆|斯图加特|纽伦堡|莱比锡"}
+  - {name: 🇨🇳 中国自动, type: url-test, url: 'https://www.apple.com/library/test/success.html', include-all: true, tolerance: 20, interval: 300, filter: "(?i)中国|China|CN|回国|北京|京|PEK|PKX|上海|沪|广州|穗|CAN|深圳|深|杭州|杭|成都|蓉|南京|宁|武汉|汉|天津|津|重庆|渝|西安|陕|苏州|苏|江苏|浙|浙江|广东|粤|山东|鲁|福建|闽|安徽|皖|河南|豫|湖北|鄂|湖南|湘|江西|赣|河北|冀|山西|晋|辽宁|辽|吉林|吉|黑龙江|黑|海南|琼|四川|川|蜀|贵州|黔|贵|云南|滇|云|甘肃|陇|甘|青海|青|内蒙古|蒙|广西|桂|西藏|藏|宁夏|宁|新疆|新"}
 
 
 # ==========================================================

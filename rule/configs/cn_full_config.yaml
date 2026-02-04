@@ -1,0 +1,157 @@
+# 生成时间: 2026-02-04
+# 模板类型: 回国全量代理模板 - 仅针对中国服务走代理，其余全部直连
+# 模板说明：
+#   1、本配置仅对中国大陆境内服务、视频、游戏进行回国加速。
+#   2、所有非中国大陆流量（如谷歌、推特、油管等）默认强制直连，不消耗代理流量。
+
+# ==========================================================
+# 节点信息
+# ==========================================================
+proxies:
+  - {name: 直连, type: direct}
+
+# ==========================================================
+# 全局配置 
+# ==========================================================
+port: 7890
+socks-port: 7891
+redir-port: 7892
+mixed-port: 7893
+tproxy-port: 7894
+allow-lan: true
+bind-address: "*"
+ipv6: false
+unified-delay: true
+tcp-concurrent: true
+log-level: warning
+find-process-mode: 'off'
+global-client-fingerprint: chrome
+profile:
+  store-selected: true
+  store-fake-ip: true
+
+# ==========================================================
+# 嗅探
+# ==========================================================
+sniffer:
+  enable: true
+  sniff:
+    HTTP:
+      ports: [80, 8080-8880]
+      override-destination: true
+    TLS:
+      ports: [443, 8443]
+    QUIC:
+      ports: [443, 8443]
+
+# ==========================================================
+# 入站  
+# ==========================================================
+tun:
+  enable: true
+  stack: mixed
+  auto-route: true
+  auto-redirect: true
+  auto-detect-interface: true
+
+# ==========================================================
+# DNS模块
+# ==========================================================
+dns:
+  enable: true
+  listen: 0.0.0.0:1053
+  enhanced-mode: fake-ip
+  nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+  fallback:
+    - 1.1.1.1
+    - 8.8.8.8
+ 
+# ==========================================================
+# 锚点配置
+# ==========================================================
+rule-anchor:
+  ip: &ip {type: http, interval: 86400, behavior: ipcidr, format: mrs}
+  domain: &domain {type: http, interval: 86400, behavior: domain, format: mrs}
+
+# ==========================================================
+# 出站策略 (Proxy Groups)
+# ==========================================================
+proxy-groups:
+  # 总开关
+  - {name: 🇨🇳 回国核心, type: select, proxies: [⚡ 自动选择, 🏙️ 上海自动, 🏛️ 北京自动, 🌆 广州自动, 🌃 深圳自动, 🍵 杭宁苏(长三角), 🛠️ 华东地区, 🍜 华北地区, 🌶️ 西南地区, 🍤 华南地区, 🥟 东北地区, 🥪 华中地区, 🐪 西北地区, 🇭🇰 香港自动, 🎯 直连]}
+  # 影音分流
+  - {name: 📺 大陆影音, type: select, proxies: [⚡ 自动选择, 🏙️ 上海自动, 🏛️ 北京自动, 🌆 广州自动, 🌃 深圳自动, 🍵 杭宁苏(长三角), 🛠️ 华东地区, 🍜 华北地区, 🌶️ 西南地区, 🍤 华南地区, 🎯 直连]}
+  # 游戏分流
+  - {name: 🎮 国服游戏, type: select, proxies: [⚡ 自动选择, 🏙️ 上海自动, 🏛️ 北京自动, 🌆 广州自动, 🌃 深圳自动, 🍵 杭宁苏(长三角), 🌶️ 西南地区, 🎯 直连]}
+  - {name: 🚫 广告拦截, type: select, proxies: [REJECT, DIRECT]}
+  # --- 地区自动选优策略 ---
+  - {name: ⚡ 自动选择, type: url-test, include-all: true, filter: "(?i)中国|CN|China|Mainland|回国|上海|北京|广州|深圳|杭州|南京|苏州|成都|重庆|武汉|西安|天津|济南|青岛|福州|厦门|郑州|长沙|合肥|南昌|沈阳|大连|长春|哈尔滨|昆明|贵阳|南宁|石家庄|太原|呼和浩特|乌鲁木齐|兰州|西宁|银川", url: "http://connect.rom.miui.com/generate_204", interval: 300}
+  - {name: 🏙️ 上海自动, type: url-test, include-all: true, filter: "(?i)上海|SH|Shanghai|SHA|PVG", url: "http://connect.rom.miui.com/generate_204", interval: 300}
+  - {name: 🏛️ 北京自动, type: url-test, include-all: true, filter: "(?i)北京|BJ|Beijing|PEK|PKX", url: "http://connect.rom.miui.com/generate_204", interval: 300}
+  - {name: 🌆 广州自动, type: url-test, include-all: true, filter: "(?i)广州|GZ|Guangzhou|CAN", url: "http://connect.rom.miui.com/generate_204", interval: 300}
+  - {name: 🌃 深圳自动, type: url-test, include-all: true, filter: "(?i)深圳|SZ|Shenzhen|SZX", url: "http://connect.rom.miui.com/generate_204", interval: 300}
+  - {name: 🍵 杭宁苏(长三角), type: url-test, include-all: true, filter: "(?i)杭州|南京|苏州|无锡|徐州|HZ|HGH|NKG|SZ", url: "http://connect.rom.miui.com/generate_204", interval: 300}
+  - {name: 🛠️ 华东地区, type: url-test, include-all: true, filter: "(?i)山东|济南|青岛|江苏|浙江|安徽|合肥|福建|福州|厦门|江西|南昌|SD|JS|ZJ|AH|FJ|JX", url: "http://connect.rom.miui.com/generate_204", interval: 300}
+  - {name: 🍜 华北地区, type: url-test, include-all: true, filter: "(?i)天津|河北|石家庄|山西|太原|内蒙古|呼和浩特|TJ|HEB|SX|IM", url: "http://connect.rom.miui.com/generate_204", interval: 300}
+  - {name: 🍤 华南地区, type: url-test, include-all: true, filter: "(?i)广东|广西|南宁|海南|海口|GD|GX|HI", url: "http://connect.rom.miui.com/generate_204", interval: 300}
+  - {name: 🥪 华中地区, type: url-test, include-all: true, filter: "(?i)河南|郑州|湖北|武汉|湖南|长沙|HA|HB|HN", url: "http://connect.rom.miui.com/generate_204", interval: 300}
+  - {name: 🌶️ 西南地区, type: url-test, include-all: true, filter: "(?i)四川|成都|重庆|云南|昆明|贵州|贵阳|西藏|SC|CTU|CKG|YN|GZ|XZ", url: "http://connect.rom.miui.com/generate_204", interval: 300}
+  - {name: 🐪 西北地区, type: url-test, include-all: true, filter: "(?i)陕西|西安|甘肃|兰州|青海|西宁|宁夏|银川|新疆|乌鲁木齐|SN|XIY|GS|QH|NX|XJ", url: "http://connect.rom.miui.com/generate_204", interval: 300}
+  - {name: 🥟 东北地区, type: url-test, include-all: true, filter: "(?i)辽宁|沈阳|大连|吉林|长春|黑龙江|哈尔滨|LN|JL|HLJ", url: "http://connect.rom.miui.com/generate_204", interval: 300}
+  - {name: 🇭🇰 香港自动, type: url-test, include-all: true, filter: "(?i)香港|HK|HongKong|HKG", url: "http://www.google.com.hk/generate_204", interval: 300}
+  - {name: 🎯 直连, type: select, proxies: [DIRECT]}
+
+# ==========================================================
+# 规则匹配 (Rules)
+# ==========================================================
+rules:
+  # 1. 广告拦截
+  - RULE-SET,category-ads-all,🚫 广告拦截
+
+  # 2. 影音分流 (走代理)
+  - RULE-SET,bilibili_domain,📺 大陆影音
+  - RULE-SET,iqiyi_domain,📺 大陆影音
+  - RULE-SET,tencent_video,📺 大陆影音
+  - RULE-SET,netease_music,📺 大陆影音
+  - RULE-SET,youku_domain,📺 大陆影音
+
+  # 3. 社交与支付 (走代理)
+  - RULE-SET,tencent_domain,🇨🇳 回国核心
+  - RULE-SET,alibaba_domain,🇨🇳 回国核心
+  - RULE-SET,sina_domain,🇨🇳 回国核心
+
+  # 4. 游戏分流 (走代理)
+  - RULE-SET,games_cn,🎮 国服游戏
+
+  # 5. 识别国内域名与IP (走代理)
+  - RULE-SET,cn_domain,🇨🇳 回国核心
+  - RULE-SET,cn_ip,🇨🇳 回国核心,no-resolve
+
+  # 6. 特别指定海外流量直连 (双重保障)
+  - GEOIP,LAN,🎯 直连
+  - RULE-SET,google_domain,🎯 直连
+  - RULE-SET,youtube_domain,🎯 直连
+
+  # 7. 兜底匹配：所有不符合上述“中国规则”的流量全部直连
+  - MATCH,🎯 直连
+
+# ==========================================================
+# 规则源
+# ==========================================================
+rule-providers:
+  category-ads-all: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ads-all.mrs"}
+  bilibili_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/bilibili.mrs"}
+  iqiyi_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/iqiyi.mrs"}
+  youku_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/youku.mrs"}
+  tencent_video: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/tencent.mrs"}
+  netease_music: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/netease.mrs"}
+  alibaba_domain: { <<: *domain, url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/alibaba.mrs"}
+  sina_domain: { <<: *domain, url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/sina.mrs"}
+  tencent_domain: { <<: *domain, url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/tencent.mrs"}
+  cn_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs"}
+  google_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/google.mrs"}
+  youtube_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/youtube.mrs"}
+  cn_ip: { <<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs"}
+  games_cn: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-games@cn.mrs"}
