@@ -7,6 +7,8 @@
  *  4. 统计分析功能
  *  5. 配置筛选和翻页功能
  *  6. UUID信息管理功能（简化版）
+ * 
+ *  移动端适配优化版
  * ================================================================= */
 
 // =================================================================
@@ -707,7 +709,7 @@ const hostingValue = validDomainHostings.includes(domain_hosting) ? domain_hosti
 try {
     // 强制转换 id 为数字，确保与数据库类型一致
     const targetId = parseInt(id);
-  
+
     const res = await env.DB.prepare('UPDATE configs SET config_data = ?, protocol = ?, remark = ?, domain_hosting = ?, updated_at = ? WHERE id = ?')
         .bind(config_data, protocol, remark, hostingValue, Date.now(), targetId)
         .run();
@@ -1442,29 +1444,35 @@ if (protocol === 'tuic') {
   try {
       const url = new URL(configStr);
       const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `Tuic-${url.hostname}-${url.port}`;
+      
+      // 核心修复：处理 uuid:password 被编码在 username 中的情况
+      let uuid = url.username;
+      let password = url.password || '';
+      
+      if (uuid.includes(':')) {
+          const parts = uuid.split(':');
+          uuid = parts[0];
+          password = parts[1];
+      } else if (uuid.includes('%3A')) {
+          const decodedUser = decodeURIComponent(uuid);
+          const parts = decodedUser.split(':');
+          uuid = parts[0];
+          password = parts[1];
+      }
 
       const clashConfig = {
           name: name,
           type: 'tuic',
           server: url.hostname,
           port: parseInt(url.port) || 443,
-          uuid: url.username,
-          password: url.password || '',
+          uuid: uuid,
+          password: password, // 现在可以正确输出 password
           sni: url.searchParams.get('sni') || url.hostname,
-          'skip-cert-verify': true
+          'skip-cert-verify': true,
+          'alpn': (url.searchParams.get('alpn') || 'h3').split(',')
       };
 
-      const alpnParam = url.searchParams.get('alpn');
-      if (alpnParam) {
-          clashConfig.alpn = alpnParam.split(',');
-      }
-
-      const disableSni = url.searchParams.get('disable-sni');
-      if (disableSni === 'true') {
-          delete clashConfig.sni;
-      }
-
-      const congestionControl = url.searchParams.get('congestion-controller');
+      const congestionControl = url.searchParams.get('congestion_control') || url.searchParams.get('congestion-controller');
       if (congestionControl) {
           clashConfig['congestion-controller'] = congestionControl;
       }
@@ -1476,7 +1484,7 @@ if (protocol === 'tuic') {
 
       return clashConfig;
   } catch (error) {
-      console.error('转换Tuic配置失败:', error, configStr);
+      console.error('转换Tuic配置失败:', error);
       return null;
   }
 }
@@ -1486,26 +1494,21 @@ if (protocol === 'anytls') {
   try {
       const url = new URL(configStr);
       const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `AnyTLS-${url.hostname}-${url.port}`;
-
-      let type = 'vless';
-      let uuid = url.username;
-
       const clashConfig = {
           name: name,
-          type: type,
+          type: 'anytls', // AnyTLS 通常对应 Trojan 协议
           server: url.hostname,
           port: parseInt(url.port) || 443,
-          uuid: uuid,
-          tls: true,
-          'skip-cert-verify': true
+          password: url.username, // 修复：使用 password 字段而非 uuid
+          sni: url.searchParams.get('sni') || url.searchParams.get('host') || url.hostname,
+          'skip-cert-verify': true,
+          'udp': true
       };
-
       const typeParam = url.searchParams.get('type') || '';
       if (typeParam === 'ws') {
           clashConfig.network = 'ws';
           const path = url.searchParams.get('path') || '/';
-          const host = url.searchParams.get('host');
-
+          const host = url.searchParams.get('host') || url.searchParams.get('sni');
           clashConfig['ws-opts'] = {
               path: path,
               headers: host ? { Host: host } : {}
@@ -1513,23 +1516,12 @@ if (protocol === 'anytls') {
       } else if (typeParam === 'grpc') {
           clashConfig.network = 'grpc';
           clashConfig['grpc-opts'] = {
-              'grpc-service-name': url.searchParams.get('serviceName') || ''
+              'grpc-service-name': url.searchParams.get('serviceName') || url.searchParams.get('path') || ''
           };
       }
-
-      const sniParam = url.searchParams.get('sni') || url.searchParams.get('host');
-      if (sniParam) {
-          clashConfig.sni = sniParam;
-      }
-
-      const alpnParam = url.searchParams.get('alpn');
-      if (alpnParam) {
-          clashConfig.alpn = alpnParam.split(',');
-      }
-
       return clashConfig;
   } catch (error) {
-      console.error('转换AnyTLS配置失败:', error, configStr);
+      console.error('转换AnyTLS配置失败:', error);
       return null;
   }
 }
@@ -1900,7 +1892,7 @@ export default {
               if (idMatch) return await handleDelete('id', idMatch.pathname.groups.id, env);
               const uuidMatch = manageUUID.exec(url);
               if (uuidMatch) return await handleDelete('uuid', uuidMatch.pathname.groups.uuid, env);
-  
+
               // ===== API: 批量删除配置 =====
               if (path === '/manage/configs/batch') {
                   const body = await request.json();
@@ -1952,7 +1944,7 @@ const unifiedPageHtmlContent = `
     box-sizing: border-box;
     -webkit-tap-highlight-color: transparent;
   }
-  
+
   /* 移动端触摸优化 */
   button, 
   input[type="button"], 
@@ -1962,7 +1954,7 @@ const unifiedPageHtmlContent = `
     min-width: 44px;
     touch-action: manipulation;
   }
-  
+
   /* 移动端表单优化 */
   input, 
   select, 
@@ -1970,13 +1962,13 @@ const unifiedPageHtmlContent = `
     font-size: 16px !important; /* 防止iOS缩放 */
     padding: 12px !important;
   }
-  
+
   /* 移动端滚动优化 */
   .table-container {
     -webkit-overflow-scrolling: touch;
     overflow-x: auto;
   }
-  
+
   /* 移动端模态框优化 */
   @media (max-width: 640px) {
     .modal-content {
@@ -1986,81 +1978,81 @@ const unifiedPageHtmlContent = `
       height: 100vh;
       overflow-y: auto;
     }
-    
+  
     .modal-header {
       position: sticky;
       top: 0;
       z-index: 10;
       background: white;
     }
-    
+  
     .modal-body {
       padding-bottom: env(safe-area-inset-bottom);
     }
   }
-  
+
   /* 移动端标签页优化 */
   .tab-btn {
     min-width: 80px;
     text-align: center;
     padding: 12px 16px;
   }
-  
+
   /* 移动端卡片间距优化 */
   @media (max-width: 640px) {
     .mobile-card {
       margin-bottom: 12px;
       padding: 16px;
     }
-    
+  
     .mobile-padding {
       padding-left: 12px;
       padding-right: 12px;
     }
   }
-  
+
   /* 移动端按钮组优化 */
   .mobile-btn-group {
     display: flex;
     flex-direction: column;
     gap: 8px;
   }
-  
+
   @media (min-width: 640px) {
     .mobile-btn-group {
       flex-direction: row;
     }
   }
-  
+
   /* 安全区域适配 */
   .safe-area-top {
     padding-top: env(safe-area-inset-top);
   }
-  
+
   .safe-area-bottom {
     padding-bottom: env(safe-area-inset-bottom);
   }
-  
+
   /* 自定义样式补充 */
   .config-data-cell { 
     white-space: normal; 
     word-break: break-all; 
     max-width: 200px; 
   }
-  
+
   .animate-slide-in {
     animation: slideIn 0.5s forwards;
   }
-  
+
   @keyframes slideIn {
     from { transform: translateX(100%); opacity: 0; }
     to { transform: translateX(0); opacity: 1; }
   }
-  
+
   .animate-fade-out {
     animation: fadeOut 0.5s forwards;
   }
-  
+
   @keyframes fadeOut {
     from { opacity: 1; }
     to { opacity: 0; transform: translateX(100%); }
@@ -2104,25 +2096,25 @@ const unifiedPageHtmlContent = `
     align-items: center;
     justify-content: center;
   }
-  
+
   @media (max-width: 640px) {
     .radio-option {
       padding: 10px 12px;
       font-size: 14px;
     }
   }
-  
+
   .radio-option:hover {
     background-color: #e5e7eb;
   }
-  
+
   .radio-option input[type="radio"] {
     position: absolute;
     opacity: 0;
     width: 0;
     height: 0;
   }
-  
+
   .radio-option input[type="radio"]:checked + span {
     background-color: #6b7280;
     color: white;
@@ -2141,7 +2133,7 @@ const unifiedPageHtmlContent = `
     margin-right: 8px;
     vertical-align: middle;
   }
-  
+
   @keyframes rotation {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
@@ -2153,37 +2145,37 @@ const unifiedPageHtmlContent = `
     border: 2px solid #d1d5db;
     border-radius: 0.375rem;
   }
-  
+
   .table-container::-webkit-scrollbar {
     height: 6px;
   }
-  
+
   .table-container::-webkit-scrollbar-track {
     background: #f1f1f1;
     border-radius: 4px;
   }
-  
+
   .table-container::-webkit-scrollbar-thumb {
     background: #c1c1c1;
     border-radius: 4px;
   }
-  
+
   .table-container::-webkit-scrollbar-thumb:hover {
     background: #a8a8a8;
   }
-  
+
   /* 移动端表格优化 */
   @media (max-width: 640px) {
     .mobile-table {
       font-size: 12px;
     }
-    
+  
     .mobile-table td,
     .mobile-table th {
       padding: 8px 4px;
     }
   }
-  
+
   /* 移动端下拉菜单优化 */
   @media (max-width: 640px) {
     .mobile-dropdown {
@@ -2510,7 +2502,7 @@ const unifiedPageHtmlContent = `
           <i data-lucide="settings" class="w-5 h-5 text-gray-700"></i>
           <h2 class="text-xl font-semibold text-gray-800">1. 基础配置</h2>
         </div>
-  
+
         <div class="mb-4 bg-blue-50 border-l-4 border-blue-500 p-3 sm:p-4 rounded-lg">
           <div class="flex items-start gap-2">
             <i data-lucide="info" class="w-5 h-5 text-blue-500 mt-0.5"></i>
@@ -2521,7 +2513,7 @@ const unifiedPageHtmlContent = `
             </p>
           </div>
         </div>
-  
+
         <div class="flex flex-wrap gap-2 sm:gap-3 mb-4">
           <label class="radio-option">
             <input type="radio" name="genConfigSource" value="manual" checked>
@@ -2532,12 +2524,12 @@ const unifiedPageHtmlContent = `
             <span class="px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base">从UUID获取</span>
           </label>
         </div>
-  
+
         <div id="genManualConfigInput">
           <textarea id="genBaseConfigInput" placeholder="在此粘贴一个或多个基础配置，每行一个。"
                     class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none font-mono text-sm resize-y" rows="4"></textarea>
         </div>
-  
+
         <div id="genUuidConfigInput" class="hidden">
           <input type="text" id="genBaseConfigUuidInput" placeholder="UUID将自动填充"
                  class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 font-mono text-sm mb-3 focus:outline-none">
@@ -2556,7 +2548,7 @@ const unifiedPageHtmlContent = `
           <i data-lucide="list" class="w-5 h-5 text-gray-700"></i>
           <h2 class="text-xl font-semibold text-gray-800">2. 优选列表 (IP/域名)</h2>
         </div>
-  
+
         <div class="mb-4">
           <label class="block text-sm font-medium text-gray-700 mb-2">地址类型</label>
           <div class="flex flex-wrap gap-2 sm:gap-3">
@@ -2593,7 +2585,7 @@ const unifiedPageHtmlContent = `
               </label>
             </div>
           </div>
-    
+  
           <div class="mb-4 sm:mb-6">
             <label class="block text-sm font-medium text-gray-700 mb-2">运营商</label>
             <div class="flex flex-wrap gap-2 sm:gap-3">
@@ -2655,7 +2647,7 @@ const unifiedPageHtmlContent = `
           <i data-lucide="package" class="w-5 h-5 text-gray-700"></i>
           <h2 class="text-xl font-semibold text-gray-800">3. 生成结果</h2>
         </div>
-  
+
         <div id="batchGeneratedLinkBox" class="hidden mb-4">
           <div class="flex flex-col sm:flex-row items-center gap-2 mb-2">
             <span class="text-sm font-medium text-gray-700">订阅:</span>
@@ -2669,7 +2661,7 @@ const unifiedPageHtmlContent = `
             </div>
           </div>
         </div>
-  
+
         <textarea id="genResultTextarea" readonly placeholder="点击下方'生成配置'按钮..."
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 font-mono text-sm resize-y focus:outline-none" rows="6"></textarea>
 
@@ -2719,7 +2711,7 @@ const unifiedPageHtmlContent = `
           <i data-lucide="settings" class="w-5 h-5 text-gray-700"></i>
           <h2 class="text-xl font-semibold text-gray-800">1. 配置信息</h2>
         </div>
-  
+
         <div class="mb-4 bg-blue-50 border-l-4 border-blue-500 p-3 sm:p-4 rounded-lg">
           <div class="flex items-start gap-2">
             <i data-lucide="info" class="w-5 h-5 text-blue-500 mt-0.5"></i>
@@ -2730,7 +2722,7 @@ const unifiedPageHtmlContent = `
             </p>
           </div>
         </div>
-  
+
         <div class="mb-4 sm:mb-6">
           <input type="text" id="clashConfigUuid" placeholder="UUID将自动填充"
                  class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 font-mono text-sm mb-3 focus:outline-none">
@@ -2770,7 +2762,7 @@ const unifiedPageHtmlContent = `
           <i data-lucide="file-text" class="w-5 h-5 text-gray-700"></i>
           <h2 class="text-xl font-semibold text-gray-800">2. 模板选择</h2>
         </div>
-  
+
         <div class="mb-4">
           <label class="block text-sm font-medium text-gray-700 mb-2">选择配置文件模板</label>
           <div class="template-select-container">
@@ -2823,7 +2815,7 @@ const unifiedPageHtmlContent = `
           <i data-lucide="globe" class="w-5 h-5 text-gray-700"></i>
           <h2 class="text-xl font-semibold text-gray-800">3. 优选地址配置</h2>
         </div>
-  
+
         <div class="mb-4">
           <label class="block text-sm font-medium text-gray-700 mb-2">地址类型</label>
           <div class="flex flex-wrap gap-2 sm:gap-3">
@@ -2860,7 +2852,7 @@ const unifiedPageHtmlContent = `
               </label>
             </div>
           </div>
-    
+  
           <div class="mb-4">
             <label class="block text-sm font-medium text-gray-700 mb-2">运营商</label>
             <div class="flex flex-wrap gap-2 sm:gap-3">
@@ -2903,7 +2895,7 @@ const unifiedPageHtmlContent = `
           <i data-lucide="package" class="w-5 h-5 text-gray-700"></i>
           <h2 class="text-xl font-semibold text-gray-800">4. 生成结果</h2>
         </div>
-  
+
         <div class="mb-4 sm:mb-6">
           <button id="generateClashBtn" onclick="generateClashConfig()"
                   class="w-full px-4 py-3 bg-gray-700 text-white rounded-lg border border-gray-700 hover:bg-gray-800 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -2966,7 +2958,7 @@ const unifiedPageHtmlContent = `
           <i data-lucide="key" class="w-5 h-5 text-gray-700"></i>
           <h2 class="text-xl font-semibold text-gray-800">1. 当前UUID</h2>
         </div>
-  
+
         <div class="flex flex-col sm:flex-row gap-3 mb-4">
           <input type="text" id="queryUuidInput" placeholder="UUID将自动加载" readonly
                  class="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 font-mono text-sm focus:outline-none">
@@ -3105,7 +3097,7 @@ const unifiedPageHtmlContent = `
           <i data-lucide="bar-chart" class="w-5 h-5 text-gray-700"></i>
           <h2 class="text-xl font-semibold text-gray-800">3. 访问统计</h2>
         </div>
-  
+
         <div class="flex flex-wrap gap-2 mb-4">
           <select id="statsDays" onchange="loadUuidStats()"
                   class="flex-1 sm:flex-none px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-500">
@@ -3148,7 +3140,7 @@ const unifiedPageHtmlContent = `
           <i data-lucide="plus" class="w-5 h-5 text-gray-700"></i>
           <h2 class="text-xl font-semibold text-gray-800">4. 添加新节点</h2>
         </div>
-  
+
         <div class="mb-4">
           <label class="block text-sm font-medium text-gray-700 mb-2">域名托管服务 (Domain Hosting)</label>
           <select id="domainHostingSelect"
@@ -3173,7 +3165,7 @@ const unifiedPageHtmlContent = `
             </p>
           </div>
         </div>
-  
+
         <div class="mb-4 sm:mb-6">
           <label class="block text-sm font-medium text-gray-700 mb-2">配置数据 (可批量添加)</label>
           <textarea id="addConfigData" placeholder="支持批量添加：
@@ -3182,7 +3174,7 @@ vless://...
 trojan://..."
                     class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none font-mono text-sm resize-y" rows="4"></textarea>
         </div>
-  
+
         <button onclick="manageAddConfig()"
                 class="w-full px-4 py-3 bg-gray-700 text-white rounded-lg border border-gray-700 hover:bg-gray-800 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500">
           添加到当前 UUID
@@ -3568,7 +3560,7 @@ trojan://..."
         }, 500);
       } else {
         showToast(data.error || '保存UUID信息失败', 'error');
-  
+
         // 出错时重置按钮状态
         saveBtn.disabled = false;
         saveBtn.innerHTML = saveBtn.originalText;
@@ -3817,14 +3809,14 @@ trojan://..."
 
     try {
       const addrType = document.querySelector('input[name="genAddressType"]:checked').value;
-  
+
       // 如果选择了禁用，则不获取地址列表
       if (addrType === 'disable') {
         showToast('优选已禁用，不需要获取地址列表', 'info');
         setButtonLoading(btn, false, '获取优选列表');
         return;
       }
-  
+
       let url = \`\${WORKER_DOMAIN}/fetch-addresses?type=\${addrType}\`;
 
       if (addrType === 'ip') {
@@ -3882,11 +3874,11 @@ trojan://..."
 
       // 检查是否禁用优选
       const disableOptimization = addressType === 'disable';
-  
+
       if (!disableOptimization) {
         payload.addressList = addressList;
       }
-  
+
       payload.disableOptimization = disableOptimization;
 
       if (configSource === 'uuid') {
@@ -3896,7 +3888,7 @@ trojan://..."
 
         const addrType = addressType;
         let linkParams = \`type=\${addrType}\`;
-    
+  
         if (disableOptimization) {
           linkParams += \`&disable=true\`;
         } else if(addrType === 'ip') {
@@ -3904,7 +3896,7 @@ trojan://..."
           const carrier = document.querySelector('input[name="genCarrierType"]:checked').value;
           linkParams += \`&ipType=\${ipType}&carrier=\${carrier}\`;
         }
-    
+  
         const subLink = \`\${WORKER_DOMAIN}/batch-configs/\${uuid}?\${linkParams}\`;
         linkInput.value = subLink;
         linkBox.classList.remove('hidden');
@@ -4474,12 +4466,12 @@ trojan://..."
           domain_hosting: domainHosting
         })
       });
-    
+  
       const result = await r.json();
       if (result.success) {
         showToast('保存成功', 'success');
         closeEditModal(); // 关闭窗口
-      
+    
         // 延迟一小会儿刷新列表，确保数据库操作已同步
         setTimeout(() => {
           manageQueryByUuid(); 
@@ -5071,7 +5063,7 @@ trojan://..."
 
     // 初始化Lucide图标
     lucide.createIcons();
-    
+  
     // 移动端触摸优化：防止双击缩放
     let lastTouchEnd = 0;
     document.addEventListener('touchend', function(event) {
@@ -5081,7 +5073,7 @@ trojan://..."
       }
       lastTouchEnd = now;
     }, false);
-    
+  
     // 移动端优化：防止300ms点击延迟
     if ('touchAction' in document.documentElement.style) {
       document.body.style.touchAction = 'manipulation';
@@ -5091,4 +5083,3 @@ trojan://..."
 </body>
 </html>
 `;
-
