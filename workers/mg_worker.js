@@ -2825,6 +2825,65 @@ const adminHtml = `
             opacity: 0.5;
             font-size: 0.8em;
         }
+        
+        /* 页码按钮样式 */
+        #domPageNumbers .nav-btn.small,
+        #ipPageNumbers .nav-btn.small, 
+        #uuidPageNumbers .nav-btn.small,
+        #templatePageNumbers .nav-btn.small {
+            padding: 0.25rem 0.5rem;
+            min-width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.875rem;
+            font-weight: 500;
+            border-radius: 4px;
+            transition: all 0.2s ease;
+        }
+        
+        #domPageNumbers .nav-btn.small.active,
+        #ipPageNumbers .nav-btn.small.active,
+        #uuidPageNumbers .nav-btn.small.active,
+        #templatePageNumbers .nav-btn.small.active {
+            background-color: #5a666d;
+            color: white;
+            border-color: #5a666d;
+            cursor: default;
+        }
+        
+        #domPageNumbers .nav-btn.small:hover:not(.active),
+        #ipPageNumbers .nav-btn.small:hover:not(.active),
+        #uuidPageNumbers .nav-btn.small:hover:not(.active),
+        #templatePageNumbers .nav-btn.small:hover:not(.active) {
+            background-color: #89949B;
+            color: white;
+            border-color: #89949B;
+        }
+        
+        /* 分页控件容器 */
+        #domPaginationControls,
+        #ipPaginationControls,
+        #uuidPaginationControls,
+        #templatePaginationControls {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        /* 页码省略号样式 */
+        #domPageNumbers .text-secondary,
+        #ipPageNumbers .text-secondary,
+        #uuidPageNumbers .text-secondary,
+        #templatePageNumbers .text-secondary {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 24px;
+            color: #6b7280;
+            user-select: none;
+        }
     </style>
 </head>
 <body class="bg-white min-h-screen">
@@ -3020,11 +3079,16 @@ const adminHtml = `
                             <option value="20">20条/页</option>
                             <option value="50">50条/页</option>
                         </select>
+                        <span class="text-xs text-gray-500 ml-2" id="domTotalInfo">共 0 条</span>
                     </div>
-                    <div class="flex items-center gap-2">
-                        <button class="nav-btn small" onclick="changeDomPage(-1)" id="domPrevBtn">上一页</button>
-                        <span class="page-info px-3 whitespace-nowrap min-w-28 text-center" id="domPageInfo">1 / 1</span>
-                        <button class="nav-btn small" onclick="changeDomPage(1)" id="domNextBtn">下一页</button>
+                    <div class="flex items-center gap-1" id="domPaginationControls">
+                        <button class="nav-btn small px-2" onclick="changeDomPage(-1)" id="domPrevBtn" title="上一页">
+                            <i data-lucide="chevron-left" class="w-4 h-4"></i>
+                        </button>
+                        <div id="domPageNumbers" class="flex gap-1"></div> <!-- 数字页码容器 -->
+                        <button class="nav-btn small px-2" onclick="changeDomPage(1)" id="domNextBtn" title="下一页">
+                            <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -3104,11 +3168,16 @@ const adminHtml = `
                             <option value="50">50条/页</option>
                             <option value="100">100条/页</option>
                         </select>
+                        <span class="text-xs text-gray-500 ml-2" id="ipTotalInfo">共 0 条</span>
                     </div>
-                    <div class="flex items-center gap-2">
-                        <button class="nav-btn small" onclick="changeIpPage(-1)" id="ipPrevBtn">上一页</button>
-                        <span class="page-info px-3 whitespace-nowrap min-w-28 text-center" id="ipPageInfo">1 / 1</span>
-                        <button class="nav-btn small" onclick="changeIpPage(1)" id="ipNextBtn">下一页</button>
+                    <div class="flex items-center gap-1" id="ipPaginationControls">
+                        <button class="nav-btn small px-2" onclick="changeIpPage(-1)" id="ipPrevBtn" title="上一页">
+                            <i data-lucide="chevron-left" class="w-4 h-4"></i>
+                        </button>
+                        <div id="ipPageNumbers" class="flex gap-1"></div> <!-- 数字页码容器 -->
+                        <button class="nav-btn small px-2" onclick="changeIpPage(1)" id="ipNextBtn" title="下一页">
+                            <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -3141,11 +3210,16 @@ const adminHtml = `
                             <option value="20">20条/页</option>
                             <option value="50">50条/页</option>
                         </select>
+                        <span class="text-xs text-gray-500 ml-2" id="uuidTotalInfo">共 0 条</span>
                     </div>
-                    <div class="flex items-center gap-2">
-                        <button class="nav-btn small" onclick="changeUuidPage(-1)" id="uuidPrevBtn">上一页</button>
-                        <span class="page-info px-3 whitespace-nowrap min-w-28 text-center" id="uuidPageInfo">1 / 1</span>
-                        <button class="nav-btn small" onclick="changeUuidPage(1)" id="uuidNextBtn">下一页</button>
+                    <div class="flex items-center gap-1" id="uuidPaginationControls">
+                        <button class="nav-btn small px-2" onclick="changeUuidPage(-1)" id="uuidPrevBtn" title="上一页">
+                            <i data-lucide="chevron-left" class="w-4 h-4"></i>
+                        </button>
+                        <div id="uuidPageNumbers" class="flex gap-1"></div> <!-- 数字页码容器 -->
+                        <button class="nav-btn small px-2" onclick="changeUuidPage(1)" id="uuidNextBtn" title="下一页">
+                            <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -3206,11 +3280,16 @@ const adminHtml = `
                             <option value="20">20条/页</option>
                             <option value="50">50条/页</option>
                         </select>
+                        <span class="text-xs text-gray-500 ml-2" id="templateTotalInfo">共 0 条</span>
                     </div>
-                    <div class="flex items-center gap-2">
-                        <button class="nav-btn small" onclick="changeTemplatePage(-1)" id="templatePrevBtn">上一页</button>
-                        <span class="page-info px-3 whitespace-nowrap min-w-28 text-center" id="templatePageInfo">1 / 1</span>
-                        <button class="nav-btn small" onclick="changeTemplatePage(1)" id="templateNextBtn">下一页</button>
+                    <div class="flex items-center gap-1" id="templatePaginationControls">
+                        <button class="nav-btn small px-2" onclick="changeTemplatePage(-1)" id="templatePrevBtn" title="上一页">
+                            <i data-lucide="chevron-left" class="w-4 h-4"></i>
+                        </button>
+                        <div id="templatePageNumbers" class="flex gap-1"></div> <!-- 数字页码容器 -->
+                        <button class="nav-btn small px-2" onclick="changeTemplatePage(1)" id="templateNextBtn" title="下一页">
+                            <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -3498,13 +3577,6 @@ const adminHtml = `
         const token = localStorage.getItem('token');
         if (!token) window.location.href = '/login';
 
-        // 初始化后刷新 Lucide 图标
-        function refreshLucideIcons() {
-            if (typeof lucide !== 'undefined') {
-                lucide.createIcons();
-            }
-        }
-
         // ============ 工具函数 ============
         function toast(message, type = 'info') { 
             const c = document.getElementById('toast-container'); 
@@ -3581,6 +3653,13 @@ const adminHtml = `
             localStorage.clear();
             sessionStorage.clear();
             window.location.href = '/login'; 
+        }
+
+        // 初始化后刷新 Lucide 图标
+        function refreshLucideIcons() {
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
         }
 
         // ============ 状态管理 ============
@@ -4496,11 +4575,11 @@ const adminHtml = `
                 });
                 document.getElementById('domList').innerHTML = h || '<tr><td colspan="5" class="p-3 text-center">无数据</td></tr>';
                 domState.total = d.total || 0;
-                updatePager('dom', domState);
+                updatePager('dom', domState, loadDom);
                 refreshLucideIcons();
             } else {
                 // 即使加载失败，也更新分页信息
-                updatePager('dom', domState);
+                updatePager('dom', domState, loadDom);
             }
         }
         
@@ -4576,6 +4655,166 @@ const adminHtml = `
                 loadDom(); 
             }
         }
+
+        // ============ 完整的分页器更新函数 ============
+        function updatePager(prefix, state, callback) {
+            const pager = document.getElementById(\`\${prefix}Pager\`);
+            if (!pager) return;
+            
+            const maxPage = Math.ceil(state.total / state.size) || 1;
+            const currentPage = state.page;
+            
+            // 更新总数显示
+            const totalInfo = document.getElementById(\`\${prefix}TotalInfo\`);
+            if (totalInfo) totalInfo.innerText = \`共 \${state.total} 条\`;
+
+            // 控制翻页按钮状态
+            const prevBtn = document.getElementById(\`\${prefix}PrevBtn\`);
+            const nextBtn = document.getElementById(\`\${prefix}NextBtn\`);
+            if (prevBtn) {
+                prevBtn.disabled = currentPage <= 1;
+                prevBtn.style.opacity = currentPage <= 1 ? '0.5' : '1';
+                prevBtn.style.cursor = currentPage <= 1 ? 'not-allowed' : 'pointer';
+            }
+            if (nextBtn) {
+                nextBtn.disabled = currentPage >= maxPage;
+                nextBtn.style.opacity = currentPage >= maxPage ? '0.5' : '1';
+                nextBtn.style.cursor = currentPage >= maxPage ? 'not-allowed' : 'pointer';
+            }
+
+            // 生成数字页码
+            const numbersContainer = document.getElementById(\`\${prefix}PageNumbers\`);
+            if (numbersContainer) {
+                numbersContainer.innerHTML = '';
+                
+                // 简易页码逻辑：显示当前页附近的页码
+                let startPage = Math.max(1, currentPage - 2);
+                let endPage = Math.min(maxPage, startPage + 4);
+                
+                if (endPage - startPage < 4) {
+                    startPage = Math.max(1, endPage - 4);
+                }
+
+                // 添加第一页按钮（如果不在范围内）
+                if (startPage > 1) {
+                    const firstBtn = document.createElement('button');
+                    firstBtn.className = 'nav-btn small min-w-[32px]';
+                    firstBtn.innerText = '1';
+                    firstBtn.onclick = () => {
+                        if (1 !== state.page) {
+                            state.page = 1;
+                            callback();
+                        }
+                    };
+                    numbersContainer.appendChild(firstBtn);
+                    
+                    if (startPage > 2) {
+                        const dots = document.createElement('span');
+                        dots.className = 'text-secondary mx-1';
+                        dots.innerText = '...';
+                        numbersContainer.appendChild(dots);
+                    }
+                }
+
+                // 添加页码按钮
+                for (let i = startPage; i <= endPage; i++) {
+                    const btn = document.createElement('button');
+                    btn.className = \`nav-btn small min-w-[32px] \${i === currentPage ? 'active' : ''}\`;
+                    btn.innerText = i;
+                    btn.onclick = () => {
+                        if (i !== state.page) {
+                            state.page = i;
+                            callback();
+                        }
+                    };
+                    numbersContainer.appendChild(btn);
+                }
+
+                // 添加最后一页按钮（如果不在范围内）
+                if (endPage < maxPage) {
+                    if (endPage < maxPage - 1) {
+                        const dots = document.createElement('span');
+                        dots.className = 'text-secondary mx-1';
+                        dots.innerText = '...';
+                        numbersContainer.appendChild(dots);
+                    }
+                    
+                    const lastBtn = document.createElement('button');
+                    lastBtn.className = 'nav-btn small min-w-[32px]';
+                    lastBtn.innerText = maxPage;
+                    lastBtn.onclick = () => {
+                        if (maxPage !== state.page) {
+                            state.page = maxPage;
+                            callback();
+                        }
+                    };
+                    numbersContainer.appendChild(lastBtn);
+                }
+            }
+            
+            // 更新页码选择器
+            const sizeSelect = document.getElementById(\`\${prefix}Size\`);
+            if (sizeSelect) sizeSelect.value = state.size;
+            
+            // 始终显示分页栏
+            pager.style.display = 'flex';
+            
+            // 如果只有一页或没有数据，隐藏翻页按钮但保留分页信息
+            if (maxPage <= 1) {
+                if (prevBtn) prevBtn.style.display = 'none';
+                if (nextBtn) nextBtn.style.display = 'none';
+                if (numbersContainer) numbersContainer.style.display = 'none';
+                if (totalInfo) totalInfo.innerText = \`共 \${state.total} 条\`;
+            } else {
+                if (prevBtn) prevBtn.style.display = 'inline-flex';
+                if (nextBtn) nextBtn.style.display = 'inline-flex';
+                if (numbersContainer) numbersContainer.style.display = 'flex';
+            }
+            
+            // 刷新图标（因为按钮里有图标）
+            refreshLucideIcons();
+        }
+        
+        function changePage(prefix, delta, state, callback) {
+            const maxPage = Math.ceil(state.total / state.size) || 1;
+            const newPage = state.page + delta;
+            
+            if (newPage > 0 && newPage <= maxPage) {
+                state.page = newPage;
+                if (callback) callback();
+                
+                const card = document.getElementById(prefix === 'template' ? 'templates' : 
+                                                    prefix === 'dom' ? 'dom' : 
+                                                    prefix === 'ip' ? 'ips' : 
+                                                    prefix === 'uuid' ? 'uuids' : prefix);
+                if (card) {
+                    const tableContainer = card.querySelector('.table-container');
+                    if (tableContainer) {
+                        tableContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                }
+            }
+        }
+        
+        function changeSize(prefix, state, callback) {
+            const newSize = parseInt(document.getElementById(\`\${prefix}Size\`).value);
+            if (newSize > 0 && newSize <= 100) {
+                state.size = newSize;
+                state.page = 1;
+                if (callback) callback();
+            }
+        }
+        
+        function changeSort(field, state, callback) {
+            if (state.sort === field) {
+                state.order = state.order === 'asc' ? 'desc' : 'asc';
+            } else {
+                state.sort = field;
+                state.order = 'desc';
+            }
+            state.page = 1;
+            if (callback) callback();
+        }
         
         function changeDomPage(d) { changePage('dom', d, domState, loadDom); }
         function changeDomSize() { changeSize('dom', domState, loadDom); }
@@ -4610,11 +4849,11 @@ const adminHtml = `
                 });
                 document.getElementById('ipList').innerHTML = h || '<tr><td colspan="6" class="p-3 text-center">无数据</td></tr>';
                 ipState.total = d.total || 0;
-                updatePager('ip', ipState);
+                updatePager('ip', ipState, loadIp);
                 refreshLucideIcons();
             } else {
                 // 即使加载失败，也更新分页信息
-                updatePager('ip', ipState);
+                updatePager('ip', ipState, loadIp);
             }
         }
         
@@ -4720,12 +4959,12 @@ const adminHtml = `
                 });
                 document.getElementById('uuidList').innerHTML = h || '<tr><td colspan="7" class="p-3 text-center">无数据</td></tr>';
                 uuidState.total = d.total || 0;
-                updatePager('uuid', uuidState);
+                updatePager('uuid', uuidState, loadUuid);
                 refreshLucideIcons();
             } else {
                 // 即使加载失败，也更新分页信息
                 document.getElementById('uuidList').innerHTML = '<tr><td colspan="7" class="p-5 text-center">加载失败，请刷新重试</td></tr>';
-                updatePager('uuid', uuidState);
+                updatePager('uuid', uuidState, loadUuid);
             }
         }
         
@@ -4836,20 +5075,20 @@ const adminHtml = `
                             </tr>\`;
                         });
                         list.innerHTML = html;
-                        updatePager('template', templateState);
+                        updatePager('template', templateState, loadTemplates);
                         refreshLucideIcons();
                     } else {
                         list.innerHTML = '<tr><td colspan="6" class="p-5 text-center text-secondary">暂无模板数据，请添加第一个模板</td></tr>';
-                        updatePager('template', templateState);
+                        updatePager('template', templateState, loadTemplates);
                     }
                 } else {
                     list.innerHTML = '<tr><td colspan="6" class="p-5 text-center text-danger">加载失败，请刷新重试</td></tr>';
-                    updatePager('template', templateState);
+                    updatePager('template', templateState, loadTemplates);
                 }
             } catch (error) {
                 console.error('加载模板失败:', error);
                 list.innerHTML = '<tr><td colspan="6" class="p-5 text-center text-danger">加载失败：' + error.message + '</td></tr>';
-                updatePager('template', templateState);
+                updatePager('template', templateState, loadTemplates);
             } finally {
                 templateState.loading = false;
             }
@@ -5012,86 +5251,6 @@ const adminHtml = `
         function changeTemplatePage(d) { changePage('template', d, templateState, loadTemplates); }
         function changeTemplateSize() { changeSize('template', templateState, loadTemplates); }
         function sortTemplate(f) { changeSort(f, templateState, loadTemplates); }
-
-        // ============ 通用分页和排序函数 ============
-        function updatePager(prefix, state) {
-            const pager = document.getElementById(\`\${prefix}Pager\`);
-            if (!pager) return;
-            
-            const maxPage = Math.ceil(state.total / state.size) || 1;
-            const currentPage = state.page;
-            
-            document.getElementById(\`\${prefix}PageInfo\`).innerText = \`\${currentPage} / \${maxPage} (共\${state.total}条)\`;
-            
-            const prevBtn = document.getElementById(\`\${prefix}PrevBtn\`);
-            const nextBtn = document.getElementById(\`\${prefix}NextBtn\`);
-            
-            if (prevBtn) {
-                prevBtn.disabled = currentPage <= 1;
-                prevBtn.style.opacity = currentPage <= 1 ? '0.5' : '1';
-                prevBtn.style.cursor = currentPage <= 1 ? 'not-allowed' : 'pointer';
-            }
-            
-            if (nextBtn) {
-                nextBtn.disabled = currentPage >= maxPage;
-                nextBtn.style.opacity = currentPage >= maxPage ? '0.5' : '1';
-                nextBtn.style.cursor = currentPage >= maxPage ? 'not-allowed' : 'pointer';
-            }
-            
-            const sizeSelect = document.getElementById(\`\${prefix}Size\`);
-            if (sizeSelect) sizeSelect.value = state.size;
-            
-            // 始终显示分页栏
-            pager.style.display = 'flex';
-            
-            // 如果只有一页或没有数据，隐藏翻页按钮但保留分页信息
-            if (maxPage <= 1) {
-                if (prevBtn) prevBtn.style.display = 'none';
-                if (nextBtn) nextBtn.style.display = 'none';
-                document.getElementById(\`\${prefix}PageInfo\`).innerText = \`共\${state.total}条\`;
-            } else {
-                if (prevBtn) prevBtn.style.display = 'inline-flex';
-                if (nextBtn) nextBtn.style.display = 'inline-flex';
-            }
-        }
-        
-        function changePage(prefix, delta, state, callback) {
-            const maxPage = Math.ceil(state.total / state.size) || 1;
-            const newPage = state.page + delta;
-            
-            if (newPage > 0 && newPage <= maxPage) {
-                state.page = newPage;
-                if (callback) callback();
-                
-                const card = document.getElementById(prefix === 'template' ? 'templates' : prefix);
-                if (card) {
-                    const tableContainer = card.querySelector('.table-container');
-                    if (tableContainer) {
-                        tableContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }
-                }
-            }
-        }
-        
-        function changeSize(prefix, state, callback) {
-            const newSize = parseInt(document.getElementById(\`\${prefix}Size\`).value);
-            if (newSize > 0 && newSize <= 100) {
-                state.size = newSize;
-                state.page = 1;
-                if (callback) callback();
-            }
-        }
-        
-        function changeSort(field, state, callback) {
-            if (state.sort === field) {
-                state.order = state.order === 'asc' ? 'desc' : 'asc';
-            } else {
-                state.sort = field;
-                state.order = 'desc';
-            }
-            state.page = 1;
-            if (callback) callback();
-        }
 
         // ============ 关闭Modal函数 ============
         function closeAllModals() {
