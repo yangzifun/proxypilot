@@ -1299,16 +1299,38 @@ if (protocol === 'trojan') {
           server: url.hostname,
           port: parseInt(url.port) || 443,
           password: url.username,
+          udp: true, // 开启 UDP
           sni: url.searchParams.get('sni') || url.hostname,
-          'skip-cert-verify': true
+          alpn: ['h2', 'http/1.1'], // 默认 ALPN
+          'client-fingerprint': url.searchParams.get('fp') || 'chrome', // 对应 client-fingerprint
+          fingerprint: url.searchParams.get('fp') || '', // 对应 fingerprint
+          'skip-cert-verify': true,
+          // 默认添加禁用状态的 ss-opts
+          'ss-opts': {
+              enabled: false,
+              method: 'aes-128-gcm',
+              password: 'example'
+          },
+          network: 'tcp', // 默认设为 tcp，后面会被 ws/grpc 覆盖
+          smux: {
+              enabled: false
+          }
       };
 
+      // 填充 Reality 特有配置 (针对支持 Reality 的 Trojan)
+      if (url.searchParams.get('security') === 'reality' || url.searchParams.get('pbk')) {
+          clashConfig['reality-opts'] = {
+              'public-key': url.searchParams.get('pbk') || '',
+              'short-id': url.searchParams.get('sid') || ''
+          };
+      }
+
+      // 处理传输网络层
       const typeParam = url.searchParams.get('type') || '';
       if (typeParam === 'ws') {
           clashConfig.network = 'ws';
           const path = url.searchParams.get('path') || '/';
           const host = url.searchParams.get('host');
-
           clashConfig['ws-opts'] = {
               path: path,
               headers: host ? { Host: host } : {}
