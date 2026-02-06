@@ -1,5 +1,5 @@
 # 生成时间: 2026-02-04
-# 模板类型: 全量模板 - 包含完整规则和策略组的完整配置，适用于大多数场景
+# 模板类型: 全量模板 - 包含完整规则和策略组的完整配置，适用于需要一站式解决方案的用户，涵盖从基础节点配置到复杂规则匹配的全方位设置。
 # 作者: YZFN
 # ==========================================================
 # 节点信息
@@ -101,37 +101,36 @@ rule-anchor:
 proxy-groups:
   # --- 1. 默认代理 (总开关) ---
   # 兜底使用的代理组，如果下方具体服务没命中，则默认走这里
-  - {name: 🚀 默认代理, type: select,include-all: true, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动, 🌐 全部节点]}
+  - {name: 🚀 默认代理, type: select, include-all: true, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇰🇷 韩国自动, 🇸🇬 新加坡自动, 🇹🇭 泰国自动, 🇻🇳 越南自动, 🇵🇭 菲律宾自动, 🇲🇾 马来西亚自动, 🇮🇩 印尼自动, 🇮🇳 印度自动, 🇺🇸 美国自动, 🇨🇦 加拿大自动, 🇧🇷 巴西自动, 🇦🇷 阿根廷自动, 🇩🇪 德国自动, 🇬🇧 英国自动, 🇫🇷 法国自动, 🇮🇹 意大利自动, 🇷🇺 俄罗斯自动, 🇹🇷 土耳其自动, 🇦🇺 澳大利亚自动, 🇨🇳 中国自动, 🌐 全部节点]}
   
-  # --- 2. AI 服务 (对 IP 纯净度要求极高) ---
-  - {name: 🤖 OpenAI, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]} 
-  - {name: ✨ Gemini, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
-  - {name: 🧠 Claude, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇩🇪 德国自动]}
-  - {name: 🌌 常用 AI, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}  # 聚合其他 AI 规则
+  # --- 2. AI 服务 (对 IP 纯净度及地区有要求) ---
+  - {name: 🤖 OpenAI, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇰🇷 韩国自动, 🇬🇧 英国自动, 🇩🇪 德国自动, 🇦🇺 澳大利亚自动]} 
+  - {name: ✨ Gemini, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇰🇷 韩国自动, 🇬🇧 英国自动, 🇩🇪 德国自动]}
+  - {name: 🧠 Claude, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇬🇧 英国自动, 🇩🇪 德国自动, 🇫🇷 法国自动, 🇦🇺 澳大利亚自动]}
+  - {name: 🌌 常用 AI, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动, 🇬🇧 英国自动, 🇰🇷 韩国自动]} 
   
   # --- 3. 社交与办公 (注重低延迟和可用性) ---
-  - {name: 📲 Telegram, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
-  - {name: 🌏 Meta, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇺🇸 美国自动]} # 包含 Facebook, Instagram, WhatsApp
-  - {name: 🐦 Twitter, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动]}
-  - {name: 💬 Discord, type: select, proxies: [🚀 默认代理, 🇺🇸 美国自动, 🇲🇴 澳门自动, 🇭🇰 香港自动, 🇩🇪 德国自动]}
-  - {name: 🐱 GitHub, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇩🇪 德国自动]} # 提升代码拉取速度
-  - {name: 🟦 Microsoft, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动]} # 解决 Outlook 或系统更新转圈
+  - {name: 📲 Telegram, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇸🇬 新加坡自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇩🇪 德国自动, 🇳🇱 荷兰自动]}
+  - {name: 🌏 Meta, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动]} 
+  - {name: 🐦 Twitter, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇰🇷 韩国自动]}
+  - {name: 💬 Discord, type: select, proxies: [🚀 默认代理, 🇺🇸 美国自动, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇩🇪 德国自动]}
+  - {name: 🐱 GitHub, type: select, proxies: [⚡ 自动选择, 🇺🇸 美国自动, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇩🇪 德国自动, 🇰🇷 韩国自动]} 
+  - {name: 🟦 Microsoft, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择, 🇭🇰 香港自动, 🇺🇸 美国自动, 🇯🇵 日本自动]} 
 
-# --- 4. 流媒体与娱乐 (注重带宽和地区版权) ---
-  - {name: 🎬 YouTube, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
-  - {name: 🎥 Netflix, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
-  - {name: 🎞️ Disney+, type: select, proxies: [🇭🇰 香港自动, 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
-  - {name: 🎵 TikTok, type: select,  proxies: [🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
-  - {name: 📺 更多流媒体, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇺🇸 美国自动]} # Prime Video, Viu, TVB, 动画疯等
-  - {name: 🎧 Spotify, type: select, proxies: [🚀 默认代理, ⚡ 自动选择, 🎯 直连]} # 建议首选直连或默认代理
+  # --- 4. 流媒体与娱乐 (涵盖多区版权切换) ---
+  - {name: 🎬 YouTube, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇺🇸 美国自动, 🇯🇵 日本自动, 🇰🇷 韩国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇹🇭 泰国自动, 🇮🇳 印度自动, 🇩🇪 德国自动, 🇬🇧 英国自动, 🇹🇷 土耳其自动]}
+  - {name: 🎥 Netflix, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇰🇷 韩国自动, 🇸🇬 新加坡自动, 🇺🇸 美国自动, 🇹🇷 土耳其自动, 🇬🇧 英国自动, 🇩🇪 德国自动, 🇫🇷 法国自动, 🇧🇷 巴西自动, 🇦🇷 阿根廷自动]}
+  - {name: 🎞️ Disney+, type: select, proxies: [🇭🇰 香港自动, 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇬🇧 英国自动, 🇩🇪 德国自动]}
+  - {name: 🎵 TikTok, type: select, proxies: [🇯🇵 日本自动, 🇰🇷 韩国自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇹🇭 泰国自动, 🇻🇳 越南自动, 🇲🇾 马来西亚自动]}
+  - {name: 📺 更多流媒体, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇰🇷 韩国自动, 🇺🇸 美国自动, 🇮🇳 印度自动, 🇹🇷 土耳其自动]} 
+  - {name: 🎧 Spotify, type: select, proxies: [🚀 默认代理, ⚡ 自动选择, 🎯 直连, 🇺🇸 美国自动, 🇹🇷 土耳其自动]} 
   
-  
- # --- 5. 流媒体与游戏 (建议：下载选直连，联机选代理) ---
-  - {name: 🎮 Steam, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇭🇰 香港自动]}
-  - {name: 🎮 Ubisoft, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择, 🇭🇰 香港自动]} # 原 Uplay 平台
+  # --- 5. 游戏服务 ---
+  - {name: 🎮 Steam, type: select, proxies: [🎯 直连, 🚀 默认代理, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇹🇷 土耳其自动, 🇦🇷 阿根廷自动]}
+  - {name: 🎮 Ubisoft, type: select, proxies: [🎯 直连, 🚀 默认代理, 🇭🇰 香港自动, 🇩🇪 德国自动, 🇫🇷 法国自动]}
   - {name: 🎮 Epic, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择]}
-  - {name: 🎮 EA, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择]} # EA App / Origin
-  - {name: 🎮 PlayStation, type: select, proxies: [🎯 直连, 🚀 默认代理, 🇯🇵 日本自动]} # PSN 商店与更新
+  - {name: 🎮 EA, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择]}
+  - {name: 🎮 PlayStation, type: select, proxies: [🎯 直连, 🚀 默认代理, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动]} 
 
  # --- 6. 中国大陆服务 (保持国内访问速度) ---
   
@@ -155,14 +154,41 @@ proxy-groups:
   - {name: 🌐 全部节点, type: select, include-all: true}
  
   # 地区分组自动筛选 (基于正则匹配节点名)
+  # ================= 亚洲地区 =================
   - {name: 🇭🇰 香港自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)香港"}
   - {name: 🇲🇴 澳门自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)澳门|MO|Macau|Macao"}
-  - {name: 🇯🇵 日本自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)日本|东京|大阪|埼玉|京都|福冈|名古屋|札幌"}
-  - {name: 🇺🇸 美国自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)美国|弗吉尼亚|维吉尼亚|阿什本|洛杉矶|旧金山|圣何塞|加州|纽约|新泽西|德克萨斯|德州|达拉斯|休斯顿|西雅图|芝加哥|佛罗里达|迈阿密|波特兰|拉斯维加斯|凤凰城|亚特兰大|盐湖城|波士顿"}
-  - {name: 🇸🇬 新加坡自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)新加坡|狮城"}
   - {name: 🇹🇼 台湾自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)台湾|台北|新北|台中|高雄|台南|桃园|新竹|基隆|嘉义|彰化|屏东|宜兰|花莲|台东|苗栗|南投|云林|澎湖|金门|马祖"}
+  - {name: 🇯🇵 日本自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)日本|东京|大阪|埼玉|京都|福冈|名古屋|札幌"}
+  - {name: 🇰🇷 韩国自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 300, filter: "(?i)韩国|Korea|KP|KR|KOR|Seoul|首尔|韩"}
+  - {name: 🇸🇬 新加坡自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)新加坡|狮城"}
+  - {name: 🇹🇭 泰国自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 300, filter: "(?i)泰国|TH|Thailand|Bangkok|曼谷"}
+  - {name: 🇻🇳 越南自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 300, filter: "(?i)越南|VN|Vietnam|Hanoi|Ho Chi Minh|河内|胡志明"}
+  - {name: 🇵🇭 菲律宾自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 300, filter: "(?i)菲律宾|PH|Philippines|Manila|马尼拉"}
+  - {name: 🇲🇾 马来西亚自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 300, filter: "(?i)马来西亚|MY|Malaysia|Kuala Lumpur|吉隆坡"}
+  - {name: 🇮🇩 印尼自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 300, filter: "(?i)印尼|ID|Indonesia|Jakarta|雅加达"}
+  - {name: 🇮🇳 印度自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 300, filter: "(?i)印度|India|IN|Mumbai|New Delhi|孟买|新德里"}
+
+  # ================= 美洲地区 =================
+  - {name: 🇺🇸 美国自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)美国|弗吉尼亚|维吉尼亚|阿什本|洛杉矶|旧金山|圣何塞|加州|纽约|新泽西|德克萨斯|德州|达拉斯|休斯顿|西雅图|芝加哥|佛罗里达|迈阿密|波特兰|拉斯维加斯|凤凰城|亚特兰大|盐湖城|波士顿"}
+  - {name: 🇨🇦 加拿大自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 300, filter: "(?i)加拿大|Canada|CA|Montreal|Toronto|Vancouver|多伦多|温哥华|蒙特利尔"}
+  - {name: 🇧🇷 巴西自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 300, filter: "(?i)巴西|Brazil|BR|Sao Paulo|圣保罗"}
+  - {name: 🇦🇷 阿根廷自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 300, filter: "(?i)阿根廷|Argentina|AR|Buenos Aires|布宜诺斯艾利斯"}
+
+  # ================= 欧洲地区 =================
   - {name: 🇩🇪 德国自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)德国|法兰克福|柏林|慕尼黑|汉堡|杜塞尔多夫|科隆|斯图加特|纽伦堡|莱比锡"}
+  - {name: 🇬🇧 英国自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 300, filter: "(?i)英国|UK|United Kingdom|Britain|Great Britain|London|伦敦|英"}
+  - {name: 🇫🇷 法国自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 300, filter: "(?i)法国|France|FR|Paris|巴黎|法"}
+  - {name: 🇳🇱 荷兰自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 300, filter: "(?i)荷兰|尼德兰|NL|Netherlands|Amsterdam|阿姆斯特丹"}
+  - {name: 🇮🇹 意大利自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 300, filter: "(?i)意大利|IT|Italy|Milan|Rome|米兰|罗马"}
+  - {name: 🇷🇺 俄罗斯自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 300, filter: "(?i)俄罗斯|RU|Russia|Moscow|Saint Petersburg|莫斯科|圣彼得堡"}
+  - {name: 🇹🇷 土耳其自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 300, filter: "(?i)土耳其|TR|Turkey|Istanbul|伊斯坦布尔"}
+
+  # ================= 大洋洲 =================
+  - {name: 🇦🇺 澳大利亚自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 300, filter: "(?i)澳大利亚|Australia|AU|Sydney|Melbourne|悉尼|墨尔本|澳洲"}
+
+  # ================= 中国内地 =================
   - {name: 🇨🇳 中国自动, type: url-test, url: 'https://www.apple.com/library/test/success.html', include-all: true, tolerance: 20, interval: 300, filter: "(?i)中国|China|CN|回国|北京|上海|广州|深圳|杭州|成都|南京|武汉|天津|重庆|西安|苏州|江苏|浙江|广东|山东|福建|安徽|河南|湖北|湖南|江西|河北|山西|辽宁|吉林|黑龙江|海南|四川|贵州|云南|甘肃|青海|内蒙古|广西|西藏|宁夏|新疆"}
+ 
 
 
 # ==========================================================
