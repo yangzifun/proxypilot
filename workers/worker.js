@@ -1233,28 +1233,52 @@ function convertToClashFormat(configStr) {
               uuid: vmessObj.id,
               alterId: vmessObj.aid || 0,
               cipher: vmessObj.scy || 'auto',
+              udp: true, // 显式开启 UDP
+              'packet-encoding': 'packetaddr', // 设置包编码
+              'global-padding': false,
+              'authenticated-length': false,
               tls: vmessObj.tls === 'tls',
-              'skip-cert-verify': true
+              'skip-cert-verify': true,
+              network: vmessObj.net || 'tcp'
           };
 
+          // 处理 TLS 相关高级字段
+          if (clashConfig.tls) {
+              clashConfig.servername = vmessObj.sni || vmessObj.host || vmessObj.add;
+              clashConfig.alpn = ['h2', 'http/1.1'];
+              clashConfig.fingerprint = vmessObj.fp || ''; // 对应 fingerprint
+              clashConfig['client-fingerprint'] = vmessObj.fp || 'chrome'; // 对应 client-fingerprint
+              
+              // 如果 vmess 包含 reality 属性 (部分自定义格式)
+              if (vmessObj.security === 'reality' || vmessObj.pbk) {
+                  clashConfig['reality-opts'] = {
+                      'public-key': vmessObj.pbk || '',
+                      'short-id': vmessObj.sid || ''
+                  };
+              }
+          }
+
+          // 处理传输层
           if (vmessObj.net === 'ws') {
-              clashConfig.network = 'ws';
               clashConfig['ws-opts'] = {
                   path: vmessObj.path || '/',
                   headers: vmessObj.host ? { Host: vmessObj.host } : {}
               };
           } else if (vmessObj.net === 'h2') {
-              clashConfig.network = 'h2';
               clashConfig['h2-opts'] = {
                   path: vmessObj.path || '/',
                   host: vmessObj.host ? [vmessObj.host] : []
               };
           } else if (vmessObj.net === 'grpc') {
-              clashConfig.network = 'grpc';
               clashConfig['grpc-opts'] = {
                   'grpc-service-name': vmessObj.path || ''
               };
           }
+
+          // 添加 smux 配置
+          clashConfig.smux = {
+              enabled: false
+          };
 
           return clashConfig;
       } catch (error) {
