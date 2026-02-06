@@ -1506,32 +1506,31 @@ if (protocol === 'hysteria2') {
           type: 'hysteria2',
           server: url.hostname,
           port: parseInt(url.port) || 443,
+          // 支持多端口范围，如果 URL 参数中没有 ports，则使用基础 port
+          ports: url.searchParams.get('ports') || url.port,
           password: url.username,
           sni: url.searchParams.get('sni') || url.hostname,
-          'skip-cert-verify': true
+          'skip-cert-verify': url.searchParams.get('insecure') === '1', // 根据参数决定，默认 false
+          fingerprint: url.searchParams.get('fp') || '', // 从参数 fp 获取指纹
+          alpn: (url.searchParams.get('alpn') || 'h3').split(',')
       };
 
-      const alpnParam = url.searchParams.get('alpn');
-      if (alpnParam) {
-          clashConfig.alpn = alpnParam.split(',');
-      }
-
-      const obfsParam = url.searchParams.get('obfs');
-      if (obfsParam) {
-          clashConfig.obfs = obfsParam;
-          const obfsPassword = url.searchParams.get('obfs-password');
-          if (obfsPassword) {
-              clashConfig['obfs-password'] = obfsPassword;
-          }
-      }
-
-      const downMbps = url.searchParams.get('downspeed');
-      const upMbps = url.searchParams.get('upspeed');
-      if (downMbps) {
-          clashConfig.down = downMbps;
-      }
+      // 处理上行和下行速度，并自动补充 " Mbps" 单位
+      const upMbps = url.searchParams.get('up') || url.searchParams.get('upspeed');
+      const downMbps = url.searchParams.get('down') || url.searchParams.get('downspeed');
+      
       if (upMbps) {
-          clashConfig.up = upMbps;
+          clashConfig.up = upMbps.toLowerCase().includes('mbps') ? upMbps : `${upMbps} Mbps`;
+      }
+      if (downMbps) {
+          clashConfig.down = downMbps.toLowerCase().includes('mbps') ? downMbps : `${downMbps} Mbps`;
+      }
+
+      // 处理混淆 obfs
+      const obfsParam = url.searchParams.get('obfs');
+      if (obfsParam && obfsParam !== 'none') {
+          clashConfig.obfs = obfsParam;
+          clashConfig['obfs-password'] = url.searchParams.get('obfs-password') || url.searchParams.get('obfsParam');
       }
 
       return clashConfig;
