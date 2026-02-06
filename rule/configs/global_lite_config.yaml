@@ -116,13 +116,6 @@ rules:
   - RULE-SET,steam_domain,🎮 游戏办公
   - RULE-SET,speedtest_domain,🎯 全球直连
 
-  # 地区分流补充
-  - GEOIP,HK,🇭🇰 香港自动,no-resolve
-  - GEOIP,TW,🇹🇼 台湾自动,no-resolve
-  - GEOIP,JP,🇯🇵 日本自动,no-resolve
-  - GEOIP,SG,🇸🇬 新加坡自动,no-resolve
-  - GEOIP,US,🇺🇸 美国自动,no-resolve
-
   # 大陆服务全部 DIRECT (强制直连)
   - RULE-SET,cn_domain,🎯 全球直连
   - GEOIP,CN,🎯 全球直连,no-resolve
