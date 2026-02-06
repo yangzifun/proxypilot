@@ -1546,7 +1546,7 @@ if (protocol === 'tuic') {
       const url = new URL(configStr);
       const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `Tuic-${url.hostname}-${url.port}`;
       
-      // 核心修复：处理 uuid:password 被编码在 username 中的情况
+      // 提取凭据信息
       let uuid = url.username;
       let password = url.password || '';
       
@@ -1567,20 +1567,22 @@ if (protocol === 'tuic') {
           server: url.hostname,
           port: parseInt(url.port) || 443,
           uuid: uuid,
-          password: password, // 现在可以正确输出 password
+          password: password,
+          token: url.searchParams.get('token') || '', // 支持 token 字段
           sni: url.searchParams.get('sni') || url.hostname,
-          'skip-cert-verify': true,
-          'alpn': (url.searchParams.get('alpn') || 'h3').split(',')
+          'skip-cert-verify': url.searchParams.get('insecure') === '1',
+          alpn: (url.searchParams.get('alpn') || 'h3').split(','),
+          'disable-sni': url.searchParams.get('disable-sni') === 'true', // 新增
+          'reduce-rtt': true, // 按照要求硬编码为 true
+          'request-timeout': 8000, // 按照要求硬编码为 8000
+          'udp-relay-mode': url.searchParams.get('udp-relay-mode') || 'native',
+          'congestion-controller': url.searchParams.get('congestion_control') || url.searchParams.get('congestion-controller') || 'bbr'
       };
 
-      const congestionControl = url.searchParams.get('congestion_control') || url.searchParams.get('congestion-controller');
-      if (congestionControl) {
-          clashConfig['congestion-controller'] = congestionControl;
-      }
-
-      const udpRelayMode = url.searchParams.get('udp-relay-mode');
-      if (udpRelayMode) {
-          clashConfig['udp-relay-mode'] = udpRelayMode;
+      // 额外处理 fast-open
+      const fastOpen = url.searchParams.get('fast-open');
+      if (fastOpen) {
+          clashConfig['fast-open'] = fastOpen === 'true' || fastOpen === '1';
       }
 
       return clashConfig;
