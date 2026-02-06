@@ -101,7 +101,7 @@ rule-anchor:
 proxy-groups:
   # --- 1. 默认代理 (总开关) ---
   # 兜底使用的代理组，如果下方具体服务没命中，则默认走这里
-  - {name: 🚀 默认代理, type: select,include-all: true, proxies: [⚡ 自动选择, 🌐 全部节点]}
+  - {name: 🚀 默认代理, type: select,include-all: true, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动, 🌐 全部节点]}
   
   # --- 2. AI 服务 (对 IP 纯净度要求极高) ---
   - {name: 🤖 OpenAI, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]} 

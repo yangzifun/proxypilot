@@ -39,7 +39,7 @@ rule-anchor:
 # 出站策略 (Proxy Groups)
 # ==========================================================
 proxy-groups:
-  - {name: 🚀 默认代理, type: select, include-all: true, filter: "^((?!(直连)).)*$", proxies: [⚡ 自动选择, 🌐 全部节点]}
+  - {name: 🚀 默认代理, type: select, include-all: true, filter: "^((?!(直连)).)*$", proxies: [⚡ 自动选择, 🇭🇰 香港自动 , 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🌐 全部节点]}
   
   # --- 专项 IP 分流组 ---
   - {name: 🔍 Google IP, type: select, proxies: [🇺🇸 美国自动, ⚡ 自动选择]}
