@@ -2436,14 +2436,16 @@ const unifiedPageHtmlContent = `
 
       <div class="grid grid-cols-1 gap-4 mb-4">
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">传输 (Net)</label>
-          <select id="edit-net"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none">
-            <option value="tcp">TCP</option>
-            <option value="ws">WebSocket</option>
-            <option value="grpc">gRPC</option>
-          </select>
-        </div>
+  <label class="block text-sm font-medium text-gray-700 mb-1">传输 (Net)</label>
+  <select id="edit-net"
+          class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none">
+    <option value="tcp">TCP</option>
+    <option value="ws">WebSocket</option>
+    <option value="grpc">gRPC</option>
+    <option value="xhttp">xhttp</option> <!-- 新增 -->
+    <option value="h2">HTTP/2</option>
+  </select>
+</div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">伪装 (Type)</label>
           <input type="text" id="edit-type" placeholder="none"
@@ -4462,6 +4464,9 @@ trojan://..."
       try {
         let u = new URL(proto + '://' + uuid + '@' + add + ':' + port);
         if (net !== 'tcp' && net) u.searchParams.set('type', net);
+         if (net === 'xhttp') {
+        u.searchParams.set('mode', 'auto');
+        } // 默认设为 auto，也可扩展 UI 供用户选择
         if (type) u.searchParams.set('headerType', type);
         if (tls === 'tls') {
           u.searchParams.set('security', 'tls');
