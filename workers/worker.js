@@ -1304,10 +1304,14 @@ if (protocol === 'trojan') {
 }
 
 // 处理VLESS配置
-if (protocol === 'vless') {
+if (protocol === 'vless' || protocol === 'any-reality' || protocol === 'reality' || protocol === 'anyreality') {
   try {
       const url = new URL(configStr);
       const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `VLESS-${url.hostname}-${url.port}`;
+
+      const security = url.searchParams.get('security');
+      const isReality = security === 'reality';
+      const isTls = security === 'tls' || isReality;
 
       const clashConfig = {
           name: name,
@@ -1315,39 +1319,55 @@ if (protocol === 'vless') {
           server: url.hostname,
           port: parseInt(url.port) || 443,
           uuid: url.username,
-          tls: true,
-          'skip-cert-verify': true
+          udp: true,
+          tls: isTls,
+          'skip-cert-verify': true,
+          servername: url.searchParams.get('sni') || url.hostname,
+          flow: url.searchParams.get('flow') || '',
+          'packet-encoding': 'xudp',
+          encryption: url.searchParams.get('encryption') || 'none',
+          'client-fingerprint': url.searchParams.get('fp') || 'chrome'
       };
 
-      const typeParam = url.searchParams.get('type') || '';
-      if (typeParam === 'ws') {
-          clashConfig.network = 'ws';
-          const path = url.searchParams.get('path') || '/';
-          const host = url.searchParams.get('host');
+      // 填充 Reality 特有配置
+      if (isReality || url.searchParams.get('pbk')) {
+          clashConfig['reality-opts'] = {
+              'public-key': url.searchParams.get('pbk') || '',
+              'short-id': url.searchParams.get('sid') || ''
+          };
+      }
 
+      // 处理传输网络层 (新增 xhttp 支持)
+      const net = url.searchParams.get('type') || 'tcp';
+      clashConfig.network = net;
+
+      if (net === 'ws') {
           clashConfig['ws-opts'] = {
-              path: path,
-              headers: host ? { Host: host } : {}
+              path: url.searchParams.get('path') || '/',
+              headers: { Host: url.searchParams.get('host') || '' }
           };
-      } else if (typeParam === 'grpc') {
-          clashConfig.network = 'grpc';
+      } else if (net === 'grpc') {
           clashConfig['grpc-opts'] = {
-              'grpc-service-name': url.searchParams.get('serviceName') || ''
+              'grpc-service-name': url.searchParams.get('serviceName') || url.searchParams.get('path') || ''
           };
-      } else if (typeParam === 'h2') {
-          clashConfig.network = 'h2';
-          const path = url.searchParams.get('path') || '/';
+      } else if (net === 'xhttp') { // --- 新增 xhttp 逻辑 ---
+          clashConfig['xhttp-opts'] = {
+              path: url.searchParams.get('path') || '/',
+              mode: url.searchParams.get('mode') || 'auto',
+              extra: {} 
+          };
           const host = url.searchParams.get('host');
-
+          if (host) clashConfig['xhttp-opts'].headers = { Host: host };
+      } else if (net === 'h2') {
           clashConfig['h2-opts'] = {
-              path: path,
-              host: host ? [host] : []
+              path: url.searchParams.get('path') || '/',
+              host: [url.searchParams.get('host') || '']
           };
       }
 
       return clashConfig;
   } catch (error) {
-      console.error('转换VLESS配置失败:', error, configStr);
+      console.error('转换VLESS/Reality配置失败:', error, configStr);
       return null;
   }
 }
