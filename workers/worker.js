@@ -180,32 +180,30 @@ async function deleteConfigsByIds(env, ids) {
   if (!db) throw new Error("D1 数据库未绑定。");
 
   if (!ids || ids.length === 0) {
-      return { success: true, deleted: 0 };
+    return { success: true, deleted: 0 };
   }
 
   try {
-      // 构建IN查询
-      const placeholders = ids.map(() => '?').join(',');
-      const query = `DELETE FROM configs WHERE id IN (${placeholders})`;
-      const stmt = db.prepare(query);
+    const placeholders = ids.map(() => '?').join(',');
+    const query = `DELETE FROM configs WHERE id IN (${placeholders})`;
+    
+    // D1 的 .run() 返回包含 meta 信息的对象
+    const result = await db.prepare(query).bind(...ids).run();
 
-      // 绑定所有参数
-      let boundStmt = stmt;
-      for (const id of ids) {
-          boundStmt = boundStmt.bind(id);
-      }
+    // 兼容不同的 D1 SDK 版本获取影响行数
+    const deletedCount = result.meta?.changes ?? result.changes ?? 0;
 
-      const result = await boundStmt.run();
-      return {
-          success: true,
-          deleted: result.changes || 0
-      };
+    return {
+      success: true,
+      deleted: deletedCount
+    };
   } catch (e) {
-      console.error("批量删除配置失败:", e.message);
-      return {
-          success: false,
-          error: e.message
-      };
+    console.error("批量删除配置失败:", e.message);
+    return {
+      success: false,
+      error: e.message,
+      deleted: 0
+    };
   }
 }
 
@@ -835,31 +833,33 @@ async function handleDeleteUuidInfo(uuid, env) {
 
 async function handleDelete(type, value, env) {
   if (type === 'batch') {
-      // 批量删除
-      try {
-          const ids = JSON.parse(value);
-          if (!Array.isArray(ids) || ids.length === 0) {
-              return jsonResponse({ error: '无效的ID列表' }, 400);
-          }
-
-          const result = await deleteConfigsByIds(env, ids);
-          if (!result.success) {
-              return jsonResponse({ error: result.error }, 500);
-          }
-
-          return jsonResponse({ 
-              success: true, 
-              deleted: result.deleted,
-              message: `成功删除 ${result.deleted} 条配置`
-          });
-      } catch (e) {
-          return jsonResponse({ error: '无效的请求数据' }, 400);
+    try {
+      const ids = JSON.parse(value);
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return jsonResponse({ error: '无效的ID列表' }, 400);
       }
+
+      // 调用修复后的函数
+      const result = await deleteConfigsByIds(env, ids);
+      
+      if (!result.success) {
+        return jsonResponse({ error: result.error }, 500);
+      }
+
+      // 返回给前端，确保包含 deleted 字段
+      return jsonResponse({ 
+        success: true, 
+        deleted: result.deleted, // 这里必须对应
+        message: `成功删除 ${result.deleted} 条配置`
+      });
+    } catch (e) {
+      return jsonResponse({ error: '无效的请求数据' }, 400);
+    }
   } else {
-      // 单个删除
-      const sql = type === 'uuid' ? 'DELETE FROM configs WHERE uuid = ?' : 'DELETE FROM configs WHERE id = ?';
-      await env.DB.prepare(sql).bind(value).run();
-      return jsonResponse({ success: true });
+    // 单个删除保持不变
+    const sql = type === 'uuid' ? 'DELETE FROM configs WHERE uuid = ?' : 'DELETE FROM configs WHERE id = ?';
+    await env.DB.prepare(sql).bind(value).run();
+    return jsonResponse({ success: true });
   }
 }
 
@@ -1886,24 +1886,32 @@ export default {
               if (path === '/manage/configs') return await handleUpdateConfig(request, env);
           }
 
-          if (method === 'DELETE') {
-              // ===== API: 配置删除 =====
-              const idMatch = manageID.exec(url);
-              if (idMatch) return await handleDelete('id', idMatch.pathname.groups.id, env);
-              const uuidMatch = manageUUID.exec(url);
-              if (uuidMatch) return await handleDelete('uuid', uuidMatch.pathname.groups.uuid, env);
-
-              // ===== API: 批量删除配置 =====
+           if (method === 'DELETE') {
+              // 1. 优先处理具体的批量删除路径 (最具体)
               if (path === '/manage/configs/batch') {
                   const body = await request.json();
                   const { ids } = body;
                   if (!ids || !Array.isArray(ids)) {
                       return jsonResponse({ error: '无效的请求数据，需要ids数组' }, 400);
                   }
-                  return await handleDelete('batch', JSON.stringify(ids), env);
+                  // 直接调用批量删除逻辑
+                  const result = await deleteConfigsByIds(env, ids);
+                  return jsonResponse({ 
+                    success: true, 
+                    deleted: result.deleted, 
+                    message: `成功删除 ${result.deleted} 条配置`
+                  });
               }
 
-              // ===== API: 删除UUID信息 =====
+              // 2. 处理按 ID 删除 (ID 匹配)
+              const idMatch = manageID.exec(url);
+              if (idMatch) return await handleDelete('id', idMatch.pathname.groups.id, env);
+
+              // 3. 处理按 UUID 删除 (放在最后，因为它会拦截所有 /manage/configs/xxx)
+              const uuidMatch = manageUUID.exec(url);
+              if (uuidMatch) return await handleDelete('uuid', uuidMatch.pathname.groups.uuid, env);
+
+              // 4. 处理删除 UUID 详细信息
               const deleteUuidInfoMatch = uuidInfo.exec(url);
               if (deleteUuidInfoMatch) {
                   return await handleDeleteUuidInfo(deleteUuidInfoMatch.pathname.groups.uuid, env);
@@ -4249,7 +4257,7 @@ trojan://..."
       return;
     }
 
-    const ids = Array.from(selectedConfigs);
+    const ids = Array.from(selectedConfigs).map(id => parseInt(id));
 
     try {
       const response = await fetch(\`\${WORKER_DOMAIN}/manage/configs/batch\`, {
@@ -4261,7 +4269,7 @@ trojan://..."
       const result = await response.json();
 
       if (result.success) {
-        showToast(\`成功删除 \${result.deleted} 条配置\`, 'success');
+        showToast(\`成功删除 \${result.deleted ?? 0} 条配置\`, 'success');
         selectedConfigs.clear();
         manageQueryByUuid();
       } else {
