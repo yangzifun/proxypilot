@@ -1597,24 +1597,31 @@ if (protocol === 'anytls') {
   try {
       const url = new URL(configStr);
       const name = url.hash ? decodeURIComponent(url.hash.substring(1)) : `AnyTLS-${url.hostname}-${url.port}`;
+      
       const clashConfig = {
           name: name,
-          type: 'anytls', // AnyTLS 通常对应 Trojan 协议
+          type: 'anytls',
           server: url.hostname,
           port: parseInt(url.port) || 443,
-          password: url.username, // 修复：使用 password 字段而非 uuid
+          password: url.username, 
+          'client-fingerprint': url.searchParams.get('fp') || 'chrome', // 默认 chrome
+          udp: true,
+          // 按照模板要求硬编码会话管理参数
+          'idle-session-check-interval': 30,
+          'idle-session-timeout': 30,
+          'min-idle-session': 0,
           sni: url.searchParams.get('sni') || url.searchParams.get('host') || url.hostname,
-          'skip-cert-verify': true,
-          'udp': true
+          alpn: (url.searchParams.get('alpn') || 'h2,http/1.1').split(','),
+          'skip-cert-verify': true // 按照模板要求默认开启
       };
+
+      // 处理可能的传输层 (如果 AnyTLS 链接中携带了 ws 或 grpc)
       const typeParam = url.searchParams.get('type') || '';
       if (typeParam === 'ws') {
           clashConfig.network = 'ws';
-          const path = url.searchParams.get('path') || '/';
-          const host = url.searchParams.get('host') || url.searchParams.get('sni');
           clashConfig['ws-opts'] = {
-              path: path,
-              headers: host ? { Host: host } : {}
+              path: url.searchParams.get('path') || '/',
+              headers: { Host: url.searchParams.get('host') || clashConfig.sni }
           };
       } else if (typeParam === 'grpc') {
           clashConfig.network = 'grpc';
@@ -1622,6 +1629,7 @@ if (protocol === 'anytls') {
               'grpc-service-name': url.searchParams.get('serviceName') || url.searchParams.get('path') || ''
           };
       }
+
       return clashConfig;
   } catch (error) {
       console.error('转换AnyTLS配置失败:', error);
