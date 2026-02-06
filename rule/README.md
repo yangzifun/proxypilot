@@ -14,6 +14,10 @@
 | geoip_config.yaml | **精准IP分流** | 基于GEOIP的IP精准分流，按目标IP国家定向代理 | MetaCubeX |
 | load-balance_config.yaml | **负载均衡配置** | 负载均衡策略，支持一致性哈希和轮询，适合多节点加速 | MetaCubeX |
 | stream_config.yaml | **影视流媒体优化** | 针对Netflix、YouTube等影视平台的专门优化配置 | MetaCubeX |
+| cn_full_config.yaml | **回国全量代理** | 仅对中国服务走代理，非中国流量直连 | MetaCubeX |
+| global_lite_config.yaml | **全球轻量版** | 极简分组，海外常用走代理，大陆服务直连 | MetaCubeX |
+| internal_config.yaml | **内网代理** | 包含内网代理配置，支持访问内网资源 | MetaCubeX |
+| ios_config.yaml | **iOS专用** | 优化内存使用，解决iOS设备限制问题 | MetaCubeX |
 
 ## 🚀 快速开始
 
@@ -193,6 +197,42 @@ https://raw.githubusercontent.com/yangzifun/proxypilot/main/rule/configs/config.
 - YouTube使用负载均衡策略，叠加带宽实现秒开
 - 强制嗅探流媒体域名，优化CDN识别
 
+### 9. `cn_full_config.yaml` - 回国全量代理
+**适用场景**: 专门为海外用户访问中国服务设计，不消耗非中国流量代理
+
+**核心特性**:
+- **中国服务专享代理**: 仅对中国大陆境内服务走代理
+- **非中国流量直连**: Google、YouTube等海外服务强制直连
+- **完整服务分类**: 影音、社交、游戏、支付等详细分类
+- **地区自动选择**: 上海、北京、深圳、香港自动选择
+
+### 10. `global_lite_config.yaml` - 全球轻量版
+**适用场景**: 资源有限设备或简单使用场景的全球上网方案
+
+**核心特性**:
+- **极简策略组**: 仅保留AI、社交、流媒体、游戏、大陆服务五大类
+- **国内直连**: 所有中国大陆流量强制直连
+- **海外代理优化**: 按需选择地区代理，减少策略组数量
+- **低资源占用**: 配置精简，启动快速，适合手机/路由器
+
+### 11. `internal_config.yaml` - 内网代理
+**适用场景**: 需要访问企业内网资源的用户
+
+**核心特性**:
+- **内网访问支持**: 专为访问192.168.x.x、10.x.x.x等内网设计
+- **完整规则集**: 保留所有标准服务分类
+- **内网策略组**: 特殊策略组用于内网资源访问
+- **企业环境优化**: 兼容企业网络环境，支持复杂网络拓扑
+
+### 12. `ios_config.yaml` - iOS专用
+**适用场景**: iOS设备用户（iPhone/iPad）
+
+**核心特性**:
+- **内存优化**: 专门解决iOS设备内存限制问题
+- **iOS兼容设置**: 优化TUN模式和DNS配置
+- **简化策略组**: 平衡功能与性能，避免内存溢出
+- **Apple服务优化**: 针对App Store、iCloud等服务的专门处理
+
 ## 🎯 策略组说明
 
 ### 通用策略组 (所有配置)
@@ -243,6 +283,12 @@ https://raw.githubusercontent.com/yangzifun/proxypilot/main/rule/configs/config.
 - **多节点加速**: `load-balance_config.yaml` - 拥有多个节点，需要负载均衡叠加带宽
 - **专业影视观看**: `stream_config.yaml` - 专注Netflix、YouTube等流媒体平台
 - **下载优化**: `load-balance_config.yaml` - 大文件下载需要轮询负载均衡
+- **企业内网访问**: `internal_config.yaml` - 需要访问内网资源
+- **iOS设备优化**: `ios_config.yaml` - 解决iOS设备内存限制问题
+
+### 特殊场景
+- **纯中国服务访问**: `cn_full_config.yaml` - 仅访问中国服务，非中国流量直连
+- **轻量全球上网**: `global_lite_config.yaml` - 资源有限设备的最佳选择
 
 ## 📁 辅助文件
 
@@ -250,14 +296,17 @@ https://raw.githubusercontent.com/yangzifun/proxypilot/main/rule/configs/config.
 - `direct.list` - 直连补充列表，包含特定需要直连的域名 (如 baidu.com, yangzifun.org 等)
 
 ### proxy.list 内容说明
+- 域名关键字匹配: 1e100
 - 国外DNS服务: dns.google, 1dot1dot1dot1.cloudflare-dns.com 等
 - 测速接口: cp.cloudflare.com, connectivitycheck.gstatic.com 等
 - 必应搜索: bing.com, cn.bing.com
 - IP地址: 8.8.8.8, 1.1.1.1 等公共DNS
+- 视频下载: ssvid.app, ssstwitter.com
 
 ### direct.list 内容说明
 - 百度相关服务: baidu.com
 - 个人域名: yangzifun.org, yangzihome.space
+- 阿里云服务: alicdn.com, aliyuncs.com
 
 ## 📈 性能优化建议
 
@@ -319,6 +368,10 @@ https://raw.githubusercontent.com/yangzifun/proxypilot/main/rule/configs/config.
 1. 在 Clash 客户端中停止当前配置
 2. 导入新的配置文件
 3. 启动新配置
+
+### Q7: ios下clashmi点击连接后,立即马上自动断开连接
+
+ios系统不同于其他系统,ios系统对vpn扩展有严格的内存使用上限限制(50M),一旦超出,系统会杀死vpn进程；通过减少geosite/geoip/ip-asn等规则数量，改用mrs格式的规则集或使用`ios_config.yaml`IOS 专用模板。
 
 ## 🤝 贡献与反馈
 
