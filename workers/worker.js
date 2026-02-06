@@ -1427,7 +1427,19 @@ if (protocol === 'shadowsocks') {
       let password = '';
       let method = 'aes-256-gcm';
 
-      const userInfo = atob(url.username).split(':');
+      // 自动识别并解码 Base64 格式或明文格式的用户信息
+      let userInfoRaw = url.username;
+      try {
+          // 部分 SS 链接将 method:password 整体进行 Base64 编码
+          const decoded = atob(userInfoRaw);
+          if (decoded.includes(':')) {
+              userInfoRaw = decoded;
+          }
+      } catch (e) {
+          // 解码失败说明可能已经是明文或采用了其他编码，保持原样
+      }
+
+      const userInfo = userInfoRaw.split(':');
       if (userInfo.length >= 2) {
           method = userInfo[0];
           password = userInfo.slice(1).join(':');
@@ -1438,17 +1450,41 @@ if (protocol === 'shadowsocks') {
           type: 'ss',
           server: url.hostname,
           port: parseInt(url.port) || 8388,
-          password: password,
           cipher: method,
-          'udp-over-tcp': true
+          password: password,
+          udp: true, // 显式开启 UDP
+          'udp-over-tcp': false, // 按照要求设为 false
+          'udp-over-tcp-version': 2, // 按照要求设为 2
+          'ip-version': 'ipv4', // 按照要求硬编码为 ipv4
+          smux: {
+              enabled: false
+          }
       };
 
+      // 处理插件 (Plugin) 信息
       const pluginParam = url.searchParams.get('plugin');
       if (pluginParam) {
-          clashConfig.plugin = pluginParam;
-          const pluginOpts = url.searchParams.get('plugin-opts');
-          if (pluginOpts) {
-              clashConfig['plugin-opts'] = pluginOpts;
+          clashConfig.plugin = pluginParam.split(';')[0]; // 获取插件名
+          
+          // 处理插件选项 plugin-opts
+          const pluginOptsRaw = url.searchParams.get('plugin-opts') || "";
+          const opts = {};
+          
+          // 如果 URL 参数中包含 plugin-opts 字符串 (如 "mode=tls;host=example.com")
+          if (pluginOptsRaw) {
+              pluginOptsRaw.split(';').forEach(pair => {
+                  const [k, v] = pair.split('=');
+                  if (k) opts[k] = v || true;
+              });
+              clashConfig['plugin-opts'] = opts;
+          } else if (pluginParam.includes(';')) {
+              // 兼容另一种写法: plugin=obfs-local;obfs=tls
+              const parts = pluginParam.split(';');
+              parts.slice(1).forEach(pair => {
+                  const [k, v] = pair.split('=');
+                  if (k) opts[k] = v || true;
+              });
+              clashConfig['plugin-opts'] = opts;
           }
       }
 
