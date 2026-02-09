@@ -902,94 +902,83 @@ function replaceAddressesInConfigs(baseConfigsData, addressList, disableOptimiza
       // 首先，无论域名属性是什么，先输出原配置
       generatedConfigs.push(baseConfig);
 
-      // 检查是否禁用优选，如果禁用，跳过优选替换
-      if (disableOptimization) {
-          console.log(`配置ID ${configId} 的优选已被禁用，只输出原配置`);
-          continue;
-      }
+      if (disableOptimization) continue;
 
-      // 检查域名托管属性，只有Cloudflare的配置才进行优选替换
-      if (domainHosting !== 'Cloudflare') {
-          // 非Cloudflare配置只输出原配置，不进行优选替换
-          console.log(`配置ID ${configId} 的域名托管属性为"${domainHosting}"，只输出原配置，不进行优选替换`);
-          continue;
-      }
+      // 只有 Cloudflare 的配置才进行优选替换
+      if (domainHosting !== 'Cloudflare') continue;
 
-      // 处理 vmess, vless, trojan 协议
+      // 处理协议
       if (configType === 'trojan' || configType === 'vless' ||
           configType === 'shadowsocks' || configType === 'hysteria2' ||
           configType === 'tuic' || configType === 'anytls' ||
           configType === 'any-reality' || configType === 'reality' ||
           configType === 'socks5') {
 
-          const addressMatch = baseConfig.match(addressExtractionRegex);
-          if (!addressMatch) {
-              pushError(`${configType}配置中未找到地址，已跳过。`);
-              continue;
-          }
           processedBaseConfig = baseConfig;
       } else if (configType === 'vmess') {
           const encodedJson = baseConfig.substring('vmess://'.length);
           try {
-              let vmessObj = JSON.parse(b64_to_utf8(encodedJson));
-              if (!vmessObj.add) {
-                  pushError(`VMess配置中未找到 "add" 字段，已跳过。`);
-                  continue;
-              }
-              processedBaseConfig = vmessObj;
+              processedBaseConfig = JSON.parse(b64_to_utf8(encodedJson));
           } catch (e) {
-              pushError(`VMess配置解码失败，已跳过。`);
+              pushError(`VMess配置解码失败`);
               continue;
           }
       } else {
-          pushError(`不支持的类型: ${configType}，已跳过。`);
           continue;
       }
 
       // 对Cloudflare配置进行优选替换
       for (const newAddr of addressList) {
-          if (!validAddressRegex.test(newAddr) && !newAddr.includes(':')) {
-              // simple validation
-          }
           const cleanAddrForName = newAddr.replace(/[\[\]]/g, '');
-
-          // 处理IPv6地址格式
           let formattedAddr = newAddr;
           if (newAddr.includes(':') && !newAddr.startsWith('[') && !newAddr.endsWith(']')) {
               formattedAddr = `[${newAddr}]`;
           }
 
-          if (configType === 'trojan' || configType === 'vless' ||
-              configType === 'shadowsocks' || configType === 'hysteria2' ||
-              configType === 'tuic' || configType === 'anytls' ||
-              configType === 'any-reality' || configType === 'reality' ||
-              configType === 'socks5') {
-
+          if (configType !== 'vmess') {
               try {
                   const url = new URL(processedBaseConfig);
-                  const originalName = url.hash ? decodeURIComponent(url.hash.substring(1)) : `${configType}-node`;
-                  const newName = `${originalName}-${cleanAddrForName}`;
-                  url.hash = encodeURIComponent(newName);
-                  url.hostname = formattedAddr;
+                  const originalHost = url.hostname; // 关键：记录原始域名
 
-                  const newUrlString = url.toString();
-                  generatedConfigs.push(newUrlString);
+                  // --- 修复逻辑开始 ---
+                  // 1. 如果是 TLS 协议且没有 SNI，将原始域名填入 SNI
+                  if (!url.searchParams.has('sni') && originalHost && !validAddressRegex.test(originalHost)) {
+                      url.searchParams.set('sni', originalHost);
+                  }
+                  // 2. 如果是 WebSocket/HTTP 传输且没有 Host，将原始域名填入 Host
+                  const netType = url.searchParams.get('type');
+                  if ((netType === 'ws' || netType === 'h2' || netType === 'grpc' || netType === 'xhttp') && !url.searchParams.has('host')) {
+                      url.searchParams.set('host', originalHost);
+                  }
+                  // --- 修复逻辑结束 ---
+
+                  const originalName = url.hash ? decodeURIComponent(url.hash.substring(1)) : `${configType}-node`;
+                  url.hash = encodeURIComponent(`${originalName}-${cleanAddrForName}`);
+                  url.hostname = formattedAddr; // 只替换连接地址
+
+                  generatedConfigs.push(url.toString());
               } catch (e) {
                   pushError(`处理 ${configType} 出错: ${e.message}`);
               }
           } else if (configType === 'vmess') {
-              const tempVmessObj = JSON.parse(JSON.stringify(processedBaseConfig));
-              const originalName = tempVmessObj.ps || tempVmessObj.remark || 'vmess-node';
-              tempVmessObj.ps = `${originalName}-${cleanAddrForName}`;
-
-              let formattedAddr = newAddr;
-              if (newAddr.includes(':') && !newAddr.startsWith('[') && !newAddr.endsWith(']')) {
-                  formattedAddr = `[${newAddr}]`;
-              }
-              tempVmessObj.add = formattedAddr;
-              if (tempVmessObj.remark) delete tempVmessObj.remark;
-
               try {
+                  const tempVmessObj = JSON.parse(JSON.stringify(processedBaseConfig));
+                  const originalHost = tempVmessObj.add; // 关键：记录原始地址
+
+                  // --- VMess 修复逻辑 ---
+                  if (!tempVmessObj.sni && originalHost && !validAddressRegex.test(originalHost)) {
+                      tempVmessObj.sni = originalHost;
+                  }
+                  if (!tempVmessObj.host && originalHost && !validAddressRegex.test(originalHost)) {
+                      tempVmessObj.host = originalHost;
+                  }
+                  // --- VMess 修复逻辑结束 ---
+
+                  const originalName = tempVmessObj.ps || tempVmessObj.remark || 'vmess-node';
+                  tempVmessObj.ps = `${originalName}-${cleanAddrForName}`;
+                  tempVmessObj.add = formattedAddr; // 只替换连接地址
+                  
+                  if (tempVmessObj.remark) delete tempVmessObj.remark;
                   generatedConfigs.push(`vmess://${utf8_to_b64(JSON.stringify(tempVmessObj))}`);
               } catch (e) {
                   pushError(`VMess编码失败: ${e.message}`);
@@ -997,8 +986,6 @@ function replaceAddressesInConfigs(baseConfigsData, addressList, disableOptimiza
           }
       }
   }
-
-  // 去重生成的配置
   return [...new Set(generatedConfigs)];
 }
 
