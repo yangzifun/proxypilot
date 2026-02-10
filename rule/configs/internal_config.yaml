@@ -201,10 +201,10 @@ rules:
   - RULE-SET,netflix_ip,🎥 Netflix,no-resolve
   - RULE-SET,disney_domain,🎞️ Disney+
   - RULE-SET,tiktok_domain,🎵 TikTok
+  - RULE-SET,twitch_domain,💜 Twitch
   - RULE-SET,primevideo_domain,📺 更多流媒体
   - RULE-SET,bahamut_domain,📺 更多流媒体
   - RULE-SET,viu_domain,📺 更多流媒体
-  - RULE-SET,twitch_domain,💜 Twitch
   - RULE-SET,streaming_all_domain,📺 更多流媒体
   - RULE-SET,spotify_domain,🎧 Spotify
   
