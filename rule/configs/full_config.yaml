@@ -122,7 +122,9 @@ proxy-groups:
   - {name: 🎥 Netflix, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇰🇷 韩国自动, 🇸🇬 新加坡自动, 🇺🇸 美国自动, 🇹🇷 土耳其自动, 🇬🇧 英国自动, 🇩🇪 德国自动, 🇫🇷 法国自动, 🇧🇷 巴西自动, 🇦🇷 阿根廷自动]}
   - {name: 🎞️ Disney+, type: select, proxies: [🇭🇰 香港自动, 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇬🇧 英国自动, 🇩🇪 德国自动]}
   - {name: 🎵 TikTok, type: select, proxies: [🇯🇵 日本自动, 🇰🇷 韩国自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇹🇭 泰国自动, 🇻🇳 越南自动, 🇲🇾 马来西亚自动]}
-  - {name: 📺 更多流媒体, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇰🇷 韩国自动, 🇺🇸 美国自动, 🇮🇳 印度自动, 🇹🇷 土耳其自动]} 
+  - {name: 💜 Twitch, type: select, proxies: [⚡ 自动选择, 🚀 默认代理, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇺🇸 美国自动]}
+  - {name: 📺 更多流媒体, type: select, proxies: [⚡ 自动选择, 🚀 默认代理, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇺🇸 美国自动]} # 全量流媒体
+  - {name: 🎧 Spotify, type: select, proxies: [🚀 默认代理, ⚡ 自动选择, 🎯 直连]} # 建议首选直连或默认代理
   - {name: 🎧 Spotify, type: select, proxies: [🚀 默认代理, ⚡ 自动选择, 🎯 直连, 🇺🇸 美国自动, 🇹🇷 土耳其自动]} 
   
   # --- 5. 游戏服务 ---
@@ -219,10 +221,11 @@ rules:
   - RULE-SET,netflix_ip,🎥 Netflix,no-resolve
   - RULE-SET,disney_domain,🎞️ Disney+
   - RULE-SET,tiktok_domain,🎵 TikTok
+  - RULE-SET,twitch_domain,💜 Twitch
   - RULE-SET,primevideo_domain,📺 更多流媒体
   - RULE-SET,bahamut_domain,📺 更多流媒体
   - RULE-SET,viu_domain,📺 更多流媒体
-  - RULE-SET,twitch_domain,📺 更多流媒体
+  - RULE-SET,streaming_all_domain,📺 更多流媒体
   - RULE-SET,spotify_domain,🎧 Spotify
   
 
