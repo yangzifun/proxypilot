@@ -122,7 +122,7 @@ proxy-groups:
   - {name: 🎥 Netflix, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
   - {name: 🎞️ Disney+, type: select, proxies: [🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
   - {name: 🎵 TikTok, type: select,  proxies: [🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
-  - {name: 📺 更多流媒体, type: select, proxies: [🚀 默认代理, 🇭🇰 香港自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇺🇸 美国自动]} # Prime Video, Viu, TVB, 动画疯等
+  - {name: 📺 更多流媒体, type: select, proxies: [⚡ 自动选择, 🚀 默认代理, 🇭🇰 香港自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇺🇸 美国自动]} # Prime Video, Viu, TVB, 动画疯等
   - {name: 🎧 Spotify, type: select, proxies: [🚀 默认代理, ⚡ 自动选择, 🎯 直连]} # 建议首选直连或默认代理
   
   
@@ -195,6 +195,7 @@ rules:
   - RULE-SET,primevideo_domain,📺 更多流媒体
   - RULE-SET,bahamut_domain,📺 更多流媒体
   - RULE-SET,viu_domain,📺 更多流媒体
+  - RULE-SET,twitch_domain,📺 更多流媒体
   - RULE-SET,spotify_domain,🎧 Spotify
   
 
@@ -278,6 +279,8 @@ rule-providers:
   primevideo_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/primevideo.mrs"}
   bahamut_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/bahamut.mrs"}
   viu_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/viu.mrs"}
+  twitch_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/twitch.mrs"}
+  
   # 通用服务
   google_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/google.mrs"}
   github_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/github.mrs"}
