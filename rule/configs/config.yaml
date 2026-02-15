@@ -148,9 +148,6 @@ proxy-groups:
   - {name: 🎯 直连, type: select, proxies: [DIRECT, 🚀 默认代理]} 
   - {name: 🐟 漏网之鱼, type: select, proxies: [🚀 默认代理, 🎯 直连, ⚡ 自动选择, 🇭🇰 香港自动, 🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
 
-
-
-
   # --- 8. 底层自动选优策略 (供上方调用)  ---
   - {name: ⚡ 自动选择, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
   - {name: 🌐 全部节点, type: select, include-all: true}
