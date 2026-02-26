@@ -98,9 +98,17 @@ rule-anchor:
 # 出站策略 (Proxy Groups) 
 # ==========================================================
 proxy-groups:
+
+  - {name: 🇭🇰 香港自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)香港"}
+  - {name: 🇲🇴 澳门自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)澳门|澳門"}
+  - {name: 🇯🇵 日本自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)日本|东京|大阪|埼玉|京都|福冈|名古屋|札幌"}
+  - {name: 🇺🇸 美国自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)美国|弗吉尼亚|维吉尼亚|阿什本|洛杉矶|旧金山|圣何塞|加州|纽约|新泽西|德克萨斯|德州|达拉斯|休斯顿|西雅图|芝加哥|佛罗里达|迈阿密|波特兰|拉斯维加斯|凤凰城|亚特兰大|盐湖城|波士顿"}
+  - {name: 🇸🇬 新加坡自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)新加坡|狮城"}
+  - {name: 🇹🇼 台湾自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)台湾|台北|新北|台中|高雄|台南|桃园|新竹|基隆|嘉义|彰化|屏东|宜兰|花莲|台东|苗栗|南投|云林|澎湖|金门|马祖"}
+  - {name: 🇩🇪 德国自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)德国|法兰克福|柏林|慕尼黑|汉堡|杜塞尔多夫|科隆|斯图加特|纽伦堡|莱比锡"}
   # --- 1. 默认代理 (总开关) ---
   - {name: 🚀 默认代理, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动 , 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动, 🌐 全部节点]}
-  
+  - {name: ⚡ 自动选择, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"} # 过滤掉明显的中国大陆节点，优先选择海外节点
   # --- 2. AI 服务 ---
   - {name: 🤖 OpenAI, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
   - {name: ✨ Gemini, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
@@ -137,17 +145,9 @@ proxy-groups:
   - {name: 🚫 广告拦截, type: select, proxies: [REJECT, DIRECT]}
   - {name: 🐟 漏网之鱼, type: select, proxies: [🚀 默认代理, DIRECT, ⚡ 自动选择]}
 
-  # --- 7. 底层自动选优策略 ---
-  - {name: ⚡ 自动选择, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"} # 过滤掉明显的中国大陆节点，优先选择海外节点
   - {name: 🌐 全部节点, type: select, include-all: true}
   
-  - {name: 🇭🇰 香港自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)香港"}
-  - {name: 🇲🇴 澳门自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)澳门|澳門"}
-  - {name: 🇯🇵 日本自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)日本|东京|大阪|埼玉|京都|福冈|名古屋|札幌"}
-  - {name: 🇺🇸 美国自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)美国|弗吉尼亚|维吉尼亚|阿什本|洛杉矶|旧金山|圣何塞|加州|纽约|新泽西|德克萨斯|德州|达拉斯|休斯顿|西雅图|芝加哥|佛罗里达|迈阿密|波特兰|拉斯维加斯|凤凰城|亚特兰大|盐湖城|波士顿"}
-  - {name: 🇸🇬 新加坡自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)新加坡|狮城"}
-  - {name: 🇹🇼 台湾自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)台湾|台北|新北|台中|高雄|台南|桃园|新竹|基隆|嘉义|彰化|屏东|宜兰|花莲|台东|苗栗|南投|云林|澎湖|金门|马祖"}
-  - {name: 🇩🇪 德国自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)德国|法兰克福|柏林|慕尼黑|汉堡|杜塞尔多夫|科隆|斯图加特|纽伦堡|莱比锡"}
+ 
 
 # ==========================================================
 # 规则匹配 (Rules) 

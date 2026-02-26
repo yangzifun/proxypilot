@@ -100,6 +100,16 @@ rule-anchor:
 # 出站策略 (Proxy Groups)
 # ==========================================================
 proxy-groups:
+  # 地区分组自动筛选 (基于正则匹配节点名)
+  - {name: 🇭🇰 香港自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)香港"}
+  - {name: 🇲🇴 澳门自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)澳门|澳門"}
+  - {name: 🇯🇵 日本自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)日本|东京|大阪|埼玉|京都|福冈|名古屋|札幌"}
+  - {name: 🇺🇸 美国自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)美国|弗吉尼亚|维吉尼亚|阿什本|洛杉矶|旧金山|圣何塞|加州|纽约|新泽西|德克萨斯|德州|达拉斯|休斯顿|西雅图|芝加哥|佛罗里达|迈阿密|波特兰|拉斯维加斯|凤凰城|亚特兰大|盐湖城|波士顿"}
+  - {name: 🇸🇬 新加坡自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)新加坡|狮城"}
+  - {name: 🇹🇼 台湾自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)台湾|台北|新北|台中|高雄|台南|桃园|新竹|基隆|嘉义|彰化|屏东|宜兰|花莲|台东|苗栗|南投|云林|澎湖|金门|马祖"}
+  - {name: 🇩🇪 德国自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)德国|法兰克福|柏林|慕尼黑|汉堡|杜塞尔多夫|科隆|斯图加特|纽伦堡|莱比锡"}
+  - {name: 🇨🇳 中国自动, type: url-test, url: 'https://www.apple.com/library/test/success.html', include-all: true, tolerance: 20, interval: 300, filter: "(?i)中国|China|CN|回国|北京|上海|广州|深圳|杭州|成都|南京|武汉|天津|重庆|西安|苏州|江苏|浙江|广东|山东|福建|安徽|河南|湖北|湖南|江西|河北|山西|辽宁|吉林|黑龙江|海南|四川|贵州|云南|甘肃|青海|内蒙古|广西|西藏|宁夏|新疆"}
+
   # --- 1. 默认代理 (总开关) ---
   # 兜底使用的代理组，如果下方具体服务没命中，则默认走这里
   - {name: 🚀 默认代理, type: select,include-all: true, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动, 🌐 全部节点]}
@@ -157,15 +167,6 @@ proxy-groups:
   - {name: 🌐 全部节点, type: select, include-all: true}
   - {name: 🏠 内网转发, type: select, include-all: true, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择]} #选择内网节点代理进入内网
  
-  # 地区分组自动筛选 (基于正则匹配节点名)
-  - {name: 🇭🇰 香港自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)香港"}
-  - {name: 🇲🇴 澳门自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)澳门|澳門"}
-  - {name: 🇯🇵 日本自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)日本|东京|大阪|埼玉|京都|福冈|名古屋|札幌"}
-  - {name: 🇺🇸 美国自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)美国|弗吉尼亚|维吉尼亚|阿什本|洛杉矶|旧金山|圣何塞|加州|纽约|新泽西|德克萨斯|德州|达拉斯|休斯顿|西雅图|芝加哥|佛罗里达|迈阿密|波特兰|拉斯维加斯|凤凰城|亚特兰大|盐湖城|波士顿"}
-  - {name: 🇸🇬 新加坡自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)新加坡|狮城"}
-  - {name: 🇹🇼 台湾自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)台湾|台北|新北|台中|高雄|台南|桃园|新竹|基隆|嘉义|彰化|屏东|宜兰|花莲|台东|苗栗|南投|云林|澎湖|金门|马祖"}
-  - {name: 🇩🇪 德国自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)德国|法兰克福|柏林|慕尼黑|汉堡|杜塞尔多夫|科隆|斯图加特|纽伦堡|莱比锡"}
-  - {name: 🇨🇳 中国自动, type: url-test, url: 'https://www.apple.com/library/test/success.html', include-all: true, tolerance: 20, interval: 300, filter: "(?i)中国|China|CN|回国|北京|上海|广州|深圳|杭州|成都|南京|武汉|天津|重庆|西安|苏州|江苏|浙江|广东|山东|福建|安徽|河南|湖北|湖南|江西|河北|山西|辽宁|吉林|黑龙江|海南|四川|贵州|云南|甘肃|青海|内蒙古|广西|西藏|宁夏|新疆"}
 
 
 # ==========================================================
