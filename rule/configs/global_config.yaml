@@ -155,7 +155,7 @@ proxy-groups:
 rules:
   - RULE-SET,category-ads-all,🚫 广告拦截
   - RULE-SET,private_domain,DIRECT
-  - RULE-SET,custom_direct,🎯 直连
+  - RULE-SET,custom_direct,DIRECT
   - GEOIP,LAN,DIRECT
 
   - RULE-SET,openai,🤖 OpenAI
