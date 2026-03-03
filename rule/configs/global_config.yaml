@@ -155,6 +155,7 @@ proxy-groups:
 rules:
   - RULE-SET,category-ads-all,🚫 广告拦截
   - RULE-SET,private_domain,DIRECT
+  - RULE-SET,custom_direct,🎯 直连
   - GEOIP,LAN,DIRECT
 
   - RULE-SET,openai,🤖 OpenAI
@@ -216,6 +217,7 @@ rules:
 # ==========================================================
 rule-providers:
   private_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs"}
+  custom_direct: { <<: *class, url: "https://github.com/yangzifun/proxypilot/raw/refs/heads/main/rule/direct.list"}
   proxylite: { <<: *class, url: "https://github.com/yangzifun/proxypilot/raw/refs/heads/main/rule/proxy.list"}
   category-ads-all: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ads-all.mrs"}
   openai: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/openai.mrs" }
