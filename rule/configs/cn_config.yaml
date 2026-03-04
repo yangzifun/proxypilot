@@ -104,7 +104,7 @@ proxy-groups:
   - {name: 🚫 广告拦截, type: select, proxies: [REJECT, DIRECT]}
 
   # --- 地区自动选优策略 ---
-  - {name: ⚡ 自动选择, type: url-test, include-all: true, filter: "(?i)上海|SH|Shanghai|北京|BJ|Beijing|深圳|SZ|Shenzhen|广州|GD|Guangzhou|杭州|HZ|Hangzhou|江苏|JS|Jiangsu|浙江|ZJ|Zhejiang|中国|CN|China|香港|HK|HongKong", url: "http://cp.cloudflare.com/generate_204", interval: 300}
+  - {name: ⚡ 自动选择, type: url-test, include-all: true, filter: "(?i)回国|上海|SH|Shanghai|北京|BJ|Beijing|深圳|SZ|Shenzhen|广州|GD|Guangzhou|杭州|HZ|Hangzhou|江苏|JS|Jiangsu|浙江|ZJ|Zhejiang|中国|CN|China|香港|HK|HongKong", url: "http://cp.cloudflare.com/generate_204", interval: 300}
   
   - {name: 🏙️ 上海自动, type: url-test, include-all: true, filter: "(?i)上海|SH|Shanghai", url: "http://connect.rom.miui.com/generate_204", interval: 300}
   
