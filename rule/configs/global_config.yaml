@@ -64,7 +64,7 @@ tun:
 # ==========================================================
 # DNS模块
 # ==========================================================
-  dns:
+dns:
   enable: true
   listen: 0.0.0.0:1053
   ipv6: false
@@ -77,15 +77,24 @@ tun:
     - "+.msftncsi.com"
     - "time.*.com"
   
+  # 默认 DNS，用于解析 DNS Over HTTPS 的域名
   default-nameserver:
     - 223.5.5.5
     - 119.29.29.29
+  
+  # 代理节点域名解析
   proxy-server-nameserver:
     - https://dns.alidns.com/dns-query
-    - https://doh.pub/dns-query
+  
+  # 国内解析：使用国内高可靠 DNS
   nameserver:
-    - 223.5.5.5
-    - 223.6.6.6
+    - https://dns.alidns.com/dns-query
+    - https://doh.pub/dns-query
+  
+  # 分流解析：国内域名强制走国内 DNS，国外走国外 DNS
+  nameserver-policy:
+    "geosite:cn,private": [https://dns.alidns.com/dns-query, https://doh.pub/dns-query]
+    "geosite:geolocation-!cn": [https://dns.cloudflare.com/dns-query, https://dns.google/dns-query]
  
 # ==========================================================
 # 锚点配置
