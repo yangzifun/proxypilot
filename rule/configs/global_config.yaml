@@ -84,17 +84,14 @@ tun:
   
   # 代理节点域名解析
   proxy-server-nameserver:
-    - https://dns.alidns.com/dns-query
+    "geosite:cn,private": [https://dns.alidns.com/dns-query, https://doh.pub/dns-query]
+    "geosite:geolocation-!cn": [https://dns.cloudflare.com/dns-query, https://dns.google/dns-query]
   
   # 国内解析：使用国内高可靠 DNS
   nameserver:
     - https://dns.alidns.com/dns-query
     - https://doh.pub/dns-query
-  
-  # 分流解析：国内域名强制走国内 DNS，国外走国外 DNS
-  nameserver-policy:
-    "geosite:cn,private": [https://dns.alidns.com/dns-query, https://doh.pub/dns-query]
-    "geosite:geolocation-!cn": [https://dns.cloudflare.com/dns-query, https://dns.google/dns-query]
+    
  
 # ==========================================================
 # 锚点配置
