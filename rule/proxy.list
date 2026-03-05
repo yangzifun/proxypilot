@@ -37,3 +37,7 @@ DOMAIN-SUFFIX,cn.bing.com
 # 视频下载
 DOMAIN-SUFFIX,ssvid.app
 DOMAIN-SUFFIX,ssstwitter.com
+
+# 谷歌Play下载
+
+DOMAIN-SUFFIX,googleapis.cn
