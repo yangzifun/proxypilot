@@ -77,21 +77,15 @@ tun:
     - "+.msftncsi.com"
     - "time.*.com"
   
-  # 默认 DNS，用于解析 DNS Over HTTPS 的域名
   default-nameserver:
     - 223.5.5.5
     - 119.29.29.29
-  
-  # 代理节点域名解析
   proxy-server-nameserver:
-    "geosite:cn,private": [https://dns.alidns.com/dns-query, https://doh.pub/dns-query]
-    "geosite:geolocation-!cn": [https://dns.cloudflare.com/dns-query, https://dns.google/dns-query]
-  
-  # 国内解析：使用国内高可靠 DNS
-  nameserver:
     - https://dns.alidns.com/dns-query
     - https://doh.pub/dns-query
-    
+  nameserver:
+    - 223.5.5.5
+    - 223.6.6.6
  
 # ==========================================================
 # 锚点配置
