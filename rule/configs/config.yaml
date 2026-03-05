@@ -217,15 +217,7 @@ rules:
   - RULE-SET,ea_domain,🎮 EA
   - RULE-SET,sony_domain,🎮 PlayStation
 
-# 7.地区分流直接调用自动选择分组
-  - GEOIP,HK,🇭🇰 香港自动,no-resolve
-  - GEOIP,TW,🇹🇼 台湾自动,no-resolve
-  - GEOIP,JP,🇯🇵 日本自动,no-resolve
-  - GEOIP,SG,🇸🇬 新加坡自动,no-resolve
-  - GEOIP,US,🇺🇸 美国自动,no-resolve
-  - GEOIP,DE,🇩🇪 德国自动,no-resolve
-
-# 8.中国大陆分流
+# 7.中国大陆分流
   - RULE-SET,bilibili_domain,🎬 大陆视频
   - RULE-SET,iqiyi_domain,🎬 大陆视频
   - RULE-SET,sina_domain,🇨🇳 中国大陆
@@ -234,12 +226,12 @@ rules:
   - RULE-SET,cn_domain,🇨🇳 中国大陆
   - RULE-SET,cn_ip,🇨🇳 中国大陆,no-resolve
 
-# 9.直连补充
+# 8.直连补充
   - RULE-SET,private_domain,🎯 直连
   - RULE-SET,custom_direct,🎯 直连
   - GEOIP,LAN,🎯 直连  
 
-# 10.兜底
+# 9.兜底
 
   - RULE-SET,gfw_domain,🚀 默认代理
   - MATCH,🐟 漏网之鱼

@@ -16,7 +16,7 @@ mixed-port: 7893
 tproxy-port: 7894
 allow-lan: true
 bind-address: "*"
-ipv6: false
+ipv6: true
 unified-delay: true
 tcp-concurrent: true
 log-level: warning
@@ -35,6 +35,7 @@ profile:
 # ==========================================================
 sniffer:
   enable: true
+  parse-pure-ip: true # 建议开启，处理纯 IP 访问的情况
   sniff:
     HTTP:
       ports: [80, 8080-8880]
@@ -43,10 +44,11 @@ sniffer:
       ports: [443, 8443]
     QUIC:
       ports: [443, 8443]
-  force-domain:
-    - "+.v2ex.com"
   skip-domain:
+    - "Mijia Cloud"
+    - "dlg.io.mi.com"
     - "+.baidu.com"
+    - "+.apple.com" # 苹果服务建议直连且跳过嗅探以防异常
 
 # ==========================================================
 # 入站  
@@ -62,29 +64,37 @@ tun:
 # ==========================================================
 # DNS模块
 # ==========================================================
-dns:
+  dns:
   enable: true
   listen: 0.0.0.0:1053
   ipv6: false
   respect-rules: true
   fake-ip-range: 28.0.0.1/8
-  fake-ip-filter-mode: blacklist
+  enhanced-mode: fake-ip
   fake-ip-filter:
-    - "rule-set:private_domain,cn_domain"
+    - "rule-set:private_domain,cn_domain" # 确保国内域名不返回 Fake-IP
     - "+.msftconnecttest.com"
     - "+.msftncsi.com"
     - "time.*.com"
-    - "+.market.xiaomi.com"
+  
+  # 默认 DNS，用于解析 DNS Over HTTPS 的域名
   default-nameserver:
-   - 223.5.5.5
-   - 223.6.6.6
+    - 223.5.5.5
+    - 119.29.29.29
+  
+  # 代理节点域名解析
   proxy-server-nameserver:
     - https://dns.alidns.com/dns-query
-    - https://doh.pub/dns-query
-  # namesever尽量用运营商提供的DNS
+  
+  # 国内解析：使用国内高可靠 DNS
   nameserver:
-    - 8.8.8.8
-    - 1.1.1.1
+    - https://dns.alidns.com/dns-query
+    - https://doh.pub/dns-query
+  
+  # 分流解析：国内域名强制走国内 DNS，国外走国外 DNS
+  nameserver-policy:
+    "geosite:cn,private": [https://dns.alidns.com/dns-query, https://doh.pub/dns-query]
+    "geosite:geolocation-!cn": [https://dns.cloudflare.com/dns-query, https://dns.google/dns-query]
  
 # ==========================================================
 # 锚点配置
@@ -107,7 +117,7 @@ proxy-groups:
   - {name: 🇹🇼 台湾自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)台湾|台北|新北|台中|高雄|台南|桃园|新竹|基隆|嘉义|彰化|屏东|宜兰|花莲|台东|苗栗|南投|云林|澎湖|金门|马祖"}
   - {name: 🇩🇪 德国自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)德国|法兰克福|柏林|慕尼黑|汉堡|杜塞尔多夫|科隆|斯图加特|纽伦堡|莱比锡"}
   # --- 1. 默认代理 (总开关) ---
-  - {name: 🚀 默认代理, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动 , 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动, 🌐 全部节点]}
+  - {name: 🚀 默认代理, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动 , 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
   - {name: ⚡ 自动选择, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"} # 过滤掉明显的中国大陆节点，优先选择海外节点
   # --- 2. AI 服务 ---
   - {name: 🤖 OpenAI, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
@@ -129,7 +139,7 @@ proxy-groups:
   - {name: 🎞️ Disney+, type: select, proxies: [🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
   - {name: 🎵 TikTok, type: select, proxies: [🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
   - {name: 📺 更多流媒体, type: select, proxies: [⚡ 自动选择, 🚀 默认代理, 🇭🇰 香港自动 , 🇲🇴 澳门自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇺🇸 美国自动]}
-  - {name: 🎧 Spotify, type: select, proxies: [DIRECT, 🚀 默认代理, ⚡ 自动选择]} 
+  - {name: 🎧 Spotify, type: select, proxies: [🚀 默认代理, ⚡ 自动选择]} 
   
   # --- 5. 游戏服务 ---
   - {name: 🎮 Steam, type: select, proxies: [⚡ 自动选择, 🚀 默认代理, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇭🇰 香港自动 , 🇲🇴 澳门自动]}
@@ -140,12 +150,11 @@ proxy-groups:
 
   # --- 6. 基础工具 ---
   - {name: 🔍 Google, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动 , 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
-  - {name: 🚀 Speedtest, type: select, proxies: [DIRECT, 🚀 默认代理, ⚡ 自动选择]}
+  - {name: 🚀 Speedtest, type: select, proxies: [🚀 默认代理, ⚡ 自动选择, DIRECT]}
   - {name: 💳 PayPal, type: select, proxies: [⚡ 自动选择, 🇺🇸 美国自动, 🇭🇰 香港自动 , 🇲🇴 澳门自动, 🇩🇪 德国自动, DIRECT]}
   - {name: 🚫 广告拦截, type: select, proxies: [REJECT, DIRECT]}
-  - {name: 🐟 漏网之鱼, type: select, proxies: [🚀 默认代理, DIRECT, ⚡ 自动选择]}
+  - {name: 🐟 漏网之鱼, type: select, proxies: [🚀 默认代理, DIRECT, ⚡ 自动选择, 🇭🇰 香港自动 , 🇲🇴 澳门自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
 
-  - {name: 🌐 全部节点, type: select, include-all: true}
   
  
 
@@ -156,7 +165,12 @@ rules:
   - RULE-SET,category-ads-all,🚫 广告拦截
   - RULE-SET,private_domain,DIRECT
   - RULE-SET,custom_direct,DIRECT
-  - GEOIP,LAN,DIRECT
+  - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
+  - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
+  - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve
+  # 中国大陆服务全部走 DIRECT
+  - RULE-SET,cn_domain,DIRECT
+  - RULE-SET,cn_ip,DIRECT,no-resolve
 
   - RULE-SET,openai,🤖 OpenAI
   - RULE-SET,gemini,✨ Gemini
@@ -182,7 +196,7 @@ rules:
   - RULE-SET,google_domain,🔍 Google
   - RULE-SET,onedrive_domain,🟦 Microsoft
   - RULE-SET,microsoft_domain,🟦 Microsoft
-  - RULE-SET,apple_domain,DIRECT
+  - RULE-SET,apple_domain,🚀 默认代理
   
   - RULE-SET,steam_domain,🎮 Steam
   - RULE-SET,ubisoft_domain,🎮 Ubisoft
@@ -191,24 +205,11 @@ rules:
   - RULE-SET,sony_domain,🎮 PlayStation
   - RULE-SET,speedtest_domain,🚀 Speedtest
   - RULE-SET,paypal_domain,💳 PayPal
-  - RULE-SET,proxylite,🚀 默认代理
   - RULE-SET,gfw_domain,🚀 默认代理
   
-  - GEOIP,HK,🇭🇰 香港自动,no-resolve
-  - GEOIP,MO,🇲🇴 澳门自动,no-resolve
-  - GEOIP,TW,🇹🇼 台湾自动,no-resolve
-  - GEOIP,JP,🇯🇵 日本自动,no-resolve
-  - GEOIP,SG,🇸🇬 新加坡自动,no-resolve
-  - GEOIP,US,🇺🇸 美国自动,no-resolve
-  - GEOIP,DE,🇩🇪 德国自动,no-resolve
-
   - RULE-SET,google_ip,🔍 Google,no-resolve
   - RULE-SET,telegram_ip,📲 Telegram,no-resolve
   - RULE-SET,netflix_ip,🎥 Netflix,no-resolve
-
-  # 中国大陆服务全部走 DIRECT
-  - RULE-SET,cn_domain,DIRECT
-  - RULE-SET,cn_ip,DIRECT,no-resolve
 
   - MATCH,🐟 漏网之鱼
 
@@ -218,7 +219,6 @@ rules:
 rule-providers:
   private_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs"}
   custom_direct: { <<: *class, url: "https://github.com/yangzifun/proxypilot/raw/refs/heads/main/rule/direct.list"}
-  proxylite: { <<: *class, url: "https://github.com/yangzifun/proxypilot/raw/refs/heads/main/rule/proxy.list"}
   category-ads-all: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ads-all.mrs"}
   openai: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/openai.mrs" }
   gemini: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/google-gemini.mrs" }
