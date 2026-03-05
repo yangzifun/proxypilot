@@ -210,7 +210,13 @@ rules:
   - RULE-SET,paypal_domain,💳 PayPal
   - RULE-SET,gfw_domain,🚀 默认代理
   
-
+  - GEOIP,HK,🇭🇰 香港自动,no-resolve
+  - GEOIP,MO,🇲🇴 澳门自动,no-resolve
+  - GEOIP,TW,🇹🇼 台湾自动,no-resolve
+  - GEOIP,JP,🇯🇵 日本自动,no-resolve
+  - GEOIP,SG,🇸🇬 新加坡自动,no-resolve
+  - GEOIP,US,🇺🇸 美国自动,no-resolve
+  - GEOIP,DE,🇩🇪 德国自动,no-resolve
 
   - MATCH,🐟 漏网之鱼
 
