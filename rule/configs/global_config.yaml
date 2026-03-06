@@ -171,6 +171,7 @@ rules:
   - RULE-SET,google_ip,🔍 Google,no-resolve
   - RULE-SET,telegram_ip,📲 Telegram,no-resolve
   - RULE-SET,netflix_ip,🎥 Netflix,no-resolve
+  - RULE-SET,google_domain,🔍 Google
   # 中国大陆服务全部走 DIRECT
   - RULE-SET,cn_domain,DIRECT
   - RULE-SET,cn_ip,DIRECT,no-resolve
@@ -194,9 +195,8 @@ rules:
   - RULE-SET,viu_domain,📺 更多流媒体
   - RULE-SET,twitch_domain,📺 更多流媒体
   - RULE-SET,spotify_domain,🎧 Spotify
-
   - RULE-SET,github_domain,🐱 GitHub
-  - RULE-SET,google_domain,🔍 Google
+  
   - RULE-SET,onedrive_domain,🟦 Microsoft
   - RULE-SET,microsoft_domain,🟦 Microsoft
   - RULE-SET,apple_domain,🚀 默认代理
