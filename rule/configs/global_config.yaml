@@ -178,7 +178,6 @@ rules:
   - RULE-SET,gemini,✨ Gemini
   - RULE-SET,claude,🧠 Claude
   - RULE-SET,ai,🌌 常用 AI
-  - RULE-SET,gfw_domain,🚀 默认代理
   - RULE-SET,telegram_domain,📲 Telegram
   - RULE-SET,facebook_domain,🌏 Meta
   - RULE-SET,instagram_domain,🌏 Meta
@@ -213,7 +212,7 @@ rules:
   - GEOIP,US,🇺🇸 美国自动,no-resolve
   - GEOIP,DE,🇩🇪 德国自动,no-resolve
   - RULE-SET,cn_ip,DIRECT,no-resolve
-
+  - RULE-SET,gfw_domain,🚀 默认代理
   - MATCH,🐟 漏网之鱼
 
 # ==========================================================
