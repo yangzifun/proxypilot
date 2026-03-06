@@ -171,8 +171,6 @@ rules:
   - RULE-SET,google_ip,🔍 Google,no-resolve
   - RULE-SET,telegram_ip,📲 Telegram,no-resolve
   - RULE-SET,netflix_ip,🎥 Netflix,no-resolve
-  - RULE-SET,google_domain,🔍 Google
-  - RULE-SET,gfw_domain,🚀 默认代理
   # 中国大陆服务全部走 DIRECT
   - RULE-SET,cn_domain,DIRECT
 
@@ -180,7 +178,7 @@ rules:
   - RULE-SET,gemini,✨ Gemini
   - RULE-SET,claude,🧠 Claude
   - RULE-SET,ai,🌌 常用 AI
-  
+  - RULE-SET,gfw_domain,🚀 默认代理
   - RULE-SET,telegram_domain,📲 Telegram
   - RULE-SET,facebook_domain,🌏 Meta
   - RULE-SET,instagram_domain,🌏 Meta
@@ -196,6 +194,7 @@ rules:
   - RULE-SET,twitch_domain,📺 更多流媒体
   - RULE-SET,spotify_domain,🎧 Spotify
   - RULE-SET,github_domain,🐱 GitHub
+  - RULE-SET,google_domain,🔍 Google
   - RULE-SET,onedrive_domain,🟦 Microsoft
   - RULE-SET,microsoft_domain,🟦 Microsoft
   - RULE-SET,apple_domain,🚀 默认代理
