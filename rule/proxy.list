@@ -38,6 +38,16 @@ DOMAIN-SUFFIX,cn.bing.com
 DOMAIN-SUFFIX,ssvid.app
 DOMAIN-SUFFIX,ssstwitter.com
 
-# 谷歌Play下载
-
+# 谷歌Play下载及组件支持
 DOMAIN-SUFFIX,googleapis.cn
+DOMAIN-SUFFIX,gvt1.com
+DOMAIN-SUFFIX,gvt2.com
+DOMAIN-SUFFIX,gvt3.com
+DOMAIN-SUFFIX,gvt4.com
+DOMAIN-SUFFIX,gvt1.net
+DOMAIN-SUFFIX,ggpht.com
+DOMAIN-SUFFIX,googleusercontent.com
+DOMAIN-SUFFIX,android.clients.google.com
+DOMAIN-SUFFIX,play.google.com
+DOMAIN-SUFFIX,play.googleapis.com
+DOMAIN-SUFFIX,mtalk.google.com
