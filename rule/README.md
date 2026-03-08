@@ -22,6 +22,27 @@
 | `legacy_config.yaml` | 旧版内核兼容 | 移除 TUN/嗅探/MRS/include-all，使用传统 rules | 传统 Clash 内核 |
 | `test.yaml` | 测试模板 | 实验性全量模板，供调试验证 | Mihomo / Clash Meta |
 
+## 与 `config.yaml` 的差异对比
+
+`config.yaml` 可视为“默认基线模板”。下表描述其余模板相对 `config.yaml` 的主要差异：
+
+| 模板 | 相对 `config.yaml` 的主要差异 | 典型取舍 |
+|---|---|---|
+| `full_config.yaml` | 区域分组更全（更多国家/地区自动组） | 更细分、更重，适合海外全场景 |
+| `global_config.yaml` | 大陆域名/IP 更偏向直连，策略重点转向海外服务 | 国内访问更直接，海外分流更集中 |
+| `lite_config.yaml` | 分组与规则聚合，减少分类粒度 | 资源占用更低，但精细控制下降 |
+| `global_lite_config.yaml` | 在轻量基础上强化“海外代理 + 大陆直连” | 轻量全球访问，场景更偏海外 |
+| `cn_config.yaml` | 目标从“出海”变为“回国”；国内服务优先走回国链路 | 海外访问国内更稳，海外服务处理更简单 |
+| `cn_full_config.yaml` | 仅中国服务走代理，非中国流量直连 | 节省代理流量，回国场景更纯粹 |
+| `geoip_config.yaml` | 以 IP 国家分流为核心（GEOIP 权重更高） | 国家级路由更明确，域名细分相对少 |
+| `load-balance_config.yaml` | 引入负载均衡策略（consistent-hashing/round-robin） | 多节点吞吐更好，但策略复杂度更高 |
+| `stream_config.yaml` | 流媒体服务独立分组，观影相关规则优先 | 视频体验更好，通用性相对下降 |
+| `internal_config.yaml` | 增加内网访问相关策略组与规则 | 企业/家庭内网访问更方便 |
+| `ios_config.yaml` | 面向 iOS 内存限制做策略与规模优化 | iOS 稳定性更好，规则规模相对克制 |
+| `no_region_config.yaml` | 弱化固定地区组依赖，偏通用自动分流 | 迁移订阅更省心，地区手动控制较少 |
+| `legacy_config.yaml` | 移除 tun/sniffer/rule-providers/mrs/include-all，使用传统 `rules` | 兼容旧内核，自动化与精细度明显下降 |
+| `test.yaml` | 实验性全量模板，用于测试新规则/新组合 | 功能前沿但稳定性不作主模板保证 |
+
 ## 重要兼容性说明
 
 - `config.yaml`、`full_config.yaml`、`global_config.yaml` 等主模板依赖以下能力：
