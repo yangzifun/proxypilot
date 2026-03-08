@@ -169,6 +169,7 @@ rules:
   - RULE-SET,google_ip,🔍 Google,no-resolve
   - RULE-SET,telegram_ip,📲 Telegram,no-resolve
   - RULE-SET,netflix_ip,🎥 Netflix,no-resolve
+  - RULE-SET,proxylite,🚀 默认代理
   # 中国大陆服务全部走 DIRECT
   - RULE-SET,cn_domain,DIRECT
 
@@ -217,6 +218,7 @@ rules:
 # 规则源 (保持不变，确保解析正常)
 # ==========================================================
 rule-providers:
+  proxylite: { <<: *class, url: "https://github.com/yangzifun/proxypilot/raw/refs/heads/main/rule/proxy.list"}
   private_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs"}
   custom_direct: { <<: *class, url: "https://github.com/yangzifun/proxypilot/raw/refs/heads/main/rule/direct.list"}
   category-ads-all: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ads-all.mrs"}
