@@ -1,0 +1,165 @@
+# 更新时间: 2026-03-08
+# 模板类型: 旧版本兼容模板（传统 Clash 内核）
+# 作者: YZFN
+# ==========================================================
+# 说明
+# 1. 本模板移除了 tun/sniffer/rule-provider/mrs/include-all 等新特性。
+# 2. 适用于旧版 Clash 内核（如部分老版本 Clash for Windows / ClashX）。
+# 3. 请先替换下方 proxies 中的示例节点，再使用。
+# ==========================================================
+
+# ==========================================================
+# 全局配置
+# ==========================================================
+port: 7890
+socks-port: 7891
+redir-port: 7892
+allow-lan: true
+bind-address: "*"
+mode: rule
+log-level: warning
+ipv6: false
+
+profile:
+  store-selected: true
+
+# ==========================================================
+# DNS（旧版兼容写法）
+# ==========================================================
+dns:
+  enable: true
+  listen: 0.0.0.0:1053
+  ipv6: false
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  default-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+  nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+  fallback:
+    - 1.1.1.1
+    - 8.8.8.8
+
+# ==========================================================
+# 节点（示例，使用前请替换）
+# ==========================================================
+proxies:
+  - {name: 节点A, type: ss, server: 1.2.3.4, port: 443, cipher: aes-128-gcm, password: "password"}
+  - {name: 节点B, type: ss, server: 5.6.7.8, port: 443, cipher: aes-128-gcm, password: "password"}
+  - {name: 节点C, type: ss, server: 9.9.9.9, port: 443, cipher: aes-128-gcm, password: "password"}
+
+# ==========================================================
+# 策略组（旧版兼容写法，不使用 include-all）
+# ==========================================================
+proxy-groups:
+  - {name: PROXY, type: select, proxies: [AUTO, 节点A, 节点B, 节点C, DIRECT]}
+  - {name: AUTO, type: url-test, url: "http://www.gstatic.com/generate_204", interval: 300, tolerance: 50, proxies: [节点A, 节点B, 节点C]}
+  - {name: AI, type: select, proxies: [PROXY, AUTO, 节点A, 节点B, 节点C]}
+  - {name: SOCIAL, type: select, proxies: [PROXY, AUTO, 节点A, 节点B, 节点C]}
+  - {name: STREAM, type: select, proxies: [PROXY, AUTO, 节点A, 节点B, 节点C]}
+  - {name: GOOGLE, type: select, proxies: [PROXY, AUTO, 节点A, 节点B, 节点C]}
+  - {name: MICROSOFT, type: select, proxies: [DIRECT, PROXY, AUTO]}
+  - {name: GAME, type: select, proxies: [DIRECT, PROXY, AUTO]}
+  - {name: PAYPAL, type: select, proxies: [PROXY, AUTO, DIRECT]}
+  - {name: AD-BLOCK, type: select, proxies: [REJECT, DIRECT]}
+  - {name: FINAL, type: select, proxies: [PROXY, DIRECT]}
+
+# ==========================================================
+# 规则（传统规则，避免 RULE-SET 依赖）
+# ==========================================================
+rules:
+  # 广告
+  - DOMAIN-KEYWORD,doubleclick,AD-BLOCK
+  - DOMAIN-KEYWORD,googlesyndication,AD-BLOCK
+  - DOMAIN-SUFFIX,adservice.google.com,AD-BLOCK
+  - DOMAIN-SUFFIX,googleadservices.com,AD-BLOCK
+
+  # 私有网络
+  - IP-CIDR,127.0.0.0/8,DIRECT,no-resolve
+  - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
+  - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve
+  - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
+  - GEOIP,LAN,DIRECT
+
+  # 自定义直连补充
+  - DOMAIN-SUFFIX,baidu.com,DIRECT
+  - DOMAIN-SUFFIX,yangzihome.space,DIRECT
+  - DOMAIN-SUFFIX,alicdn.com,DIRECT
+  - DOMAIN-SUFFIX,aliyuncs.com,DIRECT
+  - DOMAIN-SUFFIX,sunglowsec.com,DIRECT
+
+  # 自定义代理补充
+  - DOMAIN-KEYWORD,1e100,GOOGLE
+  - DOMAIN-SUFFIX,dns.google,GOOGLE
+  - DOMAIN-SUFFIX,cloudflare-dns.com,GOOGLE
+  - DOMAIN-SUFFIX,bing.com,PROXY
+  - DOMAIN-SUFFIX,cn.bing.com,PROXY
+  - IP-CIDR,8.8.8.8/32,GOOGLE,no-resolve
+  - IP-CIDR,8.8.4.4/32,GOOGLE,no-resolve
+  - IP-CIDR,1.1.1.1/32,GOOGLE,no-resolve
+  - IP-CIDR,1.0.0.1/32,GOOGLE,no-resolve
+
+  # AI 服务
+  - DOMAIN-SUFFIX,openai.com,AI
+  - DOMAIN-SUFFIX,chatgpt.com,AI
+  - DOMAIN-SUFFIX,oaistatic.com,AI
+  - DOMAIN-SUFFIX,anthropic.com,AI
+  - DOMAIN-SUFFIX,claude.ai,AI
+  - DOMAIN,gemini.google.com,AI
+  - DOMAIN,generativelanguage.googleapis.com,AI
+
+  # 社交办公
+  - DOMAIN-SUFFIX,telegram.org,SOCIAL
+  - DOMAIN-SUFFIX,t.me,SOCIAL
+  - DOMAIN-SUFFIX,facebook.com,SOCIAL
+  - DOMAIN-SUFFIX,instagram.com,SOCIAL
+  - DOMAIN-SUFFIX,twitter.com,SOCIAL
+  - DOMAIN-SUFFIX,x.com,SOCIAL
+  - DOMAIN-SUFFIX,discord.com,SOCIAL
+  - DOMAIN-SUFFIX,github.com,SOCIAL
+
+  # 流媒体
+  - DOMAIN-SUFFIX,youtube.com,STREAM
+  - DOMAIN-SUFFIX,googlevideo.com,STREAM
+  - DOMAIN-SUFFIX,ytimg.com,STREAM
+  - DOMAIN-SUFFIX,netflix.com,STREAM
+  - DOMAIN-SUFFIX,nflxvideo.net,STREAM
+  - DOMAIN-SUFFIX,disneyplus.com,STREAM
+  - DOMAIN-SUFFIX,tiktok.com,STREAM
+  - DOMAIN-SUFFIX,spotify.com,STREAM
+
+  # Google
+  - DOMAIN-SUFFIX,google.com,GOOGLE
+  - DOMAIN-SUFFIX,googleapis.com,GOOGLE
+  - DOMAIN-SUFFIX,gstatic.com,GOOGLE
+  - DOMAIN-SUFFIX,gvt1.com,GOOGLE
+  - DOMAIN-SUFFIX,gvt2.com,GOOGLE
+  - DOMAIN-SUFFIX,gvt3.com,GOOGLE
+  - DOMAIN-SUFFIX,gvt4.com,GOOGLE
+
+  # Microsoft
+  - DOMAIN-SUFFIX,microsoft.com,MICROSOFT
+  - DOMAIN-SUFFIX,live.com,MICROSOFT
+  - DOMAIN-SUFFIX,office.com,MICROSOFT
+  - DOMAIN-SUFFIX,onedrive.com,MICROSOFT
+  - DOMAIN-SUFFIX,windowsupdate.com,MICROSOFT
+
+  # 游戏
+  - DOMAIN-SUFFIX,steampowered.com,GAME
+  - DOMAIN-SUFFIX,steamcommunity.com,GAME
+  - DOMAIN-SUFFIX,epicgames.com,GAME
+  - DOMAIN-SUFFIX,ea.com,GAME
+  - DOMAIN-SUFFIX,ubisoft.com,GAME
+  - DOMAIN-SUFFIX,playstation.com,GAME
+
+  # PayPal
+  - DOMAIN-SUFFIX,paypal.com,PAYPAL
+  - DOMAIN-SUFFIX,paypalobjects.com,PAYPAL
+
+  # 国内直连
+  - GEOIP,CN,DIRECT
+
+  # 兜底
+  - MATCH,FINAL
