@@ -1,4 +1,4 @@
-# 更新时间: 2026-03-05
+﻿# 更新时间: 2026-03-05
 # 模板类型: 全球上网模板 - 针对全球上网需求优化，适用于国际访问
 # 作者: YZFN
 # ==========================================================
@@ -108,50 +108,50 @@ rule-anchor:
 # ==========================================================
 proxy-groups:
 
-  - {name: 🇨🇳 港澳自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)香港|澳门|澳門"}
-  - {name: 🇯🇵 日本自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)日本|东京|大阪|埼玉|京都|福冈|名古屋|札幌"}
-  - {name: 🇺🇸 美国自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)美国|弗吉尼亚|维吉尼亚|阿什本|洛杉矶|旧金山|圣何塞|加州|纽约|新泽西|德克萨斯|德州|达拉斯|休斯顿|西雅图|芝加哥|佛罗里达|迈阿密|波特兰|拉斯维加斯|凤凰城|亚特兰大|盐湖城|波士顿"}
-  - {name: 🇸🇬 新加坡自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)新加坡|狮城"}
-  - {name: 🇹🇼 台湾自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)台湾|台北|新北|台中|高雄|台南|桃园|新竹|基隆|嘉义|彰化|屏东|宜兰|花莲|台东|苗栗|南投|云林|澎湖|金门|马祖"}
-  - {name: 🇩🇪 德国自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)德国|法兰克福|柏林|慕尼黑|汉堡|杜塞尔多夫|科隆|斯图加特|纽伦堡|莱比锡"}
+  - {name: 🇨🇳 港澳, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)香港|澳门|澳門"}
+  - {name: 🇯🇵 日本, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)日本|东京|大阪|埼玉|京都|福冈|名古屋|札幌"}
+  - {name: 🇺🇸 美国, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)美国|弗吉尼亚|维吉尼亚|阿什本|洛杉矶|旧金山|圣何塞|加州|纽约|新泽西|德克萨斯|德州|达拉斯|休斯顿|西雅图|芝加哥|佛罗里达|迈阿密|波特兰|拉斯维加斯|凤凰城|亚特兰大|盐湖城|波士顿"}
+  - {name: 🇸🇬 新加坡, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)新加坡|狮城"}
+  - {name: 🇹🇼 中国台湾, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)台湾|台北|新北|台中|高雄|台南|桃园|新竹|基隆|嘉义|彰化|屏东|宜兰|花莲|台东|苗栗|南投|云林|澎湖|金门|马祖"}
+  - {name: 🇩🇪 德国, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)德国|法兰克福|柏林|慕尼黑|汉堡|杜塞尔多夫|科隆|斯图加特|纽伦堡|莱比锡"}
   # --- 1. 默认代理 (总开关) ---
-  - {name: 🚀 默认代理, type: select, proxies: [⚡ 自动选择, 🇨🇳 港澳自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
+  - {name: 🚀 默认代理, type: select, proxies: [⚡ 自动选择, 🇨🇳 港澳, 🇯🇵 日本, 🇺🇸 美国, 🇸🇬 新加坡, 🇹🇼 中国台湾, 🇩🇪 德国]}
   - {name: ⚡ 自动选择, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"} # 过滤掉明显的中国大陆节点，优先选择海外节点
   # --- 2. AI 服务 ---
-  - {name: 🤖 OpenAI, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
-  - {name: ✨ Gemini, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
-  - {name: 🧠 Claude, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇩🇪 德国自动]}
-  - {name: 🌌 常用 AI, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]} 
+  - {name: 🤖 OpenAI, type: select, proxies: [🇺🇸 美国, 🇯🇵 日本, 🇸🇬 新加坡, 🇹🇼 中国台湾, 🇩🇪 德国]}
+  - {name: ✨ Gemini, type: select, proxies: [🇺🇸 美国, 🇯🇵 日本, 🇸🇬 新加坡, 🇹🇼 中国台湾, 🇩🇪 德国]}
+  - {name: 🧠 Claude, type: select, proxies: [🇺🇸 美国, 🇯🇵 日本, 🇩🇪 德国]}
+  - {name: 🌌 常用 AI, type: select, proxies: [🇺🇸 美国, 🇯🇵 日本, 🇸🇬 新加坡, 🇹🇼 中国台湾, 🇩🇪 德国]} 
   
   # --- 3. 社交与办公 ---
-  - {name: 📲 Telegram, type: select, proxies: [⚡ 自动选择, 🇨🇳 港澳自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
-  - {name: 🌏 Meta, type: select, proxies: [🚀 默认代理, 🇨🇳 港澳自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇺🇸 美国自动]}
-  - {name: 🐦 Twitter, type: select, proxies: [🚀 默认代理, 🇨🇳 港澳自动, 🇯🇵 日本自动, 🇺🇸 美国自动]}
-  - {name: 💬 Discord, type: select, proxies: [🚀 默认代理, 🇺🇸 美国自动, 🇨🇳 港澳自动, 🇩🇪 德国自动]}
-  - {name: 🐱 GitHub, type: select, proxies: [⚡ 自动选择, 🇨🇳 港澳自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇩🇪 德国自动]}
-  - {name: 🟦 Microsoft, type: select, proxies: [DIRECT, 🚀 默认代理, ⚡ 自动选择, 🇨🇳 港澳自动, 🇯🇵 日本自动, 🇺🇸 美国自动]} 
+  - {name: 📲 Telegram, type: select, proxies: [⚡ 自动选择, 🇨🇳 港澳, 🇯🇵 日本, 🇺🇸 美国, 🇸🇬 新加坡, 🇹🇼 中国台湾, 🇩🇪 德国]}
+  - {name: 🌏 Meta, type: select, proxies: [🚀 默认代理, 🇨🇳 港澳, 🇹🇼 中国台湾, 🇯🇵 日本, 🇺🇸 美国]}
+  - {name: 🐦 Twitter, type: select, proxies: [🚀 默认代理, 🇨🇳 港澳, 🇯🇵 日本, 🇺🇸 美国]}
+  - {name: 💬 Discord, type: select, proxies: [🚀 默认代理, 🇺🇸 美国, 🇨🇳 港澳, 🇩🇪 德国]}
+  - {name: 🐱 GitHub, type: select, proxies: [⚡ 自动选择, 🇨🇳 港澳, 🇯🇵 日本, 🇺🇸 美国, 🇩🇪 德国]}
+  - {name: 🟦 Microsoft, type: select, proxies: [DIRECT, 🚀 默认代理, ⚡ 自动选择, 🇨🇳 港澳, 🇯🇵 日本, 🇺🇸 美国]} 
 
   # --- 4. 流媒体与娱乐 ---
-  - {name: 🎬 YouTube, type: select, proxies: [⚡ 自动选择, 🇨🇳 港澳自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
-  - {name: 🎥 Netflix, type: select, proxies: [⚡ 自动选择, 🇨🇳 港澳自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
-  - {name: 🎞️ Disney+, type: select, proxies: [🇨🇳 港澳自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
-  - {name: 🎵 TikTok, type: select, proxies: [🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
-  - {name: 📺 更多流媒体, type: select, proxies: [⚡ 自动选择, 🚀 默认代理, 🇨🇳 港澳自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🇺🇸 美国自动]}
+  - {name: 🎬 YouTube, type: select, proxies: [⚡ 自动选择, 🇨🇳 港澳, 🇯🇵 日本, 🇺🇸 美国, 🇸🇬 新加坡, 🇹🇼 中国台湾, 🇩🇪 德国]}
+  - {name: 🎥 Netflix, type: select, proxies: [⚡ 自动选择, 🇨🇳 港澳, 🇯🇵 日本, 🇺🇸 美国, 🇸🇬 新加坡, 🇹🇼 中国台湾, 🇩🇪 德国]}
+  - {name: 🎞️ Disney+, type: select, proxies: [🇨🇳 港澳, 🇯🇵 日本, 🇺🇸 美国, 🇸🇬 新加坡, 🇹🇼 中国台湾, 🇩🇪 德国]}
+  - {name: 🎵 TikTok, type: select, proxies: [🇯🇵 日本, 🇺🇸 美国, 🇸🇬 新加坡, 🇹🇼 中国台湾, 🇩🇪 德国]}
+  - {name: 📺 更多流媒体, type: select, proxies: [⚡ 自动选择, 🚀 默认代理, 🇨🇳 港澳, 🇹🇼 中国台湾, 🇯🇵 日本, 🇸🇬 新加坡, 🇺🇸 美国]}
   - {name: 🎧 Spotify, type: select, proxies: [🚀 默认代理, ⚡ 自动选择]} 
   
   # --- 5. 游戏服务 ---
-  - {name: 🎮 Steam, type: select, proxies: [⚡ 自动选择, 🚀 默认代理, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇨🇳 港澳自动]}
-  - {name: 🎮 Ubisoft, type: select, proxies: [⚡ 自动选择, 🚀 默认代理, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇨🇳 港澳自动]}
-  - {name: 🎮 Epic, type: select, proxies: [⚡ 自动选择, 🚀 默认代理, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇨🇳 港澳自动]}
-  - {name: 🎮 EA, type: select, proxies: [⚡ 自动选择, 🚀 默认代理, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇨🇳 港澳自动]}
-  - {name: 🎮 PlayStation, type: select, proxies: [⚡ 自动选择, 🚀 默认代理, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇨🇳 港澳自动]}
+  - {name: 🎮 Steam, type: select, proxies: [⚡ 自动选择, 🚀 默认代理, 🇯🇵 日本, 🇺🇸 美国, 🇨🇳 港澳]}
+  - {name: 🎮 Ubisoft, type: select, proxies: [⚡ 自动选择, 🚀 默认代理, 🇯🇵 日本, 🇺🇸 美国, 🇨🇳 港澳]}
+  - {name: 🎮 Epic, type: select, proxies: [⚡ 自动选择, 🚀 默认代理, 🇯🇵 日本, 🇺🇸 美国, 🇨🇳 港澳]}
+  - {name: 🎮 EA, type: select, proxies: [⚡ 自动选择, 🚀 默认代理, 🇯🇵 日本, 🇺🇸 美国, 🇨🇳 港澳]}
+  - {name: 🎮 PlayStation, type: select, proxies: [⚡ 自动选择, 🚀 默认代理, 🇯🇵 日本, 🇺🇸 美国, 🇨🇳 港澳]}
 
   # --- 6. 基础工具 ---
-  - {name: 🔍 Google, type: select, proxies: [⚡ 自动选择, 🇨🇳 港澳自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
+  - {name: 🔍 Google, type: select, proxies: [⚡ 自动选择, 🇨🇳 港澳, 🇯🇵 日本, 🇺🇸 美国, 🇸🇬 新加坡, 🇹🇼 中国台湾, 🇩🇪 德国]}
   - {name: 🚀 Speedtest, type: select, proxies: [🚀 默认代理, ⚡ 自动选择, DIRECT]}
-  - {name: 💳 PayPal, type: select, proxies: [⚡ 自动选择, 🇺🇸 美国自动, 🇨🇳 港澳自动, 🇩🇪 德国自动, DIRECT]}
+  - {name: 💳 PayPal, type: select, proxies: [⚡ 自动选择, 🇺🇸 美国, 🇨🇳 港澳, 🇩🇪 德国, DIRECT]}
   - {name: 🚫 广告拦截, type: select, proxies: [REJECT, DIRECT]}
-  - {name: 🐟 漏网之鱼, type: select, proxies: [🚀 默认代理, DIRECT, ⚡ 自动选择, 🇨🇳 港澳自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🇹🇼 台湾自动, 🇩🇪 德国自动]}
+  - {name: 🐟 漏网之鱼, type: select, proxies: [🚀 默认代理, DIRECT, ⚡ 自动选择, 🇨🇳 港澳, 🇯🇵 日本, 🇺🇸 美国, 🇸🇬 新加坡, 🇹🇼 中国台湾, 🇩🇪 德国]}
 
   
  
@@ -202,13 +202,13 @@ rules:
   - RULE-SET,sony_domain,🎮 PlayStation
   - RULE-SET,speedtest_domain,🚀 Speedtest
   - RULE-SET,paypal_domain,💳 PayPal
-  - GEOIP,HK,🇨🇳 港澳自动,no-resolve
-  - GEOIP,MO,🇨🇳 港澳自动,no-resolve
-  - GEOIP,TW,🇹🇼 台湾自动,no-resolve
-  - GEOIP,JP,🇯🇵 日本自动,no-resolve
-  - GEOIP,SG,🇸🇬 新加坡自动,no-resolve
-  - GEOIP,US,🇺🇸 美国自动,no-resolve
-  - GEOIP,DE,🇩🇪 德国自动,no-resolve
+  - GEOIP,HK,🇨🇳 港澳,no-resolve
+  - GEOIP,MO,🇨🇳 港澳,no-resolve
+  - GEOIP,TW,🇹🇼 中国台湾,no-resolve
+  - GEOIP,JP,🇯🇵 日本,no-resolve
+  - GEOIP,SG,🇸🇬 新加坡,no-resolve
+  - GEOIP,US,🇺🇸 美国,no-resolve
+  - GEOIP,DE,🇩🇪 德国,no-resolve
   - RULE-SET,cn_ip,DIRECT,no-resolve
   - RULE-SET,gfw_domain,🚀 默认代理
   - MATCH,🐟 漏网之鱼
@@ -257,3 +257,4 @@ rule-providers:
   telegram_ip: { <<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/telegram.mrs"}
   netflix_ip: { <<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/netflix.mrs"}
   
+
