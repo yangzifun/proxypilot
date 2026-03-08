@@ -167,7 +167,6 @@ rules:
   - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
   - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
   - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve
-  - IP-CIDR,172.0.0.1/8,DIRECT,no-resolve
   - RULE-SET,google_ip,🔍 Google,no-resolve
   - RULE-SET,telegram_ip,📲 Telegram,no-resolve
   - RULE-SET,netflix_ip,🎥 Netflix,no-resolve

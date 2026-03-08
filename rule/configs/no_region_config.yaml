@@ -216,6 +216,10 @@ proxy-groups:
     include-all: true
     filter: "^((?!(直连|中国|China|CN|回国|北京|上海|广州|深圳|杭州|成都|南京|武汉|天津|重庆|西安|苏州|江苏|浙江|广东|山东|福建|安徽|河南|湖北|湖南|江西|河北|山西|辽宁|吉林|黑龙江|海南|四川|贵州|云南|甘肃|青海|内蒙古|广西|西藏|宁夏|新疆)).)*$"
 
+  - name: 📺 更多流媒体
+    type: select
+    proxies: [🚀 默认代理, 🎬 YouTube, 🎥 Netflix, 🎞️ Disney+, 💜 Twitch]
+
   - name: 🎧 Spotify
     type: url-test
     url: 'https://www.gstatic.com/generate_204'
@@ -345,18 +349,18 @@ rules:
   
 # 6. 游戏规则
   - RULE-SET,steam_domain,🎮 Steam
-  - RULE-SET,ubisoft_domain,🎮 Ubisoft
-  - RULE-SET,epic_domain,🎮 Epic
-  - RULE-SET,ea_domain,🎮 EA
+  - RULE-SET,ubisoft_domain,🎮 Steam
+  - RULE-SET,epic_domain,🎮 Steam
+  - RULE-SET,ea_domain,🎮 Steam
   - RULE-SET,sony_domain,🎮 PlayStation
 
 # 7.地区分流直接调用自动选择分组
-  - GEOIP,HK,🇭🇰 香港自动,no-resolve
-  - GEOIP,TW,🇹🇼 台湾自动,no-resolve
-  - GEOIP,JP,🇯🇵 日本自动,no-resolve
-  - GEOIP,SG,🇸🇬 新加坡自动,no-resolve
-  - GEOIP,US,🇺🇸 美国自动,no-resolve
-  - GEOIP,DE,🇩🇪 德国自动,no-resolve
+  - GEOIP,HK,🚀 默认代理,no-resolve
+  - GEOIP,TW,🚀 默认代理,no-resolve
+  - GEOIP,JP,🚀 默认代理,no-resolve
+  - GEOIP,SG,🚀 默认代理,no-resolve
+  - GEOIP,US,🚀 默认代理,no-resolve
+  - GEOIP,DE,🚀 默认代理,no-resolve
 
 # 8.中国大陆分流
   - RULE-SET,bilibili_domain,🎬 大陆视频
@@ -413,6 +417,7 @@ rule-providers:
   bahamut_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/bahamut.mrs"}
   viu_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/viu.mrs"}
   twitch_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/twitch.mrs"}
+  streaming_all_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-media-!cn.mrs"}
   
   # 通用服务
   google_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/google.mrs"}

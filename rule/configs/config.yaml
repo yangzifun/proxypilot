@@ -101,6 +101,7 @@ rule-anchor:
 proxy-groups:
   # --- 0. 地区分组自动筛选 (基于正则匹配节点名)
   - {name: 🇭🇰 香港自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)香港"}
+  - {name: 🇲🇴 澳门自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)澳门|MO|Macau|Macao"}
   - {name: 🇯🇵 日本自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)日本|东京|大阪|埼玉|京都|福冈|名古屋|札幌"}
   - {name: 🇺🇸 美国自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)美国|弗吉尼亚|维吉尼亚|阿什本|洛杉矶|旧金山|圣何塞|加州|纽约|新泽西|德克萨斯|德州|达拉斯|休斯顿|西雅图|芝加哥|佛罗里达|迈阿密|波特兰|拉斯维加斯|凤凰城|亚特兰大|盐湖城|波士顿"}
   - {name: 🇸🇬 新加坡自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)新加坡|狮城"}
@@ -272,6 +273,7 @@ rule-providers:
   bahamut_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/bahamut.mrs"}
   viu_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/viu.mrs"}
   twitch_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/twitch.mrs"}
+  streaming_all_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-media-!cn.mrs"}
   
   # 通用服务
   google_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/google.mrs"}
