@@ -46,8 +46,8 @@ function jsonResponse(data, status = 200) {
 function getProtocol(configStr) {
   if (!configStr || typeof configStr !== 'string') return 'unknown';
 
-  // 检查各种协议前缀
-  const protocolPatterns = [
+  // 检查各种协议前缀 (新增对 socks:// 的支持，统一映射为 socks5)
+  const protocolPatterns =[
       { prefix: 'vmess://', type: 'vmess' },
       { prefix: 'vless://', type: 'vless' },
       { prefix: 'trojan://', type: 'trojan' },
@@ -58,7 +58,8 @@ function getProtocol(configStr) {
       { prefix: 'any-reality://', type: 'any-reality' },
       { prefix: 'anyreality://', type: 'anyreality' },
       { prefix: 'reality://', type: 'reality' },
-      { prefix: 'socks5://', type: 'socks5' }
+      { prefix: 'socks5://', type: 'socks5' },
+      { prefix: 'socks://', type: 'socks5' }
   ];
 
   for (const pattern of protocolPatterns) {
@@ -109,7 +110,7 @@ function getClientIp(request) {
 // 获取配置列表（支持筛选、分页和全部获取）
 async function fetchConfigsByUuidFromDB(uuid, env, options = {}) {
   const db = env.DB;
-  if (!db) return { results: [], total: 0 };
+  if (!db) return { results:[], total: 0 };
 
   try {
       // 构建查询条件
@@ -170,7 +171,7 @@ async function fetchConfigsByUuidFromDB(uuid, env, options = {}) {
 
   } catch (e) {
       console.error(`Error fetching configs for UUID ${uuid}:`, e.message);
-      return { results: [], total: 0, page: 1, pageSize: 10, totalPages: 0 };
+      return { results:[], total: 0, page: 1, pageSize: 10, totalPages: 0 };
   }
 }
 
@@ -282,7 +283,7 @@ async function fetchUuidAccessStatsFromDB(uuid, env, days = 30) {
           today_subscription: todayStats?.today_subscription || 0,
           today_apigen: todayStats?.today_apigen || 0,
           daily_stats: dailyStats?.results || [],
-          recent_logs: recentLogs?.results || []
+          recent_logs: recentLogs?.results ||[]
       };
 
   } catch (e) {
@@ -306,8 +307,9 @@ async function fetchUuidInfoFromDB(uuid, env) {
 
       if (!tableCheck) {
           return {
-              success: false,
-              error: "UUID信息表不存在，请确保已升级到v3.0.3+版本"
+              success: true,
+              exists: false,
+              message: "UUID信息表不存在，请确保已升级到v3.0.3+版本"
           };
       }
 
@@ -456,7 +458,7 @@ async function updateUuidAccessStats(uuid, env) {
 // 获取所有UUID信息列表（分页，简化版） - 保留给管理员使用
 async function fetchAllUuidInfoFromDB(env, options = {}) {
   const db = env.DB;
-  if (!db) return { results: [], total: 0 };
+  if (!db) return { results:[], total: 0 };
 
   try {
       const tableCheck = await db.prepare(
@@ -465,7 +467,7 @@ async function fetchAllUuidInfoFromDB(env, options = {}) {
 
       if (!tableCheck) {
           return {
-              results: [],
+              results:[],
               total: 0,
               page: 1,
               pageSize: 10,
@@ -475,7 +477,7 @@ async function fetchAllUuidInfoFromDB(env, options = {}) {
 
       // 构建查询条件
       let conditions = [];
-      const params = [];
+      const params =[];
 
       if (options.search) {
           conditions.push('(uuid LIKE ? OR owner LIKE ? OR email LIKE ?)');
@@ -522,7 +524,7 @@ async function fetchAllUuidInfoFromDB(env, options = {}) {
 
   } catch (e) {
       console.error("获取UUID信息列表失败:", e.message);
-      return { results: [], total: 0, page: 1, pageSize: 10, totalPages: 0 };
+      return { results:[], total: 0, page: 1, pageSize: 10, totalPages: 0 };
   }
 }
 
@@ -556,7 +558,7 @@ async function fetchIpsFromDB(ipType, carrierType, env) {
   if (!db) throw new Error("D1 数据库未绑定。");
 
   let query = 'SELECT DISTINCT ip FROM cfips WHERE 1=1';
-  const params = [];
+  const params =[];
 
   if (ipType.toLowerCase() !== 'all') {
       query += ' AND ip_type = ?';
@@ -581,7 +583,7 @@ async function fetchDomainsFromDB(env) {
       return results;
   } catch (e) {
       console.error("Fetching domains failed:", e.message);
-      return [];
+      return[];
   }
 }
 
@@ -662,7 +664,7 @@ async function handleAddConfig(request, env) {
   const { uuid, config_data, domain_hosting = 'Cloudflare' } = body;
   if (!uuid || !config_data) return jsonResponse({ error: '字段缺失' }, 400);
 
-  const validDomainHostings = [
+  const validDomainHostings =[
       'Cloudflare', '阿里ESA', '腾讯Edgeone', 'AWS Cloudfront',
       'Gcore', 'Fastly', 'CacheFly', 'LightCDN', 'Vercel', 'Netlify',
       '无', '其他'
@@ -670,7 +672,7 @@ async function handleAddConfig(request, env) {
   const hostingValue = validDomainHostings.includes(domain_hosting) ? domain_hosting : 'Cloudflare';
 
   const lines = config_data.split('\n').map(l => l.trim()).filter(Boolean);
-  const stmts = [];
+  const stmts =[];
   for (const line of lines) {
       const p = getProtocol(line);
       if (p === 'unknown') continue;
@@ -697,7 +699,7 @@ const protocol = getProtocol(config_data);
 if (protocol === 'unknown') return jsonResponse({ error: '不支持的配置格式' }, 400);
 const remark = extractRemarkFromConfig(config_data, protocol);
 
-const validDomainHostings = [
+const validDomainHostings =[
     'Cloudflare', '阿里ESA', '腾讯Edgeone', 'AWS Cloudfront',
     'Gcore', 'Fastly', 'CacheFly', 'LightCDN', 'Vercel', 'Netlify',
     '无', '其他'
@@ -757,7 +759,7 @@ async function handleGetConfigs(uuid, env, url) {
   });
 }
 
-async function handleGetUuidStats(uuid, env) {
+async function handleGetUuidStats(uuid, env, request) {
   if (!uuid) return jsonResponse({ error: 'UUID Required' }, 400);
   const urlObj = new URL(request.url);
   const days = urlObj.searchParams.get('days') || 30;
@@ -781,7 +783,7 @@ async function handlePostUuidInfo(request, env) {
       return jsonResponse({ error: '缺少必要字段: uuid, owner, email' }, 400);
   }
 
-  const validStatuses = ['active', 'inactive', 'suspended'];
+  const validStatuses =['active', 'inactive', 'suspended'];
   const finalStatus = validStatuses.includes(status) ? status : 'active';
 
   const info = {
@@ -887,7 +889,7 @@ const addressExtractionRegex = /(?:@|:\/\/)(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|\
 
 // 核心替换逻辑 - 确保所有原配置都被输出，但只有Cloudflare配置进行优选替换
 function replaceAddressesInConfigs(baseConfigsData, addressList, disableOptimization = false) {
-  let generatedConfigs = [];
+  let generatedConfigs =[];
   const validAddressRegex = /^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|\[[0-9a-fA-F:\.]+\]|(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,})$/;
 
   for (const configObj of baseConfigsData) {
@@ -996,7 +998,7 @@ async function generateConfigs(request, env) {
       const addressListText = body.addressList || body.ipList;
       const { baseConfigUuid, baseConfig: baseConfigFromRequest, disableOptimization = false } = body;
 
-      let baseConfigsData = [];
+      let baseConfigsData =[];
 
       if (baseConfigUuid) {
           const configsFromDb = await fetchConfigsByUuidFromDB(baseConfigUuid, env, { getAll: true });
@@ -1028,7 +1030,7 @@ async function generateConfigs(request, env) {
           return jsonResponse({ error: "必须提供基础配置或UUID。" }, 400);
       }
 
-      let addressList = [];
+      let addressList =[];
       if (!disableOptimization) {
           // 只有不禁用优选时，才处理地址列表
           if (!addressListText || addressListText.trim() === '') {
@@ -1036,7 +1038,7 @@ async function generateConfigs(request, env) {
           }
           addressList = addressListText.split('\n').map(a => a.trim()).filter(a => a.length > 0);
       } else {
-          addressList = []; // 禁用优选，地址列表为空
+          addressList =[]; // 禁用优选，地址列表为空
       }
 
       const generatedConfigs = replaceAddressesInConfigs(baseConfigsData, addressList, disableOptimization);
@@ -1136,7 +1138,7 @@ async function handleGetBatchConfigs(uuid, urlParams, env, request) {
 
   const type = urlParams.get('type') || 'ip';
   const disableOptimization = urlParams.get('disable') === 'true';
-  let addressList = [];
+  let addressList =[];
 
   if (!disableOptimization) {
       try {
@@ -1232,7 +1234,7 @@ function convertToClashFormat(configStr) {
           // 处理 TLS 相关高级字段
           if (clashConfig.tls) {
               clashConfig.servername = vmessObj.sni || vmessObj.host || vmessObj.add;
-              clashConfig.alpn = ['h2', 'http/1.1'];
+              clashConfig.alpn =['h2', 'http/1.1'];
               clashConfig.fingerprint = vmessObj.fp || ''; // 对应 fingerprint
               clashConfig['client-fingerprint'] = vmessObj.fp || 'chrome'; // 对应 client-fingerprint
               
@@ -1254,7 +1256,7 @@ function convertToClashFormat(configStr) {
           } else if (vmessObj.net === 'h2') {
               clashConfig['h2-opts'] = {
                   path: vmessObj.path || '/',
-                  host: vmessObj.host ? [vmessObj.host] : []
+                  host: vmessObj.host ?[vmessObj.host] :[]
               };
           } else if (vmessObj.net === 'grpc') {
               clashConfig['grpc-opts'] = {
@@ -1394,7 +1396,7 @@ if (protocol === 'vless' || protocol === 'any-reality' || protocol === 'reality'
       } else if (net === 'h2') {
           clashConfig['h2-opts'] = {
               path: url.searchParams.get('path') || '/',
-              host: [url.searchParams.get('host') || '']
+              host:[url.searchParams.get('host') || '']
           };
       }
 
@@ -1468,7 +1470,7 @@ if (protocol === 'shadowsocks') {
               // 兼容另一种写法: plugin=obfs-local;obfs=tls
               const parts = pluginParam.split(';');
               parts.slice(1).forEach(pair => {
-                  const [k, v] = pair.split('=');
+                  const[k, v] = pair.split('=');
                   if (k) opts[k] = v || true;
               });
               clashConfig['plugin-opts'] = opts;
@@ -1722,7 +1724,7 @@ async function generateClashConfig(request, env) {
       }
       const baseConfigsData = configsFromDb.results;
 
-      let addressList = [];
+      let addressList =[];
       if (!disableOptimization) {
           if (addressType === 'domain') {
               const domains = await fetchDomainsFromDB(env);
@@ -1744,7 +1746,7 @@ async function generateClashConfig(request, env) {
           return jsonResponse({ error: '未能生成有效的节点配置' }, 400);
       }
 
-      let clashProxies = [];
+      let clashProxies =[];
 
       clashProxies.push({ name: '直连', type: 'direct' });
 
@@ -1902,10 +1904,7 @@ export default {
               // ===== API: UUID访问统计 =====
               const statsMatch = uuidStats.exec(url);
               if (statsMatch) {
-                  const urlObj = new URL(request.url);
-                  const days = urlObj.searchParams.get('days') || 30;
-                  const stats = await fetchUuidAccessStatsFromDB(statsMatch.pathname.groups.uuid, env, parseInt(days));
-                  return jsonResponse(stats);
+                  return await handleGetUuidStats(statsMatch.pathname.groups.uuid, env, request);
               }
 
               // ===== API: UUID信息管理 =====
@@ -2852,6 +2851,7 @@ const unifiedPageHtmlContent = `
             <span class="px-2 py-1 bg-blue-100 text-blue-700 border border-blue-200 rounded-full text-xs sm:text-sm">VLESS</span>
             <span class="px-2 py-1 bg-blue-100 text-blue-700 border border-blue-200 rounded-full text-xs sm:text-sm">Trojan</span>
             <span class="px-2 py-1 bg-blue-100 text-blue-700 border border-blue-200 rounded-full text-xs sm:text-sm">Shadowsocks</span>
+            <span class="px-2 py-1 bg-blue-100 text-blue-700 border border-blue-200 rounded-full text-xs sm:text-sm">Socks/Socks5</span>
             <span class="px-2 py-1 bg-orange-100 text-orange-700 border border-orange-200 rounded-full text-xs sm:text-sm">Hysteria2</span>
             <span class="px-2 py-1 bg-orange-100 text-orange-700 border border-orange-200 rounded-full text-xs sm:text-sm">Tuic</span>
             <span class="px-2 py-1 bg-orange-100 text-orange-700 border border-orange-200 rounded-full text-xs sm:text-sm">AnyTLS</span>
@@ -3124,7 +3124,7 @@ const unifiedPageHtmlContent = `
               <option value="anytls">AnyTLS</option>
               <option value="any-reality">Any-reality</option>
               <option value="reality">Reality</option>
-              <option value="socks5">Socks5</option>
+              <option value="socks5">Socks/Socks5</option>
             </select>
           </div>
           <div class="flex items-center gap-2">
@@ -3311,7 +3311,7 @@ trojan://..."
   let statsChart = null;
   let currentChartType = 'split';
   let currentSubscriptionLink = '';
-  let templatesList = [];
+  let templatesList =[];
 
   // Domain hosting style mapping
   const hostingStyleMap = {
@@ -4444,7 +4444,7 @@ trojan://..."
     let p = 'unknown'; 
     const l = config.config_data;
 
-    const protocolPatterns = [
+    const protocolPatterns =[
       { prefix: 'vmess://', type: 'vmess' },
       { prefix: 'vless://', type: 'vless' },
       { prefix: 'trojan://', type: 'trojan' },
@@ -4452,6 +4452,7 @@ trojan://..."
       { prefix: 'tuic://', type: 'tuic' },
       { prefix: 'anytls://', type: 'anytls' },
       { prefix: 'socks5://', type: 'socks5' },
+      { prefix: 'socks://', type: 'socks5' },
       { prefix: 'any-reality://', type: 'any-reality' },
       { prefix: 'anyreality://', type: 'anyreality' },
       { prefix: 'reality://', type: 'reality' },
@@ -4465,8 +4466,7 @@ trojan://..."
       }
     }
 
-    document.getElementById('edit-protocol').value = p;
-    ['ps','add','port','id-uuid','net','type','host','path','tls','sni'].forEach(k=>document.getElementById('edit-'+k).value='');
+    document.getElementById('edit-protocol').value = p;['ps','add','port','id-uuid','net','type','host','path','tls','sni'].forEach(k=>document.getElementById('edit-'+k).value='');
 
     const hostingSelect = document.getElementById('edit-domain-hosting');
     hostingSelect.value = config.domain_hosting || 'Cloudflare';
@@ -4670,11 +4670,11 @@ trojan://..."
       statsChart.destroy();
     }
 
-    let datasets = [];
+    let datasets =[];
 
     switch (currentChartType) {
       case 'total':
-        datasets = [{
+        datasets =[{
           label: '总访问量',
           data: totals,
           borderColor: '#3b82f6',
@@ -4686,7 +4686,7 @@ trojan://..."
         break;
 
       case 'split':
-        datasets = [
+        datasets =[
           {
             label: '订阅访问',
             data: subscriptions,
@@ -5193,4 +5193,4 @@ trojan://..."
 </script>
 </body>
 </html>
-`;
+`
