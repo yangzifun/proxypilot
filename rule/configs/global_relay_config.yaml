@@ -89,13 +89,9 @@ proxy-groups:
 
   # --- 2. 🌟 链式代理入口组 ---
   - {name: ⚓ 自动前置, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 10, interval: 300, filter: "(?i)香港|台湾"}
-  
-  # 新增：住宅Socks组，用于存放手动添加的或订阅中的住宅IP节点
-  - {name: 🏠 住宅Socks, type: select, include-all: true, filter: "(?i)住宅|家庭|ISP|Residential|Socks5|Luminati|Oxylabs"}
 
   # --- 3. 🌟 链式代理配置 (Relay) ---
   # 逻辑：[前置跳板, 最终落地]
-  - {name: 🔗 住宅链路, type: select, proxies: [🏠 住宅Socks], dialer-proxy: ⚓ 自动前置}
   - {name: 🔗 链式美国, type: select, proxies: [🇺🇸 美国], dialer-proxy: ⚓ 自动前置}
   - {name: 🔗 链式日本, type: select, proxies: [🇯🇵 日本], dialer-proxy: ⚓ 自动前置}
   
@@ -104,11 +100,11 @@ proxy-groups:
   - {name: 🚀 默认代理, type: select, proxies: [⚡ 自动选择, 🇨🇳 港澳, 🇯🇵 日本, 🇺🇸 美国, 🇸🇬 新加坡, 🇹🇼 中国台湾, 🇩🇪 德国]}
   - {name: ⚡ 自动选择, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN)).)*$"}
 
-  # --- 5. AI 服务 (强烈建议优先使用 🔗 住宅链路 以防封号) ---
-  - {name: 🤖 OpenAI, type: select, proxies: [🔗 住宅链路, 🔗 链式美国, 🔗 链式日本, 🇺🇸 美国, 🇸🇬 新加坡, 🇯🇵 日本, 🇹🇼 中国台湾, 🇩🇪 德国]}
-  - {name: ✨ Gemini, type: select, proxies: [🔗 住宅链路, 🔗 链式美国, 🔗 链式日本, 🇺🇸 美国, 🇸🇬 新加坡, 🇯🇵 日本, 🇹🇼 中国台湾, 🇩🇪 德国]}
-  - {name: 🧠 Claude, type: select, proxies: [🔗 住宅链路, 🔗 链式美国, 🔗 链式日本, 🇺🇸 美国, 🇸🇬 新加坡, 🇯🇵 日本, 🇹🇼 中国台湾, 🇩🇪 德国]}
-  - {name: 🌌 常用 AI, type: select, proxies: [🔗 住宅链路, 🔗 链式美国, 🔗 链式日本, 🇺🇸 美国, 🇸🇬 新加坡, 🇯🇵 日本, 🇹🇼 中国台湾, 🇩🇪 德国]}
+  # --- 5. AI 服务 (强烈建议优先使用 🔗 链式美国 以防封号) ---
+  - {name: 🤖 OpenAI, type: select, proxies: [🔗 链式美国, 🔗 链式日本, 🇺🇸 美国, 🇸🇬 新加坡, 🇯🇵 日本, 🇹🇼 中国台湾, 🇩🇪 德国]}
+  - {name: ✨ Gemini, type: select, proxies: [🔗 链式美国, 🔗 链式日本, 🇺🇸 美国, 🇸🇬 新加坡, 🇯🇵 日本, 🇹🇼 中国台湾, 🇩🇪 德国]}
+  - {name: 🧠 Claude, type: select, proxies: [🔗 链式美国, 🔗 链式日本, 🇺🇸 美国, 🇸🇬 新加坡, 🇯🇵 日本, 🇹🇼 中国台湾, 🇩🇪 德国]}
+  - {name: 🌌 常用 AI, type: select, proxies: [🔗 链式美国, 🔗 链式日本, 🇺🇸 美国, 🇸🇬 新加坡, 🇯🇵 日本, 🇹🇼 中国台湾, 🇩🇪 德国]}
 
   # --- 6. 社交与办公 ---
   - {name: 📲 Telegram, type: select, proxies: [⚡ 自动选择, 🇨🇳 港澳, 🇺🇸 美国, 🇸🇬 新加坡, 🇯🇵 日本, 🇹🇼 中国台湾, 🇩🇪 德国]}
@@ -121,8 +117,8 @@ proxy-groups:
   # --- 7. 流媒体 ---
   - {name: 🎬 YouTube, type: select, proxies: [⚡ 自动选择, 🇺🇸 美国, 🇨🇳 港澳, 🇯🇵 日本, 🇸🇬 新加坡, 🇩🇪 德国, 🇹🇼 中国台湾]}
   - {name: 🎥 Netflix, type: select, proxies: [⚡ 自动选择, 🇺🇸 美国, 🇨🇳 港澳, 🇯🇵 日本, 🇸🇬 新加坡, 🇩🇪 德国, 🔗 链式日本]}
-  - {name: 🎞️ Disney+, type: select, proxies: [🇺🇸 美国, 🇯🇵 日本, 🇸🇬 新加坡, 🇩🇪 德国, 🇹🇼 中国台湾, 🔗 链式日本,🔗 链式美国, 🔗 住宅链路]}
-  - {name: 🎵 TikTok, type: select, proxies: [🇺🇸 美国, 🇯🇵 日本, 🇸🇬 新加坡, 🇩🇪 德国, 🇹🇼 中国台湾, 🔗 链式美国, 🔗 住宅链路]}
+  - {name: 🎞️ Disney+, type: select, proxies: [🇺🇸 美国, 🇯🇵 日本, 🇸🇬 新加坡, 🇩🇪 德国, 🇹🇼 中国台湾, 🔗 链式日本,🔗 链式美国]}
+  - {name: 🎵 TikTok, type: select, proxies: [🇺🇸 美国, 🇯🇵 日本, 🇸🇬 新加坡, 🇩🇪 德国, 🇹🇼 中国台湾, 🔗 链式美国]}
   - {name: 📺 更多流媒体, type: select, proxies: [⚡ 自动选择, 🔗 链式日本, 🇺🇸 美国, 🇨🇳 港澳, 🇯🇵 日本, 🇸🇬 新加坡, 🇩🇪 德国]}
   - {name: 🎧 Spotify, type: select, proxies: [DIRECT, 🚀 默认代理]}
 
@@ -136,7 +132,7 @@ proxy-groups:
   # --- 9. 基础工具 ---
   - {name: 🔍 Google, type: select, proxies: [⚡ 自动选择, 🇺🇸 美国, 🇨🇳 港澳, 🇯🇵 日本, 🇸🇬 新加坡, 🇩🇪 德国, 🇹🇼 中国台湾]}
   - {name: 🚀 Speedtest, type: select, proxies: [DIRECT, 🚀 默认代理]}
-  - {name: 💳 PayPal, type: select, proxies: [🔗 住宅链路, 🔗 链式美国, 🇺🇸 美国, DIRECT]}
+  - {name: 💳 PayPal, type: select, proxies: [🔗 链式美国, 🇺🇸 美国, DIRECT]}
   - {name: 🚫 广告拦截, type: select, proxies: [REJECT, DIRECT]}
   - {name: 🐟 漏网之鱼, type: select, proxies: [🚀 默认代理, ⚡ 自动选择, DIRECT]}
 
