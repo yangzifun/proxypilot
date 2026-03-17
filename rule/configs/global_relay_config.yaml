@@ -95,9 +95,10 @@ proxy-groups:
 
   # --- 3. 🌟 链式代理配置 (Relay) ---
   # 逻辑：[前置跳板, 最终落地]
-  - {name: 🔗 住宅链路, type: relay, proxies: [⚓ 自动前置, 🏠 住宅Socks]}
-  - {name: 🔗 链式美国, type: relay, proxies: [⚓ 自动前置, 🇺🇸 美国]}
-  - {name: 🔗 链式日本, type: relay, proxies: [⚓ 自动前置, 🇯🇵 日本]}
+  - {name: 🔗 住宅链路, type: select, proxies: [🏠 住宅Socks], dialer-proxy: ⚓ 自动前置}
+  - {name: 🔗 链式美国, type: select, proxies: [🇺🇸 美国], dialer-proxy: ⚓ 自动前置}
+  - {name: 🔗 链式日本, type: select, proxies: [🇯🇵 日本], dialer-proxy: ⚓ 自动前置}
+  
 
   # --- 4. 核心分流开关 ---
   - {name: 🚀 默认代理, type: select, proxies: [⚡ 自动选择, 🇨🇳 港澳, 🇯🇵 日本, 🇺🇸 美国, 🇸🇬 新加坡, 🇹🇼 中国台湾, 🇩🇪 德国]}
