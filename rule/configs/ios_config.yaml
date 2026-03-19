@@ -98,7 +98,7 @@ proxy-groups:
   - {name: 🚀 默认代理, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🌐 全部节点]}
   - {name: 🤖 AI 服务, type: select, proxies: [🇺🇸 美国自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🚀 默认代理]}
   - {name: 🌍 社交办公, type: select, proxies: [🚀 默认代理, ⚡ 自动选择, 🎯 直连]}
-  - {name: 🎬 国际影视, type: select, proxies: [🚀 默认代理, ⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动]}
+  - {name: 🎬 国际影视, type: select, proxies: [🚀 默认代理, ⚡ 自动选择, 🇭🇰 香港自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动]}
   - {name: 🎮 游戏平台, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择]}
   - {name: 🔍 Google, type: select, proxies: [🚀 默认代理, ⚡ 自动选择]}
   - {name: 🟦 Microsoft, type: select, proxies: [🎯 直连, 🚀 默认代理]}
@@ -137,6 +137,7 @@ rules:
   - RULE-SET,steam_domain,🎮 游戏平台
   - RULE-SET,speedtest_domain,🚀 Speedtest
   - RULE-SET,paypal_domain,💳 PayPal
+  - RULE-SET,tiktok_domain,🎬 国际影视
 
   # 4. 大陆分流
   - RULE-SET,cn_domain,🇨🇳 大陆服务
@@ -170,6 +171,7 @@ rule-providers:
   steam_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/steam.mrs"}
   speedtest_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/ookla-speedtest.mrs"}
   paypal_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/paypal.mrs"}
+  tiktok_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/tiktok.mrs"}
 
   # 大陆与兜底
   cn_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs"}
