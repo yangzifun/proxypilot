@@ -108,13 +108,12 @@ rule-anchor:
 # ==========================================================
 proxy-groups:
 
-  - {name: 🇨🇳 港澳, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)香港|澳门|澳門"}
-  - {name: 🇯🇵 日本, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)日本|东京|大阪|埼玉|京都|福冈|名古屋|札幌"}
-  - {name: 🇺🇸 美国, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)美国|弗吉尼亚|维吉尼亚|阿什本|洛杉矶|旧金山|圣何塞|加州|纽约|新泽西|德克萨斯|德州|达拉斯|休斯顿|西雅图|芝加哥|佛罗里达|迈阿密|波特兰|拉斯维加斯|凤凰城|亚特兰大|盐湖城|波士顿"}
-  - {name: 🇸🇬 新加坡, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)新加坡|狮城"}
-  - {name: 🇹🇼 中国台湾, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)台湾|台北|新北|台中|高雄|台南|桃园|新竹|基隆|嘉义|彰化|屏东|宜兰|花莲|台东|苗栗|南投|云林|澎湖|金门|马祖"}
-  - {name: 🇩🇪 德国, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)德国|法兰克福|柏林|慕尼黑|汉堡|杜塞尔多夫|科隆|斯图加特|纽伦堡|莱比锡"}
-  # --- 1. 默认代理 (总开关) ---
+  - {name: 🇨🇳 港澳, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)香港|澳门|澳門"}
+  - {name: 🇯🇵 日本, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)日本|东京|大阪|埼玉|京都|福冈|名古屋|札幌"}
+  - {name: 🇺🇸 美国, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)美国|弗吉尼亚|维吉尼亚|阿什本|洛杉矶|旧金山|圣何塞|加州|纽约|新泽西|德克萨斯|德州|达拉斯|休斯顿|西雅图|芝加哥|佛罗里达|迈阿密|波特兰|拉斯维加斯|凤凰城|亚特兰大|盐湖城|波士顿"}
+  - {name: 🇸🇬 新加坡, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)新加坡|狮城"}
+  - {name: 🇹🇼 中国台湾, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)台湾|台北|新北|台中|高雄|台南|桃园|新竹|基隆|嘉义|彰化|屏东|宜兰|花莲|台东|苗栗|南投|云林|
+
   - {name: 🚀 默认代理, type: select, proxies: [⚡ 自动选择, 🇨🇳 港澳, 🇯🇵 日本, 🇺🇸 美国, 🇸🇬 新加坡, 🇹🇼 中国台湾, 🇩🇪 德国]}
   - {name: ⚡ 自动选择, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"} # 过滤掉明显的中国大陆节点，优先选择海外节点
   # --- 2. AI 服务 ---
