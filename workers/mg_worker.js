@@ -497,6 +497,38 @@ async function ensureSchema(env) {
     }
 }
 
+async function ensureDomainTables(env) {
+    await env.DB.prepare(`
+        CREATE TABLE IF NOT EXISTS cf_domains (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            domain TEXT UNIQUE NOT NULL,
+            remark TEXT,
+            created_at INTEGER DEFAULT (CAST(STRFTIME('%s', 'now') AS INT) * 1000),
+            updated_at INTEGER DEFAULT (CAST(STRFTIME('%s', 'now') AS INT) * 1000)
+        );
+    `).run();
+
+    await env.DB.prepare(`
+        CREATE TABLE IF NOT EXISTS edgeone_domains (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            domain TEXT UNIQUE NOT NULL,
+            remark TEXT,
+            created_at INTEGER DEFAULT (CAST(STRFTIME('%s', 'now') AS INT) * 1000),
+            updated_at INTEGER DEFAULT (CAST(STRFTIME('%s', 'now') AS INT) * 1000)
+        );
+    `).run();
+
+    await env.DB.prepare(`
+        CREATE TABLE IF NOT EXISTS aliyun_esa_domains (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            domain TEXT UNIQUE NOT NULL,
+            remark TEXT,
+            created_at INTEGER DEFAULT (CAST(STRFTIME('%s', 'now') AS INT) * 1000),
+            updated_at INTEGER DEFAULT (CAST(STRFTIME('%s', 'now') AS INT) * 1000)
+        );
+    `).run();
+}
+
 async function executeInChunks(stmts) {
     const CHUNK_SIZE = 10;
     for (let i = 0; i < stmts.length; i += CHUNK_SIZE) {
@@ -624,6 +656,8 @@ async function runIpUpdateTask(env, sources = null) {
 async function initializeDatabaseSettings(env) {
     console.log('mg_worker.js: checking database tables...');
     try {
+        await ensureDomainTables(env);
+
         // 创建 admin_users 表
         await env.DB.prepare(`
             CREATE TABLE IF NOT EXISTS admin_users (
@@ -664,6 +698,17 @@ async function initializeDatabaseSettings(env) {
         // 创建 edgeone_domains 表 (腾讯云EdgeOne域名)
         await env.DB.prepare(`
             CREATE TABLE IF NOT EXISTS edgeone_domains (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                domain TEXT UNIQUE NOT NULL,
+                remark TEXT,
+                created_at INTEGER DEFAULT (CAST(STRFTIME('%s', 'now') AS INT) * 1000),
+                updated_at INTEGER DEFAULT (CAST(STRFTIME('%s', 'now') AS INT) * 1000)
+            );
+        `).run();
+
+        // 创建 aliyun_esa_domains 表 (阿里云ESA域名)
+        await env.DB.prepare(`
+            CREATE TABLE IF NOT EXISTS aliyun_esa_domains (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 domain TEXT UNIQUE NOT NULL,
                 remark TEXT,
@@ -1259,11 +1304,18 @@ async function handleDirectIpUpdate(req, env) {
  */
 async function handleGetStats(req, env) {
     try {
+        await ensureDomainTables(env);
         const url = new URL(req.url);
         const days = parseInt(url.searchParams.get('days')) || 30;
 
         // 获取基础统计
-        const domains = await env.DB.prepare('SELECT COUNT(*) as c FROM cf_domains').first('c');
+        const domainsResult = await env.DB.prepare(`
+            SELECT
+                (SELECT COUNT(*) FROM cf_domains) +
+                (SELECT COUNT(*) FROM edgeone_domains) +
+                (SELECT COUNT(*) FROM aliyun_esa_domains) as c
+        `).first();
+        const domains = domainsResult?.c || 0;
         const ips = await env.DB.prepare('SELECT COUNT(*) as c FROM cfips').first('c');
         const uuids = await env.DB.prepare('SELECT COUNT(DISTINCT uuid) as c FROM configs').first('c');
         const templates = await env.DB.prepare('SELECT COUNT(*) as c FROM config_templates').first('c');
@@ -1331,6 +1383,7 @@ async function handleGetUUIDAccessDetails(req, env) {
  */
 async function handleDomains(req, env, method) {
     try {
+        await ensureDomainTables(env);
         const url = new URL(req.url);
 
         if (method === 'GET') {
@@ -1348,6 +1401,8 @@ async function handleDomains(req, env, method) {
                     SELECT id, domain, remark, created_at, 'Cloudflare' as source FROM cf_domains
                     UNION ALL
                     SELECT id, domain, remark, created_at, '腾讯云EdgeOne' as source FROM edgeone_domains
+                    UNION ALL
+                    SELECT id, domain, remark, created_at, '阿里云ESA' as source FROM aliyun_esa_domains
                 ) ORDER BY ${actualSort} ${sortOrder}
                 LIMIT ? OFFSET ?
             `;
@@ -1358,6 +1413,8 @@ async function handleDomains(req, env, method) {
                     SELECT id FROM cf_domains
                     UNION ALL
                     SELECT id FROM edgeone_domains
+                    UNION ALL
+                    SELECT id FROM aliyun_esa_domains
                 )
             `;
 
@@ -1379,17 +1436,21 @@ async function handleDomains(req, env, method) {
             const { domain, remark, source } = await req.json();
             if(!domain) return jsonResponse({success: false, error:'域名不能为空'}, 400);
 
-            if (!source || (source !== 'Cloudflare' && source !== '腾讯云EdgeOne')) {
-                return jsonResponse({success: false, error:'域名来源必须为 Cloudflare 或 腾讯云EdgeOne'}, 400);
+            if (!source || !['Cloudflare', '腾讯云EdgeOne', '阿里云ESA'].includes(source)) {
+                return jsonResponse({success: false, error:'域名来源必须为 Cloudflare、腾讯云EdgeOne 或 阿里云ESA'}, 400);
             }
 
             if (source === 'Cloudflare') {
                 await env.DB.prepare(
                     'INSERT INTO cf_domains (domain, remark, created_at, updated_at) VALUES (?, ?, ?, ?)'
                 ).bind(domain, remark || '', Date.now(), Date.now()).run();
-            } else {
+            } else if (source === '腾讯云EdgeOne') {
                 await env.DB.prepare(
                     'INSERT INTO edgeone_domains (domain, remark, created_at, updated_at) VALUES (?, ?, ?, ?)'
+                ).bind(domain, remark || '', Date.now(), Date.now()).run();
+            } else {
+                await env.DB.prepare(
+                    'INSERT INTO aliyun_esa_domains (domain, remark, created_at, updated_at) VALUES (?, ?, ?, ?)'
                 ).bind(domain, remark || '', Date.now(), Date.now()).run();
             }
 
@@ -1411,8 +1472,12 @@ async function handleDomains(req, env, method) {
                 await env.DB.prepare(
                     'UPDATE edgeone_domains SET domain = ?, remark = ?, updated_at = ? WHERE id = ?'
                 ).bind(domain, remark || '', Date.now(), id).run();
+            } else if (source === '阿里云ESA') {
+                await env.DB.prepare(
+                    'UPDATE aliyun_esa_domains SET domain = ?, remark = ?, updated_at = ? WHERE id = ?'
+                ).bind(domain, remark || '', Date.now(), id).run();
             } else {
-                return jsonResponse({success: false, error:'域名来源必须为 Cloudflare 或 腾讯云EdgeOne'}, 400);
+                return jsonResponse({success: false, error:'域名来源必须为 Cloudflare、腾讯云EdgeOne 或 阿里云ESA'}, 400);
             }
 
             return jsonResponse({
@@ -1429,8 +1494,10 @@ async function handleDomains(req, env, method) {
                 await env.DB.prepare('DELETE FROM cf_domains WHERE id = ?').bind(id).run();
             } else if (source === '腾讯云EdgeOne') {
                 await env.DB.prepare('DELETE FROM edgeone_domains WHERE id = ?').bind(id).run();
+            } else if (source === '阿里云ESA') {
+                await env.DB.prepare('DELETE FROM aliyun_esa_domains WHERE id = ?').bind(id).run();
             } else {
-                return jsonResponse({success: false, error:'域名来源必须为 Cloudflare 或 腾讯云EdgeOne'}, 400);
+                return jsonResponse({success: false, error:'域名来源必须为 Cloudflare、腾讯云EdgeOne 或 阿里云ESA'}, 400);
             }
 
             return jsonResponse({
@@ -2310,6 +2377,11 @@ const loginHtml = `
             background: #4A86FF;
             color: white;
         }
+
+        .hosting-aliyun {
+            background: #ff6a00;
+            color: white;
+        }
         
         .template-badge {
             display: inline-block;
@@ -3066,6 +3138,11 @@ const adminHtml = `
             background: #4A86FF;
             color: white;
         }
+
+        .hosting-aliyun {
+            background: #ff6a00;
+            color: white;
+        }
         
         .template-badge {
             display: inline-block;
@@ -3403,6 +3480,7 @@ const adminHtml = `
                            class="flex-1 min-w-[150px] px-3 py-2 border-2 border-secondary rounded bg-white focus:outline-none focus:border-primary text-dark cursor-pointer">
                         <option value="Cloudflare">Cloudflare</option>
                         <option value="腾讯云EdgeOne">腾讯云EdgeOne</option>
+                        <option value="阿里云ESA">阿里云ESA</option>
                     </select>
                     <button class="nav-btn active min-w-[100px]" onclick="addDomain()">
                         <i data-lucide="plus" class="w-4 h-4 mr-1"></i>
@@ -5117,7 +5195,7 @@ const adminHtml = `
                     h += '<tr>' +
                          '<td class="p-3">' + i.domain + '</td>' +
                          '<td class="p-3">' + (i.remark || '<span class="text-gray-300">无</span>') + '</td>' +
-                         '<td class="p-3"><span class="hosting-badge ' + (i.source === 'Cloudflare' ? 'hosting-cloudflare' : i.source === '腾讯云EdgeOne' ? 'hosting-tencent' : '') + '">' + i.source + '</span></td>' +
+                         '<td class="p-3"><span class="hosting-badge ' + (i.source === 'Cloudflare' ? 'hosting-cloudflare' : i.source === '腾讯云EdgeOne' ? 'hosting-tencent' : i.source === '阿里云ESA' ? 'hosting-aliyun' : '') + '">' + i.source + '</span></td>' +
                          '<td class="p-3">' + fmtDate(i.created_at) + '</td>' +
                          '<td class="p-3">' +
                          '<button class="nav-btn small mr-1" onclick="editD(' + index + ', \\'' + domainSafe + '\\', \\'' + remarkSafe + '\\', \\'' + sourceSafe + '\\')">编辑</button>' +
