@@ -103,6 +103,55 @@ function formatDate(timestamp) {
     });
 }
 
+function b64ToUtf8(str) {
+    try {
+        return decodeURIComponent(atob(str).split('').map(c =>
+            '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+        ).join(''));
+    } catch (e) {
+        throw new Error('无效的 Base64 字符串，无法解码 VMess 配置。');
+    }
+}
+
+function getProtocol(configStr) {
+    if (!configStr || typeof configStr !== 'string') return 'unknown';
+
+    const protocolPatterns = [
+        { prefix: 'vmess://', type: 'vmess' },
+        { prefix: 'vless://', type: 'vless' },
+        { prefix: 'trojan://', type: 'trojan' },
+        { prefix: 'ss://', type: 'shadowsocks' },
+        { prefix: 'hysteria2://', type: 'hysteria2' },
+        { prefix: 'tuic://', type: 'tuic' },
+        { prefix: 'anytls://', type: 'anytls' },
+        { prefix: 'any-reality://', type: 'any-reality' },
+        { prefix: 'anyreality://', type: 'anyreality' },
+        { prefix: 'reality://', type: 'reality' },
+        { prefix: 'socks5://', type: 'socks5' },
+        { prefix: 'socks://', type: 'socks5' }
+    ];
+
+    const normalized = configStr.toLowerCase();
+    const matched = protocolPatterns.find(pattern => normalized.startsWith(pattern.prefix));
+    return matched ? matched.type : 'unknown';
+}
+
+function extractRemarkFromConfig(configStr, protocol) {
+    try {
+        if (protocol === 'vmess') {
+            const vmessObj = JSON.parse(b64ToUtf8(configStr.substring(8)));
+            return vmessObj.ps || vmessObj.remark || null;
+        }
+
+        if (['vless', 'trojan', 'hysteria2', 'tuic', 'anytls', 'socks5',
+            'any-reality', 'anyreality', 'reality', 'shadowsocks'].includes(protocol)) {
+            const url = new URL(configStr);
+            if (url.hash) return decodeURIComponent(url.hash.substring(1));
+        }
+    } catch (e) { }
+    return null;
+}
+
 /**
  * 获取访问统计摘要
  */
@@ -632,11 +681,31 @@ async function initializeDatabaseSettings(env) {
                 domain TEXT,
                 port INTEGER,
                 meta TEXT,
+                config_data TEXT,
+                protocol TEXT,
+                remark TEXT,
+                domain_hosting TEXT DEFAULT 'Cloudflare',
                 created_at INTEGER DEFAULT (CAST(STRFTIME('%s', 'now') AS INT) * 1000),
                 updated_at INTEGER DEFAULT (CAST(STRFTIME('%s', 'now') AS INT) * 1000)
             );
         `).run();
         await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_configs_uuid ON configs (uuid);').run();
+
+        const configInfo = await env.DB.prepare('PRAGMA table_info(configs)').all();
+        const configColumns = (configInfo.results || []).map(c => c.name);
+        const configMigrations = [
+            ['config_data', 'ALTER TABLE configs ADD COLUMN config_data TEXT'],
+            ['protocol', 'ALTER TABLE configs ADD COLUMN protocol TEXT'],
+            ['remark', 'ALTER TABLE configs ADD COLUMN remark TEXT'],
+            ['domain_hosting', "ALTER TABLE configs ADD COLUMN domain_hosting TEXT DEFAULT 'Cloudflare'"]
+        ];
+        for (const [column, sql] of configMigrations) {
+            if (!configColumns.includes(column)) {
+                await env.DB.prepare(sql).run();
+            }
+        }
+        await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_configs_protocol ON configs (protocol);').run();
+        await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_configs_domain_hosting ON configs (domain_hosting);').run();
 
         // 创建 cfips 表
         await env.DB.prepare(`
@@ -1573,6 +1642,277 @@ async function handleUuids(req, env, method) {
     }
 }
 
+async function fetchConfigsByUuidFromDB(uuid, env, options = {}) {
+    const db = env.DB;
+    if (!db) return { results: [], total: 0, page: 1, pageSize: 10, totalPages: 0 };
+
+    try {
+        let conditions = ['uuid = ?', "config_data IS NOT NULL", "config_data != ''"];
+        const params = [uuid];
+
+        if (options.protocol && options.protocol !== 'all') {
+            conditions.push('protocol = ?');
+            params.push(options.protocol);
+        }
+
+        if (options.domain_hosting && options.domain_hosting !== 'all') {
+            conditions.push('domain_hosting = ?');
+            params.push(options.domain_hosting);
+        }
+
+        const whereClause = 'WHERE ' + conditions.join(' AND ');
+        const totalResult = await db.prepare(`SELECT COUNT(*) as total FROM configs ${whereClause}`).bind(...params).first();
+        const total = totalResult?.total || 0;
+        const page = Math.max(parseInt(options.page) || 1, 1);
+        const pageSize = Math.min(Math.max(parseInt(options.pageSize) || 10, 1), 100);
+        const offset = (page - 1) * pageSize;
+
+        const { results } = await db.prepare(`
+            SELECT id, uuid, config_data, protocol, remark, domain_hosting, created_at, updated_at
+            FROM configs
+            ${whereClause}
+            ORDER BY id ASC
+            LIMIT ? OFFSET ?
+        `).bind(...params, pageSize, offset).all();
+
+        return {
+            results: results || [],
+            total,
+            page,
+            pageSize,
+            totalPages: Math.ceil(total / pageSize) || 1
+        };
+    } catch (e) {
+        console.error(`获取UUID ${uuid} 配置失败:`, e.message);
+        return { results: [], total: 0, page: 1, pageSize: 10, totalPages: 0 };
+    }
+}
+
+async function ensureConfigManagerSchema(env) {
+    await env.DB.prepare(`
+        CREATE TABLE IF NOT EXISTS configs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            uuid TEXT NOT NULL,
+            ip TEXT,
+            domain TEXT,
+            port INTEGER,
+            meta TEXT,
+            config_data TEXT,
+            protocol TEXT,
+            remark TEXT,
+            domain_hosting TEXT DEFAULT 'Cloudflare',
+            created_at INTEGER DEFAULT (CAST(STRFTIME('%s', 'now') AS INT) * 1000),
+            updated_at INTEGER DEFAULT (CAST(STRFTIME('%s', 'now') AS INT) * 1000)
+        )
+    `).run();
+
+    const info = await env.DB.prepare('PRAGMA table_info(configs)').all();
+    const columns = (info.results || []).map(c => c.name);
+    const migrations = [
+        ['config_data', 'ALTER TABLE configs ADD COLUMN config_data TEXT'],
+        ['protocol', 'ALTER TABLE configs ADD COLUMN protocol TEXT'],
+        ['remark', 'ALTER TABLE configs ADD COLUMN remark TEXT'],
+        ['domain_hosting', "ALTER TABLE configs ADD COLUMN domain_hosting TEXT DEFAULT 'Cloudflare'"]
+    ];
+
+    for (const [column, sql] of migrations) {
+        if (!columns.includes(column)) await env.DB.prepare(sql).run();
+    }
+
+    await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_configs_uuid ON configs (uuid);').run();
+    await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_configs_protocol ON configs (protocol);').run();
+    await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_configs_domain_hosting ON configs (domain_hosting);').run();
+}
+
+async function fetchUuidStatsForManager(uuid, env, days = 30) {
+    try {
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - days);
+        const startDateStr = startDate.toISOString().split('T')[0];
+        const today = new Date().toISOString().split('T')[0];
+
+        const totalStats = await env.DB.prepare(`
+            SELECT COUNT(*) as total,
+                   SUM(CASE WHEN query_type = "subscription" THEN 1 ELSE 0 END) as subscription_total,
+                   SUM(CASE WHEN query_type = "api-generation" THEN 1 ELSE 0 END) as apigen_total,
+                   MIN(created_at) as first_access,
+                   MAX(created_at) as last_access
+            FROM config_access_logs
+            WHERE uuid = ?
+        `).bind(uuid).first();
+
+        const todayStats = await env.DB.prepare(`
+            SELECT COUNT(*) as total
+            FROM config_access_logs
+            WHERE uuid = ? AND DATE(created_at) = ?
+        `).bind(uuid, today).first();
+
+        const dailyStats = await env.DB.prepare(`
+            SELECT DATE(created_at) as date,
+                   COUNT(*) as total,
+                   SUM(CASE WHEN query_type = "subscription" THEN 1 ELSE 0 END) as subscription,
+                   SUM(CASE WHEN query_type = "api-generation" THEN 1 ELSE 0 END) as api_generation
+            FROM config_access_logs
+            WHERE uuid = ? AND DATE(created_at) >= ?
+            GROUP BY DATE(created_at)
+            ORDER BY date DESC
+        `).bind(uuid, startDateStr).all();
+
+        const recentLogs = await env.DB.prepare(`
+            SELECT query_type, client_ip, user_agent, created_at
+            FROM config_access_logs
+            WHERE uuid = ?
+            ORDER BY created_at DESC
+            LIMIT 30
+        `).bind(uuid).all();
+
+        return {
+            success: true,
+            uuid,
+            total_access: totalStats?.total || 0,
+            today_access: todayStats?.total || 0,
+            subscription_total: totalStats?.subscription_total || 0,
+            api_generation_total: totalStats?.apigen_total || 0,
+            first_access: totalStats?.first_access,
+            last_access: totalStats?.last_access,
+            daily_stats: dailyStats?.results || [],
+            recent_logs: recentLogs?.results || []
+        };
+    } catch (e) {
+        console.error(`获取UUID ${uuid} 管理统计失败:`, e.message);
+        return { success: false, error: e.message };
+    }
+}
+
+function normalizeDomainHosting(domainHosting) {
+    const validDomainHostings = [
+        'Cloudflare', '阿里ESA', '腾讯Edgeone', '腾讯云EdgeOne', 'AWS Cloudfront',
+        'Gcore', 'Fastly', 'CacheFly', 'LightCDN', 'Vercel', 'Netlify',
+        '无', '其他'
+    ];
+    return validDomainHostings.includes(domainHosting) ? domainHosting : 'Cloudflare';
+}
+
+async function handleUuidConfigs(req, env, method) {
+    try {
+        await ensureConfigManagerSchema(env);
+        const url = new URL(req.url);
+
+        if (method === 'GET') {
+            const uuid = url.searchParams.get('uuid');
+            if (!uuid) return jsonResponse({ success: false, error: 'UUID不能为空' }, 400);
+
+            const result = await fetchConfigsByUuidFromDB(uuid, env, {
+                page: url.searchParams.get('page') || 1,
+                pageSize: url.searchParams.get('size') || 10,
+                protocol: url.searchParams.get('protocol') || 'all',
+                domain_hosting: url.searchParams.get('domain_hosting') || 'all'
+            });
+
+            return jsonResponse({
+                success: true,
+                uuid,
+                data: result.results,
+                total: result.total,
+                page: result.page,
+                size: result.pageSize,
+                totalPages: result.totalPages
+            });
+        }
+
+        if (method === 'POST') {
+            const { uuid, config_data, domain_hosting = 'Cloudflare' } = await req.json();
+            if (!uuid || !config_data) return jsonResponse({ success: false, error: 'UUID和配置内容不能为空' }, 400);
+
+            const lines = config_data.split('\n').map(line => line.trim()).filter(Boolean);
+            const stmts = [];
+            const now = Date.now();
+            const hostingValue = normalizeDomainHosting(domain_hosting);
+            let skipped = 0;
+
+            for (const line of lines) {
+                const protocol = getProtocol(line);
+                if (protocol === 'unknown') {
+                    skipped++;
+                    continue;
+                }
+
+                const existing = await env.DB.prepare(
+                    'SELECT id FROM configs WHERE uuid = ? AND config_data = ?'
+                ).bind(uuid, line).first();
+                if (existing) {
+                    skipped++;
+                    continue;
+                }
+
+                const remark = extractRemarkFromConfig(line, protocol);
+                stmts.push(env.DB.prepare(`
+                    INSERT INTO configs (uuid, config_data, protocol, remark, domain_hosting, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                `).bind(uuid, line, protocol, remark, hostingValue, now, now));
+            }
+
+            if (stmts.length === 0) {
+                return jsonResponse({ success: false, error: skipped > 0 ? '没有可新增的有效配置' : '无有效配置' }, 400);
+            }
+
+            await executeInChunks(stmts);
+            return jsonResponse({ success: true, inserted: stmts.length, skipped });
+        }
+
+        if (method === 'PUT') {
+            const { id, config_data, domain_hosting = 'Cloudflare' } = await req.json();
+            if (!id || !config_data) return jsonResponse({ success: false, error: 'ID和配置内容不能为空' }, 400);
+
+            const protocol = getProtocol(config_data.trim());
+            if (protocol === 'unknown') return jsonResponse({ success: false, error: '不支持的配置格式' }, 400);
+
+            const remark = extractRemarkFromConfig(config_data.trim(), protocol);
+            await env.DB.prepare(`
+                UPDATE configs
+                SET config_data = ?, protocol = ?, remark = ?, domain_hosting = ?, updated_at = ?
+                WHERE id = ?
+            `).bind(config_data.trim(), protocol, remark, normalizeDomainHosting(domain_hosting), Date.now(), parseInt(id)).run();
+
+            return jsonResponse({ success: true, message: '配置更新成功' });
+        }
+
+        if (method === 'DELETE') {
+            const { id, uuid } = await req.json();
+            if (id) {
+                await env.DB.prepare('DELETE FROM configs WHERE id = ?').bind(parseInt(id)).run();
+                return jsonResponse({ success: true, message: '配置删除成功' });
+            }
+
+            if (uuid) {
+                await env.DB.prepare('DELETE FROM configs WHERE uuid = ?').bind(uuid).run();
+                return jsonResponse({ success: true, message: '分组配置已清空' });
+            }
+
+            return jsonResponse({ success: false, error: 'ID或UUID不能为空' }, 400);
+        }
+
+        return jsonResponse({ success: false, error: '不支持的请求方法' }, 405);
+    } catch (error) {
+        console.error('handleUuidConfigs error:', error.message);
+        return jsonResponse({ success: false, error: '服务器错误: ' + error.message }, 500);
+    }
+}
+
+async function handleUuidConfigStats(req, env) {
+    try {
+        const url = new URL(req.url);
+        const uuid = url.searchParams.get('uuid');
+        const days = parseInt(url.searchParams.get('days')) || 30;
+        if (!uuid) return jsonResponse({ success: false, error: 'UUID不能为空' }, 400);
+
+        return jsonResponse(await fetchUuidStatsForManager(uuid, env, days));
+    } catch (error) {
+        console.error('handleUuidConfigStats error:', error.message);
+        return jsonResponse({ success: false, error: '服务器错误' }, 500);
+    }
+}
+
 // =================================================================
 //  TEMPLATE MANAGEMENT API (模板管理)
 // =================================================================
@@ -1836,6 +2176,14 @@ async function handleApi(req, env) {
 
         if (path === '/api/uuids' && ['GET', 'DELETE', 'POST', 'PUT'].includes(method)) {
             return await handleUuids(req, env, method);
+        }
+
+        if (path === '/api/uuid-configs' && ['GET', 'POST', 'PUT', 'DELETE'].includes(method)) {
+            return await handleUuidConfigs(req, env, method);
+        }
+
+        if (path === '/api/uuid-configs/stats' && method === 'GET') {
+            return await handleUuidConfigStats(req, env);
         }
 
         // 模板管理API（新增）
@@ -2742,6 +3090,12 @@ const adminHtml = `
             word-break: break-all;
             white-space: normal;
         }
+
+        .config-data-cell {
+            max-width: 360px;
+            word-break: break-all;
+            white-space: normal;
+        }
         
         .loader {
             display: inline-block;
@@ -3483,6 +3837,203 @@ const adminHtml = `
         </div>
     </div>
 
+    <!-- UUID配置管理弹窗 -->
+    <div class="modal-overlay" id="uuidConfigModal" onclick="event.target===this && closeUuidConfigManager()">
+        <div class="modal" style="max-width: 1100px;">
+            <div class="max-h-[85vh] overflow-y-auto">
+                <div class="sticky top-0 bg-white pb-3 border-b mb-4 z-10">
+                    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                        <div>
+                            <h3 class="text-lg font-semibold text-dark">分组配置管理</h3>
+                            <div class="font-mono text-xs text-gray-500 break-all" id="managedUuidText"></div>
+                        </div>
+                        <div class="flex gap-2 flex-wrap">
+                            <button class="nav-btn small active" id="uuidConfigListTabBtn" onclick="switchUuidConfigTab('list')">配置列表</button>
+                            <button class="nav-btn small" id="uuidConfigStatsTabBtn" onclick="switchUuidConfigTab('stats')">访问统计</button>
+                            <button class="nav-btn small" id="uuidConfigAddTabBtn" onclick="switchUuidConfigTab('add')">添加新节点</button>
+                            <button class="nav-btn small" onclick="closeUuidConfigManager()">关闭</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="uuidConfigListPanel">
+                    <div class="flex flex-wrap gap-2.5 items-center mb-4">
+                        <select id="uuidConfigProtocolFilter" onchange="applyUuidConfigFilters()"
+                                class="px-3 py-1.5 border-2 border-secondary rounded bg-white focus:outline-none focus:border-primary">
+                            <option value="all">全部协议</option>
+                            <option value="vmess">vmess</option>
+                            <option value="vless">vless</option>
+                            <option value="trojan">trojan</option>
+                            <option value="shadowsocks">shadowsocks</option>
+                            <option value="hysteria2">hysteria2</option>
+                            <option value="tuic">tuic</option>
+                            <option value="anytls">anytls</option>
+                            <option value="socks5">socks5</option>
+                        </select>
+                        <select id="uuidConfigHostingFilter" onchange="applyUuidConfigFilters()"
+                                class="px-3 py-1.5 border-2 border-secondary rounded bg-white focus:outline-none focus:border-primary">
+                            <option value="all">全部托管</option>
+                            <option value="Cloudflare">Cloudflare</option>
+                            <option value="腾讯云EdgeOne">腾讯云EdgeOne</option>
+                            <option value="腾讯Edgeone">腾讯Edgeone</option>
+                            <option value="阿里ESA">阿里ESA</option>
+                            <option value="AWS Cloudfront">AWS Cloudfront</option>
+                            <option value="Gcore">Gcore</option>
+                            <option value="Fastly">Fastly</option>
+                            <option value="无">无</option>
+                            <option value="其他">其他</option>
+                        </select>
+                        <select id="uuidConfigSize" onchange="changeUuidConfigSize()"
+                                class="px-3 py-1.5 border-2 border-secondary rounded bg-white focus:outline-none focus:border-primary">
+                            <option value="5">5条/页</option>
+                            <option value="10" selected>10条/页</option>
+                            <option value="20">20条/页</option>
+                            <option value="50">50条/页</option>
+                        </select>
+                        <button class="nav-btn small" onclick="loadUuidConfigs()">
+                            <i data-lucide="refresh-cw" class="w-4 h-4 mr-1"></i>
+                            刷新
+                        </button>
+                        <button class="nav-btn danger small" onclick="clearManagedUuidConfigs()">
+                            <i data-lucide="trash-2" class="w-4 h-4 mr-1"></i>
+                            清空分组配置
+                        </button>
+                    </div>
+
+                    <div class="table-container">
+                        <table class="w-full border-collapse text-sm">
+                            <thead>
+                                <tr>
+                                    <th class="p-3 text-left bg-gray-50 text-dark font-semibold">备注</th>
+                                    <th class="p-3 text-left bg-gray-50 text-dark font-semibold">协议</th>
+                                    <th class="p-3 text-left bg-gray-50 text-dark font-semibold">域名托管</th>
+                                    <th class="p-3 text-left bg-gray-50 text-dark font-semibold">配置</th>
+                                    <th class="p-3 text-left bg-gray-50 text-dark font-semibold w-36">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="uuidConfigList">
+                                <tr><td colspan="5" class="p-5 text-center">请选择分组</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="flex justify-between items-center pt-4 text-sm text-primary">
+                        <span id="uuidConfigTotalInfo">共 0 条</span>
+                        <div class="flex items-center gap-2">
+                            <button class="nav-btn small" onclick="changeUuidConfigPage(-1)" id="uuidConfigPrevBtn">
+                                <i data-lucide="chevron-left" class="w-4 h-4"></i>
+                            </button>
+                            <span id="uuidConfigPageInfo">第 1 / 1 页</span>
+                            <button class="nav-btn small" onclick="changeUuidConfigPage(1)" id="uuidConfigNextBtn">
+                                <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="uuidConfigStatsPanel" style="display:none;">
+                    <div class="flex flex-wrap gap-2.5 items-center mb-4">
+                        <select id="uuidConfigStatsDays" onchange="loadManagedUuidStats()"
+                                class="px-3 py-1.5 border-2 border-secondary rounded bg-white focus:outline-none focus:border-primary">
+                            <option value="7">最近7天</option>
+                            <option value="14">最近14天</option>
+                            <option value="30" selected>最近30天</option>
+                            <option value="60">最近60天</option>
+                        </select>
+                        <button class="nav-btn small" onclick="loadManagedUuidStats()">刷新统计</button>
+                    </div>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                        <div class="access-stat-box"><span class="text-2xl font-bold text-blue-800 block" id="managedStatsTotal">0</span><span class="text-sm text-gray-600">总访问</span></div>
+                        <div class="access-stat-box"><span class="text-2xl font-bold text-blue-800 block" id="managedStatsToday">0</span><span class="text-sm text-gray-600">今日访问</span></div>
+                        <div class="access-stat-box"><span class="text-2xl font-bold text-blue-800 block" id="managedStatsSub">0</span><span class="text-sm text-gray-600">订阅访问</span></div>
+                        <div class="access-stat-box"><span class="text-2xl font-bold text-blue-800 block" id="managedStatsApi">0</span><span class="text-sm text-gray-600">网页生成</span></div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 text-sm">
+                        <div class="bg-gray-50 p-3 rounded">首次访问：<span id="managedStatsFirst">-</span></div>
+                        <div class="bg-gray-50 p-3 rounded">最后访问：<span id="managedStatsLast">-</span></div>
+                    </div>
+                    <div class="table-container">
+                        <table class="w-full border-collapse text-sm">
+                            <thead>
+                                <tr>
+                                    <th class="p-3 text-left bg-gray-50 text-dark font-semibold">时间</th>
+                                    <th class="p-3 text-left bg-gray-50 text-dark font-semibold">类型</th>
+                                    <th class="p-3 text-left bg-gray-50 text-dark font-semibold">客户端IP</th>
+                                    <th class="p-3 text-left bg-gray-50 text-dark font-semibold">User Agent</th>
+                                </tr>
+                            </thead>
+                            <tbody id="managedStatsLogs">
+                                <tr><td colspan="4" class="p-5 text-center">暂无数据</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="uuidConfigAddPanel" style="display:none;">
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-primary mb-1.5">域名托管</label>
+                        <select id="addUuidConfigHosting"
+                                class="w-full px-3 py-2 border-2 border-secondary rounded bg-white focus:outline-none focus:border-primary">
+                            <option value="Cloudflare">Cloudflare</option>
+                            <option value="腾讯云EdgeOne">腾讯云EdgeOne</option>
+                            <option value="腾讯Edgeone">腾讯Edgeone</option>
+                            <option value="阿里ESA">阿里ESA</option>
+                            <option value="AWS Cloudfront">AWS Cloudfront</option>
+                            <option value="Gcore">Gcore</option>
+                            <option value="Fastly">Fastly</option>
+                            <option value="CacheFly">CacheFly</option>
+                            <option value="LightCDN">LightCDN</option>
+                            <option value="Vercel">Vercel</option>
+                            <option value="Netlify">Netlify</option>
+                            <option value="无">无</option>
+                            <option value="其他">其他</option>
+                        </select>
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-primary mb-1.5">节点配置（可一次粘贴多行）</label>
+                        <textarea id="addUuidConfigData" rows="8" placeholder="vmess://...&#10;vless://..."
+                                  class="w-full px-3 py-2 border-2 border-secondary rounded focus:outline-none focus:border-primary font-mono text-sm"></textarea>
+                    </div>
+                    <button class="nav-btn active" onclick="addManagedUuidConfig()">
+                        <i data-lucide="plus" class="w-4 h-4 mr-1"></i>
+                        添加新节点
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 单条配置编辑弹窗 -->
+    <div class="modal-overlay" id="editConfigModal" onclick="event.target===this && (this.style.display='none')">
+        <div class="modal" style="max-width: 760px;">
+            <h3 class="text-lg font-semibold text-dark mb-4">编辑节点配置</h3>
+            <input type="hidden" id="editConfigId">
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-primary mb-1.5">域名托管</label>
+                <select id="editConfigHosting" class="w-full px-3 py-2 border-2 border-secondary rounded bg-white focus:outline-none focus:border-primary">
+                    <option value="Cloudflare">Cloudflare</option>
+                    <option value="腾讯云EdgeOne">腾讯云EdgeOne</option>
+                    <option value="腾讯Edgeone">腾讯Edgeone</option>
+                    <option value="阿里ESA">阿里ESA</option>
+                    <option value="AWS Cloudfront">AWS Cloudfront</option>
+                    <option value="Gcore">Gcore</option>
+                    <option value="Fastly">Fastly</option>
+                    <option value="CacheFly">CacheFly</option>
+                    <option value="LightCDN">LightCDN</option>
+                    <option value="Vercel">Vercel</option>
+                    <option value="Netlify">Netlify</option>
+                    <option value="无">无</option>
+                    <option value="其他">其他</option>
+                </select>
+            </div>
+            <textarea id="editConfigData" rows="7" class="w-full px-3 py-2 border-2 border-secondary rounded focus:outline-none focus:border-primary font-mono text-sm mb-4"></textarea>
+            <div class="flex justify-end gap-2.5">
+                <button class="nav-btn" onclick="document.getElementById('editConfigModal').style.display='none'">取消</button>
+                <button class="nav-btn active" onclick="saveManagedUuidConfig()">保存修改</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 模板编辑弹窗 -->
     <div class="modal-overlay" id="editTemplateModal" onclick="event.target===this && (this.style.display='none')">
         <div class="modal">
@@ -3666,6 +4217,7 @@ const adminHtml = `
         let domState = { page: 1, size: 10, total: 0, sort: 'id', order: 'desc' };
         let ipState = { page: 1, size: 10, total: 0, sort: 'created_at', order: 'desc' };
         let uuidState = { page: 1, size: 10, total: 0, sort: 'updated_at', order: 'desc' };
+        let uuidConfigState = { uuid: '', page: 1, size: 10, total: 0, totalPages: 1, protocol: 'all', domain_hosting: 'all' };
         let templateState = { page: 1, size: 10, total: 0, sort: 'created_at', order: 'desc', loading: false };
         let autoUpdateSettings = { global_enabled: false, hostmonit_v4: true, hostmonit_v6: false, vps789: true };
         let mfaStatus = { enabled: false, last_login: 0, backup_codes: 0 };
@@ -4951,6 +5503,7 @@ const adminHtml = `
                         <td class="p-3">\${fmtDate(i.updated_at)}</td>
                         <td class="p-3">
                             <div class="flex gap-1 flex-wrap">
+                                <button class="nav-btn small active" onclick="openUuidConfigManager('\${safeUUID}')">配置管理</button>
                                 <button class="nav-btn small" onclick="editUuidInfo('\${safeUUID}', '\${safeOwner}', '\${safeEmail}', '\${safeContactInfo}', '\${safeStatus}', '\${safeRemark}')">编辑信息</button>
                                 <button class="nav-btn danger small" onclick="delU('\${i.uuid}')">删除整组</button>
                             </div>
@@ -5019,6 +5572,250 @@ const adminHtml = `
                 document.getElementById('editUuidModal').style.display = 'none';
                 loadUuid();
             }
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function escapeAttr(value) {
+            return escapeHtml(value).replace(/\`/g, '&#96;');
+        }
+
+        function openUuidConfigManager(uuid) {
+            uuidConfigState = { uuid, page: 1, size: 10, total: 0, totalPages: 1, protocol: 'all', domain_hosting: 'all' };
+            document.getElementById('managedUuidText').textContent = uuid;
+            document.getElementById('uuidConfigProtocolFilter').value = 'all';
+            document.getElementById('uuidConfigHostingFilter').value = 'all';
+            document.getElementById('uuidConfigSize').value = '10';
+            document.getElementById('addUuidConfigData').value = '';
+            document.getElementById('uuidConfigModal').style.display = 'flex';
+            switchUuidConfigTab('list');
+            loadUuidConfigs();
+            loadManagedUuidStats();
+        }
+
+        function closeUuidConfigManager() {
+            document.getElementById('uuidConfigModal').style.display = 'none';
+            uuidConfigState.uuid = '';
+        }
+
+        function switchUuidConfigTab(tab) {
+            const panels = {
+                list: 'uuidConfigListPanel',
+                stats: 'uuidConfigStatsPanel',
+                add: 'uuidConfigAddPanel'
+            };
+            const buttons = {
+                list: 'uuidConfigListTabBtn',
+                stats: 'uuidConfigStatsTabBtn',
+                add: 'uuidConfigAddTabBtn'
+            };
+
+            Object.keys(panels).forEach(key => {
+                document.getElementById(panels[key]).style.display = key === tab ? 'block' : 'none';
+                document.getElementById(buttons[key]).classList.toggle('active', key === tab);
+            });
+
+            if (tab === 'list') loadUuidConfigs();
+            if (tab === 'stats') loadManagedUuidStats();
+            setTimeout(refreshLucideIcons, 50);
+        }
+
+        async function loadUuidConfigs() {
+            if (!uuidConfigState.uuid) return;
+
+            uuidConfigState.protocol = document.getElementById('uuidConfigProtocolFilter').value;
+            uuidConfigState.domain_hosting = document.getElementById('uuidConfigHostingFilter').value;
+            uuidConfigState.size = parseInt(document.getElementById('uuidConfigSize').value) || 10;
+
+            const query = 'uuid-configs?uuid=' + encodeURIComponent(uuidConfigState.uuid) +
+                '&page=' + uuidConfigState.page +
+                '&size=' + uuidConfigState.size +
+                '&protocol=' + encodeURIComponent(uuidConfigState.protocol) +
+                '&domain_hosting=' + encodeURIComponent(uuidConfigState.domain_hosting);
+
+            const list = document.getElementById('uuidConfigList');
+            list.innerHTML = '<tr><td colspan="5" class="p-5 text-center">加载中...</td></tr>';
+
+            const data = await api(query);
+            if (!data || !data.success) {
+                list.innerHTML = '<tr><td colspan="5" class="p-5 text-center text-danger">加载失败</td></tr>';
+                return;
+            }
+
+            uuidConfigState.total = data.total || 0;
+            uuidConfigState.totalPages = data.totalPages || 1;
+            uuidConfigState.page = data.page || 1;
+
+            if (!data.data || data.data.length === 0) {
+                list.innerHTML = '<tr><td colspan="5" class="p-5 text-center text-gray-500">暂无配置，请添加新节点</td></tr>';
+            } else {
+                let html = '';
+                data.data.forEach(row => {
+                    const configJson = escapeAttr(JSON.stringify(row));
+                    const hosting = row.domain_hosting || 'Cloudflare';
+                    html += '<tr>' +
+                        '<td class="p-3">' + (row.remark ? escapeHtml(row.remark) : '<span class="text-gray-300">无</span>') + '</td>' +
+                        '<td class="p-3 font-mono text-sm">' + escapeHtml(row.protocol || 'unknown') + '</td>' +
+                        '<td class="p-3"><span class="hosting-badge ' + (hosting === 'Cloudflare' ? 'hosting-cloudflare' : hosting.includes('腾讯') ? 'hosting-tencent' : 'badge-normal') + '">' + escapeHtml(hosting) + '</span></td>' +
+                        '<td class="p-3 config-data-cell font-mono text-xs" title="' + escapeAttr(row.config_data || '') + '">' + escapeHtml((row.config_data || '').slice(0, 96)) + ((row.config_data || '').length > 96 ? '...' : '') + '</td>' +
+                        '<td class="p-3"><div class="flex gap-1 flex-wrap">' +
+                        '<button class="nav-btn small" data-config="' + configJson + '" onclick="openManagedConfigEdit(JSON.parse(this.dataset.config))">编辑</button>' +
+                        '<button class="nav-btn danger small" onclick="deleteManagedUuidConfig(' + row.id + ')">删除</button>' +
+                        '</div></td>' +
+                        '</tr>';
+                });
+                list.innerHTML = html;
+            }
+
+            updateUuidConfigPager();
+            refreshLucideIcons();
+        }
+
+        function updateUuidConfigPager() {
+            const totalPages = uuidConfigState.totalPages || 1;
+            document.getElementById('uuidConfigTotalInfo').textContent = '共 ' + uuidConfigState.total + ' 条';
+            document.getElementById('uuidConfigPageInfo').textContent = '第 ' + uuidConfigState.page + ' / ' + totalPages + ' 页';
+            const prevBtn = document.getElementById('uuidConfigPrevBtn');
+            const nextBtn = document.getElementById('uuidConfigNextBtn');
+            prevBtn.disabled = uuidConfigState.page <= 1;
+            nextBtn.disabled = uuidConfigState.page >= totalPages;
+            prevBtn.style.opacity = prevBtn.disabled ? '0.5' : '1';
+            nextBtn.style.opacity = nextBtn.disabled ? '0.5' : '1';
+        }
+
+        function applyUuidConfigFilters() {
+            uuidConfigState.page = 1;
+            loadUuidConfigs();
+        }
+
+        function changeUuidConfigSize() {
+            uuidConfigState.page = 1;
+            loadUuidConfigs();
+        }
+
+        function changeUuidConfigPage(delta) {
+            const nextPage = uuidConfigState.page + delta;
+            if (nextPage < 1 || nextPage > uuidConfigState.totalPages) return;
+            uuidConfigState.page = nextPage;
+            loadUuidConfigs();
+        }
+
+        async function addManagedUuidConfig() {
+            const configData = document.getElementById('addUuidConfigData').value.trim();
+            const hosting = document.getElementById('addUuidConfigHosting').value;
+            if (!uuidConfigState.uuid || !configData) {
+                toast('UUID或配置内容不能为空', 'error');
+                return;
+            }
+
+            const res = await api('uuid-configs', 'POST', {
+                uuid: uuidConfigState.uuid,
+                config_data: configData,
+                domain_hosting: hosting
+            });
+
+            if (res && res.success) {
+                toast('已添加 ' + (res.inserted || 0) + ' 个节点');
+                document.getElementById('addUuidConfigData').value = '';
+                uuidConfigState.page = 1;
+                switchUuidConfigTab('list');
+                loadUuid();
+                loadStats();
+            }
+        }
+
+        function openManagedConfigEdit(config) {
+            document.getElementById('editConfigId').value = config.id;
+            document.getElementById('editConfigHosting').value = config.domain_hosting || 'Cloudflare';
+            document.getElementById('editConfigData').value = config.config_data || '';
+            document.getElementById('editConfigModal').style.display = 'flex';
+            setTimeout(() => document.getElementById('editConfigData').focus(), 100);
+        }
+
+        async function saveManagedUuidConfig() {
+            const id = document.getElementById('editConfigId').value;
+            const configData = document.getElementById('editConfigData').value.trim();
+            const hosting = document.getElementById('editConfigHosting').value;
+            if (!id || !configData) {
+                toast('配置内容不能为空', 'error');
+                return;
+            }
+
+            const res = await api('uuid-configs', 'PUT', {
+                id,
+                config_data: configData,
+                domain_hosting: hosting
+            });
+
+            if (res && res.success) {
+                toast('配置已更新');
+                document.getElementById('editConfigModal').style.display = 'none';
+                loadUuidConfigs();
+                loadUuid();
+            }
+        }
+
+        async function deleteManagedUuidConfig(id) {
+            if (!confirm('确认删除此节点配置?')) return;
+            const res = await api('uuid-configs', 'DELETE', { id });
+            if (res && res.success) {
+                toast('配置已删除');
+                loadUuidConfigs();
+                loadUuid();
+                loadStats();
+            }
+        }
+
+        async function clearManagedUuidConfigs() {
+            if (!uuidConfigState.uuid) return;
+            if (!confirm('确认清空此分组的所有配置?')) return;
+            const res = await api('uuid-configs', 'DELETE', { uuid: uuidConfigState.uuid });
+            if (res && res.success) {
+                toast('分组配置已清空');
+                uuidConfigState.page = 1;
+                loadUuidConfigs();
+                loadUuid();
+                loadStats();
+            }
+        }
+
+        async function loadManagedUuidStats() {
+            if (!uuidConfigState.uuid) return;
+            const days = document.getElementById('uuidConfigStatsDays').value || 30;
+            const data = await api('uuid-configs/stats?uuid=' + encodeURIComponent(uuidConfigState.uuid) + '&days=' + days);
+            if (!data || !data.success) return;
+
+            document.getElementById('managedStatsTotal').textContent = data.total_access || 0;
+            document.getElementById('managedStatsToday').textContent = data.today_access || 0;
+            document.getElementById('managedStatsSub').textContent = data.subscription_total || 0;
+            document.getElementById('managedStatsApi').textContent = data.api_generation_total || 0;
+            document.getElementById('managedStatsFirst').textContent = data.first_access ? fmtDate(data.first_access) : '-';
+            document.getElementById('managedStatsLast').textContent = data.last_access ? fmtDate(data.last_access) : '-';
+
+            const logs = document.getElementById('managedStatsLogs');
+            if (!data.recent_logs || data.recent_logs.length === 0) {
+                logs.innerHTML = '<tr><td colspan="4" class="p-5 text-center text-gray-500">暂无访问记录</td></tr>';
+                return;
+            }
+
+            let html = '';
+            data.recent_logs.forEach(log => {
+                const isSub = log.query_type === 'subscription';
+                html += '<tr>' +
+                    '<td class="p-3">' + fmtDate(log.created_at) + '</td>' +
+                    '<td class="p-3"><span class="type-badge ' + (isSub ? 'type-subscription' : 'type-apigen') + '">' + (isSub ? '订阅' : '网页') + '</span></td>' +
+                    '<td class="p-3">' + escapeHtml(log.client_ip || '未知') + '</td>' +
+                    '<td class="p-3 max-w-[260px] truncate" title="' + escapeAttr(log.user_agent || '') + '">' + escapeHtml(log.user_agent || '未知') + '</td>' +
+                    '</tr>';
+            });
+            logs.innerHTML = html;
         }
         
         function changeUuidPage(d) { changePage('uuid', d, uuidState, loadUuid); }
