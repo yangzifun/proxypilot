@@ -103,9 +103,40 @@ function getClientIp(request) {
   return 'unknown';
 }
 
+function isValidUuid(uuid) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(uuid || '');
+}
+
 // =================================================================
 //  DATABASE OPERATIONS (数据库操作)
 // =================================================================
+
+async function uuidExistsForManagement(uuid, env) {
+  if (!uuid || !env.DB) return false;
+
+  const configCount = await env.DB.prepare(
+      'SELECT COUNT(*) as count FROM configs WHERE uuid = ?'
+  ).bind(uuid).first();
+
+  if ((configCount?.count || 0) > 0) return true;
+
+  try {
+      const tableCheck = await env.DB.prepare(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name='uuid_info'"
+      ).first();
+
+      if (!tableCheck) return false;
+
+      const uuidInfo = await env.DB.prepare(
+          'SELECT uuid FROM uuid_info WHERE uuid = ? LIMIT 1'
+      ).bind(uuid).first();
+
+      return !!uuidInfo;
+  } catch (e) {
+      console.error("检查UUID是否存在失败:", e.message);
+      return false;
+  }
+}
 
 // 获取配置列表（支持筛选、分页和全部获取）
 async function fetchConfigsByUuidFromDB(uuid, env, options = {}) {
@@ -661,8 +692,14 @@ async function logConfigAccess(env, uuid, queryType, clientIp, userAgent) {
 async function handleAddConfig(request, env) {
   let body;
   try { body = await request.json(); } catch (e) { return jsonResponse({ error: '无效 JSON' }, 400); }
-  const { uuid, config_data, domain_hosting = 'Cloudflare' } = body;
+  const { uuid, config_data, domain_hosting = 'Cloudflare', allow_create_uuid = false } = body;
   if (!uuid || !config_data) return jsonResponse({ error: '字段缺失' }, 400);
+  if (!isValidUuid(uuid)) return jsonResponse({ error: 'UUID格式无效' }, 400);
+
+  const uuidExists = await uuidExistsForManagement(uuid, env);
+  if (!uuidExists && !allow_create_uuid) {
+      return jsonResponse({ error: 'UUID不存在，请通过生成按钮生成新的UUID后再添加配置' }, 404);
+  }
 
   const validDomainHostings =[
       'Cloudflare', '阿里ESA', '腾讯Edgeone', 'AWS Cloudfront',
@@ -694,6 +731,8 @@ try {
 
 const { id, config_data, domain_hosting = 'Cloudflare' } = body;
 if (!id) return jsonResponse({ error: '缺少配置ID' }, 400);
+if (!body.uuid) return jsonResponse({ error: '缺少UUID，无法校验编辑权限' }, 400);
+if (!isValidUuid(body.uuid)) return jsonResponse({ error: 'UUID格式无效' }, 400);
 
 const protocol = getProtocol(config_data);
 if (protocol === 'unknown') return jsonResponse({ error: '不支持的配置格式' }, 400);
@@ -709,9 +748,16 @@ const hostingValue = validDomainHostings.includes(domain_hosting) ? domain_hosti
 try {
     // 强制转换 id 为数字，确保与数据库类型一致
     const targetId = parseInt(id);
+    const existingConfig = await env.DB.prepare('SELECT id FROM configs WHERE id = ? AND uuid = ?')
+        .bind(targetId, body.uuid)
+        .first();
 
-    const res = await env.DB.prepare('UPDATE configs SET config_data = ?, protocol = ?, remark = ?, domain_hosting = ?, updated_at = ? WHERE id = ?')
-        .bind(config_data, protocol, remark, hostingValue, Date.now(), targetId)
+    if (!existingConfig) {
+        return jsonResponse({ error: '配置不存在，或不属于当前UUID，禁止编辑' }, 404);
+    }
+
+    const res = await env.DB.prepare('UPDATE configs SET config_data = ?, protocol = ?, remark = ?, domain_hosting = ?, updated_at = ? WHERE id = ? AND uuid = ?')
+        .bind(config_data, protocol, remark, hostingValue, Date.now(), targetId, body.uuid)
         .run();
 
     // 只要执行没有报错，就返回成功。
@@ -727,6 +773,21 @@ try {
 }
 }
 
+
+async function handleCheckUuid(uuid, env) {
+  if (!uuid) return jsonResponse({ success: false, exists: false, error: 'UUID Required' }, 400);
+  if (!isValidUuid(uuid)) {
+      return jsonResponse({ success: true, exists: false, valid: false, error: 'UUID格式无效' }, 400);
+  }
+
+  const exists = await uuidExistsForManagement(uuid, env);
+  return jsonResponse({
+      success: true,
+      valid: true,
+      exists,
+      message: exists ? 'UUID存在，可以进入配置管理' : 'UUID不存在，请通过生成按钮生成新的UUID'
+  });
+}
 
 async function handleGetConfigs(uuid, env, url) {
   // 获取查询参数
@@ -1882,6 +1943,7 @@ export default {
       const uuidStats = new URLPattern({ pathname: '/manage/stats/:uuid' });
       const batchUUID = new URLPattern({ pathname: '/batch-configs/:uuid' });
       const uuidInfo = new URLPattern({ pathname: '/manage/uuid-info/:uuid' });
+      const uuidCheck = new URLPattern({ pathname: '/manage/uuid-check/:uuid' });
       const allUuidInfo = new URLPattern({ pathname: '/manage/all-uuid-info' });
 
       try {
@@ -1900,6 +1962,12 @@ export default {
               // ===== API: 配置管理 =====
               const uuidMatch = manageUUID.exec(url);
               if (uuidMatch) return await handleGetConfigs(uuidMatch.pathname.groups.uuid, env, url);
+
+              // ===== API: UUID入口校验 =====
+              const uuidCheckMatch = uuidCheck.exec(url);
+              if (uuidCheckMatch) {
+                  return await handleCheckUuid(uuidCheckMatch.pathname.groups.uuid, env);
+              }
 
               // ===== API: UUID访问统计 =====
               const statsMatch = uuidStats.exec(url);
@@ -2428,16 +2496,17 @@ const unifiedPageHtmlContent = `
                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 focus:outline-none">
         <div class="mt-2 bg-gray-50 border-l-4 border-gray-500 p-3 rounded-lg">
           <p class="text-sm text-gray-700">
-            如果您没有 UUID，可以
-            <a href="javascript:void(0)" onclick="generateNewUuid()" class="text-gray-700 underline font-medium hover:text-gray-900">
-              点击这里生成一个新的
-            </a>
-            <br>UUID 将保存在您的浏览器中，方便下次使用。
+            已存在的 UUID 通过校验后才可进入配置管理。
+            <br>如果您没有 UUID，请点击下方生成按钮创建新的配置分组。
           </p>
         </div>
       </div>
 
-      <div class="flex justify-end gap-3 mobile-btn-group">
+      <div class="flex justify-end gap-3 mobile-btn-group flex-wrap">
+        <button onclick="generateNewUuid()"
+                class="flex-1 px-4 py-2 border border-gray-700 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+          生成UUID
+        </button>
         <button onclick="closeConfigManagerModal()"
                 class="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
           取消
@@ -3312,6 +3381,7 @@ trojan://..."
   let currentChartType = 'split';
   let currentSubscriptionLink = '';
   let templatesList =[];
+  let generatedUuidForEntry = '';
 
   // Domain hosting style mapping
   const hostingStyleMap = {
@@ -3343,9 +3413,14 @@ trojan://..."
   // ============================================
 
   // Local storage functions for UUID persistence
-  function saveUuidToStorage(uuid) {
+  function saveUuidToStorage(uuid, isGenerated = false) {
     localStorage.setItem('proxy_manager_uuid', uuid);
     localStorage.setItem('proxy_manager_last_access', Date.now().toString());
+    if (isGenerated) {
+      localStorage.setItem('proxy_manager_generated_uuid', uuid);
+    } else {
+      localStorage.removeItem('proxy_manager_generated_uuid');
+    }
   }
 
   function getUuidFromStorage() {
@@ -3366,6 +3441,15 @@ trojan://..."
   function clearUuidFromStorage() {
     localStorage.removeItem('proxy_manager_uuid');
     localStorage.removeItem('proxy_manager_last_access');
+    localStorage.removeItem('proxy_manager_generated_uuid');
+  }
+
+  function isGeneratedUuid(uuid) {
+    return uuid && localStorage.getItem('proxy_manager_generated_uuid') === uuid;
+  }
+
+  function isValidUuidInput(uuid) {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(uuid || '');
   }
 
   // ============================================
@@ -3404,21 +3488,42 @@ trojan://..."
       const v = c === 'x' ? r : (r & 0x3 | 0x8);
       return v.toString(16);
     });
+    generatedUuidForEntry = newUuid;
     document.getElementById('configUuidInput').value = newUuid;
-    showToast('已生成新的 UUID', 'success');
+    showToast('已生成新的 UUID，可用于创建新的配置分组', 'success');
   }
 
-  function enterConfigManagement() {
+  async function enterConfigManagement() {
     const uuid = document.getElementById('configUuidInput').value.trim();
     if (!uuid) {
       showToast('请输入 UUID', 'error');
       return;
     }
 
+    if (!isValidUuidInput(uuid)) {
+      showToast('UUID格式无效，请检查或点击生成按钮', 'error');
+      return;
+    }
+
+    const isGenerated = uuid === generatedUuidForEntry || isGeneratedUuid(uuid);
+    if (!isGenerated) {
+      try {
+        const response = await fetch(\`\${WORKER_DOMAIN}/manage/uuid-check/\${encodeURIComponent(uuid)}\`);
+        const result = await response.json();
+        if (!response.ok || !result.success || !result.exists) {
+          showToast(result.error || result.message || 'UUID不存在，请通过生成按钮生成新的UUID', 'error');
+          return;
+        }
+      } catch (error) {
+        showToast('UUID校验失败: ' + error.message, 'error');
+        return;
+      }
+    }
+
     closeConfigManagerModal();
 
     // Save UUID to storage
-    saveUuidToStorage(uuid);
+    saveUuidToStorage(uuid, isGenerated);
 
     // Update logout button
     updateLogoutButton();
@@ -4397,13 +4502,15 @@ trojan://..."
         body: JSON.stringify({
           uuid: u,
           config_data: d,
-          domain_hosting: hosting
+          domain_hosting: hosting,
+          allow_create_uuid: isGeneratedUuid(u)
         })
       });
 
       const result = await response.json();
       if (result.success) {
         showToast('添加成功','success'); 
+        saveUuidToStorage(u, false);
         document.getElementById('addConfigData').value=''; 
         manageQueryByUuid();
       } else {
@@ -4573,6 +4680,7 @@ trojan://..."
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
           id: parseInt(id), // 确保传给后端的是数字
+          uuid: currentUuid || document.getElementById('queryUuidInput').value.trim(),
           config_data: nL,
           domain_hosting: domainHosting
         })
