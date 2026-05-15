@@ -5833,6 +5833,7 @@ const adminHtml = `
             try {
                 const d = await api(q);
                 if (d && d.success) {
+                    templateState.total = d.total || 0;
                     if (d.data && d.data.length > 0) {
                         let html = '';
                         d.data.forEach(i => {
