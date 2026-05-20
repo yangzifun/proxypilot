@@ -88,7 +88,7 @@ rule-anchor:
 proxy-groups:
   # --- 底层自动选优 (降低频率，降低内存和CPU压力) ---
   - {name: ⚡ 自动选择, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 600, filter: "^((?!(直连|中国|国内|回国|CN|China|Mainland)).)*$"}
-  - {name: 🇭🇰 香港自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 80, interval: 600, filter: "(?i)香港|HK|Hong Kong|HongKong"}
+  - {name: 🇨🇳 港澳, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 80, interval: 600, filter: "(?i)香港|澳门|澳門|HK|Hong Kong|HongKong"}
   - {name: 🇯🇵 日本自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 80, interval: 600, filter: "(?i)日本|JP|Japan|东京|大阪|埼玉|京都|福冈|名古屋|札幌"}
   - {name: 🇺🇸 美国自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 80, interval: 600, filter: "(?i)美国|US|USA|洛杉矶|旧金山|西雅图|纽约|弗吉尼亚|阿什本"}
   - {name: 🇸🇬 新加坡自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 80, interval: 600, filter: "(?i)新加坡|SG|Singapore|狮城"}
@@ -96,10 +96,10 @@ proxy-groups:
   - {name: 🌐 全部节点, type: select, include-all: true}
 
   # --- 业务策略组 (精简) ---
-  - {name: 🚀 默认代理, type: select, proxies: [⚡ 自动选择, 🇭🇰 香港自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🌐 全部节点]}
+  - {name: 🚀 默认代理, type: select, proxies: [⚡ 自动选择, 🇨🇳 港澳, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🌐 全部节点]}
   - {name: 🤖 AI 服务, type: select, proxies: [🇺🇸 美国自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🚀 默认代理]}
   - {name: 🌍 社交办公, type: select, proxies: [🚀 默认代理, ⚡ 自动选择, 🎯 直连]}
-  - {name: 🎬 国际影视, type: select, proxies: [🚀 默认代理, ⚡ 自动选择, 🇭🇰 香港自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动]}
+  - {name: 🎬 国际影视, type: select, proxies: [🚀 默认代理, ⚡ 自动选择, 🇨🇳 港澳, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动]}
   - {name: 🎮 游戏平台, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择]}
   - {name: 🔍 Google, type: select, proxies: [🚀 默认代理, ⚡ 自动选择]}
   - {name: 🟦 Microsoft, type: select, proxies: [🎯 直连, 🚀 默认代理]}
