@@ -126,8 +126,7 @@ proxy-groups:
   # --- 3. 社交与办公 ---
   - {name: 📲 Telegram, type: select, proxies: [⚡ 自动选择, 🇨🇳 港澳, 🇯🇵 日本, 🇺🇸 美国, 🇸🇬 新加坡, 🇹🇼 中国台湾, 🇩🇪 德国]}
   - {name: 🌏 Meta, type: select, proxies: [🚀 默认代理, 🇨🇳 港澳, 🇹🇼 中国台湾, 🇯🇵 日本, 🇺🇸 美国]}
-  - {name: 🐦 Twitter, type: select, proxies: [🚀 默认代理, 🇨🇳 港澳, 🇯🇵 日本, 🇺🇸 美国]}
-  - {name: 💬 Discord, type: select, proxies: [🚀 默认代理, 🇺🇸 美国, 🇨🇳 港澳, 🇩🇪 德国]}
+  - {name: 🐦 X, type: select, proxies: [⚡ 自动选择, 🇨🇳 港澳, 🇯🇵 日本, 🇺🇸 美国, 🇸🇬 新加坡, 🇹🇼 中国台湾, 🇩🇪 德国]}
   - {name: 🐱 GitHub, type: select, proxies: [⚡ 自动选择, 🇨🇳 港澳, 🇯🇵 日本, 🇺🇸 美国, 🇩🇪 德国]}
   - {name: 🟦 Microsoft, type: select, proxies: [DIRECT, 🚀 默认代理, ⚡ 自动选择, 🇨🇳 港澳, 🇯🇵 日本, 🇺🇸 美国]} 
 
@@ -180,8 +179,7 @@ rules:
   - RULE-SET,telegram_domain,📲 Telegram
   - RULE-SET,facebook_domain,🌏 Meta
   - RULE-SET,instagram_domain,🌏 Meta
-  - RULE-SET,twitter_domain,🐦 Twitter
-  - RULE-SET,discord_domain,💬 Discord
+  - RULE-SET,twitter_domain,🐦 X
   - RULE-SET,youtube_domain,🎬 YouTube
   - RULE-SET,netflix_domain,🎥 Netflix
   - RULE-SET,disney_domain,🎞️ Disney+
@@ -227,7 +225,6 @@ rule-providers:
   claude: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/anthropic.mrs" }
   ai: { <<: *domain, url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/category-ai-!cn.mrs" }
   telegram_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/telegram.mrs"}
-  discord_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/discord.mrs"}
   youtube_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/youtube.mrs"}
   netflix_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/netflix.mrs"}
   disney_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/disney.mrs"}
