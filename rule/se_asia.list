@@ -1,0 +1,107 @@
+# ==========================================
+# 东南亚地区补充列表 (Southeast Asia Proxy List)
+# ==========================================
+
+# ----- 泰国基础服务、运营商 -----
+# 泰国true
+DOMAIN-SUFFIX,trueid.net
+DOMAIN-SUFFIX,truecorp.co.th
+DOMAIN-SUFFIX,truemoney.com
+DOMAIN-SUFFIX,truevisions.co.th
+# 泰国AIS & Dtac
+DOMAIN-SUFFIX,cloud.ais.th
+DOMAIN-SUFFIX,ais.co.th
+DOMAIN-SUFFIX,ais.th
+DOMAIN-SUFFIX,dtac.co.th
+
+# ----- 泰国零售与生活服务 -----
+# 泰国BigC
+DOMAIN-SUFFIX,bigc.co.th
+DOMAIN-SUFFIX,bigc-cs.com
+# 泰国7-11
+DOMAIN-SUFFIX,7eleven.co.th
+# 泰国Lotuss
+DOMAIN-SUFFIX,lotuss.com
+# 泰国Makro万客隆
+DOMAIN-SUFFIX,makro.co.th
+DOMAIN-SUFFIX,makro.pro
+# 其他零售与票务
+DOMAIN-SUFFIX,central.co.th
+DOMAIN-SUFFIX,wongnai.com
+DOMAIN-SUFFIX,majorcineplex.com
+DOMAIN-SUFFIX,sfcinemacity.com
+DOMAIN-SUFFIX,thaiticketmajor.com
+DOMAIN-SUFFIX,kerryexpress.com
+DOMAIN-SUFFIX,flashexpress.com
+
+# ----- 泰国流媒体与传媒 -----
+# 泰国正大CDN
+DOMAIN-SUFFIX,dmpcdn.com
+# 3plus
+DOMAIN-SUFFIX,ch3plus.com
+# 影视流媒体与电视网络
+DOMAIN-SUFFIX,bugaboo.tv
+DOMAIN-SUFFIX,monomax.me
+DOMAIN-SUFFIX,one31.net
+DOMAIN-SUFFIX,gmm25.com
+DOMAIN-SUFFIX,amarintv.com
+DOMAIN-SUFFIX,viu.com
+# 资讯与论坛
+DOMAIN-SUFFIX,sanook.com
+DOMAIN-SUFFIX,pantip.com
+DOMAIN-SUFFIX,thairath.co.th
+DOMAIN-SUFFIX,matichon.co.th
+DOMAIN-SUFFIX,dek-d.com
+
+# ----- 泰国银行服务 (视节点情况选择代理或直连) -----
+DOMAIN-SUFFIX,kasikornbank.com
+DOMAIN-SUFFIX,scb.co.th
+DOMAIN-SUFFIX,bangkokbank.com
+DOMAIN-SUFFIX,krungsri.com
+
+# ----- 泛东南亚生活、出行与电商 -----
+# 叫车与外卖
+DOMAIN-SUFFIX,grab.com
+DOMAIN-SUFFIX,gojek.com
+DOMAIN-SUFFIX,lineman.line.me
+DOMAIN-SUFFIX,foodpanda.co.th
+DOMAIN-SUFFIX,foodpanda.sg
+# Shopee (虾皮)
+DOMAIN-SUFFIX,shopee.co.th
+DOMAIN-SUFFIX,shopee.sg
+DOMAIN-SUFFIX,shopee.com.my
+DOMAIN-SUFFIX,shopee.ph
+DOMAIN-SUFFIX,shopee.co.id
+DOMAIN-SUFFIX,shopee.vn
+# Lazada (来赞达)
+DOMAIN-SUFFIX,lazada.co.th
+DOMAIN-SUFFIX,lazada.sg
+DOMAIN-SUFFIX,lazada.com.my
+DOMAIN-SUFFIX,lazada.com.ph
+DOMAIN-SUFFIX,lazada.co.id
+DOMAIN-SUFFIX,lazada.vn
+DOMAIN-SUFFIX,tokopedia.com
+# 机票与OTA旅游
+DOMAIN-SUFFIX,traveloka.com
+DOMAIN-SUFFIX,agoda.com
+DOMAIN-SUFFIX,airasia.com
+DOMAIN-SUFFIX,thaiairways.com
+DOMAIN-SUFFIX,vietjetair.com
+
+# ----- 新马越印尼代表性服务 -----
+# 新加坡
+DOMAIN-SUFFIX,singtel.com
+DOMAIN-SUFFIX,starhub.com
+DOMAIN-SUFFIX,channelnewsasia.com
+DOMAIN-SUFFIX,mewatch.sg
+DOMAIN-SUFFIX,straitstimes.com
+# 越南
+DOMAIN-SUFFIX,zalo.me
+DOMAIN-SUFFIX,vnexpress.net
+DOMAIN-SUFFIX,fptplay.vn
+DOMAIN-SUFFIX,thegioididong.com
+# 印尼
+DOMAIN-SUFFIX,vidio.com
+DOMAIN-SUFFIX,kompas.com
+DOMAIN-SUFFIX,detik.com
+DOMAIN-SUFFIX,telkomsel.com
