@@ -172,6 +172,7 @@ rules:
   # 中国大陆服务全部走 DIRECT
   - RULE-SET,cn_domain,DIRECT
 
+  - RULE-SET,se_asia,🇸🇬 新加坡
   - RULE-SET,openai,🤖 OpenAI
   - RULE-SET,gemini,✨ Gemini
   - RULE-SET,claude,🧠 Claude
@@ -210,6 +211,7 @@ rules:
 # ==========================================================
 rule-providers:
   proxylite: { <<: *class, url: "https://github.com/yangzifun/proxypilot/raw/refs/heads/main/rule/proxy.list"}
+  se_asia: { <<: *class, url: "https://raw.githubusercontent.com/yangzifun/proxypilot/refs/heads/main/rule/se_asia.list"}
   private_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs"}
   custom_direct: { <<: *class, url: "https://github.com/yangzifun/proxypilot/raw/refs/heads/main/rule/direct.list"}
   category-ads-all: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ads-all.mrs"}
