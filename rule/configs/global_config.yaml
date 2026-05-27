@@ -145,6 +145,9 @@ proxy-groups:
   - {name: 🎮 EA, type: select, proxies: [⚡ 自动选择, 🚀 默认代理, 🇯🇵 日本, 🇺🇸 美国, 🇨🇳 港澳]}
   - {name: 🎮 PlayStation, type: select, proxies: [⚡ 自动选择, 🚀 默认代理, 🇯🇵 日本, 🇺🇸 美国, 🇨🇳 港澳]}
 
+  # --- 6.东南亚自动选优 ---
+  - {name: 东南亚自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)新加坡|狮城|马来西亚|吉隆坡|马六甲|槟城|印尼|雅加达|巴厘岛|菲律宾|马尼拉|越南|胡志明市|河内|泰国|曼谷|清迈"}
+
   # --- 6. 基础工具 ---
   - {name: 🔍 Google, type: select, proxies: [⚡ 自动选择, 🇨🇳 港澳, 🇯🇵 日本, 🇺🇸 美国, 🇸🇬 新加坡, 🇹🇼 中国台湾, 🇩🇪 德国]}
   - {name: 🚀 Speedtest, type: select, proxies: [🚀 默认代理, ⚡ 自动选择, DIRECT]}
@@ -172,7 +175,7 @@ rules:
   # 中国大陆服务全部走 DIRECT
   - RULE-SET,cn_domain,DIRECT
 
-  - RULE-SET,se_asia,🇸🇬 新加坡
+  - RULE-SET,se_asia,东南亚自动
   - RULE-SET,openai,🤖 OpenAI
   - RULE-SET,gemini,✨ Gemini
   - RULE-SET,claude,🧠 Claude
