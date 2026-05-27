@@ -1,4 +1,4 @@
-# 更新时间: 2026-03-08
+# 更新时间: 2026-05-27
 # 模板类型: IOS 专用模板 - 内存优化版 (50MB 限制)
 # 作者: YZFN
 # 说明:
@@ -106,6 +106,7 @@ proxy-groups:
   - {name: 🍎 Apple, type: select, proxies: [🎯 直连, 🚀 默认代理]}
   - {name: 🚀 Speedtest, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择]}
   - {name: 💳 PayPal, type: select, proxies: [🚀 默认代理, ⚡ 自动选择, 🎯 直连]}
+  - {name: 东南亚自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)新加坡|狮城|马来西亚|吉隆坡|马六甲|槟城|印尼|雅加达|巴厘岛|菲律宾|马尼拉|越南|胡志明市|河内|泰国|曼谷|清迈"}
   - {name: 🚫 广告拦截, type: select, proxies: [REJECT, DIRECT]}
   - {name: 🎯 直连, type: select, proxies: [DIRECT, 🚀 默认代理]}
   - {name: 🐟 漏网之鱼, type: select, proxies: [🚀 默认代理, 🎯 直连, ⚡ 自动选择]}
@@ -140,6 +141,7 @@ rules:
   - RULE-SET,speedtest_domain,🚀 Speedtest
   - RULE-SET,paypal_domain,💳 PayPal
   - RULE-SET,tiktok_domain,🎬 国际影视
+  - RULE-SET,se_asia,东南亚自动
 
 
 
@@ -156,6 +158,7 @@ rule-providers:
   private_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs"}
   custom_direct: { <<: *class, url: "https://github.com/yangzifun/proxypilot/raw/refs/heads/main/rule/direct.list"}
   proxylite: { <<: *class, url: "https://github.com/yangzifun/proxypilot/raw/refs/heads/main/rule/proxy.list"}
+  se_asia: { <<: *class, url: "https://raw.githubusercontent.com/yangzifun/proxypilot/refs/heads/main/rule/se_asia.list"}
 
   # 聚合规则 (内存优化)
   ai: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ai-!cn.mrs"}
