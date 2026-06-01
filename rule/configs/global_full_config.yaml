@@ -172,12 +172,7 @@ rules:
   - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
   - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
   - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve
-  
-  # IP 规则优先
-  - RULE-SET,google_ip,🔍 Google,no-resolve
-  - RULE-SET,telegram_ip,📲 Telegram,no-resolve
-  - RULE-SET,netflix_ip,🎥 Netflix,no-resolve
-  
+
   - RULE-SET,proxylite,🚀 默认代理
   - RULE-SET,cn_domain,DIRECT
   - RULE-SET,se_asia,东南亚自动
@@ -190,6 +185,7 @@ rules:
   - RULE-SET,ai,🌌 常用 AI
 
   # 社交与通讯
+  - RULE-SET,telegram_ip,📲 Telegram,no-resolve
   - RULE-SET,telegram_domain,📲 Telegram
   - RULE-SET,discord_domain,💬 Discord
   - RULE-SET,reddit_domain,📱 Reddit
@@ -211,6 +207,7 @@ rules:
 
   # 视频流媒体
   - RULE-SET,youtube_domain,🎬 YouTube
+  - RULE-SET,netflix_ip,🎥 Netflix,no-resolve
   - RULE-SET,netflix_domain,🎥 Netflix
   - RULE-SET,disney_domain,🎞️ Disney+
   - RULE-SET,tiktok_domain,🎵 TikTok
@@ -243,6 +240,7 @@ rules:
   - RULE-SET,sony_domain,🎮 PlayStation
 
   # 基础平台与其他
+  - RULE-SET,google_ip,🔍 Google,no-resolve
   - RULE-SET,google_domain,🔍 Google
   - RULE-SET,onedrive_domain,🟦 Microsoft
   - RULE-SET,microsoft_domain,🟦 Microsoft

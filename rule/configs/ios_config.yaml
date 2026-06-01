@@ -130,18 +130,20 @@ rules:
 
   # 3. 核心业务
   - RULE-SET,ai,🤖 AI 服务
+  - RULE-SET,se_asia,东南亚自动
   - RULE-SET,telegram_domain,🌍 社交办公
   - RULE-SET,social_domain,🌍 社交办公
   - RULE-SET,github_domain,🌍 社交办公
   - RULE-SET,media_domain,🎬 国际影视
+  - RULE-SET,tiktok_domain,🎬 国际影视
   - RULE-SET,google_domain,🔍 Google
   - RULE-SET,microsoft_domain,🟦 Microsoft
   - RULE-SET,apple_domain,🍎 Apple
   - RULE-SET,steam_domain,🎮 游戏平台
   - RULE-SET,speedtest_domain,🚀 Speedtest
   - RULE-SET,paypal_domain,💳 PayPal
-  - RULE-SET,tiktok_domain,🎬 国际影视
-  - RULE-SET,se_asia,东南亚自动
+  
+  
 
 
 
