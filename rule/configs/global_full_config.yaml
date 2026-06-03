@@ -1,4 +1,4 @@
-﻿# 更新时间: 2026-05-27
+﻿# 更新时间: 2026-06-03
 # 模板类型: 全球上网全量模板 - 针对全球上网需求优化，适用于国际访问
 # 作者: YZFN
 # ==========================================================
@@ -113,54 +113,39 @@ proxy-groups:
   - {name: ⚡ 自动选择, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
  
   # --- AI 服务 ---
-  - {name: 🤖 OpenAI, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH|香港|澳门|澳門|HK|hk|MO)).)*$"}
-  - {name: 🧠 Claude, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH|香港|澳门|澳門|HK|hk|MO)).)*$"}
-  - {name: 🤗 Hugging Face, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
-  - {name: 🌌 常用 AI, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH|香港|澳门|澳門|HK|hk|MO)).)*$"}
+   - {name: 🌌 AI, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH|香港|澳门|澳門|HK|hk|MO)).)*$"}
   
   # --- 社交与通讯 ---
   - {name: 📲 Telegram, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
-  - {name: 💬 Discord, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
-  - {name: 📱 Reddit, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
   - {name: 🌏 Meta, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
   - {name: 🐦 X, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
+  - {name: 📱 社交媒体, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
   
   # --- 生产力与协作 ---
-  - {name: 💼 LinkedIn, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
-  - {name: 📝 Notion, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
-  - {name: 🧩 Figma, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
-  - {name: 🤝 Zoom, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
+  - {name: 💼 办公, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
 
   # --- 开发者与云服务 ---
-  - {name: 🐱 GitHub, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
-  - {name: ☁️ Cloudflare, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
-  - {name: 🐳 Docker, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
-  - {name: 🚀 Vercel, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
+  - {name: 🧑‍💻 开发, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
+  - {name: ☁️ 云服务, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
+  
 
   # --- 流媒体与娱乐 ---
-  - {name: 🎬 YouTube, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
-  - {name: 🎥 Netflix, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
-  - {name: 🎞️ Disney+, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
-  - {name: 📺 海外流媒体, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
-  - {name: 🎵 TikTok, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH|香港|hk|HK)).)*$"}
-  - {name: 🎧 海外音乐, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
+  - {name: 📺 流媒体, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
+  - {name: 📺 流媒体（解锁）, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH|香港|hk|HK)).)*$"}
+  - {name: 🎧 音乐, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
   
   # --- 游戏通用 ---
-  - {name: 🎮 Steam, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
-  - {name: 🎮 Ubisoft, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
-  - {name: 🎮 Epic, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
-  - {name: 🎮 EA, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
-  - {name: 🎮 PlayStation, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
-
-  # --- 东南亚自动选优 ---
-  - {name: 东南亚自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)新加坡|狮城|马来西亚|吉隆坡|马六甲|槟城|印尼|雅加达|巴厘岛|菲律宾|马尼拉|越南|胡志明市|河内|泰国|曼谷|清迈"}
+  - {name: 🎮 游戏, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
+  
+    # --- 东南亚选优 ---
+  - {name: 🌏️ 东南亚, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)新加坡|狮城|马来西亚|吉隆坡|马六甲|槟城|印尼|雅加达|巴厘岛|菲律宾|马尼拉|越南|胡志明市|河内|泰国|曼谷|清迈"}
   
   # --- 基础工具 ---
-  - {name: 🔍 Google, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
-  - {name: 🟦 Microsoft, type: select, proxies: [DIRECT, 🚀 默认代理, ⚡ 自动选择]} 
-  - {name: 💳 PayPal, type: select, proxies: [⚡ 自动选择, 🚀 默认代理, DIRECT]}
+  - {name: 🔍 Google, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH|香港|HK|hk)).)*$"}
+  - {name: 🪟 微软, type: select, proxies: [DIRECT, 🚀 默认代理, ⚡ 自动选择]} 
+  - {name: 💳 海外支付, type: select, proxies: [⚡ 自动选择, 🚀 默认代理, DIRECT]}
   - {name: 🚫 广告拦截, type: select, proxies: [REJECT, DIRECT]}
-  - {name: 🐟 漏网之鱼, type: select, proxies: [🚀 默认代理, DIRECT, ⚡ 自动选择]}
+  - {name: 🧱 漏网之鱼, type: select, proxies: [🚀 默认代理, DIRECT, ⚡ 自动选择]}
 
 # ==========================================================
 # 规则匹配 (Rules) 
@@ -175,80 +160,80 @@ rules:
 
   - RULE-SET,proxylite,🚀 默认代理
   - RULE-SET,cn_domain,DIRECT
-  - RULE-SET,se_asia,东南亚自动
+  - RULE-SET,se_asia,🌏️ 东南亚
 
   # AI 规则
-  - RULE-SET,openai,🤖 OpenAI
+  - RULE-SET,openai,🌌 AI
   - RULE-SET,gemini,🔍 Google
-  - RULE-SET,claude,🧠 Claude
-  - RULE-SET,huggingface_domain,🤗 Hugging Face
-  - RULE-SET,ai,🌌 常用 AI
+  - RULE-SET,claude,🌌 AI
+  - RULE-SET,huggingface_domain,🌌 AI
+  - RULE-SET,ai,🌌 AI
 
   # 社交与通讯
   - RULE-SET,telegram_ip,📲 Telegram,no-resolve
   - RULE-SET,telegram_domain,📲 Telegram
-  - RULE-SET,discord_domain,💬 Discord
-  - RULE-SET,reddit_domain,📱 Reddit
+  - RULE-SET,discord_domain,📱 社交媒体
+  - RULE-SET,reddit_domain,📱 社交媒体
   - RULE-SET,facebook_domain,🌏 Meta
   - RULE-SET,instagram_domain,🌏 Meta
   - RULE-SET,twitter_domain,🐦 X
 
   # 生产力与协作
-  - RULE-SET,linkedin_domain,💼 LinkedIn
-  - RULE-SET,notion_domain,📝 Notion
-  - RULE-SET,figma_domain,🧩 Figma
-  - RULE-SET,zoom_domain,🤝 Zoom
+  - RULE-SET,linkedin_domain,💼 办公
+  - RULE-SET,notion_domain,💼 办公
+  - RULE-SET,figma_domain,💼 办公
+  - RULE-SET,zoom_domain,💼 办公
 
   # 开发者与云服务
-  - RULE-SET,github_domain,🐱 GitHub
-  - RULE-SET,cloudflare_domain,☁️ Cloudflare
-  - RULE-SET,docker_domain,🐳 Docker
-  - RULE-SET,vercel_domain,🚀 Vercel
+  - RULE-SET,github_domain,🧑‍💻 开发
+  - RULE-SET,cloudflare_domain,☁️ 云服务
+  - RULE-SET,docker_domain,🧑‍💻 开发
+  - RULE-SET,vercel_domain,🧑‍💻 开发
 
   # 视频流媒体
-  - RULE-SET,youtube_domain,🎬 YouTube
-  - RULE-SET,netflix_ip,🎥 Netflix,no-resolve
-  - RULE-SET,netflix_domain,🎥 Netflix
-  - RULE-SET,disney_domain,🎞️ Disney+
-  - RULE-SET,tiktok_domain,🎵 TikTok
-  - RULE-SET,primevideo_domain,📺 海外流媒体
-  - RULE-SET,hbo_domain,📺 海外流媒体
-  - RULE-SET,hulu_domain,📺 海外流媒体
-  - RULE-SET,crunchyroll_domain,📺 海外流媒体
-  - RULE-SET,peacock_domain,📺 海外流媒体
-  - RULE-SET,paramount_domain,📺 海外流媒体
-  - RULE-SET,discovery_domain,📺 海外流媒体
-  - RULE-SET,espn_domain,📺 海外流媒体
-  - RULE-SET,vimeo_domain,📺 海外流媒体
-  - RULE-SET,dailymotion_domain,📺 海外流媒体
-  - RULE-SET,plex_domain,📺 海外流媒体
-  - RULE-SET,bahamut_domain,📺 海外流媒体
-  - RULE-SET,viu_domain,📺 海外流媒体
-  - RULE-SET,twitch_domain,📺 海外流媒体
+  - RULE-SET,youtube_domain,📺 流媒体
+  - RULE-SET,netflix_ip,📺 流媒体,no-resolve
+  - RULE-SET,netflix_domain,📺 流媒体
+  - RULE-SET,disney_domain,📺 流媒体
+  - RULE-SET,tiktok_domain,📺 流媒体（解锁）
+  - RULE-SET,primevideo_domain,📺 流媒体
+  - RULE-SET,hbo_domain,📺 流媒体
+  - RULE-SET,hulu_domain,📺 流媒体
+  - RULE-SET,crunchyroll_domain,📺 流媒体
+  - RULE-SET,peacock_domain,📺 流媒体
+  - RULE-SET,paramount_domain,📺 流媒体
+  - RULE-SET,discovery_domain,📺 流媒体
+  - RULE-SET,espn_domain,📺 流媒体
+  - RULE-SET,vimeo_domain,📺 流媒体
+  - RULE-SET,dailymotion_domain,📺 流媒体
+  - RULE-SET,plex_domain,📺 流媒体
+  - RULE-SET,bahamut_domain,📺 流媒体
+  - RULE-SET,viu_domain,📺 流媒体
+  - RULE-SET,twitch_domain,📺 流媒体
 
   # 音乐流媒体
-  - RULE-SET,spotify_domain,🎧 海外音乐
-  - RULE-SET,deezer_domain,🎧 海外音乐
-  - RULE-SET,soundcloud_domain,🎧 海外音乐
-  - RULE-SET,tidal_domain,🎧 海外音乐
+  - RULE-SET,spotify_domain,🎧 音乐
+  - RULE-SET,deezer_domain,🎧 音乐
+  - RULE-SET,soundcloud_domain,🎧 音乐
+  - RULE-SET,tidal_domain,🎧 音乐
 
   # 游戏服务
-  - RULE-SET,steam_domain,🎮 Steam
-  - RULE-SET,ubisoft_domain,🎮 Ubisoft
-  - RULE-SET,epic_domain,🎮 Epic
-  - RULE-SET,ea_domain,🎮 EA
-  - RULE-SET,sony_domain,🎮 PlayStation
+  - RULE-SET,steam_domain,🎮 游戏
+  - RULE-SET,ubisoft_domain,🎮 游戏
+  - RULE-SET,epic_domain,🎮 游戏
+  - RULE-SET,ea_domain,🎮 游戏
+  - RULE-SET,sony_domain,🎮 游戏
 
   # 基础平台与其他
   - RULE-SET,google_ip,🔍 Google,no-resolve
   - RULE-SET,google_domain,🔍 Google
-  - RULE-SET,onedrive_domain,🟦 Microsoft
-  - RULE-SET,microsoft_domain,🟦 Microsoft
+  - RULE-SET,onedrive_domain,🪟 微软
+  - RULE-SET,microsoft_domain,🪟 微软
   - RULE-SET,apple_domain,🚀 默认代理
-  - RULE-SET,paypal_domain,💳 PayPal
+  - RULE-SET,paypal_domain,💳 海外支付
   - RULE-SET,cn_ip,DIRECT,no-resolve
   - RULE-SET,gfw_domain,🚀 默认代理
-  - MATCH,🐟 漏网之鱼
+  - MATCH,🧱 漏网之鱼
 
 # ==========================================================
 # 规则源 (Rule-providers)
@@ -307,7 +292,7 @@ rule-providers:
   viu_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/viu.mrs"}
   twitch_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/twitch.mrs"}
   
-  # 海外音乐
+  # 音乐
   spotify_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/spotify.mrs"}
   deezer_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/deezer.mrs"}
   soundcloud_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/soundcloud.mrs"}
