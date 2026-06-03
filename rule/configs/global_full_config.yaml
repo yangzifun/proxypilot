@@ -162,8 +162,6 @@ proxy-groups:
 rules:
   # --- ⚠️ 核心保护：防止 BT 下载导致节点被封 ---
   # 强烈建议保留：防止 P2P 下载软件的流量走代理，导致机场节点因版权投诉（DMCA）被封禁
-  - PORT,6881-6889,DIRECT                   # BT 常用端口直连
-  - PORT,1337,DIRECT                        # BT 常用端口直连
   - MATCH,PROCESS-NAME,BitTorrent,DIRECT    # 匹配 BitTorrent 进程直连
   - MATCH,PROCESS-NAME,qBittorrent,DIRECT   # 匹配 qBittorrent 进程直连
   - MATCH,PROCESS-NAME,Transmission,DIRECT  # 匹配 Transmission 进程直连
