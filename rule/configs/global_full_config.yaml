@@ -132,6 +132,16 @@ proxy-groups:
 # 规则匹配 (Rules) 
 # ==========================================================
 rules:
+  # --- ⚠️ 核心保护：防止 BT 下载导致节点被封 ---
+  - PORT,6881-6889,DIRECT
+  - PORT,1337,DIRECT
+  - MATCH,PROCESS-NAME,BitTorrent,DIRECT
+  - MATCH,PROCESS-NAME,qBittorrent,DIRECT
+  - MATCH,PROCESS-NAME,Transmission,DIRECT
+  - MATCH,PROCESS-NAME,uTorrent,DIRECT
+  - MATCH,PROCESS-NAME,aria2c,DIRECT
+
+  # --- 基础去广告与直连 ---
   - RULE-SET,category-ads-all,🚫 广告拦截
   - RULE-SET,private_domain,DIRECT
   - RULE-SET,custom_direct,DIRECT
@@ -143,35 +153,45 @@ rules:
   - RULE-SET,cn_domain,DIRECT
   - RULE-SET,se_asia,🌏️ 东南亚
 
-  # AI 规则
+  # --- AI 规则 ---
   - RULE-SET,openai,🌌 AI
   - RULE-SET,gemini,🔍 Google
   - RULE-SET,claude,🌌 AI
+  - RULE-SET,perplexity_domain,🌌 AI
   - RULE-SET,huggingface_domain,🌌 AI
   - RULE-SET,ai,🌌 AI
 
-  # 社交与通讯
+  # --- 社交与通讯 ---
   - RULE-SET,telegram_ip,📲 Telegram,no-resolve
   - RULE-SET,telegram_domain,📲 Telegram
   - RULE-SET,discord_domain,📱 社交媒体
   - RULE-SET,reddit_domain,📱 社交媒体
+  - RULE-SET,whatsapp_domain,📱 社交媒体
+  - RULE-SET,line_domain,📱 社交媒体
+  - RULE-SET,pinterest_domain,📱 社交媒体
   - RULE-SET,facebook_domain,🌏 Meta
   - RULE-SET,instagram_domain,🌏 Meta
   - RULE-SET,twitter_domain,🐦 X
 
-  # 生产力与协作
+  # --- 加密货币 Web3---
+  - RULE-SET,binance_domain,💳 海外支付
+  - RULE-SET,okx_domain,💳 海外支付
+
+  # --- 生产力与协作 ---
   - RULE-SET,linkedin_domain,💼 办公
   - RULE-SET,notion_domain,💼 办公
   - RULE-SET,figma_domain,💼 办公
   - RULE-SET,zoom_domain,💼 办公
 
-  # 开发者与云服务
+  # --- 开发者与云服务 ---
   - RULE-SET,github_domain,🧑‍💻 开发
   - RULE-SET,cloudflare_domain,☁️ 云服务
   - RULE-SET,docker_domain,🧑‍💻 开发
   - RULE-SET,vercel_domain,🧑‍💻 开发
+  - RULE-SET,aws_domain,☁️ 云服务
+  - RULE-SET,dropbox_domain,☁️ 云服务
 
-  # 视频流媒体
+  # --- 视频流媒体 ---
   - RULE-SET,youtube_domain,📺 流媒体
   - RULE-SET,netflix_ip,📺 流媒体,no-resolve
   - RULE-SET,netflix_domain,📺 流媒体
@@ -191,21 +211,25 @@ rules:
   - RULE-SET,bahamut_domain,📺 流媒体
   - RULE-SET,viu_domain,📺 流媒体
   - RULE-SET,twitch_domain,📺 流媒体
+  - RULE-SET,porn_domain,📺 流媒体
 
-  # 音乐流媒体
+  # --- 音乐流媒体 ---
   - RULE-SET,spotify_domain,🎧 音乐
   - RULE-SET,deezer_domain,🎧 音乐
   - RULE-SET,soundcloud_domain,🎧 音乐
   - RULE-SET,tidal_domain,🎧 音乐
 
-  # 游戏服务
+  # --- 游戏服务 ---
   - RULE-SET,steam_domain,🎮 游戏
   - RULE-SET,ubisoft_domain,🎮 游戏
   - RULE-SET,epic_domain,🎮 游戏
   - RULE-SET,ea_domain,🎮 游戏
   - RULE-SET,sony_domain,🎮 游戏
+  - RULE-SET,nintendo_domain,🎮 游戏
+  - RULE-SET,xbox_domain,🎮 游戏
+  - RULE-SET,roblox_domain,🎮 游戏
 
-  # 基础平台与其他
+  # --- 基础平台与其他 ---
   - RULE-SET,google_ip,🔍 Google,no-resolve
   - RULE-SET,google_domain,🔍 Google
   - RULE-SET,onedrive_domain,🪟 微软
@@ -215,6 +239,7 @@ rules:
   - RULE-SET,cn_ip,DIRECT,no-resolve
   - RULE-SET,gfw_domain,🚀 默认代理
   - MATCH,🧱 漏网之鱼
+
 
 # ==========================================================
 # 规则源 (Rule-providers)
@@ -231,15 +256,23 @@ rule-providers:
   gemini: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/google-gemini.mrs" }
   claude: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/anthropic.mrs" }
   huggingface_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/huggingface.mrs" }
-  ai: { <<: *domain, url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/category-ai-!cn.mrs" }
+  perplexity_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/perplexity.mrs" }
+  ai: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ai-!cn.mrs" }
   
   # 社交与通讯
   telegram_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/telegram.mrs"}
   discord_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/discord.mrs"}
   reddit_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/reddit.mrs"}
+  whatsapp_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/whatsapp.mrs"}
+  line_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/line.mrs"}
+  pinterest_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/pinterest.mrs"}
   facebook_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/facebook.mrs"}
   instagram_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/instagram.mrs"}
   twitter_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/twitter.mrs"}
+
+  # 加密货币 Web3 
+  binance_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/binance.mrs"}
+  okx_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/okx.mrs"}
 
   # 生产力与协作
   linkedin_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/linkedin.mrs"}
@@ -252,6 +285,8 @@ rule-providers:
   cloudflare_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cloudflare.mrs"}
   docker_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/docker.mrs"}
   vercel_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/vercel.mrs"}
+  aws_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/aws.mrs"}
+  dropbox_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/dropbox.mrs"}
 
   # 影音视频流媒体
   youtube_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/youtube.mrs"}
@@ -272,6 +307,7 @@ rule-providers:
   bahamut_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/bahamut.mrs"}
   viu_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/viu.mrs"}
   twitch_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/twitch.mrs"}
+  porn_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-porn.mrs"}
   
   # 音乐
   spotify_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/spotify.mrs"}
@@ -285,6 +321,9 @@ rule-providers:
   epic_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/epicgames.mrs"}
   ea_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/ea.mrs"}
   sony_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/sony.mrs"}
+  nintendo_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/nintendo.mrs"}
+  xbox_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/xbox.mrs"}
+  roblox_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/roblox.mrs"}
   
   # 基础服务与平台
   google_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/google.mrs"}
