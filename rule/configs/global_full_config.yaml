@@ -109,7 +109,7 @@ rule-anchor:
 proxy-groups:
 
   # --- 默认代理 (总开关) ---
-  - {name: 🚀 默认代理, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
+  - {name: 🚀 默认代理, type: url-test, url: "http://cp.cloudflare.com/generate_204", include-all: true, tolerance: 20, interval: 300, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH"}
   - {name: ⚡ 自动选择, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
  
   # --- AI 服务 ---
