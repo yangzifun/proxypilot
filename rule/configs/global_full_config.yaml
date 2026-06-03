@@ -107,21 +107,19 @@ rule-anchor:
 # 出站策略 (Proxy Groups) 
 # ==========================================================
 proxy-groups:
-
-  # --- 默认代理 (总开关) ---
   - {name: 🚀 默认代理, type: url-test, url: "http://cp.cloudflare.com/generate_204", include-all: true, tolerance: 20, interval: 300, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH"}
-  - {name: ⚡ 自动选择, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
+  - {name: ⚡ 自动选择, type: url-test, url: "http://cp.cloudflare.com/generate_204", include-all: true, tolerance: 20, interval: 300, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH"}
  
-  # --- AI 服务 ---
-   - {name: 🌌 AI, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH|香港|澳门|澳門|HK|hk|MO)).)*$"}
+ 
+  - {name: 🌌 AI, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH|香港|澳门|澳門|HK|hk|MO)).)*$"}
   
-  # --- 社交与通讯 ---
+
   - {name: 📲 Telegram, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
   - {name: 🌏 Meta, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
   - {name: 🐦 X, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
   - {name: 📱 社交媒体, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
   
-  # --- 生产力与协作 ---
+
   - {name: 💼 办公, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "^((?!(直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH)).)*$"}
 
   # --- 开发者与云服务 ---
