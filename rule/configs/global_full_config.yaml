@@ -160,13 +160,6 @@ proxy-groups:
 # 规则匹配采用自上而下的顺序，一旦匹配成功即停止向下匹配。
 # 因此，高优先级的（如防BT、局域网直连、去广告）必须放在最前面。
 rules:
-  # --- ⚠️ 核心保护：防止 BT 下载导致节点被封 ---
-  # 强烈建议保留：防止 P2P 下载软件的流量走代理，导致机场节点因版权投诉（DMCA）被封禁
-  - MATCH,PROCESS-NAME,BitTorrent,DIRECT    # 匹配 BitTorrent 进程直连
-  - MATCH,PROCESS-NAME,qBittorrent,DIRECT   # 匹配 qBittorrent 进程直连
-  - MATCH,PROCESS-NAME,Transmission,DIRECT  # 匹配 Transmission 进程直连
-  - MATCH,PROCESS-NAME,uTorrent,DIRECT      # 匹配 uTorrent 进程直连
-  - MATCH,PROCESS-NAME,aria2c,DIRECT        # 匹配 aria2c 下载神器进程直连
 
   # --- 基础去广告与直连 ---
   - RULE-SET,category-ads-all,🚫 广告拦截   # 拦截各大平台和网盟的广告、追踪器流量
