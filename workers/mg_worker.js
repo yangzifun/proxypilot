@@ -607,8 +607,8 @@ async function runIpUpdateTask(env, sources = null) {
         }
     });
 
-    const newIpList = Array.from(uniqueMap.values());
-    console.log(`去重后得到 ${newIpList.length} 个有效记录`);
+    const newIpList = Array.from(uniqueMap.values()).slice(0, 100);
+    console.log(`去重并截断后保留 ${newIpList.length} 个有效记录`);
 
     if (sources.global_enabled === 0) {
         return { success: true, count: newIpList.length, message: "自动更新已关闭" };
@@ -629,7 +629,10 @@ async function runIpUpdateTask(env, sources = null) {
                     .bind(i.ip, i.ip_type || 'v4', i.carrier, i.source, Date.now(), Date.now())
             );
 
-            await executeInChunks(insertStmts);
+            // D1 Batch: 每批最多100条，大幅减少查询次数
+            for (let i = 0; i < insertStmts.length; i += 100) {
+                await env.DB.batch(insertStmts.slice(i, i + 100));
+            }
             insertedCount = newIpList.length;
         }
 
