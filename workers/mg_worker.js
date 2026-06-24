@@ -863,7 +863,28 @@ async function initializeDatabaseSettings(env) {
  */
 async function handleLogin(req, env) {
     try {
-        const { username, password, totp_code, step } = await req.json();
+        const { username, password, totp_code, step, cf_turnstile_response } = await req.json();
+
+        // Turnstile 人机验证（仅在第一次密码登录时验证，二次验证(TOTP)时跳过）
+        if (!step || step !== 'verify_totp') {
+            if (!cf_turnstile_response) {
+                return jsonResponse({ error: '请完成人机验证' }, 400);
+            }
+
+            const turnstileSecret = env.TURNSTILE_SECRET_KEY || '';
+            if (turnstileSecret) {
+                const verifyRes = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: `secret=${encodeURIComponent(turnstileSecret)}&response=${encodeURIComponent(cf_turnstile_response)}`
+                });
+                const verifyData = await verifyRes.json();
+                if (!verifyData.success) {
+                    console.error('Turnstile 验证失败:', JSON.stringify(verifyData['error-codes']));
+                    return jsonResponse({ error: '人机验证失败，请重试' }, 403);
+                }
+            }
+        }
 
         const user = await env.DB.prepare(
             'SELECT * FROM admin_users WHERE username = ?'
@@ -2285,6 +2306,7 @@ const loginHtml = `
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <link rel="icon" href="https://s3.yangzifun.org/logo.ico">
     <title>优选配置管理后台 - 登录</title>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -2518,6 +2540,7 @@ const loginHtml = `
                 <input type="password" id="password" placeholder="访问密码" required autocomplete="current-password"
                        class="flex-1 px-3 py-2 border-2 border-secondary rounded focus:outline-none focus:border-primary">
             </div>
+            <div class="cf-turnstile mb-4 flex justify-center" data-sitekey="__TURNSTILE_SITE_KEY__"></div>
             <button type="submit" id="loginBtn"
                     class="w-full bg-primary text-white py-2.5 px-4 rounded border-2 border-primary font-medium hover:bg-opacity-90 transition flex items-center justify-center gap-2">
                 <i data-lucide="arrow-right" class="w-4 h-4"></i>
@@ -2623,6 +2646,14 @@ const loginHtml = `
                 return;
             }
             
+            // 获取Turnstile验证Token
+            const turnstileToken = document.querySelector('[name="cf-turnstile-response"]')?.value || '';
+            if (!turnstileToken) {
+                msg.innerText = '请完成人机验证';
+                msg.classList.remove('hidden');
+                return;
+            }
+            
             btn.disabled = true;
             btn.innerHTML = '<i data-lucide="loader" class="w-4 h-4 animate-spin"></i>验证中...';
             msg.classList.add('hidden');
@@ -2633,7 +2664,8 @@ const loginHtml = `
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
                         username, 
-                        password 
+                        password,
+                        cf_turnstile_response: turnstileToken
                     })
                 });
                 
@@ -6183,7 +6215,9 @@ export default {
 
         // 处理静态页面
         if (url.pathname === '/login') {
-            return new Response(loginHtml, {
+            const siteKey = env.TURNSTILE_SITE_KEY || '';
+            const html = loginHtml.replace('__TURNSTILE_SITE_KEY__', siteKey);
+            return new Response(html, {
                 headers: {
                     'Content-Type': 'text/html;charset=UTF-8',
                     'Cache-Control': CACHE_CONTROL

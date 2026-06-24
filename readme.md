@@ -199,9 +199,16 @@
     *   **D1 Database Bindings**：
         *   **Variable name**: `DB` (必须完全一致，注意大写)
         *   **D1 database**: 选择第 1 步创建的数据库。
-    *   **JWT 密钥**（仅限 `mg_worker.js`）：
+        *   **JWT 密钥**（仅限 `mg_worker.js`）：
         *   **Variable name**: `JWT_SECRET` (必须完全一致)
         *   **Value**: 请设置一个足够长且复杂的随机字符串作为 JWT 密钥，用于签名和验证管理后台的认证 Token。例如，可以使用 `openssl rand -base64 32` 生成。
+        *   **人机验证（Cloudflare Turnstile）配置**（仅限 `mg_worker.js`，可选但强烈推荐）：
+            *   前往 [Cloudflare Turnstile](https://dash.cloudflare.com/?to=/:account/turnstile) 添加站点，获取 Site Key 和 Secret Key。
+            *   **Variable name**: `TURNSTILE_SITE_KEY`
+            *   **Value**: 填写 Turnstile 站点密钥（Site Key），例如 `0x4AAAAAADqAuGR7IqMqFqX3`
+            *   **Variable name**: `TURNSTILE_SECRET_KEY`
+            *   **Value**: 填写 Turnstile 私钥（Secret Key），例如 `0x4AAAAAADqAuAUBzjaYCvPupHUIqSOrEvA`
+            *   **说明**：配置后，管理后台登录页面将自动启用 Cloudflare Turnstile 人机验证，有效防止自动化暴力破解登录。如果未设置这两个变量，登录页面将不会显示验证组件（向后兼容）。
 
 ### 4. 初始化域名表 (可选)
 
