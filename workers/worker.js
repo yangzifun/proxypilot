@@ -1253,12 +1253,26 @@ async function handleGetBatchConfigs(uuid, urlParams, env, request) {
 // 获取Clash配置模板
 async function fetchClashConfigTemplate(templateUrl) {
   try {
-      const response = await fetch(templateUrl);
+      console.log(`正在获取Clash模板: ${templateUrl}`);
+      const response = await fetch(templateUrl, {
+          redirect: 'follow',
+          headers: {
+              'User-Agent': 'ProxyPilot/1.0 (Cloudflare Worker)',
+              'Accept': 'text/plain, application/octet-stream, */*'
+          }
+      });
+      console.log(`模板响应状态: ${response.status} ${response.statusText}, content-type: ${response.headers.get('content-type')}`);
       if (!response.ok) {
-          console.error(`无法从URL获取模板: ${response.status} ${response.statusText}`);
-          throw new Error(`无法从 ${templateUrl} 获取Clash配置文件模板。`);
+          console.error(`无法从URL获取模板: ${response.status} ${response.statusText}, URL: ${templateUrl}`);
+          throw new Error(`无法从 ${templateUrl} 获取Clash配置文件模板。HTTP ${response.status}: ${response.statusText}`);
       }
-      return await response.text();
+      const text = await response.text();
+      if (!text || text.trim().length === 0) {
+          console.error(`模板内容为空: ${templateUrl}`);
+          throw new Error(`从 ${templateUrl} 获取的模板内容为空`);
+      }
+      console.log(`模板获取成功，长度: ${text.length} 字符`);
+      return text;
   } catch (error) {
       console.error('获取Clash模板失败:', error);
       throw new Error(`无法从 ${templateUrl} 获取Clash配置文件模板: ${error.message}`);
@@ -1846,33 +1860,41 @@ async function generateClashConfig(request, env) {
       let templateUrl;
       if (template.startsWith('http://') || template.startsWith('https://')) {
           templateUrl = template;
+          console.log(`使用直接URL模板: ${templateUrl}`);
       } else {
+          console.log(`从数据库查找模板: ${template}`);
           const dbTemplate = await fetchTemplateFromDB(env, template);
           if (!dbTemplate) {
               return jsonResponse({ error: `未在数据库中找到模板 "${template}"` }, 404);
           }
           templateUrl = dbTemplate.url;
+          console.log(`数据库模板URL: ${templateUrl}`);
       }
 
-      const templateContent = await fetchClashConfigTemplate(templateUrl);
+      let templateContent;
+      try {
+          templateContent = await fetchClashConfigTemplate(templateUrl);
+      } catch (templateError) {
+          console.error(`模板获取失败 (${templateUrl}):`, templateError.message);
+          return jsonResponse({ error: `模板载入失败: ${templateError.message}` }, 502);
+      }
 
       let finalConfig = templateContent;
 
-      const proxiesMarker = '# 节点信息\nproxies:';
-      let proxiesStartIndex = templateContent.indexOf(proxiesMarker);
-
-      if (proxiesStartIndex === -1) {
-          proxiesStartIndex = templateContent.indexOf('\nproxies:');
-          if (proxiesStartIndex !== -1) {
-              proxiesStartIndex++;
-          }
-      }
+      // 使用正则匹配行首的 proxies:（兼容 LF/CRLF 等各种换行格式，不受前后注释/分隔符影响）
+      const proxiesMatch = templateContent.match(/^proxies:\s*$/m);
+      let proxiesStartIndex = proxiesMatch ? proxiesMatch.index : -1;
 
       if (proxiesStartIndex !== -1) {
           const insertPosition = templateContent.indexOf('\n', proxiesStartIndex + 'proxies:'.length);
 
-          let proxiesEndIndex = templateContent.indexOf('\n\n', insertPosition);
-          if (proxiesEndIndex === -1 || proxiesEndIndex < insertPosition) {
+          // 查找 proxies 块之后的分隔空行（兼容 LF 的 \n\n 和 CRLF 的 \r\n\r\n）
+          const afterInsert = templateContent.substring(insertPosition);
+          const blankLineMatch = afterInsert.match(/\n\s*\n/);
+          let proxiesEndIndex;
+          if (blankLineMatch) {
+              proxiesEndIndex = insertPosition + blankLineMatch.index + blankLineMatch[0].length;
+          } else {
               proxiesEndIndex = templateContent.length;
           }
 
