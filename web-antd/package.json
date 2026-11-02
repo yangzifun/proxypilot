@@ -1,7 +1,7 @@
 {
   "name": "proxypilot-web-antd",
   "private": true,
-  "version": "15.4.0",
+  "version": "15.5.0",
   "type": "module",
   "description": "ProxyPilot 管理后台 · Ant Design 6 + React 18（构建后内嵌进 Go 服务）",
   "scripts": {

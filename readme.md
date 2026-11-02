@@ -1,6 +1,6 @@
 # ProxyPilot
 
-![Go](https://img.shields.io/badge/Go-1.23-00ADD8?logo=go&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white) ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black) ![Ant Design](https://img.shields.io/badge/Ant%20Design-6-1677FF?logo=antdesign&logoColor=white) ![Agent](https://img.shields.io/badge/Agent-Go-00ADD8?logo=go&logoColor=white) ![Version](https://img.shields.io/badge/Version-V15.4-blue.svg) ![License](https://img.shields.io/badge/License-MIT-green.svg)
+![Go](https://img.shields.io/badge/Go-1.23-00ADD8?logo=go&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white) ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black) ![Ant Design](https://img.shields.io/badge/Ant%20Design-6-1677FF?logo=antdesign&logoColor=white) ![Agent](https://img.shields.io/badge/Agent-Go-00ADD8?logo=go&logoColor=white) ![Version](https://img.shields.io/badge/Version-V15.5-blue.svg) ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
 ---
 
@@ -474,6 +474,13 @@ npm run check      # build + render-check + e2e
 ---
 
 ## 更新日志
+
+### V15.5（2026-11-02）
+
+- **WARP（Cloudflare WARP）**：新增「运维 → 节点运维 → WARP」页面，控制面直接注册免费 WARP 设备，按 UUID 授权；每 UUID 一份凭据，支持 MASQUE 配置下载、刷新、撤销；节点服务器无需部署，不进入 sing-box 订阅。
+- **用户中心**：一级入口改为「代理服务」，包含「Telegram 代理」与「WARP」；WARP 卡片支持下载 mihomo 配置。
+- **管理端导航**：运维拆分为「服务器运维」（服务器管理、服务器监控）与「节点运维」（普通代理、MTProto、WARP）。
+- **修复**：WARP 设置读取列顺序、授权列表与 uuid_info 的排序规则冲突。
 
 ### V15.4（2026-11-01）
 

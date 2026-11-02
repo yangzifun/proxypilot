@@ -1,4 +1,4 @@
-VERSION ?= V15.4
+VERSION ?= V15.5
 NODE ?= node
 
 .PHONY: build release frontend test vet run tidy

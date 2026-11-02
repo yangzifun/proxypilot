@@ -1,4 +1,4 @@
-# ProxyPilot Go 服务（V15.4）
+# ProxyPilot Go 服务（V15.5）
 
 Cloudflare Worker 的完整替代实现：Go + MySQL 8，内嵌生产前端 bundle，Agent 协议与数据格式保持兼容。
 
