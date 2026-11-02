@@ -1,0 +1,16 @@
+{
+  "version": "v1.7.0",
+  "released_at": "2026-11-01T10:17:45Z",
+  "files": {
+    "linux-amd64": {
+      "file": "proxypilot-agent-linux-amd64",
+      "size": 6283416,
+      "sha256": "f2f58d0e469c97ea1005a47ff73bfe8e137d53b4a7b71ec9c086c3eb4ea6977b"
+    },
+    "linux-arm64": {
+      "file": "proxypilot-agent-linux-arm64",
+      "size": 6095000,
+      "sha256": "d24b9e33ea65f065c5fabdc4abb679d8d839fbf3ab9d74be6307f03d980b0bd5"
+    }
+  }
+}

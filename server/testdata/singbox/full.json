@@ -1,0 +1,270 @@
+{
+  "template": {
+    "name": "golden",
+    "port_base": 13700,
+    "warp_base": 13800,
+    "cert_path": "/etc/sing-box/cert.crt",
+    "key_path": "/etc/sing-box/private.key",
+    "ss_method": "2022-blake3-aes-256-gcm",
+    "ss_server_key": "SERVERKEY",
+    "reality_private_key": "PRIVATEKEY",
+    "reality_public_key": "PUB",
+    "reality_short_id": "abcd",
+    "reality_dest": "www.microsoft.com:443",
+    "reality_sni": "www.microsoft.com",
+    "ws_sni": "www.bing.com",
+    "xhttp_path": "/xhttp-auto",
+    "protocol_options": "{}",
+    "enable_ss": 1,
+    "enable_anytls": 1,
+    "enable_hy2": 1,
+    "enable_vmess": 1,
+    "enable_reality": 1,
+    "enable_vlws": 1,
+    "enable_masque": 0
+  },
+  "users": [
+    {
+      "name": "u1",
+      "uuid": "11111111-2222-3333-4444-555555555555",
+      "ss_password": "SSPASS1"
+    },
+    {
+      "name": "u2",
+      "uuid": "66666666-7777-8888-9999-000000000000",
+      "ss_password": "SSPASS2"
+    }
+  ],
+  "ports": {
+    "hy2": 13701,
+    "hy2_warp": 13801,
+    "ss": 13702,
+    "ss_warp": 13802,
+    "anytls": 13703,
+    "anytls_warp": 13803,
+    "vmess": 13704,
+    "vmess_warp": 13804,
+    "reality": 13705,
+    "reality_warp": 13805,
+    "vlws": 13706,
+    "vlws_warp": 13806,
+    "masque": 13707,
+    "masque_warp": 13807,
+    "xhttp": 13708,
+    "xhttp_warp": 13808,
+    "base": 13700,
+    "warp_base": 13800
+  },
+  "sb": {
+    "log": {
+      "disabled": false,
+      "level": "warning",
+      "timestamp": true
+    },
+    "inbounds": [
+      {
+        "type": "shadowsocks",
+        "tag": "ss2022-sb",
+        "listen": "::",
+        "listen_port": 13702,
+        "method": "2022-blake3-aes-256-gcm",
+        "password": "SERVERKEY",
+        "users": [
+          {
+            "name": "u1",
+            "password": "SSPASS1"
+          },
+          {
+            "name": "u2",
+            "password": "SSPASS2"
+          }
+        ]
+      },
+      {
+        "type": "anytls",
+        "tag": "anytls-sb",
+        "listen": "::",
+        "listen_port": 13703,
+        "tls": {
+          "enabled": true,
+          "certificate_path": "/etc/sing-box/cert.crt",
+          "key_path": "/etc/sing-box/private.key"
+        },
+        "users": [
+          {
+            "name": "u1",
+            "password": "11111111-2222-3333-4444-555555555555"
+          },
+          {
+            "name": "u2",
+            "password": "66666666-7777-8888-9999-000000000000"
+          }
+        ]
+      },
+      {
+        "type": "hysteria2",
+        "tag": "hy2-sb",
+        "listen": "::",
+        "listen_port": 13701,
+        "tls": {
+          "enabled": true,
+          "alpn": [
+            "h3"
+          ],
+          "certificate_path": "/etc/sing-box/cert.crt",
+          "key_path": "/etc/sing-box/private.key"
+        },
+        "users": [
+          {
+            "name": "u1",
+            "password": "11111111-2222-3333-4444-555555555555"
+          },
+          {
+            "name": "u2",
+            "password": "66666666-7777-8888-9999-000000000000"
+          }
+        ]
+      },
+      {
+        "type": "tuic",
+        "tag": "tuic-sb",
+        "listen": "::",
+        "listen_port": 13704,
+        "congestion_control": "bbr",
+        "auth_timeout": "3s",
+        "zero_rtt_handshake": false,
+        "tls": {
+          "enabled": true,
+          "alpn": [
+            "h3"
+          ],
+          "certificate_path": "/etc/sing-box/cert.crt",
+          "key_path": "/etc/sing-box/private.key"
+        },
+        "users": [
+          {
+            "name": "u1",
+            "uuid": "11111111-2222-3333-4444-555555555555",
+            "password": "11111111-2222-3333-4444-555555555555"
+          },
+          {
+            "name": "u2",
+            "uuid": "66666666-7777-8888-9999-000000000000",
+            "password": "66666666-7777-8888-9999-000000000000"
+          }
+        ]
+      },
+      {
+        "type": "vless",
+        "tag": "vless-tcp-reality-vision",
+        "listen": "::",
+        "listen_port": 13705,
+        "tls": {
+          "enabled": true,
+          "server_name": "www.microsoft.com",
+          "reality": {
+            "enabled": true,
+            "handshake": {
+              "server": "www.microsoft.com",
+              "server_port": 443
+            },
+            "private_key": "PRIVATEKEY",
+            "short_id": [
+              "abcd"
+            ]
+          }
+        },
+        "users": [
+          {
+            "name": "u1",
+            "uuid": "11111111-2222-3333-4444-555555555555",
+            "flow": "xtls-rprx-vision"
+          },
+          {
+            "name": "u2",
+            "uuid": "66666666-7777-8888-9999-000000000000",
+            "flow": "xtls-rprx-vision"
+          }
+        ]
+      },
+      {
+        "type": "vless",
+        "tag": "vless-ws-in",
+        "listen": "::",
+        "listen_port": 13706,
+        "tls": {
+          "enabled": true,
+          "alpn": [
+            "h2",
+            "http/1.1"
+          ],
+          "certificate_path": "/etc/sing-box/cert.crt",
+          "key_path": "/etc/sing-box/private.key"
+        },
+        "transport": {
+          "type": "ws",
+          "path": "/vlws"
+        },
+        "users": [
+          {
+            "name": "u1",
+            "uuid": "11111111-2222-3333-4444-555555555555",
+            "flow": ""
+          },
+          {
+            "name": "u2",
+            "uuid": "66666666-7777-8888-9999-000000000000",
+            "flow": ""
+          }
+        ]
+      }
+    ],
+    "outbounds": [
+      {
+        "type": "direct",
+        "tag": "direct"
+      }
+    ],
+    "route": {
+      "final": "direct",
+      "default_domain_resolver": {
+        "server": "dns-remote",
+        "strategy": "prefer_ipv4"
+      },
+      "rules": [
+        {
+          "action": "sniff"
+        },
+        {
+          "action": "resolve",
+          "strategy": "prefer_ipv4"
+        },
+        {
+          "ip_cidr": [
+            "::/0",
+            "0.0.0.0/0"
+          ],
+          "outbound": "direct"
+        }
+      ]
+    },
+    "dns": {
+      "servers": [
+        {
+          "tag": "dns-remote",
+          "type": "udp",
+          "server": "1.1.1.1"
+        },
+        {
+          "tag": "dns-remote2",
+          "type": "udp",
+          "server": "8.8.8.8"
+        },
+        {
+          "tag": "localv4",
+          "type": "local"
+        }
+      ]
+    }
+  }
+}

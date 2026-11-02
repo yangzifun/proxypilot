@@ -1,659 +1,866 @@
-# 代理配置管理优选工具 
+# ProxyPilot（Go + MySQL + Ant Design）V15.4
 
-![JavaScript](https://img.shields.io/badge/JavaScript-ES6+-yellow?logo=javascript&logoColor=white) ![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white)  ![Node.js](https://img.shields.io/badge/Node.js-18+-339933?logo=node.js&logoColor=white)  ![Chart.js](https://img.shields.io/badge/Chart.js-4.0+-FF6384?logo=chart.js&logoColor=white) ![Version](https://img.shields.io/badge/Version-V5.0-blue.svg) ![MIT License](https://img.shields.io/badge/License-MIT-green.svg)
+![Go](https://img.shields.io/badge/Go-1.23-00ADD8?logo=go&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white) ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black) ![Ant Design](https://img.shields.io/badge/Ant%20Design-6-1677FF?logo=antdesign&logoColor=white) ![Agent](https://img.shields.io/badge/Agent-Go-00ADD8?logo=go&logoColor=white) ![Version](https://img.shields.io/badge/Version-V15.0-blue.svg) ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
-## 📦 系统组成
+> **本分支（`feat/go-backend-migration`）的生产主架构：Go 后端 + MySQL 8 + Ant Design 前端 + Go Agent。**
+> 旧 Cloudflare Worker 实现已移除，历史迁移记录保留在 `docs/migration/`。
 
-**系统由2个核心Worker组成**：
-
-- **`worker.js`** - 主服务（综合配置管理器与生成器）：处理 IP/域名优选、配置管理 CRUD、订阅生成、批量配置替换、Clash 配置文件生成、访问日志与统计等功能（已合并原 `config_worker.js` / `subs_worker.js` 的功能）。
-- **`mg_worker.js`** - 管理后台：JWT 认证、域名/IP/UUID 管理、模板与系统统计、IP 更新、订阅访问统计分析、管理 UI。
-
-**说明**：仓库中目前主要包含 `worker.js` 和 `mg_worker.js`；`config_worker.js` 在代码库中已移除或作为可选模块。**V5.0** 的目标是将功能一体化，简化部署与维护，并增加UUID信息管理和优选禁用功能。
-
-## ✨ 主要特性
-
-### 1. **微服务架构（主服务 + 管理后台）**
-
-系统目前推荐部署两类 Worker：主服务与管理后台（可选额外的实例用于冗余或历史兼容）。
-
-*   **`worker.js`（主服务）** - 负责综合配置管理、优选替换、订阅和 Clash 配置生成、批量替换、访问日志与 UUID 统计。
-*   **`mg_worker.js`（管理后台）** - 提供管理 UI、JWT 认证、域名/IP/UUID 管理、模板管理、系统统计、IP 更新任务与订阅分析。
-
-**V5.0 优化**：通过功能整合，减少部署复杂度并提升维护效率，增加UUID信息管理和优选禁用功能。新版部署服务域名示例：`https://proxypilot.yangzifun.org/`
-
-### 2. **域名托管属性管理**
-
-*   **扩展域名托管类型**：支持多种CDN厂商，包括 Gcore、Fastly、CacheFly、LightCDN、Vercel、Netlify 等
-*   **增加"无"选项**：支持标记配置为不使用域名托管的情况
-*   **智能优选匹配**：优选配置生成器现在会根据域名托管属性智能处理配置
-    *   **Cloudflare属性配置**：会进行优选替换（输出原配置 + 优选配置）
-    *   **非Cloudflare属性配置**：只输出原配置，不进行优选替换
-    *   **所有配置都输出**：无论域名属性如何，都会输出原配置
-*   **彩色徽章标识**：前端界面为不同域名托管类型显示彩色徽章，便于识别
-*   **统一分类管理**：帮助用户按CDN厂商分类管理配置
-
-### 3. **协议支持扩展**
-
-*   **扩展协议支持**：在原有 VMess、VLESS、Trojan 协议基础上，增加对更多主流代理协议的支持，包括 **Shadowsocks (ss)**、**Hysteria (hysteria2)**、**TUIC (tuic)**、**anytls / any-reality / reality**、**socks5** 等。
-
-    支持识别的协议前缀包括：`vmess://`, `vless://`, `trojan://`, `ss://`, `hysteria2://`, `tuic://`, `anytls://`, `any-reality://` / `anyreality://`, `reality://`, `socks5://`。
-*   **统一解析架构**：所有协议都集成到统一的解析器中，支持标准格式的协议链接
-*   **向下兼容**：原有协议配置保持完全兼容，新协议可无缝集成到配置管理系统
-
-### 4. **双模式优选**
-
-*   支持将配置中的地址批量替换为 **优选 IP** 或 **优选域名**
-*   **支持 IPv4/IPv6** 和不同运营商（电信/联通/移动）筛选
-*   **IP 资源池增加了 IP 来源显示**（如：HostMonit IPv4, HostMonit IPv6, Vps789）
-*   支持通过管理后台手动更新 IP 数据源（直接调用mg_worker.js内置的IP更新功能）
-
-### 5. **配置管理 (CRUD)**
-
-*   提供完整的管理界面，可添加、查询、编辑、删除基础配置（支持 VMess, VLESS, Trojan, Shadowsocks 等）
-*   按 UUID 分组管理，方便生成不同的订阅
-*   支持配置编辑功能，可修改别名、地址、端口、传输协议等参数
-*   **编辑配置即时返回**：修改配置后，API接口会立即返回更新后的完整配置对象，前端无需重新查询即可更新界面显示
-*   提供配置生成器外部链接（"配置生成"按钮），链接到外部配置生成器
-*   改进的订阅链接显示方式（使用可复制的输入框）
-*   统一的前端按钮样式
-
-### 6. **动态订阅生成**
-
-*   提供 `/sub/{uuid}` 订阅接口，返回 Base64 编码的配置列表
-*   支持通过 URL 参数动态指定 IP 类型（IPv4/IPv6）或运营商（电信/联通/移动）
-*   支持批量添加配置，提高管理效率
-
-### 7. **访问日志记录**
-
-*   **完整的访问统计**：记录用户通过UUID生成配置的所有访问
-*   **双模式记录**：
-    - 订阅链接访问 (`subscription`)
-    - 网页API生成访问 (`api-generation`)
-*   **客户端信息收集**：记录客户端IP、User-Agent
-*   **实时统计API**：提供`/stats`接口获取详细的访问统计数据
-*   **汇总分析**：支持按日期、UUID、访问类型进行多维度统计
-
-### 8. **订阅分析功能**
-
-*   **管理后台订阅分析**：在管理后台提供全局访问分析
-*   **配置页面UUID统计**：在配置管理页面为每个UUID提供专属统计图表
-*   **交互式趋势图表**：使用Chart.js可视化近7/14/30/60天的访问趋势
-*   **多维度分析**：
-    - 总访问量趋势
-    - 订阅访问 vs 网页生成访问对比
-*   **实时数据更新**：支持手动刷新统计数据
-*   **详细访问记录**：显示最近访问记录和客户端信息
-
-### 9. **完整的数据管理**
-
-*   域名管理：添加、编辑、删除优选域名
-*   **IP 资源池管理**：查看、删除、刷新优选 IP，**支持 HostMonit IPv6 接口开启/关闭，并显示 IP 来源**
-*   UUID 分组管理：按 UUID 管理配置分组
-*   系统统计：实时查看域名、IP、UUID 数量统计
-*   **IP更新功能集成**：IP更新任务已集成到mg_worker.js中，无需独立的IP Worker
-
-### 10. **IP资源池智能管理**
-
-*   **支持一个IP多个运营商**：同一个IP可以关联多个运营商（如CM、CT、CU等）
-*   **基于IP+运营商组合去重**：使用IP地址和运营商组合作为唯一标识，支持更精细的IP管理
-*   **增量更新机制**：只插入新记录、更新来源信息，智能删除长时间不存在的记录
-*   **详细的统计信息**：提供IP来源分布、运营商统计、IP类型分布等多维度分析
-*   **定时更新任务**：支持通过Cloudflare Workers的Cron Triggers自动更新IP资源池
-*   **手动更新接口**：提供公开的手动更新接口，无需认证即可触发IP更新
-*   **来源追踪**：记录每个IP的具体来源（HostMonit IPv4/IPv6、Vps789等）
-
-### 11. **配置编辑器高级功能**
-
-*   **多协议配置解析器**：支持VMess、VLESS、Trojan、Shadowsocks等多种协议的详细参数编辑
-*   **域名托管属性编辑**：可直接在编辑器中修改配置的域名托管属性（Cloudflare、阿里ESA、腾讯Edgeone等）
-*   **参数验证**：自动验证端口、UUID、传输协议等参数的合法性
-*   **即时预览**：保存后立即在配置列表中显示更新后的配置内容，无需重新查询
-*   **统一编辑界面**：所有协议类型使用统一的编辑界面，简化操作流程
-
-### 12. **V5.0 新增特性**
-
-*   **配置编辑功能增强**：支持更精细的配置参数编辑，包括服务器地址、端口、UUID、传输协议等，编辑后立即生效无需刷新页面
-*   **UI重构与界面优化**：重新设计了用户界面，提供更直观的操作流程、更好的响应式设计，提升了用户体验
-*   **UUID信息管理功能**：
-    - 新增 `uuid_info` 表，用于存储UUID的详细信息（所属人、联系方式、状态等）
-    - 支持UUID的分组管理和统计追踪
-    - 提供UUID信息查询和管理API接口
-*   **优选禁用功能**：
-    - 用户可以选择禁用优选功能，只输出原配置而不进行地址替换
-    - 支持在批量生成器和Clash配置生成中独立控制优选开关
-    - 提供灵活的配置输出选项，满足不同使用场景
-
-### 13. **安全特性**
-
-*   JWT 认证系统，保障管理后台安全
-*   **MFA双重验证**：
-    - 支持TOTP(基于时间的一次性密码)验证
-    - 管理员可启用/禁用MFA
-    - 提供10个一次性备份码，防止验证器丢失
-    - 支持使用备份码登录
-*   响应式设计，适配桌面和移动设备
-*   配置生成器外部链接跳转功能，提供一站式配置管理体验
-
-## 🛠️ 部署准备
-
-在使用此脚本之前，您需要：
-
-1.  一个 **Cloudflare** 账号。
-2.  启用 **Workers** 和 **D1 Database** 功能。
-3.  至少一个自定义域名（用于部署主服务与管理后台）。
-
-## 🚀 部署步骤
-
-### 1. 创建 D1 数据库
-
-在 Cloudflare 控制台的 "Workers & Pages" -> "D1" 中创建一个新的数据库（例如命名为 `proxy-db`）。
-
-### 2. 初始化数据库表单与程序对应关系
-
-进入 D1 数据库的 "Console" 标签页，执行 `init_database.sql` 中 SQL 语句以创建所需的表结构。下面是数据库表单与各 Worker 程序的对应关系：
-
-| 表单名称                 | 用途描述                                 | 使用此表单的程序            | 是否必需 | 使用状态             |
-| ------------------------ | ---------------------------------------- | --------------------------- | -------- | -------------------- |
-| **configs**              | 存储代理配置数据，包括域名托管属性       | `worker.js`, `mg_worker.js` | **必需** | **已使用**           |
-| **config_access_logs**   | 记录配置访问日志，用于统计分析           | `worker.js`, `mg_worker.js` | **必需** | **已使用**           |
-| **admin_users**          | 存储管理员账户信息，支持 MFA 双重验证    | `mg_worker.js`              | **必需** | **已使用**           |
-| **cfips**                | 存储优选 IP 地址，支持一个 IP 多个运营商 | `worker.js`, `mg_worker.js` | **必需** | **已使用**           |
-| **cf_domains**           | 存储优选域名列表（Cloudflare）           | `worker.js`, `mg_worker.js` | **必需** | **已使用**           |
-| **edgeone_domains**      | 存储腾讯云 EdgeOne 的优选域名（可选）    | `worker.js`, `mg_worker.js` | 可选     | **已使用（若启用）** |
-| **config_templates**     | 存储 Clash/模板信息（name/url/描述）     | `worker.js`, `mg_worker.js` | **推荐** | **已使用**           |
-| **auto_update_settings** | 存储自动更新配置设置                     | `mg_worker.js`              | **必需** | **已使用**           |
-| **api_keys**             | 存储用于 IP 更新等接口的 API 密钥        | `mg_worker.js`              | 可选     | **已使用（若启用）** |
-| **uuid_info**           | 存储UUID的详细信息（所属人、联系方式、状态等） | `worker.js`, `mg_worker.js` | 可选 | **新增** |
-| **mfa_backup_codes**     | 存储 MFA 备份码                          | `mg_worker.js`              | **必需** | **已使用**           |
-
-**说明：**
-- **必需表单**：系统正常运行必须的表单，所有 Worker 程序都会用到
-- **已使用表单**：在当前代码中有实际读写操作的表单
-- **已移除表单**：`users`, `uuids`, `system_logs`, `api_access_stats` 等未使用的表已从数据库文件中移除
-- **程序依赖关系**：
-  - `worker.js`：读取 `configs`, `cfips`, `cf_domains`, `config_templates`, `uuid_info`，写入 `config_access_logs`
-  - `mg_worker.js`：读写 `admin_users`, `cf_domains`, `edgeone_domains`, `cfips`, `auto_update_settings`, `api_keys`, `mfa_backup_codes`, `uuid_info`，读取 `configs`, `config_access_logs`
-
-要初始化数据库，请复制 `init_database.sql` 中的完整 SQL 语句到 D1 Console 中执行。
-
-### 3. 部署 Workers 并绑定 D1
-
-建议最小部署为两个 Worker，并可按需水平扩展或启用备用实例：
-
-| Worker名称   | 绑定文件       | 数据库绑定变量 | 建议路由/域名                                                | 说明                                                       |
-| ------------ | -------------- | -------------- | ------------------------------------------------------------ | ---------------------------------------------------------- |
-| `proxy-main` | `worker.js`    | `DB`           | `proxy.yangzifun.org`（或 `cfst.yangzifun.org`）             | 主服务，包含优选生成、配置管理、订阅生成功能、Clash 生成等 |
-| `proxy-mg`   | `mg_worker.js` | `DB`           | `mg.proxy.yangzifun.org`（或 `mg.proxypilot.yangzifun.org`） | 管理后台，提供 UI、模板管理、IP 更新、统计与安全管理       |
-
-**V5.0 更新说明**：`worker.js` 已整合原 `config_worker.js` / `subs_worker.js` 的功能，默认只需部署两类 Worker 即可满足大多数场景；如果需要可额外部署备用或只读实例用于高可用。**新版部署服务域名示例：** `https://proxypilot.yangzifun.org/`
-
-绑定步骤：
-
-1.  每个Worker的"Settings" → "Variables"中添加D1绑定
-2.  **Variable name** 必须设置为 `DB`（区分大小写）
-3.  选择前面创建的D1数据库
-4.  **路由配置**：
-    *   在 DNS 设置中创建两条或多条路由（示例，请替换为您的实际域名），至少需要一条用于主服务，一条用于管理后台。
-5.  **重要配置**：进入每个 Worker 的 **Settings** -> **Variables**：
-    *   **D1 Database Bindings**：
-        *   **Variable name**: `DB` (必须完全一致，注意大写)
-        *   **D1 database**: 选择第 1 步创建的数据库。
-        *   **JWT 密钥**（仅限 `mg_worker.js`）：
-        *   **Variable name**: `JWT_SECRET` (必须完全一致)
-        *   **Value**: 请设置一个足够长且复杂的随机字符串作为 JWT 密钥，用于签名和验证管理后台的认证 Token。例如，可以使用 `openssl rand -base64 32` 生成。
-        *   **人机验证（Cloudflare Turnstile）配置**（仅限 `mg_worker.js`，可选但强烈推荐）：
-            *   前往 [Cloudflare Turnstile](https://dash.cloudflare.com/?to=/:account/turnstile) 添加站点，获取 Site Key 和 Secret Key。
-            *   **Variable name**: `TURNSTILE_SITE_KEY`
-            *   **Value**: 填写 Turnstile 站点密钥（Site Key），例如 `0x4AAAAAADqAuGR7IqMqFqX3`
-            *   **Variable name**: `TURNSTILE_SECRET_KEY`
-            *   **Value**: 填写 Turnstile 私钥（Secret Key），例如 `0x4AAAAAADqAuAUBzjaYCvPupHUIqSOrEvA`
-            *   **说明**：配置后，管理后台登录页面将自动启用 Cloudflare Turnstile 人机验证，有效防止自动化暴力破解登录。如果未设置这两个变量，登录页面将不会显示验证组件（向后兼容）。
-
-### 4. 初始化域名表 (可选)
-
-在配置管理页(`mg.example.com`)上线后，您可以直接在UI中添加域名：
-
-1.  访问管理后台地址 (`mg.example.com`) 并登录。
-2.  切换到 "优选域名" 标签页。
-3.  点击 "添加域名" 按钮。
-4.  输入域名和备注信息。
-
-或者通过 SQL 初始化（在 D1 Console 中执行）：
-
-```sql
-INSERT INTO cf_domains (domain, remark, created_at) VALUES 
-('cf.example.com', '默认优选域名', unixepoch()),
-('cdn.example.net', '加速CDN专用', unixepoch());
-```
-
-### 5. 部署上线
-
-点击 "Deploy" 保存并发布所有Worker。访问各 Worker 的 URL 即可看到操作界面。
+详细设计见 **[ARCHITECTURE.md](ARCHITECTURE.md)**，迁移记录见 [`docs/migration/`](docs/migration/README.md)。
 
 ---
 
-## 📖 使用指南
+## 目录
 
-### 1. 首页 (批量生成器)
-
-*   **基础配置**：
-    *   **手动粘贴**：直接将 vmess/vless/trojan/ss/hysteria2/tuic/anytls/reality/socks5 等链接粘贴到文本框。
-    *   **从 UUID 获取**：输入在管理页保存的 UUID，脚本会自动拉取该组所有配置。
-*   **优选列表**：
-    *   **IP 地址**：选择 IPv4/IPv6 或特定运营商。支持 HostMonit IPv4/IPv6 及 Vps789 等多个来源的 IP 数据。如果 IP 池为空，请在管理后台的 **"IP 资源池管理"** 中，点击 **"立即更新"** 按钮手动获取 IP。
-    *   **优选域名**：直接使用数据库 `cf_domains` 表中的域名。
-*   **生成配置**：点击按钮，底部文本框将显示替换后的节点列表。
-*   **访问日志**：使用UUID生成配置会自动记录访问日志，用于后台统计。
-*   **域名托管属性过滤**：只有域名托管属性为"Cloudflare"的配置会进行优选替换，非Cloudflare配置只输出原配置。
-*   **优选禁用功能**：可以选择禁用优选功能，直接输出原配置而不进行地址替换。
-
-### 2. 配置管理页
-
-*   在此页面，您可以：
-    *   **管理基础配置**：添加/查询/删除节点配置
-    *   **设置域名托管**：为每个配置指定域名托管服务（Cloudflare、阿里ESA、腾讯Edgeone、Gcore、Fastly、CacheFly、LightCDN、Vercel、Netlify或无）
-    *   **即时编辑反馈**：编辑配置保存后，列表会立即更新，无需重新查询
-    *   **查看 UUID 统计**：为当前查询的 UUID 显示访问统计图表
-    *   **添加新配置**：批量添加新的配置节点
-*   **操作指南**：
-    1.  在"检索订阅"卡片：
-        -   **输入UUID**：输入要查询的UUID
-        -   **点击查询**：查看该UUID下的所有配置
-    2.  在"配置列表"卡片：
-        -   **编辑配置**：点击编辑按钮修改配置参数（包括域名托管属性）
-        -   **保存编辑**：保存后界面立即显示最新配置内容
-        -   **删除配置**：删除单个配置或整个UUID组
-    3.  在"访问统计"卡片：
-        -   **查看趋势图**：选择时间范围（7/14/30/60天）查看访问趋势
-        -   **切换图表类型**：查看总访问量或分类统计
-        -   **查看访问记录**：查看最近的访问记录和客户端信息
-    4.  在"添加新节点"卡片：
-        -   **选择域名托管**：选择配置使用的CDN服务商
-        -   **批量添加配置**：支持多种协议链接批量添加
-
-### 3. 管理后台
-
-*   首次访问 `mg.example.com` 会跳转到 `/login` 页面。
-*   默认管理员账号：`admin`，密码：`password`。登录后请务必修改密码。
-*   在此页面，您可以：
-    *   **系统概览**：查看系统状态和访问摘要
-    *   **域名管理**：添加/编辑/删除优选域名
-    *   **IP 资源池管理**：**管理 IP 池，包括新的 HostMonit IPv6 开启按钮，并显示 IP 来源**，以及自动更新设置。点击"立即更新"会直接调用mg_worker.js内置的IP更新功能
-    *   **配置分组管理**：查看和管理 UUID 分组
-    *   **订阅分析**：全局访问统计分析
-    *   **安全中心**：管理 MFA 双重验证
-
-### 4. 订阅链接
-
-生成配置后，如果使用了 UUID 模式，系统会提供一个永久订阅链接，格式如下：
-
-*   **IP 模式**: `proxy.example.com/batch-configs/{uuid}?type=ip&ipType=v4&carrier=CT`
-*   **域名 模式**: `proxy.example.com/batch-configs/{uuid}?type=domain`
-*   **协议扩展**：支持所有已配置的协议类型
-*   **域名托管属性过滤**：只有Cloudflare属性的配置会进行优选替换，其他属性配置只输出原配置
+- [架构总览](#架构总览)
+- [技术栈](#技术栈)
+- [快速开始](#快速开始go--mysql)
+- [目录结构](#目录结构)
+- [旧版代码](#旧版代码)
+- [功能总览](#功能总览)
+- [协议与端口](#协议与端口)
+- [权限模型](#权限模型)
+- [生产部署](#生产部署)
+- [使用指南](#使用指南)
+- [Go Agent](#go-agent)
+- [API 概览](#api-概览)
+- [开发与测试](#开发与测试)
+- [故障排查](#故障排查)
+- [更新日志](#更新日志)
+- [安全说明](#安全说明)
+- [许可证](#许可证)
 
 ---
 
-## ⚙️ 系统架构
+## 架构总览
 
-### 组件交互流程
-
-```mermaid
-sequenceDiagram
-    participant User as 用户浏览器
-    participant Main as worker.js
-    participant DB as D1 数据库
-    participant Mg as mg_worker.js
-
-    User->>Main: 访问 / (生成器首页)
-    Main->>DB: 读取优选IP/域名
-    Main-->>User: 返回生成器界面
-
-    User->>Main: 访问 /manage (配置管理)
-    Main->>DB: 读写配置数据
-    Main-->>User: 返回管理界面（含域名托管属性）
-
-    User->>Main: 提交生成请求
-    Main->>DB: 获取基础配置（含域名托管属性）
-    Main->>Main: 过滤处理：Cloudflare配置进行优选替换<br/>非Cloudflare配置返回原配置
-    Main->>DB: 记录访问日志(如使用UUID)
-    Main-->>User: 返回配置（所有原配置+Cloudflare优选配置）
-
-    User->>Main: 查询UUID配置
-    Main->>DB: 获取配置列表（含域名托管属性）
-    Main->>DB: 获取访问统计
-    Main-->>User: 返回配置列表和统计图表
-
-    User->>Main: 编辑配置并保存
-    Main->>DB: 更新配置（包含域名托管字段）
-    Main-->>User: 立即返回更新后的配置对象
-
-    User->>Mg: 点击"立即更新IP"
-    Mg->>DB: 保存自动更新设置
-    Mg->>Mg: 直接执行IP更新任务
-    Mg-->>User: 显示更新成功/失败
-
-    Mg->>Mg: 定时任务更新IP
-    Mg->>DB: 读取设置并执行IP更新
-
-    User->>Main: 生成Clash配置文件
-    Main->>Mg: 获取模板数据
-    Main->>DB: 获取节点配置
-    Main-->>User: 返回Clash配置文件
+```text
+                    ┌─────────────────────────────┐
+浏览器 ──HTTPS/WS──▶ │  Go server (server/)         │
+  /  /admin         │  前端 + REST + 订阅 + WebSSH │
+  /api/*            └───────┬─────────────┬────────┘
+  /sub /clash               │             │
+                    MySQL 8 │             │ 本地目录（桶 / Agent 分发）
+                            ▼             ▼
+                     ┌────────────┐  ┌──────────────────┐
+                     │ 业务数据   │  │ data/bucket      │
+                     │ 26+ 张表   │  │ agent/dist       │
+                     └────────────┘  └──────────────────┘
+                            ▲
+                            │ Agent 出站：poll / ack / WS / shell
+                     proxypilot-agent ──▶ sing-box / xray / mtg
 ```
 
-### 域名托管属性处理逻辑
+- 后端：`server/`（Go 1.23，标准库 HTTP，150 条路径）
+- 前端：`web-antd/`（React 18 + Ant Design 6 + antd-mobile）
+- 数据库：MySQL 8（`utf8mb4_0900_as_cs`，`server/migrations/`）
+- Agent：`agent/`（Go，只出站；配置任务下发 + PTY 终端）
+- 存储：本地对象桶 + Agent 分发目录（不再依赖 R2/S3）
+- WebSSH：Go WebSocket 中继，不依赖 Durable Object
+- 旧 Cloudflare Worker：已移除
 
-```mermaid
-graph TD
-    A[开始处理配置] --> B{域名托管属性检查}
-    B -->|属性为 Cloudflare| C[输出原配置]
-    C --> D[为每个优选地址生成新配置]
-    D --> E[添加到结果数组]
-    B -->|属性为非 Cloudflare| F[只输出原配置]
-    F --> G[添加到结果数组]
-    E --> H[继续处理下个配置]
-    G --> H
+## 技术栈
+
+| 层 | 选型 |
+|---|---|
+| 前端 | React 18 + Ant Design 6 + antd-mobile，Vite 构建 |
+| 后端 | Go 1.23（`net/http`，无 Web 框架；`database/sql` + go-sql-driver/mysql） |
+| 数据库 | MySQL 8，26+ 张表，启动自动迁移 |
+| 鉴权 | HS256 JWT（与 Worker 同算法/载荷）、PBKDF2 口令、TOTP、X-API-Key、OIDC |
+| 节点 Agent | Go（轮询 / WebSocket 唤醒 / PTY 终端 / 配置落盘） |
+| 存储 | 本地目录：对象桶 + Agent 二进制分发 |
+
+## 快速开始（Go + MySQL）
+
+```bash
+# 1) 配置
+cp server/.env.example server/.env
+# 必改：PP_JWT_SECRET、PP_ADMIN_PASSWORD、MYSQL_ROOT_PASSWORD、PP_PUBLIC_BASE_URL
+
+# 2) Agent 产物（可选，用于节点接入）
+cd agent && ./build.sh && cd ..
+
+# 3) 启动（MySQL + Go，自动迁移）
+cd server && docker compose up -d --build
+
+# 4) 打开后台
+# http://127.0.0.1:8080/admin  （admin / 你在 .env 里设置的口令）
+# 运行中配置：/admin/settings（登录方式 / Turnstile / SMTP / OIDC / 站点地址）
 ```
 
-### 接口调用关系
+反向代理 + TLS + 切换域名：见 [server/README.md](server/README.md) 的「生产部署（替换域名）」。
+部署后冒烟：`server/tools/smoke.sh https://<域名>`。
 
-| 调用方      | 被调用方       | 接口路径                            | 数据流向                      |
-| :---------- | :------------- | :---------------------------------- | :---------------------------- |
-| `worker.js` | `mg_worker.js` | `/api/ips`                          | 获取优选IP                    |
-| `worker.js` | `mg_worker.js` | `/api/domains`                      | 获取优选域名                  |
-| `worker.js` | `mg_worker.js` | `/api/templates`                    | 获取模板数据（Clash配置生成） |
-| 用户浏览器  | `mg_worker.js` | `/api/login` (及其他`/api`前缀接口) | 管理后台操作                  |
-| 用户浏览器  | `mg_worker.js` | `/api/stats`                        | 全局订阅统计分析              |
-| 用户浏览器  | `worker.js`    | `/manage/configs/:uuid`             | 配置管理、统计查询            |
-| 用户浏览器  | `worker.js`    | `/clash-config`                     | Clash配置文件生成             |
+## 目录结构
 
-**V5.0更新：** 所有配置管理、统计查询、Clash配置生成功能都已集成到`worker.js`中，并增加了UUID信息管理和优选禁用功能。
-
-## 📡 API 接口文档
-
-### mg_worker.js 接口：
-
-| 方法     | 路径                        | 描述                       | 参数示例                                                     |
-| :------- | :-------------------------- | :------------------------- | :----------------------------------------------------------- |
-| `GET`    | `/`                         | 管理后台首页UI             | -                                                            |
-| `POST`   | `/api/login`                | 管理员登录                 | JSON body                                                    |
-| `GET`    | `/api/domains`              | 获取域名列表               | `?page=1&size=10&sort=domain&order=asc`                      |
-| `POST`   | `/api/domains`              | 添加域名                   | `{"domain":"new.site.com", "remark":"新域名"}`               |
-| `PUT`    | `/api/domains`              | 更新域名                   | `{"id":1, "domain":"updated.com", "remark":"更新"}`          |
-| `DELETE` | `/api/domains`              | 删除域名                   | `{"id":1}`                                                   |
-| `GET`    | `/api/ips`                  | 获取IP列表                 | `?page=1&size=20&sort=ip&order=desc`                         |
-| `POST`   | `/api/ips/update`           | **直接执行IP更新**         | `{"global_enabled":true, "hostmonit_v4":true, "hostmonit_v6":false, "vps789":true}` |
-| `DELETE` | `/api/ips`                  | 删除IP                     | `{"ip":"1.1.1.1"}`                                           |
-| `GET`    | `/api/uuids`                | 获取UUID列表               | `?page=1&size=10&sort=updated_at&order=desc`                 |
-| `DELETE` | `/api/uuids`                | 删除UUID分组及其所有配置   | `{"uuid":"some_uuid"}`                                       |
-| `GET`    | `/api/settings/auto-update` | 获取自动更新设置           | -                                                            |
-| `POST`   | `/api/settings/auto-update` | 更新自动更新设置           | `{"global_enabled": true, "hostmonit_v4": true, "hostmonit_v6": false, "vps789": true}` |
-| `GET`    | `/api/stats`                | 获取系统概览及全局访问统计 | `?days=30` (默认30天)                                        |
-| `GET`    | `/api/stats/uuid-details`   | 获取指定UUID的详细访问记录 | `?uuid={uuid}&start_date=xxx&end_date=xxx`                   |
-
-### worker.js 接口（综合配置管理器）：
-
-| 方法     | 路径                     | 描述                                               | 参数示例                                                     |
-| :------- | :----------------------- | :------------------------------------------------- | :----------------------------------------------------------- |
-| `GET`    | `/`                      | 主生成器UI                                         | -                                                            |
-| `GET`    | `/fetch-addresses`       | 获取优选地址列表                                   | `?type=ip&ipType=v4&carrierType=all&source=database`         |
-| `GET`    | `/batch-ip`              | 获取优选列表文本                                   | `?type=ip&ipType=v4&carrier=CT`                              |
-| `GET`    | `/fetch-ips`             | 获取IP列表（兼容旧接口）                           | `?ipType=all&carrierType=all`                                |
-| `GET`    | `/batch-configs/:uuid`   | 生成订阅链接（基于UUID）                           | `?type=ip&ipType=v4&carrier=CT`                              |
-| `POST`   | `/generate`              | 手动生成配置                                       | `{"addressList":"1.1.1.1\n2.2.2.2", "baseConfigUuid":"xxx"}` |
-| `GET`    | `/manage/configs/:uuid`  | 获取UUID配置列表                                   | -                                                            |
-| `GET`    | `/manage/stats/:uuid`    | 获取UUID访问统计                                   | `?days=30` (默认30天)                                        |
-| `POST`   | `/manage/configs`        | 批量添加配置                                       | `{"uuid":"xxx", "config_data":"vmess://...", "domain_hosting":"Cloudflare"}` |
-| `PUT`    | `/manage/configs`        | 更新单个配置                                       | `{"id":123, "config_data":"vmess://...", "domain_hosting":"Cloudflare"}` |
-| `DELETE` | `/manage/configs`        | 删除指定UUID组                                     | 路径参数: `/:uuid`                                           |
-| `DELETE` | `/manage/configs/id/:id` | 删除单个配置                                       | -                                                            |
-| `GET`    | `/api/templates`         | 获取模板列表                                       | -                                                            |
-| `GET`    | `/clash-config`          | 生成Clash配置文件（基于模板，`template` 参数必填） | `?uuid=xxx&type=ip&ipType=v4&carrier=CT&template=template-name` |
-| `GET`    | `/sub/:uuid`             | 原始订阅输出（返回 Base64 编码的节点列表）         | -                                                            |
-| `GET`    | `/manage/uuid-info/:uuid` | 获取特定UUID的详细信息                         | -                                                            |
-| `GET`    | `/manage/all-uuid-info`   | 获取所有UUID信息列表                           | `?page=1&size=10&sort=owner&order=asc`                       |
-| `POST`   | `/manage/uuid-info`       | 添加或更新UUID信息                             | `{"uuid":"xxx", "owner":"张三", "email":"zhangsan@example.com", "status":"active"}` |
-| `DELETE` | `/manage/uuid-info/:uuid` | 删除UUID信息                                 | -                                                            |
-
-**说明**：`/sub/:uuid` 订阅响应包含 `Subscription-User-Info` 头，用于客户端订阅流量/配额信息展示。
-
-**V5.0新接口：**
-- `/clash-config`：支持 Clash/Mihomo 配置文件生成，基于模板创建完整配置。**注意**：`template` 参数必填（可以是数据库中的模板名或一个 URL）。响应会返回 `Content-Disposition` 下载头以及若干调试头，如 `X-Template-Used`, `X-Supported-Protocols`, `X-Cloudflare-Configs` 等。
-- `/api/templates`：获取模板列表，用于 Clash 配置生成（返回 `name`, `url`, `description`, `is_default`）。
-- UUID信息管理接口：`/manage/uuid-info/:uuid`, `/manage/all-uuid-info`, `/manage/uuid-info`, `/manage/uuid-info/:uuid` (DELETE)
-
-**已整合的接口**：原`config_worker.js`的配置管理接口和原`subs_worker.js`的Clash生成接口
-
-### 统计接口说明
-
-#### 1. 获取UUID访问统计 (`GET /manage/stats/:uuid` by `worker.js`)
-
-返回指定UUID的详细访问统计信息，支持时间范围参数：
-
-- **days**: 查询天数（7/14/30/60天），例如 `?days=14`
-
-响应格式示例：
-
-```json
-{
-  "success": true,
-  "uuid": "my-uuid-123",
-  "total_access": 150,
-  "subscription_count": 120,
-  "apigen_count": 30,
-  "first_access": 1705307400000, // Unix timestamp (ms)
-  "last_access": 1705742700000,   // Unix timestamp (ms)
-  "today_total": 15,
-  "today_subscription": 12,
-  "today_apigen": 3,
-  "daily_stats": [
-    {
-      "date": "2024-01-20",
-      "total": 25,
-      "subscription": 20,
-      "api_generation": 5
-    }
-  ],
-  "recent_logs": [
-    {
-      "uuid": "my-uuid-123",
-      "query_type": "subscription",
-      "client_ip": "123.123.123.123",
-      "user_agent": "Clash/2.0",
-      "created_at": 1705742700000 // Unix timestamp (ms)
-    }
-  ]
-}
+```text
+proxypilot/
+├── server/                     # 主后端（Go + MySQL）
+│   ├── cmd/proxypilot/         # 入口
+│   ├── internal/api/           # 路由 / 业务 / WebSocket / 设置
+│   ├── internal/auth/          # JWT / PBKDF2 / TOTP
+│   ├── internal/db/            # 连接池 + 迁移执行器
+│   ├── migrations/             # MySQL DDL（26+ 表）
+│   ├── testdata/               # Clash / sing-box / MTProto 黄金用例
+│   ├── internal/api/assets_web/# 内嵌前端快照（免构建兜底）
+│   └── Dockerfile / docker-compose.yml / .env.example / Makefile
+├── web-antd/                   # 前端源码：React 18 + Ant Design 6
+│   ├── src/                    # 管理后台 + 用户中心 + 图表/样式
+│   └── dist/                   # 构建产物（PP_WEB_DIST 指向这里）
+├── agent/                      # Go Agent + install.sh + build.sh + dist/
+├── rule/                       # Clash / Mihomo 模板与规则
+├── docs/                       # 架构与迁移文档
 ```
 
-#### 2. 获取系统统计 (`GET /api/stats` by `mg_worker.js`)
+### 前端说明（Ant Design 为主）
 
-返回完整的系统统计信息，包括：
+- 源码唯一入口：`web-antd/src`。生产推荐 `npm ci && npm run build`，设置 `PP_WEB_DIST=.../web-antd/dist`。
+- 未设置 `PP_WEB_DIST` 时，Go 使用内嵌 UI；`node web-antd/scripts/build.mjs` 会自动同步到 `server/internal/api/assets_web/`。
 
--   **基础统计**: 域名数、IP数、UUID分组数、自动更新状态
--   **访问统计**: 总访问次数、今日访问、订阅访问、网页生成访问
--   **趋势数据**: 近N天的每日访问数据
--   **热门UUID**: 访问次数最多的UUID排行
+## 旧版代码
 
-响应格式示例：
+- `workers/`、`wrangler.toml` 与依赖 Worker 的测试脚本已从本分支删除。
+- 历史迁移方案、D1 导入工具仍保留在 `docs/migration/` 与 `server/tools/`，仅用于迁移旧数据。
+- `PP_LEGACY_BASE` 配置项保留，作为迁移期可选兜底；新部署无需配置。
+- 当前版本：Go 1.23 + MySQL 8 + React 18 / Ant Design 6 + Go Agent。
 
-```json
-{
-  "domains": 15,
-  "ips": 256,
-  "uuids": 8,
-  "autoUpdate": 1, // 0表示关闭，1表示开启
-  "lastExecuted": 1707907200000, // Unix timestamp (ms)
-  "access_stats": {
-    "success": true,
-    "total_requests": 150,
-    "unique_uuids": 8,
-    "subscription_requests": 120,
-    "api_generation_requests": 30,
-    "today_total": 15,
-    "today_subscription": 12,
-    "today_apigen": 3,
-    "daily_stats": [
-       {"date": "2024-02-14", "total": 10, "subscription": 8, "api_generation": 2, "unique_uuids": 5}
-    ],
-    "popular_uuids": [
-       {"uuid": "uuid-abc", "access_count": 50, "subscription_count": 40, "apigen_count": 10}
-    ]
-  }
-}
+## 功能总览
+
+### 公共站点
+
+| 入口 | 说明 |
+| ---- | ---- |
+| `/`、`/me` | **用户中心**：邮箱验证码 + Cloudflare Turnstile 登录，UUID 由登录邮箱决定（不再手动输入）。PC 端为单页（订阅卡 + 订阅生成 / 配置管理 / 访问统计 / 外部订阅源）；移动端为底部 4 个页签（我的订阅 / 配置管理 / 访问统计 / 我的），账号信息与退出登录收在「我的」 |
+| `/manage` | 老书签兼容：302 → `/` |
+| `/login` | 三种登录方式：账号密码 / 邮箱验证码 / OIDC 单点登录；支持 TOTP 双重验证与备份码 |
+| `/sub`、`/clash-config` 等 | 面向客户端的订阅输出（UUID 鉴权 + 可选人机验证） |
+
+### 管理后台（左侧菜单 9 个页面）
+
+| 页面 | 内容 |
+| ---- | ---- |
+| **系统概览** `#dash` | 访问统计、趋势图、热门 UUID、最新订阅 |
+| **订阅分组** `#uuids` | 按 UUID 管理节点配置、订阅源、外部订阅合并、分组授权；**一个邮箱只能绑定一个 UUID**（重复绑定返回 409） |
+| **订阅模板** `#tpls` | Clash / Mihomo 订阅模板（含默认模板）；页面底部可直接浏览/编辑对象存储 `rule/` 下的模板与地区配置（R2 绑定 `bucket`） |
+| **服务器管理** `#servers` | Agent 接入、安装命令（**可选安装后停用 SSH**）、**SSH 状态列与单台 / 批量启停**、密钥轮换、一键更新、任务队列、**实时终端（WebSSH）** |
+| **节点管理** `#singbox` | 协议模板（sb.json / xray.json；MASQUE 由 sb.json 的 masque-server endpoint 承载；**可选 sing-box / Xray 正式版或预览版**）+ 节点绑定（服务器 / 域名 / 授权 UUID）+ 编排下发；**MTProto** 独立页签（mtg-multi，模板 + 节点两级、按用户授权，链接不进订阅） |
+| **日志管理** `#logs` | 节点下发与命令执行日志、结果与耗时 |
+| **服务器监控** `#status` | 顶部三张等高卡片：**集群在线率**（在线率环图 + 服务异常 / 未安装）、**资源均值**（CPU / 内存仪表 + 磁盘进度）、**全球分布**（Natural Earth 底图，按经纬度打点、点击进详情；可开大图，滚轮缩放 / 拖动平移；小图悬停圆点查看地区与资源信息，大图直接在地图内标注地区名）+ 卡片式面板（CPU / 内存 / 磁盘 / 负载 / 网络 / 磁盘 IO / 连接 / 进程数 / **IPv4 + IPv6 分行显示**）；「详情」内分区展示概览、**运行信息（内核 / 平台 / Tunnel / Top 进程）**、服务状态（可一键重启）、下发配置、任务队列与性能折线图 |
+| **系统管理** `#sys` | 用户管理、访问日志维护、API 密钥 —— **仅 `admin` 可见** |
+| **安全中心** `#sec` | 本人改密、MFA、邮箱绑定（所有账号可用） |
+
+### 主要特性
+
+- **订阅生成**：本地配置 + 外部订阅源合并，支持 Clash / Mihomo 与原始链接
+- **用户中心（PC / 移动端）**：PC 单页、移动端 4 页签；订阅生成（原始 / Clash / 批量 + 模板 + 本机二维码）、配置管理（搜索 / 8 种协议 / 外部订阅源增删启停）、访问统计、账号信息与换绑邮箱
+- **监控双栈地址**：Agent 上报的本机 IPv4 / IPv6 分别落库（`last_ip4` / `last_ip6`），页面按有无各显示一行，不再只剩 IPv6 或同一地址显示两遍
+- **协议编排**：一份模板最多两个配置文件（sing-box / Xray），互相独立；MASQUE 不再是独立进程，改为 sing-box 的 `masque-server` endpoint
+- **MTProto（Telegram）**：`mtg-multi` 单进程多 secret，按 UUID 授权、撤销只断该用户；配置独立成表，不写入 `configs`，也就不进任何订阅；门户可看二维码或发到邮箱
+- **版本化下发**：内容未变不升版本；变更自动 +1；Agent 回执 applied_version
+- **UUID 一致性巡检**：Cron 每 30 分钟比对「平台授权 ↔ 节点配置 ↔ 订阅配置」，发现漂移自动修复；也支持事件触发与手动检查
+- **删除 UUID 级联**：从授权、节点用户、订阅配置、节点配置中一并清理
+- **监控采集**：hostname / OS / 内核 / 负载 / 内存 / 磁盘 / CPU / 网络 / 磁盘 IO / 连接状态 / 进程 Top / 服务状态 / cloudflared Tunnel / IPv4 + IPv6
+- **Agent 自动更新**：与对象存储 `manifest.json` 比对，后台一键推送升级
+- **安全**：JWT、可选 Turnstile、TOTP、API 密钥（细粒度权限位）、占位 UUID 拦截、公开示例密钥自动轮换
+
+---
+
+## 协议与端口
+
+端口基线默认 `13700`，每个协议固定偏移（可在协议模板里逐项改端口）：
+
+| 协议 | 引擎 | 端口 | 传输 | 说明 |
+| ---- | ---- | ---- | ---- | ---- |
+| hysteria2 | sing-box | 13701 | QUIC / UDP | 自签 TLS，弱网表现好 |
+| shadowsocks 2022 | sing-box | 13702 | TCP | `2022-blake3-aes-256-gcm`，用户密钥由服务器密钥 + UUID 派生 |
+| anytls | sing-box | 13703 | TLS | 抗探测，证书与其他 TLS 协议共用 |
+| TUIC v5 | sing-box | 13704 | QUIC / UDP | bbr，0-RTT 关闭，uuid 双填 |
+| vless-reality | sing-box | 13705 | TCP + REALITY | `xtls-rprx-vision`，无需自有证书 |
+| vless-ws | sing-box | 13706 | TLS + WebSocket | 路径 `/vlws`，可直接接 CDN |
+| MASQUE | sing-box（masque-server） | 13707 | HTTP/3 · CONNECT-IP | 随 sb.json 下发（endpoint），需 sing-box ≥ 1.15.0；默认模板不启用，不生成订阅链接 |
+| vless-xhttp | Xray | 13708 | xhttp + REALITY | 双栈监听，`::`，spiderX 为派生诱饵路径 |
+| MTProto（Telegram） | mtg-multi | 13709 | TCP | 仅 TG 使用，**不进订阅**；每用户独立 secret，SIGHUP 热加载 |
+
+补充：
+
+- 所有 sing-box 入站监听 `::`（IPv4 + IPv6 双栈）；
+- sb.json 的域名解析策略为 `prefer_ipv4`：优先 IPv4，IPv6-only 目标自动回落；
+- 内部字段 `enable_vmess` 承载 TUIC 槽位（历史兼容），对外显示为 `tuic`；
+- MASQUE 自 sing-box 1.15.0 起由 `masque-server` endpoint 提供（HTTP Basic 用户 + TLS），不再单独起进程；1.15 稳定前默认模板不启用，模板启用时后端会按节点上报的 sing-box 版本拦截；
+- MTProto 不需要证书：FakeTLS 的伪装域名只写进 secret（`ee` + 16 字节随机 + hex(域名)），证书由被伪装的真实站点提供。
+
+---
+
+## 权限模型
+
+| 身份 | 入口 | 可用范围 |
+| ---- | ---- | -------- |
+| 超级管理员（默认 `admin`，可用 `SUPER_ADMIN_USERNAME` 覆盖） | `/admin` | 全部功能（含「系统管理」） |
+| 其他后台管理员 | `/admin` | 除「系统管理」外的全部页面与接口 |
+| 用户 | `/`（= `/me`） | 邮箱验证码 + 人机验证登录后进入用户中心（PC 单页 / 移动端 4 页签），只能管理 **自己邮箱绑定的那个 UUID**（一个邮箱仅允许绑定一个 UUID）；`/manage/*` 数据接口校验令牌与 UUID 归属 |
+
+- 非超管登录时「系统管理」入口不渲染，手输 `#sys` 也会被前端拦回；
+- 服务端同样强制：`/api/admin/users`、`/api/logs/summary`、`/api/logs/cleanup`、`/api/apikeys` 对非超管一律 403；
+- 用户端令牌（JWT 带 `role=user`）只能访问 `/api/portal/*`，调用任何后台接口一律 403；
+- 用户能看到哪些 UUID 由「订阅分组」里维护的**邮箱**决定（大小写不敏感），管理员改邮箱即改归属。
+
+---
+
+## 生产部署
+
+目标：把域名直接指向 Go 服务，功能与 Worker 对齐。完整步骤见
+[`server/README.md`](server/README.md) 的「生产部署（替换域名）」。
+
+1. **数据**：D1 导出后用 `server/tools/d1_to_mysql.py` 导入 MySQL；或空库启动自动建表。
+2. **配置**：`server/.env`；`PP_JWT_SECRET`、`PP_AGENT_KEY_SECRET` 必须与旧 Worker 相同。
+3. **启动**：`cd server && docker compose up -d --build`（MySQL + Go，自动迁移）。
+4. **反代**：Caddy/Nginx 终止 TLS，转发 `Host` / `X-Forwarded-Proto`，并允许 WebSocket Upgrade。
+5. **验收**：`server/tools/smoke.sh https://<域名>`；后台登录、订阅、Agent、WebSSH 各跑一遍。
+6. **切流/回滚**：DNS 指向新服务；旧系统可短期保留，必要时回滚 DNS。
+
+> 已知限制：批量任务同步执行；WebSSH 会话在进程内存（多实例需按 server_id 粘性）。
+> MySQL 与真实 Agent 的端到端回归需在部署机完成。
+
+---
+
+## 使用指南
+
+### 1. 管理员首次配置顺序
+
+按这个顺序建，依赖关系不会打架：
+
+| 顺序 | 页面 | 做什么 |
+| ---- | ---- | ------ |
+| 1 | 安全中心 `#sec` | 改掉默认密码，建议开 TOTP；绑定收件邮箱（邮箱验证码登录要用） |
+| 2 | 订阅模板 `#tpls` | 有默认模板就能直接生成 Clash 订阅；想自定义分组 / 分流就在这里改 YAML |
+| 3 | 服务器管理 `#servers` | 新建服务器 → 生成接入密钥 → 复制安装命令到机器上执行 |
+| 4 | 节点管理 `#singbox` | 新建协议模板（「填入示例」会生成随机密钥与端口）→ 新建节点，绑定服务器 / 域名 / 授权 UUID |
+| 5 | 节点管理 | 点「下发」，等 Agent 下一轮 poll（≤30 秒）写入配置并重启 |
+| 6 | 订阅分组 `#uuids` | 新建 UUID，把「邮箱」填成用户邮箱；一个邮箱只能绑一个 UUID |
+| 7 | 服务器监控 `#status` | 确认节点在线、CPU / 内存 / 磁盘有数、IPv4 / IPv6 显示正常 |
+
+> 「全局域名」用于生成订阅里的节点域名；协议模板里的 `{DOMAIN}` 会自动替换。
+
+### 2. 日常运维
+
+- **服务器监控**：顶部三卡（在线率 / 资源均值 / 全球分布）等高排布；下面「各节点资源占用」「服务器明细」卡片点进详情能看内核、服务状态、Top 进程、任务队列与性能折线。
+- **一键更新**：「服务器管理」→ 一键更新，Agent 与对象存储 `manifest.json` 比对后自升级。
+- **日志管理**：每次下发 / exec 都有 rc、耗时与输出，排障先看这里。
+- **巡检与通知**：Cron 每 30 分钟比对「平台授权 ↔ 节点配置 ↔ 订阅配置」，漂移自动修复；「通知设置」可配告警邮箱。
+- **API 密钥**：「系统管理 → API 密钥」按权限位创建，给脚本 / CI 用。
+
+### 3. 用户中心（PC）
+
+地址 `https://<你的域名>/`（`/me` 等价），邮箱验证码 + 人机验证登录后是单页：
+
+| 区块 | 用法 |
+| ---- | ---- |
+| 订阅卡 | 显示 UUID、状态、节点数；多 UUID 时点卡片切换；点左上头像看账号信息 |
+| 订阅生成 | 选「原始 / Clash / 批量」→ Clash 可挑模板 → 生成后复制链接、下载文件、看二维码，或点 App 名称一键唤起 |
+| 配置管理 | 只读列表：搜索备注 / 配置内容、按 8 种协议筛选、每行复制节点链接 |
+| 外部订阅源 | 填 `https://` 地址 + 备注添加，启用后下次生成自动合并；可停用 / 删除 |
+| 访问统计 | 总访问 / 今日访问 / 订阅拉取 / 接口生成，近 30 天趋势 + 访问构成；「最近访问」点按钮看弹窗明细（时间 / 类型 / IP / 客户端） |
+| 账号与信息 | 改所有者 / 联系方式 / 备注；换绑邮箱（验证码发到新邮箱，成功后令牌自动换发） |
+
+### 4. 用户中心（手机）
+
+底部 4 个页签：
+
+| 页签 | 内容 |
+| ---- | ---- |
+| 我的订阅 | 顶部订阅卡（状态 / 节点数 / UUID 复制，多个 UUID 横滑切换）→ 选格式 → 生成 → 复制 / 下载 / 扫码 / 一键导入 |
+| 配置管理 | 搜索 + 协议胶囊筛选 + 下拉刷新 + 加载更多；点「外部订阅源」弹层里可新增 / 启停 / 删除 |
+| 访问统计 | 四个指标块 + 趋势图 + 访问构成 + 最近访问；支持下拉刷新与失败重试 |
+| 我的 | 账号卡、登录邮箱（换绑）、UUID 复制、用户信息编辑、「退出登录」 |
+
+### 5. 客户端导入
+
+| 格式 | 适合 | 导入方式 |
+| ---- | ---- | -------- |
+| 原始（Base64） | v2rayN / Shadowrocket / NekoBox 等通用客户端 | 复制订阅链接粘到「添加订阅」，或扫码 |
+| Clash 订阅 | Clash Verge / ClashX / Mihomo / Stash | 同上；可套用订阅模板改变分组与分流 |
+| 批量配置 | 一次性导出 / 脚本处理 | 下载 `.txt`，一行一个节点链接 |
+
+生成结果里的 App 按钮走 URL scheme（`clash://install-config`、`shadowrocket://add/sub`、`sing-box://import-remote-profile`、`v2rayng://install-sub`），手机上点一下直接跳到客户端。节点变动后客户端「更新订阅」即可，链接不变。
+
+### 6. 邮箱绑定规则
+
+- **一个邮箱只能绑定一个 UUID**：重复绑定返回 `409 email_taken`；
+- 用户看到哪些订阅完全由「订阅分组 → 邮箱」决定（大小写不敏感），管理员改邮箱即改归属；
+- 换绑邮箱后立即生效，旧令牌失效并换发新令牌，当前页面无需重新登录。
+
+### 7. API 调用示例
+
+```bash
+# 后台登录拿 JWT
+TOKEN=$(curl -s https://<域名>/api/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"<密码>"}' | jq -r .token)
+
+# 查服务器列表
+curl -s https://<域名>/api/servers -H "Authorization: Bearer $TOKEN"
+
+# 用 API 密钥调接口（只开放 配置分组 / 配置管理 / 配置模板 三类，按 permissions 校验）
+curl -s https://<域名>/api/uuids -H 'X-API-Key: pk_xxx'
 ```
 
-#### 3. 获取UUID详细访问记录 (`GET /api/stats/uuid-details` by `mg_worker.js`)
+> `X-API-Key` 只能访问 `/api/uuids`、`/api/uuid-configs`、`/api/templates/manage`；其余接口（服务器、Agent、账号、日志等）必须用 JWT。
 
-返回指定UUID的详细访问记录，支持时间范围筛选。
+用户端接口走用户令牌（`localStorage.pp_portal_token` 那个），只能访问 `/api/portal/*` 与自己的 `/manage/*`。
 
--   **uuid**: 必填，要查询的 UUID
--   **start_date**: 可选，起始日期，格式 `YYYY-MM-DD`
--   **end_date**: 可选，结束日期，格式 `YYYY-MM-DD`
+### 8. 备份与恢复
 
-响应格式示例：
+后台「系统设置 → 数据备份」可一键导出 ZIP（`schema.sql` + 全表 JSON + R2/本地桶文件）。
 
-```json
-{
-  "success": true,
-  "uuid": "my-config-group",
-  "total_access": 45,
-  "first_access": 1705307400000, // Unix timestamp (ms)
-  "last_access": 1705742700000,   // Unix timestamp (ms)
-  "access_logs": [
-    {
-      "uuid": "my-config-group",
-      "query_type": "subscription",
-      "client_ip": "123.123.123.123",
-      "user_agent": "Clash/2.0",
-      "created_at": 1705742700000 // Unix timestamp (ms)
-    },
-    // ...更多记录
-  ]
-}
+命令行等价方式：
+
+```bash
+mysqldump --single-transaction --routines --triggers proxypilot > backup-$(date +%F).sql
+# 本地桶
+tar czf bucket-$(date +%F).tar.gz -C /opt/proxypilot data/bucket
+# R2 桶（rclone 配置后）
+rclone sync r2:proxypilot r2-backup:proxypilot
 ```
 
-### MFA相关接口：
+恢复：先建库并执行 `schema.sql`，再按表导入 JSON；对象桶文件同步回 `PP_BUCKET_DIR` 或 R2。
 
-| 方法   | 路径                               | 描述                        |
-| ------ | ---------------------------------- | --------------------------- |
-| `POST` | `/api/mfa/init`                    | 初始化MFA，获取密钥和二维码 |
-| `POST` | `/api/mfa/verify-first`            | 首次验证MFA并启用           |
-| `POST` | `/api/mfa/login-with-backup`       | 使用备份码登录              |
-| `GET`  | `/api/mfa/status`                  | 获取MFA状态                 |
-| `POST` | `/api/mfa/disable`                 | 禁用MFA                     |
-| `POST` | `/api/mfa/backup-codes/regenerate` | 重新生成备份码              |
+### 9. 远程终端（WebSSH）
 
-### 自动更新设置接口说明
+「服务器管理 → 命令」现在是**实时交互式终端**，打开即建立会话，不是逐条推送命令：
 
-- **获取自动更新设置** (`GET /api/settings/auto-update`): 
-  返回当前自动更新配置，包括每个数据源 (`global_enabled`, `hostmonit_v4`, `hostmonit_v6`, `vps789`) 的启用状态，以及 `last_executed` 时间戳。
+| 前置条件 | 说明 |
+| -------- | ---- |
+| Agent ≥ **1.3.0** 或本地服务器 | 本地服务器由 Go 直接开 PTY，无需 Agent |
+| 服务器开启「允许远程命令」 | 服务器编辑弹窗里的 `allow_exec` |
 
-- **更新自动更新设置** (`POST /api/settings/auto-update`): 
-  更新自动更新配置。请求体为JSON格式，示例：
+打开后的状态流转：
 
-  ```json
-  { 
-    "global_enabled": true, 
-    "hostmonit_v4": true,
-    "hostmonit_v6": false, 
-    "vps789": true 
-  }
-  ```
+```
+连接中 → 等待 Agent 接入（Agent 下一次 poll，≤30 秒）→ 已连接
+```
 
-## 🎯 适用场景
+- 已连接后就是真正的 shell：支持 `vim` / `top` / `htop` 等交互程序、颜色、窗口大小变化、Tab 补全；
+- 浏览器用 `@xterm/xterm` 渲染，窗口自适应（FitAddon），没有 canvas 的环境退化成纯文本输出；
+- 「重新连接」会重新登记会话并重新拨号；关闭弹窗即结束远端 shell 进程；
+- 原理：浏览器 `wss://…/api/shell/browser/:id` ↔ **Durable Object** ↔ Agent 主动出站的 `wss://…/api/shell/agent/:id` ↔ 服务器上的 PTY（`/bin/bash -il`，没有 bash 时回落 `/bin/sh -i`）；
+- 安全：浏览器侧校验后台 JWT（用户端令牌不可用）、服务器必须开 `allow_exec`；Agent 侧校验接入令牌；会话号一次性、120 秒未接入自动作废；同一服务器同时只保留一个终端会话。
 
-1.  **代理配置批量管理**：适合管理多个代理配置，避免重复修改
-2.  **IP优选服务**：为代理提供优化的Cloudflare IP和域名
-3.  **订阅服务分发**：通过UUID分组为不同用户提供定制订阅
-4.  **使用情况分析**：通过统计分析了解配置的使用情况和热度
-5.  **多协议支持**：支持多种主流代理协议的统一管理（VMess, VLESS, Trojan, Shadowsocks, Hysteria2, TUIC等）
-6.  **多CDN厂商管理**：支持按不同CDN服务商分类管理配置
-7.  **Clash配置文件生成**：基于模板生成完整的Clash/Mihomo配置文件
-8.  **模板管理**：统一管理多个配置文件模板，支持一键切换配置
+常见状态：
 
-**V5.0新增场景：**
-- **配置模板化部署**：通过模板管理功能，可以快速部署不同场景的Clash配置文件
-- **一体化配置管理**：所有功能集成在一个界面，简化用户操作流程
-- **服务整合**：减少部署复杂度，提高系统维护效率
-- **UUID精细化管理**：通过UUID信息管理功能，更好地组织和追踪不同用户组的使用情况
-- **灵活的输出控制**：通过优选禁用功能，提供更灵活的配置输出选项，满足不同使用需求
+| 现象 | 原因 / 处理 |
+| ---- | ----------- |
+| 提示「服务端没有配置 Durable Object 绑定 SHELL」 | 按部署第 3 步加 `SHELL` 绑定并重新部署 |
+| 一直「等待 Agent 接入」 | Agent 版本低于 1.3.0，或 Agent 离线；升级 Agent 后重试 |
+| 打开即断开 | 检查服务器是否开启「允许远程命令」、Agent 是否在线 |
 
-## 🔧 技术栈
+---
 
--   **运行环境**: Cloudflare Workers (无服务器边缘计算)
--   **数据库**: Cloudflare D1 (基于SQLite的分布式数据库)
--   **前端框架**: 纯HTML/CSS/JavaScript，无框架依赖
--   **图表库**: Chart.js (用于数据可视化)
--   **认证系统**: JWT + TOTP双重验证
--   **通讯协议**: 支持VMess、VLESS、Trojan、Shadowsocks、Hysteria2、TUIC、AnyTLS、Reality等多种协议
+### 10. Telegram（MTProto）代理
 
-## 故障排除
+1. 「节点管理 → MTProto → 协议模板」先确认模板：监听端口默认 `13709`、伪装域名（如 `storage.googleapis.com`，不能填 IP）、授权模式；改完保存会自动重渲染全部绑定节点；
+2. 「MTProto → 节点绑定」新建节点：选服务器 + 模板，域名 / 端口留空即继承模板（需要时再覆盖）；
+3. 保存后自动渲染 `/etc/mtg/config.toml` 并排队下发；Agent 首次会自动安装 `mtg-multi` 并写 `mtg.service`（`ExecReload` = SIGHUP）；
+4. 打开「授权用户」抽屉 → 选 UUID → 授权：每人生成独立 secret，撤销 / 轮换只影响该用户；
+5. 用户中心「Telegram 代理」可看二维码、一键发到绑定邮箱；
+6. 链接**不会**出现在 `/sub`、`/batch-configs`、`/clash-config` 里——授权数据在 `mtproto_clients`，从不写 `configs`。
 
-### 常见问题
+> 「整节点共享」模式（`secret_mode=single`）下所有用户共用一条链接，轮换 / 撤销会影响全部用户，仅适合临时场景。
 
-1. **配置无法添加**
-   - 检查配置格式是否正确
-   - 检查UUID是否有效
-   - 查看控制台错误日志
+## Go Agent
 
-2. **批量生成失败**
-   - 检查优选地址列表是否为空
-   - 检查基础配置是否存在
-   - 检查域名托管属性设置
+- 版本：**1.6.0**，静态编译（`CGO_ENABLED=0`），支持 `linux/amd64`、`linux/arm64`
+- 常驻 systemd：`proxypilot-agent.service`（`Restart=always`）
+- 安装脚本会校验密钥（`/api/agent/keycheck`）、下载二进制并强制 sha256 校验
 
-3. **订阅链接无法访问**
-   - 检查UUID是否正确
-   - 检查Worker路由配置
-   - 检查数据库连接状态
+采集项（每轮 poll 上报）：
 
-4. **IP池为空**
-   - 在管理后台的"IP 资源池管理"中点击"立即更新"
-   - 检查自动更新设置是否正确
-   - 检查HostMonit和Vps789 API是否可访问
+```
+hostname / os / kernel / platform / arch / cores / uptime / load
+mem_used_mb / mem_total_mb / disk_percent / cpu_ticks
+net（累计收发、包、错包、网卡数）
+disk_io（累计读写、次数）
+conn（TCP/UDP 状态计数）
+proc（进程总数 + Top RSS）
+services（systemd 服务状态，含 mtg / cloudflared）
+versions（sing-box / xray / mtg-multi 的实际版本号，5 分钟缓存，供「服务状态」展示）
+ssh（sshd / ssh 的 enabled / active 状态，供「服务器管理」与监控详情只读展示）
+ip（IPv4）/ ipv6（本机全局 IPv6）
+```
 
-### 日志查看
-通过Cloudflare控制台的Workers日志功能查看详细日志。
+- 不再采集 CPU 温度（云主机普遍读不到）；
+- 服务状态四态：`active` / `inactive` / `failed` / `not-installed`；服务器详情里同时显示已装组件的版本号（老 Agent 不上报则为空）；
+- 一键更新：后台比对对象存储 manifest.json，推送新二进制并重启 Agent。
+- 轮询：默认 **10 秒**一轮；连续 **3 个周期**（默认 30 秒）没有心跳即判离线——页面读取状态时动态判定，cron 负责落库 / 邮件通知。
+- 实时终端（1.3.0 起）：poll 拿到 `shell` 指令后主动出站连 `wss://…/api/shell/agent/:id`，在 PTY 里跑 `/bin/bash -il`（没有 bash 时用 `/bin/sh -i`），浏览器输入输出经 Durable Object 双向转发。
+
+常用命令：
+
+```bash
+proxypilot-agent doctor -c /etc/proxypilot-agent/config.json   # 自检
+systemctl status proxypilot-agent
+journalctl -u proxypilot-agent -n 50
+curl -fsSL https://<域名>/api/agent/install.sh | sh -s -- --uninstall
+```
+
+---
+
+## API 概览
+
+鉴权两种：
+
+- 后台：`Authorization: Bearer <JWT>`（登录后获取）
+- 脚本：`X-API-Key: pk_...`（权限位受限于分组 / 配置 / 模板）
+
+| 分组 | 代表路径 |
+| ---- | -------- |
+| 用户端（邮箱登录） | `/api/portal/send-code`、`/api/portal/login`、`/api/portal/uuids`、`/api/portal/email/send-code`、`/api/portal/email/verify` |
+| 登录 / 会话 | `/api/login`、`/api/login/email-code*`、`/api/oidc/*`、`/api/mfa/*` |
+| UUID 与订阅 | `/api/uuids`、`/api/uuids/:uuid/nodes`、`/api/uuid-configs`、`/api/sub-sources` |
+| 附件管理（R2） | `GET /api/attachments`、`POST /api/attachments/upload`、`GET /api/attachments/download`、`DELETE /api/attachments` |
+| 配置与模板 | `/api/batch-configs`、`/api/templates/manage`、`/api/configs` |
+| 服务器 | `/api/servers`、`/api/servers/:id/agent-key`、`/api/servers/monitor`、`/api/servers/:id/metrics` |
+| 节点下发 | `/api/node-templates`、`/api/node-configs`、`/api/node-configs/logs` |
+| 协议编排 | `/api/singbox/templates`、`/api/singbox/nodes`、`/api/singbox/nodes/:id/preview`、`/api/singbox/push` |
+| 后台任务 | `/api/jobs`、`/api/jobs/:id`、`/api/jobs/:id/cancel`、`/api/jobs/:id/retry`（批量操作默认转后台，`?sync=1` 可走同步） |
+| MTProto | `/api/mtproto/templates`、`/api/mtproto/templates/:id/apply`、`/api/mtproto/nodes`、`/api/mtproto/nodes/:id/clients`、`/api/mtproto/clients/:id/{link,rotate,revoke}`、`/api/portal/mtproto` |
+| 巡检 / 监控 | `/api/monitor/uuid-check`、`/api/monitor/notify` |
+| Agent（机器侧） | `/api/agent/poll`、`/api/agent/ack`、`/api/agent/install.sh`、`/api/agent/latest`、`/api/agent/push-update` |
+
+完整路由与参数以 `server/internal/api/router.go` 为准。
+
+---
+
+## 开发与测试
+
+要求 **Go 1.23+**、**Node.js ≥ 22**、**MySQL 8.0.13+**。
+
+### 后端（Go）
+
+```bash
+cd server
+go test ./...
+go vet ./...
+go build ./cmd/proxypilot
+```
+
+### Agent（Go）
+
+```bash
+cd agent
+go vet ./...
+go test ./...
+```
+
+### 前端（web-antd）
+
+```bash
+cd web-antd
+npm install
+npm run build      # 构建并自动同步 server/internal/api/assets_web/
+npm run preview    # 本地预览
+npm run check      # build + render-check + e2e
+```
+
+## 故障排查
+
+| 现象 | 排查方向 |
+| ---- | -------- |
+| 下发显示成功但配置没生效 | `restart_cmd` 必须是 `systemctl restart <svc>`（`enable --now` 不会重启已运行的服务）；看「日志管理」的 rc 与校验输出 |
+| sing-box 起不来：`bad key` | SS2022 密钥必须是 32 字节 base64 |
+| `decode private key` | REALITY 私钥 43 字符 base64url，不能带 `=` |
+| 客户端连上但一直超时 | REALITY 的 `pbk` 与服务器私钥不配对；或端口未放行（hysteria2 / TUIC 走 UDP） |
+| 订阅 404 | 该 UUID 既没有本地配置也没有外部订阅源 |
+| 监控数据全为 0 | Agent 版本过低（< 1.1.0）；升级后重启 Agent |
+| 「命令」提示实时终端不可用（未配置 SHELL） | Worker 没有绑定 Durable Object；按 [部署 第 3 步](#部署) 加 `SHELL` / `ShellSession` 后重新部署 |
+| 终端一直停在「等待 Agent 接入」 | Agent < 1.3.0 或离线；升级 Agent（一键更新）并确认心跳正常 |
+| 后台看不到「系统管理」 | 当前登录账号不是超管（账号名需等于 `SUPER_ADMIN_USERNAME`） |
+| 一键更新失败 | 对象存储里的 `manifest.json` 与二进制是否同步、基址是否正确 |
+| `install.sh` 返回 **403** / `cf-mitigated: challenge`（阿里云等机房 IP 常见） | **Cloudflare 对机房 IP 发起了 Managed Challenge**，请求没到 Worker（`/cdn-cgi/trace` 能通、`/api/*` 被挑战就是典型特征）：<br>1) Security → Bots → 关闭 **Bot Fight Mode**（Pro+ 的 Super Bot Fight Mode 把 “Definitely automated” 设为 Allow）<br>2) Security → WAF → Tools → **IP Access Rules** 加该服务器出口 IP（或 ASN）→ Action **Allow**<br>3) 或 Rules → **Configuration Rules**：`starts_with(http.request.uri.path, "/api/agent/")` → Security Level = Essentially Off / Bot Fight Mode = Off<br>4) 检查 WAF → Custom rules 里是否有匹配 `/api/*` 的挑战规则<br>5) 临时绕过：改用 Worker 的 `*.workers.dev` 地址（不经过自定义域名的 WAF），安装时 `--url https://<name>.<sub>.workers.dev`<br>6) 纯下载问题也可走对象存储：`node workers/export_agent_script.mjs --static` + `publish.ps1` 上传后设置 `AGENT_INSTALL_BASE`<br>⚠️ 注意：即使脚本下载绕过成功，**agent 轮询 `/api/agent/poll` 仍会被挑战**，所以必须让 Cloudflare 放行，或统一改用不被挑战的域名 |
+
+---
+
+## 更新日志
+
+### V15.4（2026-11-01）
+
+- **系统管理合并**：系统管理与系统设置合并为单一「系统管理」入口，仅超级管理员可访问；旧 `#settings` 自动进入系统设置页签。
+- **登录配置整合**：SSO / OIDC 并入「登录与验证」；原「站点 / 巡检 / 保留」更名为「高级设置」。
+- **Agent 解锁检测**：新增 Agent 内置 `unlock` 任务，支持 `allow_exec=0` 的服务器；集成 CommonMediaTests 与 RegionRestrictionCheck，输出上限提升至 16 KB。
+- **解锁结果修复**：HTTP 200 可达按已解锁展示；修复 Netflix、Disney+ 截断，Gemini 误报与地区跳转识别。
+- **组件版本**：Agent 1.7.3 上报 sing-box / xray / mtg / cloudflared 版本；cloudflared 支持一键更新并重启。
+- **性能**：图表改用自绘 SVG，首屏 JS 由约 1122 KB 降至 678 KB（gzip/br），降低约 40%。
+- **Agent 分发**：统一使用对象存储 `https://s3.proxypilot.yangzifun.org/agent`，后台可配置。
+- **体验修复**：发行版品牌图标、服务器卡片指标完整显示、详情状态映射、移动端账号状态、订阅模板列表与访问统计。
+
+### V15.3（2026-11-01）
+
+- **解锁详情**：服务器卡片新增 AI / 影视解锁检测；Netflix、Disney+ 使用 CommonMediaTests 实测，其余服务标记待确认，避免把 HTTP 200 误报为已解锁。
+- **组件版本**：Agent 1.7.1 上报 sing-box / xray / mtg / cloudflared 版本，本机模式同步采集。
+- **cloudflared 更新**：服务器详情支持一键下载最新 cloudflared、替换并重启服务。
+- **系统图标**：监控卡片展示 Ubuntu / Debian / CentOS / Rocky / AlmaLinux / Fedora / Arch / Alpine / openSUSE 等发行版图标。
+- **体验修复**：服务器详情状态映射、卡片指标完整显示、移动端账号状态、订阅模板列表、用户端访问统计与 UUID 信息接口。
+- **Agent 分发**：统一使用对象存储 `https://s3.proxypilot.yangzifun.org/agent`，后台分发基址可配置。
+- **主线清理**：仅保留 `main` 分支，历史功能分支已合并并删除。
+
+### V15.2（2026-11-01）
+
+- **备份管理**：独立「系统 → 备份管理」页，支持完整 ZIP 导出与事务式导入恢复。
+- **Cloudflare 检查**：一键检查 Token、R2 读写与 Email Sending 权限，并自动清理测试对象。
+- **本机 SSH**：控制服务器上报 SSH 状态，支持启用 / 停用；本机隐藏安装 Agent、探测与轮换密钥。
+- **NAT 公网 IP**：内网 IPv4 自动替换为连接来源公网 IPv4；仅有 IPv6 时隐藏内网地址并显示公网 IPv6。
+- **节点导航**：拆分「普通节点」与「MTProto（Telegram）」，各自包含节点绑定与协议模板两个子页面。
+- **订阅修复**：支持 CRLF 模板，修复重复 `proxies` 键导致 Clash 订阅不可用。
+- **用户端修复**：补齐访问统计与 UUID 信息 JSON 接口；移除用户信息中重复的「所有者」。
+- **体验**：全局路由与页面加载动画、后台 favicon、移除旧页脚。
+
+### V15.1（2026-11-01）
+
+- **附件管理**：独立「附件管理」页，R2 全桶浏览、上传、下载、删除；文本文件在线读取/编辑（≤2 MiB）。
+- **CDN**：支持配置 R2 公共自定义域，文件列表生成 `cdn_url`，可一键复制外链。
+- **Cloudflare 统一凭证**：一个 API Token 同时驱动 R2 与 Email Sending；R2 S3 凭证由 Token 自动派生。
+- **本机直控**：控制服务器自动登记为本地节点，无需 Agent 即可监控、执行、WebSSH、下发模板。
+- **Agent 1.7.0**：心跳最短 2 秒；离线阈值 `max(60s, 4×心跳)`，修复 Cron 列别名导致的误判离线。
+- **监控**：5 秒实时刷新，集群实时下行/上行/总流量卡片，单机实时网络与磁盘速率。
+- **修复**：监控卡片主机名/运行时间/最后心跳缺失。
+
+### V15.0（2026-11-01）
+
+- **架构切换**：Go + MySQL 8 + Ant Design 成为生产主架构；旧 Cloudflare Worker 已从本分支移除；`PP_LEGACY_BASE` 仅作迁移期可选兜底。
+- **路由**：150/150（含动态子路由）；内嵌 AntD bundle + boot 注入，无需 npm 构建即可打开后台。
+- **WebSSH**：Go WebSocket 中继替代 Durable Object；Agent WS 唤醒 + 真实长轮询。
+- **后台设置**：登录方式、Turnstile、SMTP / Cloudflare Email Sending、OIDC、站点/Agent 地址、离线通知与保留期。
+- **Worker 能力补齐**：7 类批量任务、Cron（离线通知/清理/巡检）、管理员 OIDC、UUID 一致性修复。
+- **部署**：本地对象存储与 Agent 分发、Dockerfile / docker-compose / smoke.sh / 生产部署文档。
+- **质量**：108 个单测（Clash / sing-box / MTProto 黄金用例）；MySQL、Docker、真实 Agent 回归仍需在部署机完成。
+
+### V14.2（2026-10-30）
+
+- **Cloudflare Paid 能力落地**：批量任务改走 Queues（25s 预算、预算耗尽退避续投、cron 兜底、7 天/200 条保留期清理、单目标自动重试 3 次）；Agent 长轮询用 Durable Object 唤醒，任务与 WebSSH 秒级下发；补 D1 热点索引。
+- **轮询成本优化**：默认轮询 10s → 60s，Agent 1.5.5 长轮询覆盖完整周期；后台可配置且不再被旧 Agent 回写覆盖（旧 Agent 服务端仍降级为 10s）。
+- **DO Duration 优化**：Agent 1.6.0 改用 WebSocket（DO Hibernation），空闲时 DO 不再按长轮询挂起时长计费；连接断开时自动回退长轮询。
+- **CPU 优化**：订阅链接生成把模板级计算移出用户循环，并按私钥缓存 X25519 公钥，同场景 CPU 降低约 200 倍。
+- **移动端**：用户中心登录页重构为全屏 Hero + 白面板（≤899px），发送验证码内联、步骤单行、CTA 沉底；「我的订阅」移除重复的 Telegram 卡片。
+- **监控**：全球分布小图改为聚合气泡（显示台数）+ 地区数量条，大图保留精细散点、标签与缩放。
+- 测试：e2e 192 项通过，Worker 各测试全绿；Agent **1.6.0** 已发布。
+
+### V14.1（2026-10-29）
+
+- **批量操作后台化**：一键下发、批量授权、Agent 批量更新、UUID 巡检等改为「提交即返回」，后台分片执行（`waitUntil` 先跑 15s，跑不完由 cron 续跑），顶栏「任务」里看进度、取消、只重试失败项；
+- 新增 `batch_jobs` / `batch_job_items` 两张表与 `/api/jobs` 接口；旧接口默认返回 `{async:true, job_id}`，`?sync=1` 保留同步行为；
+- **效率优化**：订阅链接按「链接指纹」判断是否需要重写（链接没变直接跳过）、链接写入/删除改为 `DB.batch` 批量提交、同一任务加锁防并发；
+- 新增 `workers/test_jobs_api.mjs`（26 项：物化 / 进度 / 部分失败 / 取消 / 重试 / 锁 / 预算续跑）。
+- 监控页去掉「升级 Agent」与「通知设置」：Agent 升级统一在「服务器管理 → 更新 Agent」，通知设置也移到服务器管理页。
+- 节点可填 **CDN 域名**：VLESS-WS 会同时生成「直连源站」和「CDN:443」两条链接，同一 UUID 两种用法；服务端端口不变，CDN 转发由使用者自行配置。
+
+### V14.0（2026-10-29）
+
+本次是一个功能版本，汇总：
+
+- **MTProto（Telegram）部署**：模板 + 节点两级、按 UUID 独立 secret、撤销只断一人；配置独立成表，不进任何订阅；用户中心可看二维码 / 发到邮箱；
+- **MASQUE 并入 sing-box**：改为 `masque-server` endpoint 随 sb.json 下发，不再独立进程；默认模板不启用，低于 sing-box 1.15 有版本闸门；
+- **引擎版本可选**：协议模板能选 sing-box / Xray 的正式版或预览版（也可手填 tag），下发时 Agent 自动安装并切换；
+- **组件版本采集**：Agent 上报 sing-box / xray / mtg-multi 版本，服务器详情直接显示；
+- **安装可停用 SSH**：安装命令支持 `--disable-ssh`（Agent 运行后才执行）；
+- **SSH 启停集中到「服务器管理」**：列表新增 SSH 状态列（来自 Agent 上报），支持单台与勾选后批量启用 / 停用，统一走后台任务；**服务器监控详情只读显示 SSH 状态**，不再提供操作按钮；
+- **协议模板补说明**：8 个协议的端口 / 传输 / 用途在模板页与标签提示里可见；
+- Agent 升至 **1.5.1**：新增 `mtg` 服务监控、SSH 服务状态上报（`ssh.enabled/active`）。
+- Agent **1.5.2**：部署前自动补 systemd 单元；配置未变化但服务未运行时自动拉起（修复 MTProto 下发后「未启动」）。
+- Agent **1.5.3**：SSH 状态同时检查 `ssh.service` 与 `ssh.socket`（Ubuntu 套接字激活），并区分「运行中但未自启」，修复 SSH 实际已启用却显示已停用。
+- Agent **1.5.4**：长轮询等待任务（Durable Object 唤醒），下发延迟从轮询间隔降到秒级；旧 Worker 无 `AGENT_HUB` 时自动回退普通轮询。
+- Agent **1.5.5**：长轮询覆盖完整轮询周期（默认 60s），在降低请求量的同时保持任务下发 / WebSSH 秒级唤醒；打开 WebSSH 时服务端会主动 push 唤醒 Agent。
+- Agent **1.6.0**：WebSocket + DO Hibernation，空闲时不再持续挂起长轮询（DO Duration 接近 0）；断线自动回退长轮询。
+
+> 升级注意：需先发布并推送 Agent 1.5.0，版本选择与组件版本展示才会生效；旧 Agent 会忽略新增字段。
+
+### V13.8（2026-10-29）
+
+- **安装时可停用 SSH**：服务器「安装命令」弹窗新增开关，安装命令追加 `--disable-ssh`；安装脚本在 **Agent 服务确认运行后** 才执行 `systemctl disable --now sshd|ssh`，装失败或 Agent 没起来会跳过并打日志，避免失联；
+- 服务器详情「服务状态」旁新增「停用 SSH / 启用 SSH」：复用 restart 任务下发 `systemctl enable --now sshd|ssh`，可在面板里随时恢复（也可用 WebSSH 执行）；
+- 安装命令默认不带该参数，行为与之前一致。
+
+### V13.7（2026-10-29）
+
+- **协议模板可选引擎版本**：模板里能选 sing-box / Xray 的具体版本（下拉同时列出正式版与预览版，也可手填 tag；留空跟随 Agent 内置默认）；
+- 「下发」时把版本随配置带给 Agent：部署载荷新增第 15 个 wire 字段 `install_versions`（老 Agent 会忽略，兼容），Agent 比对已装版本，不一致就下载安装并切换，再跑 `sing-box check` 与重启；
+- 新增 `GET /api/singbox/releases?engine=singbox|xray`（GitHub Release，D1 缓存 6 小时；拉取失败回落缓存）；
+- Agent 升到 **1.5.0**；老 Agent 不认这个字段，配了版本的模板需要先升级 Agent 才会真正切换。
+
+### V13.6（2026-10-29）
+
+- **MASQUE 并入 sing-box**：模板启用后生成 `endpoints[{ type: "masque-server" }]` 写进 sb.json（TLS 复用模板证书、用户取模板 users），不再下发独立 `masque.json`、不再起独立进程；旧模板的 `masque_json` 字段保留但不再使用；
+- 版本闸门：按 Agent 上报的 sing-box 版本拦截——低于 1.15.0 时明确报错，不会把 1.14.x 节点打挂；默认模板不启用 MASQUE；
+- 模板编辑器改为「开关 + URI 路径」，从粘贴的 sb.json 里也能反推 `masque-server`；
+- **协议模板补说明**：模板页新增可折叠的「协议说明（端口 / 传输 / 用途）」，协议标签 hover 也能看到；补上 `mtg` 服务监控。
+
+### V13.5（2026-10-29）
+
+- **采集组件版本**：Agent 每轮上报 `versions`（`sing-box version` / `xray version` / `mtg-multi version`，5 分钟缓存），服务器详情「服务状态」直接显示 `v1.14.4` 这类版本号；
+- 服务监控名单补上 `mtg`（MTProto 用），与 sing-box / xray / cloudflared 一致可重启；
+- Agent 升到 **1.4.1**（需重新发布二进制后，一键更新才会推送）。
+
+### V13.4（2026-10-29）
+
+- **MTProto 改为「模板 + 节点」两级**：新增 `mtproto_templates`（监听端口默认 `13709`、伪装域名、模式、并发、黑名单等），节点只存覆盖项（`0` / `空` / `-1` = 继承）；
+- 模板可编辑，保存后自动按新参数重渲染全部绑定节点并排队下发；模板行另有「下发」按钮，节点页有「全部下发」；
+- 节点端可覆盖域名 / 端口 / 模式等，覆盖优先于模板；页面用「继承」标签标出来源；
+- 老库自动补 `mtproto_nodes.template_id` 列，既有节点保持原行为（自身值即覆盖值）。
+
+### V13.3（2026-10-29）
+
+- **新增 MTProto（Telegram）部署**：节点管理多一个页签，引擎 `mtg-multi`（单进程多 secret），默认端口 `13709`；
+- 新增 `mtproto_nodes` / `mtproto_clients` 两表，按 UUID 授权、每用户独立 secret；撤销 / 轮换只断该用户，SIGHUP 热加载；
+- 配置独立于订阅：不写 `configs`，`/sub`、`/batch-configs`、`/clash-config` 里不会出现 `tg://`；
+- 用户中心新增「Telegram 代理」卡片：二维码本机渲染 + 一键发送到绑定邮箱（60 秒 / 每日 5 次限流）；
+- Agent 自动安装 `mtg-multi`（GitHub Release v1.13.0）并补 `ExecReload`；服务监控新增 `mtg`；
+- 新增 `workers/test_mtproto_api.mjs`（98 项）。
+
+### V13.2（2026-10-29）
+
+- **Ant Design 6**：升级到 antd **6.6.8** + @ant-design/icons **6.3.4**（React 18.3 满足 v6 要求）；侧边栏底部由「V13.1 · AntD 5」改为「V13.2 · AntD 6」，登录页文案同步为 Ant Design 6
+- **Ant Design Charts 全覆盖**：柱状图 / 环形图 / 折线面积 / 迷你趋势改用 **@ant-design/plots 2.6.8**（G2 5）；「全球分布」点位用 **Scatter** 按经纬度/国家中心点投影到内置 1000×400 世界底图（无需 Mapbox / AMap key）；仪表盘用 antd `Progress type="dashboard"`
+- **图表稳定性**：关闭入场动画，修复折线/面积首帧空白；无 canvas 环境（jsdom / 老浏览器）自动回退轻量 SVG
+- **全球分布**：小图悬停圆点显示地区 / CPU / 内存，大图把地区名直接写在地图上（无卡片、无引线），点击圆点进详情
+- 清理 antd v6 弃用 API：`destroyOnClose`→`destroyOnHidden`、`destroyInactiveTabPane`→`destroyOnHidden`、Table `size="middle"`→`"medium"`、Space `direction`→`orientation`
+- 版本号：`APP_VERSION` / `UI_VERSION` / `web-antd/package.json` → **13.2**
+- 测试：smoke 22 / render 38 / e2e 180 全绿
+
+### V13.1（2026-10-29 增补）
+
+- **前端依赖升级**：antd 5.22 → **6.6.8**、@ant-design/icons 5.5 → **6.3.4**（React 18.3 满足 v6 要求）；清理 v6 弃用 API（`destroyOnClose`→`destroyOnHidden`、`destroyInactiveTabPane`→`destroyOnHidden`、`Table size="middle"`→`"medium"`、`Space direction`→`orientation`），e2e 180 全绿
+- **Ant Design 图表**：柱状图 / 环形图 / 折线面积 / 迷你趋势改用 **@ant-design/plots 2.6.8**（G2 5）渲染，仪表盘改用 antd `Progress type="dashboard"`；「全球分布」地图的点位改用 **Scatter** 打在 1000×400 世界底图上（直接按经纬度/国家中心点投影，无需 Mapbox/AMap key），无 canvas 环境回退 HTML 圆点。构建体积约 1.28 MB gzip，占 64 MiB 上限约 2%
+- **移动端用户中心重做**：底部 4 个页签（我的订阅 / 配置管理 / 访问统计 / 我的），账号信息与退出登录收进「我的」，顶部导航栏不再放头像 / 退出；顶部渐变订阅卡（名称 / 状态 / 节点数 / UUID 复制 + 多 UUID chip 切换），订阅生成、配置列表、统计 KPI、账号表单统一视觉
+- **访问统计**：「最近访问」由表格改为「一行摘要 + 弹窗明细」；移动端支持下拉刷新与失败重试；修复移动端趋势图恒为 0（`AreaChart` 读行上扁平字段，旧代码塞在 `values` 里）、环形图中心恒为 0（`DonutChart` 内部 `Number()` 与 `fmtNum` 的千分位冲突）、折线图末位 x 轴标签与前一个挤在一起
+- **服务器监控**：顶部三卡（集群在线率 / 资源均值 / 全球分布）改为 grid 等高；双栈机器 IPv4 / IPv6 分行显示，新增 `servers.last_ip4`（Agent 上报的本机 IPv4，幂等补列，老 Agent 也生效），只有一种就只显示一行；`/api/servers`、`/api/servers/status`、`/api/servers/monitor` 均带出 `last_ip4` / `last_ip6`
+- **全球分布**：支持大图弹窗（滚轮缩放 1x–4x / 拖动平移 / 重置），每个地点带地区标签与引线，标签自动避让圆点与彼此
+- **远程终端**：「服务器管理 → 命令」由一次性执行改为交互式终端（连续输入、输出追加、↑/↓ 历史、`cd` 跨命令保持、Ctrl+L 清屏）；`/exec` 返回 `task_id`，前端轮询任务队列取回输出
+- **实时终端（WebSSH）**：浏览器 ↔ Durable Object ↔ Agent 出站 WebSocket ↔ PTY，打开即连、支持 vim / top 等交互程序；Agent 1.3.0 新增 `internal/shell`（PTY + 最小 WebSocket 客户端），Worker 新增 `ShellSession` Durable Object 与 `/api/shell/*` 路由
+- **配置管理**：协议 / 备注定宽、配置内容列吃满整页并完整换行，去掉 64 字截断与横向滚动
+- **外部订阅源**：移动端 Popup 接入新增 / 启停 / 删除（与 PC 能力对齐）
+- **README 重写**：补齐快速开始、目录结构、部署（绑定 / 密钥 / cron / 构建 / 升级回滚）、使用指南（管理员配置顺序、PC / 手机用户中心、客户端导入、API 示例）、环境变量按 bindings / 变量分类
+- 测试：e2e 137 → 168、Agent 单元 203 项，smoke 22 / render 38 全绿
+- 版本号：**V13.1**（本轮为功能增补，`APP_VERSION` / `UI_VERSION` 未变）
+
+### V13.1（2026-10-28）
+
+- **单文件交付**：旧版内置页面（登录页 / 用户中心 / 管理后台 / 公共生成器）已从 `workers/worker.js` 移除；前端改为 React 18 + Ant Design 6，`npm run build` 直接把产物写进 `workers/worker.js` 的 `GENERATED ASSETS` 区间，一个文件即可部署（当前约 1.28 MB gzip，约占 64 MiB 上限的 2%）
+- **入口收敛**：`/admin` 管理后台、`/` 与 `/me` 用户中心；`/login`、`/manage` 302 跳转；`/sub`、`/clash-config`、`/batch-configs` 等订阅输出与 `/manage/*` API 完全不变
+- **用户中心**：PC 单页（账号卡两栏：订阅 + 用户信息 / 登录邮箱、订阅生成、访问统计、配置管理、外部订阅源），移动端三页 + 底部导航（10-29 增补为 4 页签）；订阅模板按 `name` 生效且仅作用于 Clash
+- **服务器监控**：KPI 并入「集群在线率」卡；告警改为弹窗，仅在有告警时出现
+- **IP 记录**：`getClientIp()` 依次取 `cf-connecting-ip` / `cf-pseudo-ipv4` / `true-client-ip` / `x-real-ip` / `x-client-ip` / `x-forwarded-for`，并清洗 `::ffff:`、端口与 `unknown`
+- 版本号 V12.28 → V13.1
+
+### V12.11（2026-10-28）
+
+- **安装脚本多渠道**：新增免 `/api` 别名 `GET /install.sh`（`/agent/install.sh` 亦可），规避只拦 `/api/*` 的 WAF 规则
+- **对象存储分发**：`agent/dist/install.sh` 由 `node workers/export_agent_script.mjs --static` 生成（`ORIGIN` 留空、二进制基址写死），`publish.ps1` 一并上传；新增环境变量 `AGENT_INSTALL_BASE`，设置后安装命令自动变成 `curl ... <base>/install.sh | sudo sh -s -- --key <key> --url <本站>`
+- **排查**：机房 IP 访问 Worker 域名被 Cloudflare 403 时，按 readme 故障排查表处理（放行 IP / 关 Bot Fight Mode / 走对象存储）
+- 版本号 V12.10 → V12.11
+
+### V12.28（2026-10-28）
+
+- **后台按钮与同行控件高度对齐**：`card-head` / `inline-form` / `chart-controls` 里的下拉、输入框、按钮统一 34px；
+  分页条（`page-ctrl`）统一 30px；表格里的 `.nav-btn.small` 保持紧凑不受影响
+- 覆盖：订阅模板（模板前缀下拉 + 刷新 / 新建文件）、监控（自动刷新 + 通知设置）、
+  访问日志（保留期限 + 预览待删除数量）、分页（每页下拉 + 上一页 / 下一页）、统计范围 / 图表视图
+- 浏览器探针实测：修复前 7 处高度差（24 vs 43 / 28 等），修复后 0 处；版本号 V12.27 → V12.28
+
+### V12.27（2026-10-28）
+
+- **用户中心登录页对齐**：邮箱 / 验证码输入框与右侧「发送验证码」「登录」按钮统一 44px 等高，按钮不再被移动端 `width:100%` 拉满
+- check_pages 增加 `portal-login-row` / `portal-login-btn` / `height: 44px` 标记；版本号 V12.26 → V12.27
+
+### V12.26（2026-10-28）
+
+- **修复后台「订阅分组」查看外部订阅源报「请先用邮箱登录」**
+  · 原因：`/manage/uuid-sub-sources` 只认用户端邮箱令牌，而后台页面用 admin JWT 且没带 Authorization
+  · 服务端新增 `adminSessionOf` / `portalOrAdminGate` / `portalOrAdminGateByRow`：admin 令牌放行任意 UUID，
+    用户令牌仍按归属校验（跨账号 403）
+  · 后台 SPA 的 `subSourceApi` 与外部订阅源列表请求补上 `Authorization: Bearer <admin token>`
+- test_portal 46 → 51：admin 令牌放行 / 无令牌 401 / 用户跨账号 403 / 按行放行 / 记录不存在 404
+- 版本号 V12.25 → V12.26
+
+### V12.25（2026-10-28）
+
+- **性能优化（前端传输 / 订阅 / Agent 轮询）**
+  · HTML 页面（`/`、`/manage`、`/login`、`/admin`）加 `ETag` + `Cache-Control: private, no-cache`，命中 `If-None-Match` 直接 304：`/admin` 从每次重下 353KB 变为 0 字节、本地 24ms → 1.7ms
+  · Chart.js 从首屏移除（`/admin`、`/manage`），改为首次画图时动态加载：首屏少 210KB 阻塞下载；顺带移除未使用的 xterm addon
+  · 订阅访问统计：`INSERT` 日志 + `UPDATE access_count` 合并成一次 `DB.batch`，并去掉每次请求的 `sqlite_master` 表存在性检查
+  · 外部订阅源结果用 Cache API 缓存 120 秒，客户端刷新不再每次外呼第三方
+  · Agent 轮询：任务回收 / 过期维护从每次 poll 改为每 5 次（首次必跑）；`provisionSingboxOnAgentInstall` 只在首次接入 / 前两次 / 每小时自愈时检查
+- check_pages 新增 ETag/304、首屏资源断言；版本号 V12.24 → V12.25
+
+### V12.24（2026-10-28）
+
+- **修复 worker.js 的 TypeScript 报错**（`Property 'vlws'/'xhttp' does not exist on type 'object'`、`'warp'` 联合类型）
+  · `singboxProtoOptions` 标注 `Record<string, any>`，`singboxPorts` 标注 `Record<string, number>`
+  · `singboxTemplateFromSb` / xray 解析分支补全 `warp`、`xhttp` 字段与 `ports/paths/ss/hy2` 的类型，消除结构联合
+  · `singboxApplyNode` 失败分支不再参与 files 类型推断（此前 `applied.files` 被推断成预览/下发两种结构）
+  · 顺带修复重复的 `warp_base` 字段（后者覆盖前者，导致表单里的 warp_base 被忽略）
+- 新增 `workers/tsconfig.json` + `workers/worker-types.d.ts`（cloudflare:sockets / cf / URLPattern 声明），`npx tsc -p workers` 0 error
+- 版本号 V12.23 → V12.24
+
+### V12.23（2026-10-28）
+
+- **统一 sing-box 配置文件返回结构**：预览与下发此前字段不一致（预览是 `key/name/engine/path/service_name/check_cmd/content`，下发是 `node_config_id/name/changed/version/path`），调用方按联合类型处理会报 `Property 'changed' does not exist`（ts(2339)）
+  · 新增 `singboxFileView` / `singboxFilesView`，所有 `files` 统一为 10 个字段：`key/name/engine/path/service_name/check_cmd/content/node_config_id/version/changed`
+  · 预览项固定 `changed=false`、`version=0`、`node_config_id=0`，下发项返回真实值与内容
+  · `/apply`、`/deploy`、`/deploy`（默认配置）、`/apply`（force）等响应新增顶层 `changed` 计数，前端不再自己遍历 `files`
+- 版本号 V12.22 → V12.23
+
+### V12.22（2026-10-28）
+
+- **订阅模板页新增「存储桶文件」区块**：直接浏览、编辑对象存储里的模板（`rule/configs/*.yaml`）与地区配置（`rule/*.list`）
+  · 前缀切换：`rule/configs/`（模板）/ `rule/`（全部）
+  · 文件列表显示大小与更新时间，点「编辑」弹出编辑器，保存写回存储桶
+  · 「新建文件」可在当前前缀下创建新文件
+  · 订阅模板行如果 URL 指向存储桶，会多一个「编辑源文件」按钮，一键跳到对应文件
+- 新增接口：`GET /api/bucket/files`、`GET /api/bucket/file`、`PUT/POST /api/bucket/file`、`DELETE /api/bucket/file`
+  · 依赖 R2 绑定 `bucket`（`r2_buckets`），未绑定时返回 503 并提示
+  · 只允许 `BUCKET_PREFIX`（默认 `rule/`）下的文本文件；拒绝 `..`、前缀外路径；单文件上限 512KB
+  · 写入时按扩展名设置 Content-Type（yaml / json / md / txt）
+- 版本号 V12.21 → V12.22
+
+### V12.21（2026-10-28）
+
+- **协议配置列表拆分端口列**：原来「启用协议」单元格是「协议 :端口」两段，现拆成两列
+  · 启用协议：ss / anytls / hy2 / tuic / reality / vlws …
+  · 端口：与协议逐行对齐（尊重模板里按协议自定义的端口）
+  · 端口列悬停显示 `ss:13702 · anytls:13703 …` 的完整对照
+- 版本号 V12.20 → V12.21
+
+### V12.20（2026-10-28）
+
+- **协议配置列表去掉「内置用户」列**：模板只展示 模板 / 启用协议 / 更新时间 / 操作
+- 绑定节点弹窗里选择协议模板时也只显示模板名（不再带任何用户信息）
+- 「默认配置」推送的确认文案改为「模板 sb.json 里自带的用户」，避免与账号概念混淆
+- 版本号 V12.19 → V12.20
+
+### V12.19（2026-10-28）
+
+- **协议配置的「用户」列改为「内置用户」**：它来自模板 `sb.json` 的 `inbounds.users`（新建模板时示例里是 `user01`），仅用于预览/示例，**不参与实际下发**
+- 悬停该列可看到内置用户名单与说明；绑定节点的模板下拉不再显示「N 用户」
+- 真正下发的用户来自「节点配置 → 授权节点」里的 UUID（下发时会整体替换 `users_json`）
+- 版本号 V12.18 → V12.19
+
+### V12.18（2026-10-28）
+
+- **Agent 分发基址迁移**到新对象存储：`https://s3.proxypilot.yangzifun.org/agent`（示例：`https://s3.proxypilot.yangzifun.org/agent/proxypilot-agent-linux-amd64`）
+- `AGENT_BINARY_BASE_URL` 默认值、`install.sh` 导出示例、`publish.ps1` 默认 Endpoint/Bucket、`build.sh` 提示、readme 全部同步
+- 旧桶仍可用：需要回退时设置环境变量 `AGENT_BINARY_BASE_URL=https://s3.yangzifun.org/proxypilot`
+- **`rule/` 链接迁移**：`configs/*.yaml` 的 `rule-providers` 与 README 中的下载地址从 Git 仓库链接改为 `https://s3.proxypilot.yangzifun.org/rule/`（不再随 commit 变化而失效）；新增 `workers/check_rule_links.mjs` 自检
+- 版本号 V12.17 → V12.18
+
+### V12.17（2026-10-28）
+
+- **监控页预留区上线**「集群概览」：
+  · 在线率环形图（在线 / 总数）
+  · CPU Top 5 横向条形（按在线服务器 CPU 排序，>75 橙 / >90 红）
+  · 告警列表：离线、状态未知、CPU≥80/90、内存≥85/90、磁盘≥85/90、负载 > 核数、服务 failed、agent 版本过低；按严重度排序，最多 8 条，点击直接打开该服务器详情
+- 右侧地图保持 380px；窄屏（≤1240px）自动隐藏 CPU 条形，≤900px 上下堆叠
+- 版本号 V12.16 → V12.17
+
+### V12.16（2026-10-28）
+
+- **监控卡片精简**：`内核 / 平台`、`Tunnel`、`Top 进程` 从卡片移除，卡片只保留 CPU / 内存 / 磁盘 / 负载 / 网络 / 磁盘 IO / 连接 / 进程数
+- **详情新增「运行信息」分区**：内核 · 平台、Tunnel 状态、Top 6 进程（名称 / 内存 / CPU / pid）
+- 版本号 V12.15 → V12.16
+
+### V12.15（2026-10-28）
+
+- **右上角显示用户名**（`uuid_info.owner`，未设置时回退邮箱）；展开下拉显示「名称 + 邮箱」
+- **自助修改绑定邮箱**：下拉 → 修改邮箱 → 向新邮箱发 6 位验证码（10 分钟有效、60 秒重发间隔）→ 校验通过后立即生效；邮箱唯一性照样校验（已绑定他人返回 409）
+- 改绑成功后服务端换发新令牌（旧令牌的 `sub` 是旧邮箱），页面自动替换，无需重新登录
+- 新接口：`POST /api/portal/email/send-code`、`POST /api/portal/email/verify`
+- 版本号 V12.14 → V12.15
+
+### V12.14（2026-10-28）
+
+- 配置管理右上角：显示登录邮箱（按钮内只放邮箱地址，宽度 200px / 280px，超长省略；悬停 tooltip 与下拉里的「邮箱：」块显示完整地址）
+- 版本号 V12.13 → V12.14
+
+### V12.13（2026-10-28）
+
+- **删除用户端列表页**：`/` 只剩邮箱登录，登录成功直接进 `/manage`；不再有 UUID 卡片 / 订阅卡片
+- **取消手动输入 UUID**：`/manage` 的「配置管理入口」弹窗、`生成UUID`、`编辑UUID信息` 全部下线；没有登录令牌直接跳回 `/`
+- **右上角显示邮箱**（原显示 `UUID: xxxxxxxx...`），退出登录清除令牌后回登录页
+- **服务端强制**：`/manage/configs|stats|uuid-info|uuid-check|uuid-sub-sources|all-uuid-info` 等接口要求 `Authorization: Bearer <用户令牌>` 且 UUID 必须属于该邮箱（401 / 403）；`/manage/entry`、`/manage/generate-uuid` 关闭
+- 订阅输出 `/sub/:uuid`、`/batch-configs/:uuid`、`/clash-config` 保持公开（客户端要用）
+- 版本号 V12.11 → V12.13
+
+### V12.10（2026-10-28）
+
+- **一个账号一个 UUID**：`uuid_info.email` 改为「邮箱唯一」（大小写不敏感），后台新建 / 改绑到已被占用的邮箱返回 **409 `email_taken`**，公开的 UUID 信息接口同样拦截
+- 数据库补 `uuid_info(lower(email)) WHERE email <> ''` 唯一索引（历史数据已有重复时索引创建会跳过，写入仍被应用层拦住）
+- 空邮箱不受限制（方便先建分组后补信息）
+- 用户中心因此最多只列 1 个 UUID，登录直达 `/manage?uuid=` 成为常态
+- 版本号 V12.9 → V12.10
+
+### V12.9（2026-10-28）
+
+- **登录直达**：只有一个可用 UUID 的账号，用户中心登录成功后直接 `location.replace('/manage?uuid=<uuid>')`；已有令牌再次进入同样直达
+- 多 UUID 账号仍显示列表选择；UUID 为「停用」时不跳转
+- 想强制停留在列表：访问 `/?list=1`
+- 版本号 V12.8 → V12.9
+
+### V12.8（2026-10-28）
+
+- **用户中心 → 配置管理**：每个 UUID 卡片新增「查看配置 / 管理订阅」入口，直达 `/manage?uuid=<uuid>`
+- **`/manage` 深链**：URL 带 `?uuid=` 时自动写入本地、解除入口门禁并切到「配置管理」标签加载该 UUID（原来的生成器 / 配置管理 / 订阅管理功能全部保留）
+- 版本号 V12.7 → V12.8
+
+### V12.7（2026-10-28）
+
+- **监控页布局**：全球分布地图缩小到右上角（380px 紧凑卡片），同一排左侧留出「预留区域」，供后续放置图表 / 告警 / 用量概览
+- 窄屏（≤900px）自动上下堆叠
+
+### V12.6（2026-10-28）
+
+- **用户中心登录页**：与后台 `/login` 共用同一套样式（`panelCss` + 页脚），登录框、按钮、输入框、页脚版本号完全一致
+- **人机验证**：用户端「发送验证码」接入 Cloudflare Turnstile（与后台登录同一套校验；未配置 `TURNSTILE_SECRET_KEY` 时自动跳过）
+- **一致性修复**：取消节点授权 / 删除 UUID / 一键清理配置，都会同步重渲染节点配置、删除订阅配置并排队下发（含"最后一个用户"场景）
+- 版本号 V12.5 → V12.6
+
+### V12.5（2026-10-28）
+
+- **用户端**：新增 `/`（= `/me`）用户中心 —— 邮箱验证码登录 → 列出该邮箱绑定的 UUID → 生成订阅（原始 / Base64 / Clash）与二维码；用户令牌与后台账号隔离
+- **页面分工**：`/` 改为用户中心，原「批量生成器」移到 `/manage`；`/login`、`/admin` 不变
+- **监控**：全球分布地图（经纬度打点）、CPU / 内存 / 磁盘环形图、负载柱状图、连接堆积条；服务状态矩阵下线，服务状态与重启并入服务器详情（分区卡片）
+- **性能**：授权节点同步 SQL 从「用户 × 链接」逐条往返（约 260 次）降为常数级（约 3 次）；多节点授权并行、UUID 巡检改为后台任务
+- **配置管理**：支持批量勾选删除与一键清理某个 UUID 的全部节点配置
+- Agent 版本 1.2.7
+
+### V12.0（2026-10-28）
+
+- **权限收敛**：仅 `admin` 可进「系统管理」，其余账号开放服务器管理 / 节点管理 / 监控 / 日志
+- **协议**：新增 **TUIC v5** 取代 vmess-ws（端口 13704）；协议引导补全 TUIC 与「其他协议」章节
+- **监控**：新增 **IPv6 采集与展示**；移除 CPU 温度；卡片不再重复服务状态点阵与内核
+- **安全性**：Xray 配置改为双栈监听、随机 UUID、派生 spiderX；占位 UUID 保存即拦截
+- **配置**：sb.json 域名解析改 `prefer_ipv4`（双栈，优先 v4）
+- **示例**：「填入示例」产出与生成器一致（含 TUIC、随机凭证、端口 +8）
+- Agent 版本 1.2.7
+
+### 历史要点
+
+- V11.x：sing-box 协议统一编排、MASQUE、Agent 版本化下发、服务器监控面板、UUID 一致性巡检、TUIC
+- V10.x：后台改版（左侧菜单 + 顶部工具栏）、节点配置模板
+- V8.x：弃用 SSH，改为 Go Agent 主动接入；对象存储直连分发二进制
+- V7.x：多管理员账号、JWT、MFA、API 密钥、OIDC/邮箱登录
+
+---
+
+## 适用场景
+
+- 自建节点（sing-box / Xray / MASQUE）统一编排与下发
+- 多台服务器、多 UUID 的订阅分发与访问统计
+- 想要「面板 + Agent」但不想开放管理端口的环境
+
+## 安全说明
+
+- 用户端令牌（`role=user`）与后台令牌完全隔离，越权调用后台接口一律 403；
+- 订阅链接含 UUID，等同于密码，前端多处提示「请勿公开分享」；
+- 后台可关掉密码登录只留 OIDC / 邮箱验证码；Turnstile 未配置时自动跳过；
+- Agent 只做出站连接，服务器不开放管理端口；接入密钥可随时轮换，旧密钥立即失效；
+- 公开示例配置里的密钥在保存时会被拦截，占位 UUID 同样拒绝入库。
 
 ## 许可证
 
-本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
-
-## 免责声明
-
-本项目仅供学习和研究使用，请遵守相关法律法规。使用者应对自己的行为负责，作者不承担任何责任。
-
----
-
-**系统架构图**：
-
-```
-┌─────────────────────────────────────────────────────┐
-│                 Cloudflare Workers                   │
-├─────────────────────────────────────────────────────┤
-│  ┌───────────────┐        ┌───────────────┐        │
-│  │   worker.js   │◄──────►│  mg_worker.js │        │
-│  │   (主服务)    │        │  (管理后台)   │        │
-│  └───────────────┘        └───────────────┘        │
-│          │                       │                  │
-│          ▼                       ▼                  │
-│  ┌───────────────┐        ┌───────────────┐        │
-│  │   D1 数据库   │◄──────►│  D1 数据库    │        │
-│  └───────────────┘        └───────────────┘        │
-└─────────────────────────────────────────────────────┘
-```
-
-**数据流向**：
-- `worker.js` ←→ D1: 读写配置、访问日志、优选IP/域名
-- `mg_worker.js` ←→ D1: 读写管理数据、模板、系统设置
-- `worker.js` ←→ `mg_worker.js`: 获取模板、管理数据（通过HTTP API）
-
-**优势**：
-1. **模块化设计**：功能分离，便于维护和扩展
-2. **高可用性**：可以独立部署和扩展每个组件
-3. **安全性**：管理后台与主服务分离，减少攻击面
-4. **灵活性**：可以根据需要调整部署架构
-
-部署成功后，您将拥有一个功能完整的代理配置管理系统，可以方便地管理、生成和分发代理配置。
+MIT

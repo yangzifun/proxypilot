@@ -1,0 +1,307 @@
+# ==========================================
+# 韩国地区补充列表 (Korea Service Proxy List)
+# 说明：仅收录韩国本地服务；通用基础设施与第三方 SDK
+# 更新时间: 2026-10-23
+# ==========================================
+
+# ----- HYBE / Weverse 及 K-POP 粉丝平台 -----
+DOMAIN-SUFFIX,weverse.io
+DOMAIN-SUFFIX,weverseshop.io
+DOMAIN-SUFFIX,weverse.co
+DOMAIN-SUFFIX,weverse.akamaized.net
+DOMAIN-SUFFIX,hybe.com
+DOMAIN-SUFFIX,hybe.co.kr
+DOMAIN-SUFFIX,frommyarti.com
+DOMAIN-SUFFIX,dearu.com
+DOMAIN-SUFFIX,lysn.com
+DOMAIN-SUFFIX,bstage.in
+DOMAIN-SUFFIX,phoning.me
+DOMAIN-SUFFIX,vlive.tv
+# 三大社与韩综平台
+DOMAIN-SUFFIX,smtown.com
+DOMAIN-SUFFIX,smentertainment.com
+DOMAIN-SUFFIX,jype.com
+DOMAIN-SUFFIX,ygfamily.com
+DOMAIN-SUFFIX,kocowa.com
+DOMAIN-SUFFIX,mnet.com
+DOMAIN-SUFFIX,mnetplus.tv
+
+# ----- 门户、搜索与云服务 (Naver / Daum / Nate) -----
+DOMAIN-SUFFIX,naver.com
+DOMAIN-SUFFIX,naver.net
+DOMAIN-SUFFIX,pharos.naver.com
+DOMAIN-SUFFIX,naver.me
+DOMAIN-SUFFIX,navercorp.com
+DOMAIN-SUFFIX,naverlabs.com
+DOMAIN-SUFFIX,pstatic.net
+DOMAIN-SUFFIX,ncloud.com
+DOMAIN-SUFFIX,band.us
+DOMAIN-SUFFIX,daum.net
+DOMAIN-SUFFIX,daumcdn.net
+DOMAIN-SUFFIX,nate.com
+
+# ----- 社交、内容与支付 (Kakao / LINE) -----
+# LINE 为 Naver 关联企业（韩日合资），如仅需韩国本土服务可注释掉
+DOMAIN-SUFFIX,kakao.com
+DOMAIN-SUFFIX,kakao.co.kr
+DOMAIN-SUFFIX,kakaocdn.net
+DOMAIN-SUFFIX,kakaocorp.com
+DOMAIN-SUFFIX,kakaoent.com
+DOMAIN-SUFFIX,kakaocloud.com
+DOMAIN-SUFFIX,kakaoenterprise.com
+DOMAIN-SUFFIX,kakaomobility.com
+DOMAIN-SUFFIX,kakaobank.com
+DOMAIN-SUFFIX,kakaopay.com
+DOMAIN-SUFFIX,kakaogames.com
+DOMAIN-SUFFIX,tistory.com
+DOMAIN-SUFFIX,brunch.co.kr
+DOMAIN-SUFFIX,line.me
+DOMAIN-SUFFIX,line-apps.com
+DOMAIN-SUFFIX,line-scdn.net
+
+# ----- 音乐、视频与直播 -----
+DOMAIN-SUFFIX,melon.com
+DOMAIN-SUFFIX,melon.net
+DOMAIN-SUFFIX,genie.co.kr
+DOMAIN-SUFFIX,bugs.co.kr
+DOMAIN-SUFFIX,music-flo.com
+DOMAIN-SUFFIX,watcha.com
+DOMAIN-SUFFIX,tving.com
+DOMAIN-SUFFIX,wavve.com
+DOMAIN-SUFFIX,coupangplay.com
+DOMAIN-SUFFIX,afreecatv.com
+DOMAIN-SUFFIX,sooplive.co.kr
+DOMAIN-SUFFIX,cjenm.com
+# ----- 电视与新闻媒体 -----
+DOMAIN-SUFFIX,kbs.co.kr
+DOMAIN-SUFFIX,imbc.com
+DOMAIN-SUFFIX,sbs.co.kr
+DOMAIN-SUFFIX,jtbc.co.kr
+DOMAIN-SUFFIX,tvchosun.com
+DOMAIN-SUFFIX,channela.com
+DOMAIN-SUFFIX,mbn.co.kr
+DOMAIN-SUFFIX,ytn.co.kr
+DOMAIN-SUFFIX,ebs.co.kr
+DOMAIN-SUFFIX,arirang.co.kr
+DOMAIN-SUFFIX,chosun.com
+DOMAIN-SUFFIX,joins.com
+DOMAIN-SUFFIX,donga.com
+DOMAIN-SUFFIX,hani.co.kr
+DOMAIN-SUFFIX,khan.co.kr
+DOMAIN-SUFFIX,ohmynews.com
+DOMAIN-SUFFIX,mk.co.kr
+DOMAIN-SUFFIX,hankyung.com
+DOMAIN-SUFFIX,yna.co.kr
+DOMAIN-SUFFIX,newsis.com
+DOMAIN-SUFFIX,edaily.co.kr
+DOMAIN-SUFFIX,sedaily.com
+DOMAIN-SUFFIX,fnnews.com
+DOMAIN-SUFFIX,etoday.co.kr
+
+# ----- 购物与百货 -----
+DOMAIN-SUFFIX,coupang.com
+DOMAIN-SUFFIX,gmarket.co.kr
+DOMAIN-SUFFIX,auction.co.kr
+DOMAIN-SUFFIX,11st.co.kr
+DOMAIN-SUFFIX,ssg.com
+DOMAIN-SUFFIX,lotteon.com
+DOMAIN-SUFFIX,lotte.com
+DOMAIN-SUFFIX,shinsegae.com
+DOMAIN-SUFFIX,thehyundai.com
+DOMAIN-SUFFIX,ehyundai.com
+DOMAIN-SUFFIX,interpark.com
+DOMAIN-SUFFIX,ticketlink.co.kr
+DOMAIN-SUFFIX,yes24.com
+DOMAIN-SUFFIX,aladin.co.kr
+DOMAIN-SUFFIX,kyobobook.co.kr
+DOMAIN-SUFFIX,musinsa.com
+DOMAIN-SUFFIX,kream.co.kr
+DOMAIN-SUFFIX,zigzag.kr
+DOMAIN-SUFFIX,a-bly.com
+DOMAIN-SUFFIX,wemakeprice.com
+DOMAIN-SUFFIX,bunjang.co.kr
+DOMAIN-SUFFIX,joongna.com
+DOMAIN-SUFFIX,oliveyoung.co.kr
+
+# ----- 本地生活、外卖与配送 -----
+DOMAIN-SUFFIX,daangn.com
+DOMAIN-SUFFIX,baemin.com
+DOMAIN-SUFFIX,woowahan.com
+DOMAIN-SUFFIX,yogiyo.co.kr
+DOMAIN-SUFFIX,cjlogistics.com
+DOMAIN-SUFFIX,epost.go.kr
+DOMAIN-SUFFIX,koreapost.go.kr
+DOMAIN-SUFFIX,zigbang.com
+DOMAIN-SUFFIX,r114.com
+DOMAIN-SUFFIX,wadiz.kr
+
+# ----- 出行与旅游 -----
+DOMAIN-SUFFIX,yanolja.com
+DOMAIN-SUFFIX,myrealtrip.com
+DOMAIN-SUFFIX,hanatour.com
+DOMAIN-SUFFIX,modetour.com
+DOMAIN-SUFFIX,korail.com
+DOMAIN-SUFFIX,letskorail.com
+DOMAIN-SUFFIX,seoulmetro.co.kr
+DOMAIN-SUFFIX,tmoney.co.kr
+DOMAIN-SUFFIX,tmap.co.kr
+
+# ----- 金融、支付与银行 -----
+DOMAIN-SUFFIX,toss.im
+DOMAIN-SUFFIX,tosspayments.com
+DOMAIN-SUFFIX,tossbank.com
+DOMAIN-SUFFIX,tossinvest.com
+DOMAIN-SUFFIX,payco.com
+DOMAIN-SUFFIX,inicis.com
+DOMAIN-SUFFIX,kcp.co.kr
+DOMAIN-SUFFIX,eximbay.com
+DOMAIN-SUFFIX,allat.co.kr
+DOMAIN-SUFFIX,danal.co.kr
+DOMAIN-SUFFIX,settlebank.co.kr
+DOMAIN-SUFFIX,kbstar.com
+DOMAIN-SUFFIX,kbfg.com
+DOMAIN-SUFFIX,shinhan.com
+DOMAIN-SUFFIX,hanabank.com
+DOMAIN-SUFFIX,wooribank.com
+DOMAIN-SUFFIX,nonghyup.com
+DOMAIN-SUFFIX,ibk.co.kr
+DOMAIN-SUFFIX,kdb.co.kr
+DOMAIN-SUFFIX,sc.co.kr
+DOMAIN-SUFFIX,kbanknow.com
+DOMAIN-SUFFIX,miraeasset.com
+DOMAIN-SUFFIX,samsungpop.com
+DOMAIN-SUFFIX,kiwoom.com
+DOMAIN-SUFFIX,kbsec.com
+DOMAIN-SUFFIX,nhqv.com
+DOMAIN-SUFFIX,hanaw.com
+DOMAIN-SUFFIX,upbit.com
+DOMAIN-SUFFIX,bithumb.com
+DOMAIN-SUFFIX,coinone.co.kr
+DOMAIN-SUFFIX,korbit.co.kr
+DOMAIN-SUFFIX,dunamu.com
+DOMAIN-SUFFIX,gopax.co.kr
+
+# ----- 游戏 -----
+DOMAIN-SUFFIX,nexon.com
+DOMAIN-SUFFIX,netmarble.com
+DOMAIN-SUFFIX,ncsoft.com
+DOMAIN-SUFFIX,plaync.com
+DOMAIN-SUFFIX,smilegate.com
+DOMAIN-SUFFIX,krafton.com
+DOMAIN-SUFFIX,pubg.com
+DOMAIN-SUFFIX,pearlabyss.com
+DOMAIN-SUFFIX,com2us.com
+DOMAIN-SUFFIX,gamevil.com
+DOMAIN-SUFFIX,webzen.com
+DOMAIN-SUFFIX,wemade.com
+DOMAIN-SUFFIX,neowiz.com
+DOMAIN-SUFFIX,gravity.co.kr
+DOMAIN-SUFFIX,linegames.com
+DOMAIN-SUFFIX,inven.co.kr
+
+# ----- 社区、论坛与求职 -----
+DOMAIN-SUFFIX,dcinside.com
+DOMAIN-SUFFIX,theqoo.net
+DOMAIN-SUFFIX,instiz.net
+DOMAIN-SUFFIX,clien.net
+DOMAIN-SUFFIX,ruliweb.com
+DOMAIN-SUFFIX,todayhumor.co.kr
+DOMAIN-SUFFIX,ppomppu.co.kr
+DOMAIN-SUFFIX,82cook.com
+DOMAIN-SUFFIX,dogdrip.net
+DOMAIN-SUFFIX,fmkorea.com
+DOMAIN-SUFFIX,humoruniv.com
+DOMAIN-SUFFIX,bobaedream.co.kr
+DOMAIN-SUFFIX,etoland.co.kr
+DOMAIN-SUFFIX,jobkorea.co.kr
+DOMAIN-SUFFIX,saramin.co.kr
+DOMAIN-SUFFIX,wanted.co.kr
+DOMAIN-SUFFIX,incruit.com
+DOMAIN-SUFFIX,jobplanet.co.kr
+
+# ----- 运营商与通信 -----
+DOMAIN-SUFFIX,sktelecom.com
+DOMAIN-SUFFIX,kt.com
+DOMAIN-SUFFIX,lguplus.com
+
+# ----- 教育与工具软件 -----
+DOMAIN-SUFFIX,hancom.com
+DOMAIN-SUFFIX,megastudy.net
+DOMAIN-SUFFIX,inflearn.com
+DOMAIN-SUFFIX,class101.net
+
+# ==========================================
+# 以下为补充项（2026-10-23）：财团根域名 + 金融/电商/内容/游戏补充
+# ==========================================
+
+# ----- 财团与根域名 -----
+# 说明：samsung.com / lg.com / hyundai.com / kia.com 为全球站点，
+#       如仅需韩国本土服务可将这四行注释掉。
+DOMAIN-SUFFIX,samsung.co.kr
+DOMAIN-SUFFIX,samsung.com
+DOMAIN-SUFFIX,samsungcard.com
+DOMAIN-SUFFIX,samsungsds.com
+DOMAIN-SUFFIX,lg.co.kr
+DOMAIN-SUFFIX,lg.com
+DOMAIN-SUFFIX,lge.co.kr
+DOMAIN-SUFFIX,lghellovision.com
+DOMAIN-SUFFIX,sk.com
+DOMAIN-SUFFIX,skinnovation.com
+DOMAIN-SUFFIX,skbroadband.com
+DOMAIN-SUFFIX,hanwha.com
+DOMAIN-SUFFIX,gs.co.kr
+DOMAIN-SUFFIX,gsretail.com
+DOMAIN-SUFFIX,cj.net
+DOMAIN-SUFFIX,cj.co.kr
+DOMAIN-SUFFIX,lotte.co.kr
+DOMAIN-SUFFIX,hyundai.com
+DOMAIN-SUFFIX,hyundai.co.kr
+DOMAIN-SUFFIX,kia.com
+DOMAIN-SUFFIX,kia.co.kr
+DOMAIN-SUFFIX,posco.com
+DOMAIN-SUFFIX,posco.co.kr
+DOMAIN-SUFFIX,doosan.com
+DOMAIN-SUFFIX,korea.kr
+
+# ----- 金融与支付补充 -----
+DOMAIN-SUFFIX,kbcard.com
+DOMAIN-SUFFIX,hyundaicard.com
+DOMAIN-SUFFIX,shinhancard.com
+DOMAIN-SUFFIX,lottecard.co.kr
+DOMAIN-SUFFIX,bccard.com
+
+# ----- 电商与百货补充 -----
+DOMAIN-SUFFIX,kurly.com
+DOMAIN-SUFFIX,ohou.se
+DOMAIN-SUFFIX,29cm.co.kr
+DOMAIN-SUFFIX,ssfshop.com
+DOMAIN-SUFFIX,thehandsome.com
+DOMAIN-SUFFIX,gsshop.com
+DOMAIN-SUFFIX,cjonstyle.com
+DOMAIN-SUFFIX,hmall.com
+DOMAIN-SUFFIX,lottehomeshopping.com
+DOMAIN-SUFFIX,nsmall.com
+DOMAIN-SUFFIX,tmon.co.kr
+
+# ----- 内容、阅读与网络漫画 -----
+DOMAIN-SUFFIX,serieson.com
+DOMAIN-SUFFIX,kakaopage.com
+DOMAIN-SUFFIX,ridibooks.com
+DOMAIN-SUFFIX,munpia.com
+DOMAIN-SUFFIX,novelpia.com
+DOMAIN-SUFFIX,joara.com
+DOMAIN-SUFFIX,webtoons.com
+
+# ----- 游戏补充 -----
+DOMAIN-SUFFIX,hangame.com
+DOMAIN-SUFFIX,hanbitsoft.com
+DOMAIN-SUFFIX,mgame.com
+
+# ----- 出行、旅游与本地生活 -----
+DOMAIN-SUFFIX,yeogi.com
+DOMAIN-SUFFIX,goodchoice.kr
+DOMAIN-SUFFIX,visitkorea.or.kr
+DOMAIN-SUFFIX,coupangeats.com
+
+# ----- 教育与其他 -----
+DOMAIN-SUFFIX,eduwill.net

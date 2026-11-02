@@ -1,0 +1,28 @@
+{
+  "input": "tuic://11111111-2222-3333-4444-555555555555:pass@example.com:443?sni=example.com&alpn=h3&congestion_control=bbr#TUIC-01",
+  "proxies": [
+    {
+      "name": "直连",
+      "type": "direct"
+    },
+    {
+      "name": "TUIC-01",
+      "type": "tuic",
+      "server": "example.com",
+      "port": 443,
+      "uuid": "11111111-2222-3333-4444-555555555555",
+      "password": "pass",
+      "token": "",
+      "sni": "example.com",
+      "skip-cert-verify": false,
+      "alpn": [
+        "h3"
+      ],
+      "disable-sni": false,
+      "reduce-rtt": true,
+      "request-timeout": 8000,
+      "udp-relay-mode": "native",
+      "congestion-controller": "bbr"
+    }
+  ]
+}

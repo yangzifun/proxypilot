@@ -1,0 +1,37 @@
+{
+  "input": "vless://11111111-2222-3333-4444-555555555555@example.com:443?security=reality&pbk=PUBKEY&sid=abcd&type=xhttp&path=%2Fxhttp-auto&mode=auto&host=cdn.example.com#XHTTP-01",
+  "proxies": [
+    {
+      "name": "直连",
+      "type": "direct"
+    },
+    {
+      "name": "XHTTP-01",
+      "type": "vless",
+      "server": "example.com",
+      "port": 443,
+      "uuid": "11111111-2222-3333-4444-555555555555",
+      "udp": true,
+      "tls": true,
+      "skip-cert-verify": true,
+      "servername": "example.com",
+      "flow": "",
+      "packet-encoding": "xudp",
+      "encryption": "none",
+      "client-fingerprint": "chrome",
+      "reality-opts": {
+        "public-key": "PUBKEY",
+        "short-id": "abcd"
+      },
+      "network": "xhttp",
+      "xhttp-opts": {
+        "path": "/xhttp-auto",
+        "mode": "auto",
+        "extra": {},
+        "headers": {
+          "Host": "cdn.example.com"
+        }
+      }
+    }
+  ]
+}

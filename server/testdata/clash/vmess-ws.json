@@ -1,0 +1,41 @@
+{
+  "input": "vmess://eyJ2IjoiMiIsInBzIjoiVk1FU1MtMDEiLCJhZGQiOiJleGFtcGxlLmNvbSIsInBvcnQiOiI0NDMiLCJpZCI6IjExMTExMTExLTIyMjItMzMzMy00NDQ0LTU1NTU1NTU1NTU1NSIsImFpZCI6IjAiLCJzY3kiOiJhdXRvIiwibmV0Ijoid3MiLCJ0eXBlIjoibm9uZSIsImhvc3QiOiJjZG4uZXhhbXBsZS5jb20iLCJwYXRoIjoiL3dzIiwidGxzIjoidGxzIiwic25pIjoiZXhhbXBsZS5jb20iLCJmcCI6ImNocm9tZSJ9",
+  "proxies": [
+    {
+      "name": "直连",
+      "type": "direct"
+    },
+    {
+      "name": "VMESS-01",
+      "type": "vmess",
+      "server": "example.com",
+      "port": 443,
+      "uuid": "11111111-2222-3333-4444-555555555555",
+      "alterId": "0",
+      "cipher": "auto",
+      "udp": true,
+      "packet-encoding": "packetaddr",
+      "global-padding": false,
+      "authenticated-length": false,
+      "tls": true,
+      "skip-cert-verify": true,
+      "network": "ws",
+      "servername": "example.com",
+      "alpn": [
+        "h2",
+        "http/1.1"
+      ],
+      "fingerprint": "chrome",
+      "client-fingerprint": "chrome",
+      "ws-opts": {
+        "path": "/ws",
+        "headers": {
+          "Host": "cdn.example.com"
+        }
+      },
+      "smux": {
+        "enabled": false
+      }
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "input": "vless://11111111-2222-3333-4444-555555555555@example.com:443?security=reality&pbk=PUBKEY&sid=abcd&sni=www.microsoft.com&flow=xtls-rprx-vision&fp=chrome&type=tcp#Reality-01",
+  "proxies": [
+    {
+      "name": "直连",
+      "type": "direct"
+    },
+    {
+      "name": "Reality-01",
+      "type": "vless",
+      "server": "example.com",
+      "port": 443,
+      "uuid": "11111111-2222-3333-4444-555555555555",
+      "udp": true,
+      "tls": true,
+      "skip-cert-verify": true,
+      "servername": "www.microsoft.com",
+      "flow": "xtls-rprx-vision",
+      "packet-encoding": "xudp",
+      "encryption": "none",
+      "client-fingerprint": "chrome",
+      "reality-opts": {
+        "public-key": "PUBKEY",
+        "short-id": "abcd"
+      },
+      "network": "tcp"
+    }
+  ]
+}

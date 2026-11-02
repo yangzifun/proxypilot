@@ -1,10 +1,12 @@
-# 更新时间: 2026-05-27
+# 更新时间: 2026-10-26
 # 模板类型: IOS 专用模板 - 内存优化版 (50MB 限制)
+# 模板链接：https://s3.proxypilot.yangzifun.org/rule/configs/ios_config.yaml
 # 作者: YZFN
 # 说明:
 # 1) 精简策略组与规则集，减少内存占用
 # 2) 关闭嗅探，降低协议识别开销
 # 3) 合并规则提供者，优先保障常用场景可用性
+# 4) 策略组不再保留固定地区组，业务策略组通过 include-all + exclude-filter 直接引用节点自动选路
 
 # ==========================================================
 # 节点信息
@@ -85,31 +87,30 @@ rule-anchor:
 # ==========================================================
 # 出站策略 (Proxy Groups)
 # ==========================================================
+# 策略组说明:
+#   1. 不再保留固定地区组（港澳/日本/美国/新加坡/台湾等），业务组直接用 include-all + exclude-filter 引用节点自动选路。
+#   2. 所有 url-test 组统一排除大陆节点，AI / Google / TikTok / 微软 / Steam 另排除港澳节点。
+#   3. iOS 内存优化：测速间隔放宽到 600 秒，减少测速负载；TikTok 域名规则直接走「⚡ 自动选择」。
+#   4. select 组不自动测速，用户可在客户端手动选择其 proxies 列表中的策略或节点。
 proxy-groups:
-  # --- 底层自动选优 (降低频率，降低内存和CPU压力) ---
-  - {name: ⚡ 自动选择, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 600, filter: "^((?!(直连|中国|国内|回国|CN|China|Mainland)).)*$"}
-  - {name: 🇨🇳 港澳, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 80, interval: 600, filter: "(?i)香港|澳门|澳門|HK|Hong Kong|HongKong"}
-  - {name: 🇯🇵 日本自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 80, interval: 600, filter: "(?i)日本|JP|Japan|东京|大阪|埼玉|京都|福冈|名古屋|札幌"}
-  - {name: 🇺🇸 美国自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 80, interval: 600, filter: "(?i)美国|US|USA|洛杉矶|旧金山|西雅图|纽约|弗吉尼亚|阿什本"}
-  - {name: 🇸🇬 新加坡自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 80, interval: 600, filter: "(?i)新加坡|SG|Singapore|狮城"}
-  - {name: 🇹🇼 台湾自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)台湾|台北|新北|台中|高雄|台南|桃园|新竹|基隆|嘉义|彰化|屏东|宜兰|花莲|台东|苗栗|南投|云林|澎湖|金门|马祖"}
+  # --- 自动选优出口 (降低频率，降低内存和CPU压力) ---
+  - {name: ⚡ 自动选择, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 600, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH"}
   - {name: 🌐 全部节点, type: select, include-all: true}
 
-  # --- 业务策略组 (精简) ---
-  - {name: 🚀 默认代理, type: select, proxies: [⚡ 自动选择, 🇨🇳 港澳, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动, 🌐 全部节点]}
-  - {name: 🤖 AI 服务, type: select, proxies: [🇺🇸 美国自动, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇸🇬 新加坡自动, 🚀 默认代理]}
-  - {name: 🌍 社交办公, type: select, proxies: [🚀 默认代理, ⚡ 自动选择, 🎯 直连]}
-  - {name: 🎬 国际影视, type: select, proxies: [🚀 默认代理, ⚡ 自动选择, 🇨🇳 港澳, 🇹🇼 台湾自动, 🇯🇵 日本自动, 🇺🇸 美国自动, 🇸🇬 新加坡自动]}
-  - {name: 🎮 游戏平台, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择]}
-  - {name: 🔍 Google, type: select, proxies: [🚀 默认代理, ⚡ 自动选择]}
-  - {name: 🟦 Microsoft, type: select, proxies: [🎯 直连, 🚀 默认代理]}
-  - {name: 🍎 Apple, type: select, proxies: [🎯 直连, 🚀 默认代理]}
-  - {name: 🚀 Speedtest, type: select, proxies: [🎯 直连, 🚀 默认代理, ⚡ 自动选择]}
-  - {name: 💳 PayPal, type: select, proxies: [🚀 默认代理, ⚡ 自动选择, 🎯 直连]}
-  - {name: 东南亚自动, type: url-test, include-all: true, tolerance: 20, interval: 300, filter: "(?i)新加坡|狮城|马来西亚|吉隆坡|马六甲|槟城|印尼|雅加达|巴厘岛|菲律宾|马尼拉|越南|胡志明市|河内|泰国|曼谷|清迈"}
+  # --- 业务策略组 (精简，直接引用节点) ---
+  - {name: 🚀 默认代理, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 600, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH"}
+  - {name: 🤖 AI 服务, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 600, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH|香港|澳门|澳門|HK|MO"}
+  - {name: 🌍 社交办公, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 600, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH"}
+  - {name: 🎬 国际影视, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 600, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH"}
+  - {name: 🎮 游戏平台, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 600, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH|香港|澳门|澳門|HK|MO"}
+  - {name: 🔍 Google, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 600, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH|香港|澳门|澳門|HK|MO"}
+  - {name: 🟦 Microsoft, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 600, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH|香港|澳门|澳門|HK|MO"}
+  - {name: 🍎 Apple, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 600, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH"}
+  - {name: 🚀 Speedtest, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 600, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH"}
+  - {name: 💳 PayPal, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 600, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH"}
+  - {name: 东南亚自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)新加坡|狮城|马来西亚|吉隆坡|马六甲|槟城|印尼|雅加达|巴厘岛|菲律宾|马尼拉|越南|胡志明市|河内|泰国|曼谷|清迈|孟买", proxies: [🚀 默认代理]}
   - {name: 🚫 广告拦截, type: select, proxies: [REJECT, DIRECT]}
-  - {name: 🎯 直连, type: select, proxies: [DIRECT, 🚀 默认代理]}
-  - {name: 🐟 漏网之鱼, type: select, proxies: [🚀 默认代理, 🎯 直连, ⚡ 自动选择]}
+  - {name: 🐟 漏网之鱼, type: select, proxies: [🚀 默认代理, ⚡ 自动选择, DIRECT]}
 
 # ==========================================================
 # 规则匹配 (Rules)
@@ -117,13 +118,13 @@ proxy-groups:
 rules:
   # 1. 广告与直连基础
   - RULE-SET,category-ads-all,🚫 广告拦截
-  - RULE-SET,private_domain,🎯 直连
-  - RULE-SET,custom_direct,🎯 直连
-  - IP-CIDR,192.168.0.0/16,🎯 直连,no-resolve
-  - IP-CIDR,10.0.0.0/8,🎯 直连,no-resolve
-  - IP-CIDR,172.16.0.0/12,🎯 直连,no-resolve
-  - RULE-SET,cn_domain,🎯 直连
-  - RULE-SET,cn_ip,🎯 直连,no-resolve
+  - RULE-SET,private_domain,DIRECT
+  - RULE-SET,custom_direct,DIRECT
+  - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
+  - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
+  - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve
+  - RULE-SET,cn_domain,DIRECT
+  - RULE-SET,cn_ip,DIRECT,no-resolve
 
   # 2. 自定义代理补充
   - RULE-SET,proxylite,🚀 默认代理
@@ -135,7 +136,7 @@ rules:
   - RULE-SET,social_domain,🌍 社交办公
   - RULE-SET,github_domain,🌍 社交办公
   - RULE-SET,media_domain,🎬 国际影视
-  - RULE-SET,tiktok_domain,🎬 国际影视
+  - RULE-SET,tiktok_domain,⚡ 自动选择
   - RULE-SET,google_domain,🔍 Google
   - RULE-SET,microsoft_domain,🟦 Microsoft
   - RULE-SET,apple_domain,🍎 Apple
@@ -158,14 +159,14 @@ rule-providers:
   # 基础与系统
   category-ads-all: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ads-all.mrs"}
   private_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs"}
-  custom_direct: { <<: *class, url: "https://github.com/yangzifun/proxypilot/raw/refs/heads/main/rule/direct.list"}
-  proxylite: { <<: *class, url: "https://github.com/yangzifun/proxypilot/raw/refs/heads/main/rule/proxy.list"}
-  se_asia: { <<: *class, url: "https://raw.githubusercontent.com/yangzifun/proxypilot/refs/heads/main/rule/se_asia.list"}
+  custom_direct: { <<: *class, url: "https://s3.proxypilot.yangzifun.org/rule/direct.list"}
+  proxylite: { <<: *class, url: "https://s3.proxypilot.yangzifun.org/rule/proxy.list"}
+  se_asia: { <<: *class, url: "https://s3.proxypilot.yangzifun.org/rule/se_asia.list"}
 
   # 聚合规则 (内存优化)
   ai: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ai-!cn.mrs"}
   social_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-social-media-!cn.mrs"}
-  media_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-media-!cn.mrs"}
+  media_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-media.mrs"}
 
   # 关键服务
   telegram_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/telegram.mrs"}

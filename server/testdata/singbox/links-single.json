@@ -1,0 +1,276 @@
+{
+  "template": {
+    "name": "golden",
+    "port_base": 13700,
+    "warp_base": 13800,
+    "cert_path": "/etc/sing-box/cert.crt",
+    "key_path": "/etc/sing-box/private.key",
+    "ss_method": "2022-blake3-aes-256-gcm",
+    "ss_server_key": "SERVERKEY",
+    "reality_private_key": "PRIVATEKEY",
+    "reality_public_key": "PUB",
+    "reality_short_id": "abcd",
+    "reality_dest": "www.microsoft.com:443",
+    "reality_sni": "www.microsoft.com",
+    "ws_sni": "www.bing.com",
+    "xhttp_path": "/xhttp-auto",
+    "protocol_options": "{}",
+    "enable_ss": 1,
+    "enable_anytls": 1,
+    "enable_hy2": 1,
+    "enable_vmess": 1,
+    "enable_reality": 1,
+    "enable_vlws": 1,
+    "enable_masque": 0
+  },
+  "users": [
+    {
+      "name": "u1",
+      "uuid": "11111111-2222-3333-4444-555555555555",
+      "ss_password": "SSPASS1"
+    }
+  ],
+  "node": {
+    "name": "jp-01",
+    "domain": ""
+  },
+  "ports": {
+    "hy2": 13701,
+    "hy2_warp": 13801,
+    "ss": 13702,
+    "ss_warp": 13802,
+    "anytls": 13703,
+    "anytls_warp": 13803,
+    "vmess": 13704,
+    "vmess_warp": 13804,
+    "reality": 13705,
+    "reality_warp": 13805,
+    "vlws": 13706,
+    "vlws_warp": 13806,
+    "masque": 13707,
+    "masque_warp": 13807,
+    "xhttp": 13708,
+    "xhttp_warp": 13808,
+    "base": 13700,
+    "warp_base": 13800
+  },
+  "sb": {
+    "log": {
+      "disabled": false,
+      "level": "warning",
+      "timestamp": true
+    },
+    "inbounds": [
+      {
+        "type": "shadowsocks",
+        "tag": "ss2022-sb",
+        "listen": "::",
+        "listen_port": 13702,
+        "method": "2022-blake3-aes-256-gcm",
+        "password": "SERVERKEY",
+        "users": [
+          {
+            "name": "u1",
+            "password": "SSPASS1"
+          }
+        ]
+      },
+      {
+        "type": "anytls",
+        "tag": "anytls-sb",
+        "listen": "::",
+        "listen_port": 13703,
+        "tls": {
+          "enabled": true,
+          "certificate_path": "/etc/sing-box/cert.crt",
+          "key_path": "/etc/sing-box/private.key"
+        },
+        "users": [
+          {
+            "name": "u1",
+            "password": "11111111-2222-3333-4444-555555555555"
+          }
+        ]
+      },
+      {
+        "type": "hysteria2",
+        "tag": "hy2-sb",
+        "listen": "::",
+        "listen_port": 13701,
+        "tls": {
+          "enabled": true,
+          "alpn": [
+            "h3"
+          ],
+          "certificate_path": "/etc/sing-box/cert.crt",
+          "key_path": "/etc/sing-box/private.key"
+        },
+        "users": [
+          {
+            "name": "u1",
+            "password": "11111111-2222-3333-4444-555555555555"
+          }
+        ]
+      },
+      {
+        "type": "tuic",
+        "tag": "tuic-sb",
+        "listen": "::",
+        "listen_port": 13704,
+        "congestion_control": "bbr",
+        "auth_timeout": "3s",
+        "zero_rtt_handshake": false,
+        "tls": {
+          "enabled": true,
+          "alpn": [
+            "h3"
+          ],
+          "certificate_path": "/etc/sing-box/cert.crt",
+          "key_path": "/etc/sing-box/private.key"
+        },
+        "users": [
+          {
+            "name": "u1",
+            "uuid": "11111111-2222-3333-4444-555555555555",
+            "password": "11111111-2222-3333-4444-555555555555"
+          }
+        ]
+      },
+      {
+        "type": "vless",
+        "tag": "vless-tcp-reality-vision",
+        "listen": "::",
+        "listen_port": 13705,
+        "tls": {
+          "enabled": true,
+          "server_name": "www.microsoft.com",
+          "reality": {
+            "enabled": true,
+            "handshake": {
+              "server": "www.microsoft.com",
+              "server_port": 443
+            },
+            "private_key": "PRIVATEKEY",
+            "short_id": [
+              "abcd"
+            ]
+          }
+        },
+        "users": [
+          {
+            "name": "u1",
+            "uuid": "11111111-2222-3333-4444-555555555555",
+            "flow": "xtls-rprx-vision"
+          }
+        ]
+      },
+      {
+        "type": "vless",
+        "tag": "vless-ws-in",
+        "listen": "::",
+        "listen_port": 13706,
+        "tls": {
+          "enabled": true,
+          "alpn": [
+            "h2",
+            "http/1.1"
+          ],
+          "certificate_path": "/etc/sing-box/cert.crt",
+          "key_path": "/etc/sing-box/private.key"
+        },
+        "transport": {
+          "type": "ws",
+          "path": "/vlws"
+        },
+        "users": [
+          {
+            "name": "u1",
+            "uuid": "11111111-2222-3333-4444-555555555555",
+            "flow": ""
+          }
+        ]
+      }
+    ],
+    "outbounds": [
+      {
+        "type": "direct",
+        "tag": "direct"
+      }
+    ],
+    "route": {
+      "final": "direct",
+      "default_domain_resolver": {
+        "server": "dns-remote",
+        "strategy": "prefer_ipv4"
+      },
+      "rules": [
+        {
+          "action": "sniff"
+        },
+        {
+          "action": "resolve",
+          "strategy": "prefer_ipv4"
+        },
+        {
+          "ip_cidr": [
+            "::/0",
+            "0.0.0.0/0"
+          ],
+          "outbound": "direct"
+        }
+      ]
+    },
+    "dns": {
+      "servers": [
+        {
+          "tag": "dns-remote",
+          "type": "udp",
+          "server": "1.1.1.1"
+        },
+        {
+          "tag": "dns-remote2",
+          "type": "udp",
+          "server": "8.8.8.8"
+        },
+        {
+          "tag": "localv4",
+          "type": "local"
+        }
+      ]
+    }
+  },
+  "links": [
+    {
+      "id": 1,
+      "protocol": "shadowsocks",
+      "port": 13702,
+      "user": "u1",
+      "link": "ss://MjAyMi1ibGFrZTMtYWVzLTI1Ni1nY206U0VSVkVSS0VZOlNTUEFTUzE@:13702#jp-01-ss",
+      "note": "SS2022 多用户：密码 = 服务器密钥:用户密钥"
+    },
+    {
+      "id": 2,
+      "protocol": "anytls",
+      "port": 13703,
+      "user": "u1",
+      "link": "anytls://11111111-2222-3333-4444-555555555555@:13703/?security=tls&sni=www.bing.com&insecure=1#jp-01-anytls",
+      "note": "自签证书：客户端需允许不安全"
+    },
+    {
+      "id": 3,
+      "protocol": "hysteria2",
+      "port": 13701,
+      "user": "u1",
+      "link": "hysteria2://11111111-2222-3333-4444-555555555555@:13701/?sni=www.bing.com&insecure=1&alpn=h3#jp-01-hy2",
+      "note": "UDP 端口：注意放行与 NAT 映射"
+    },
+    {
+      "id": 4,
+      "protocol": "vless-reality",
+      "port": 13705,
+      "user": "u1",
+      "link": "vless://11111111-2222-3333-4444-555555555555@:13705/?security=reality&encryption=none&pbk=PUB&fp=chrome&sni=www.microsoft.com&sid=abcd&spx=%2F&flow=xtls-rprx-vision&type=tcp#jp-01-reality",
+      "note": "pbk / sid 必须与服务端一致"
+    }
+  ]
+}

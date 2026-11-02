@@ -1,5 +1,6 @@
 # ==========================================
 # 东南亚地区补充列表 (Southeast Asia Proxy List)
+# 更新时间: 2026-10-23
 # ==========================================
 
 # ----- 泰国基础服务、运营商 -----
@@ -105,3 +106,138 @@ DOMAIN-SUFFIX,vidio.com
 DOMAIN-SUFFIX,kompas.com
 DOMAIN-SUFFIX,detik.com
 DOMAIN-SUFFIX,telkomsel.com
+
+# ----- 其他需走东南亚节点的服务 -----
+# Insider (useinsider.com 客户数据/营销平台)
+DOMAIN-SUFFIX,useinsider.com
+
+# ==========================================
+# 以下为补充项（2026-10-23）：根域名 + 各国主流银行/电商/运营商/媒体
+# ==========================================
+
+# ----- 泛东南亚平台根域名 -----
+# 各国站点之上再保留一份根域名，避免子域切换到 .com 时漏判
+DOMAIN-SUFFIX,shopee.com
+DOMAIN-SUFFIX,lazada.com
+DOMAIN-SUFFIX,foodpanda.com
+DOMAIN-SUFFIX,deliveroo.com
+DOMAIN-SUFFIX,zalora.com
+DOMAIN-SUFFIX,gopay.com
+# Sea 集团（Shopee / Garena / SeaMoney 母公司）
+DOMAIN-SUFFIX,sea.com
+DOMAIN-SUFFIX,garena.com
+DOMAIN-SUFFIX,seamoney.com
+
+# ----- 新加坡 -----
+# 银行与政务
+DOMAIN-SUFFIX,dbs.com
+DOMAIN-SUFFIX,dbs.com.sg
+DOMAIN-SUFFIX,ocbc.com
+DOMAIN-SUFFIX,uob.com.sg
+DOMAIN-SUFFIX,uobgroup.com
+DOMAIN-SUFFIX,singpass.gov.sg
+DOMAIN-SUFFIX,cpf.gov.sg
+# 媒体与生活
+DOMAIN-SUFFIX,mediacorp.sg
+DOMAIN-SUFFIX,8world.com
+DOMAIN-SUFFIX,zaobao.com.sg
+DOMAIN-SUFFIX,carousell.sg
+DOMAIN-SUFFIX,propertyguru.com.sg
+DOMAIN-SUFFIX,grab.com.sg
+
+# ----- 马来西亚 -----
+# 银行与支付
+DOMAIN-SUFFIX,maybank.com
+DOMAIN-SUFFIX,maybank2u.com.my
+DOMAIN-SUFFIX,cimb.com
+DOMAIN-SUFFIX,cimb.com.my
+DOMAIN-SUFFIX,publicbank.com.my
+DOMAIN-SUFFIX,rhbgroup.com
+DOMAIN-SUFFIX,touchngo.com.my
+DOMAIN-SUFFIX,tngdigital.com.my
+# 媒体、电商与出行
+DOMAIN-SUFFIX,astro.com.my
+DOMAIN-SUFFIX,thestar.com.my
+DOMAIN-SUFFIX,malaymail.com
+DOMAIN-SUFFIX,mudah.my
+DOMAIN-SUFFIX,carousell.com.my
+DOMAIN-SUFFIX,iproperty.com.my
+DOMAIN-SUFFIX,fireflyz.com.my
+
+# ----- 印度尼西亚 -----
+# 银行与电子钱包
+DOMAIN-SUFFIX,bca.co.id
+DOMAIN-SUFFIX,bankmandiri.co.id
+DOMAIN-SUFFIX,bni.co.id
+DOMAIN-SUFFIX,bri.co.id
+DOMAIN-SUFFIX,ovo.id
+DOMAIN-SUFFIX,dana.id
+DOMAIN-SUFFIX,gopay.co.id
+# 电商、出行与媒体
+DOMAIN-SUFFIX,blibli.com
+DOMAIN-SUFFIX,bukalapak.com
+DOMAIN-SUFFIX,tiket.com
+DOMAIN-SUFFIX,indosat.com
+DOMAIN-SUFFIX,xl.co.id
+DOMAIN-SUFFIX,tri.co.id
+DOMAIN-SUFFIX,cnnindonesia.com
+DOMAIN-SUFFIX,liputan6.com
+DOMAIN-SUFFIX,kapanlagi.com
+DOMAIN-SUFFIX,merdeka.com
+DOMAIN-SUFFIX,suara.com
+
+# ----- 菲律宾 -----
+# 运营商与支付
+DOMAIN-SUFFIX,globe.com.ph
+DOMAIN-SUFFIX,pldt.com.ph
+DOMAIN-SUFFIX,pldthome.com
+DOMAIN-SUFFIX,smart.com.ph
+DOMAIN-SUFFIX,gcash.com
+DOMAIN-SUFFIX,maya.ph
+# 银行
+DOMAIN-SUFFIX,bdo.com.ph
+DOMAIN-SUFFIX,bpi.com.ph
+DOMAIN-SUFFIX,metrobank.com.ph
+DOMAIN-SUFFIX,landbank.com
+# 媒体与外卖
+DOMAIN-SUFFIX,foodpanda.ph
+DOMAIN-SUFFIX,abs-cbn.com
+DOMAIN-SUFFIX,gmanetwork.com
+DOMAIN-SUFFIX,rappler.com
+DOMAIN-SUFFIX,inquirer.net
+DOMAIN-SUFFIX,philstar.com
+
+# ----- 越南 -----
+# 银行
+DOMAIN-SUFFIX,vietcombank.com.vn
+DOMAIN-SUFFIX,techcombank.com
+DOMAIN-SUFFIX,bidv.com.vn
+DOMAIN-SUFFIX,agribank.com.vn
+DOMAIN-SUFFIX,vpbank.com.vn
+DOMAIN-SUFFIX,mbbank.com.vn
+# 运营商与科技
+DOMAIN-SUFFIX,viettel.com.vn
+DOMAIN-SUFFIX,vnpt.com.vn
+DOMAIN-SUFFIX,fpt.vn
+DOMAIN-SUFFIX,zalo.vn
+# 电商
+DOMAIN-SUFFIX,tiki.vn
+DOMAIN-SUFFIX,sendo.vn
+DOMAIN-SUFFIX,fptshop.com.vn
+# 媒体与影音
+DOMAIN-SUFFIX,dantri.com.vn
+DOMAIN-SUFFIX,vietnamnet.vn
+DOMAIN-SUFFIX,tuoitre.vn
+DOMAIN-SUFFIX,thanhnien.vn
+DOMAIN-SUFFIX,vtv.vn
+DOMAIN-SUFFIX,vtvgo.vn
+DOMAIN-SUFFIX,galaxyplay.vn
+DOMAIN-SUFFIX,zing.vn
+DOMAIN-SUFFIX,zingmp3.vn
+DOMAIN-SUFFIX,nhaccuatui.com
+
+# ----- 泰国补充 -----
+DOMAIN-SUFFIX,ttb.co.th
+DOMAIN-SUFFIX,centralgroup.com
+DOMAIN-SUFFIX,the1.co.th
+DOMAIN-SUFFIX,robinhood.in.th

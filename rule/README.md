@@ -1,56 +1,38 @@
 ﻿# Clash/Mihomo 规则模板说明
 
-`rule/configs` 目录提供多场景配置模板。本文档按当前模板实际内容维护，避免“描述与文件不一致”。
+`rule/configs` 目录提供多场景配置模板（当前 6 个）。本文档按当前模板实际内容维护，避免“描述与文件不一致”。
 
 ## 配置总览
 
 | 配置文件 | 适用场景 | 核心特性 | 推荐内核 |
 |---|---|---|---|
-| `config.yaml` | 大陆日常全能 | 服务分类完整，地区自动分组，规则覆盖全面 | Mihomo / Clash Meta |
-| `full_config.yaml` | 海外全能使用 | 区域分组最全，面向海外网络环境 | Mihomo / Clash Meta |
-| `global_config.yaml` | 专注海外访问 | 大陆流量优先直连，海外服务精细分流 | Mihomo / Clash Meta |
-| `lite_config.yaml` | 轻量通用 | 分组精简，资源占用更低 | Mihomo / Clash Meta |
-| `global_lite_config.yaml` | 轻量全球方案 | 极简分组，海外代理+大陆直连 | Mihomo / Clash Meta |
-| `cn_config.yaml` | 海外回国加速 | 面向国内影音/社交/游戏回国链路优化 | Mihomo / Clash Meta |
-| `cn_full_config.yaml` | 回国全量代理 | 仅中国服务走代理，非中国流量直连 | Mihomo / Clash Meta |
-| `geoip_config.yaml` | IP 精准分流 | 基于 IP 国家策略分流 | Mihomo / Clash Meta |
-| `load-balance_config.yaml` | 多节点负载均衡 | 一致性哈希 + 轮询下载策略 | Mihomo / Clash Meta |
-| `stream_config.yaml` | 影视流媒体优化 | 流媒体服务独立分组，观影优先 | Mihomo / Clash Meta |
-| `internal_config.yaml` | 内网访问 | 含内网策略组与内网分流规则 | Mihomo / Clash Meta |
-| `ios_config.yaml` | iOS 专用 | 针对 iOS 内存限制做策略优化 | Mihomo / Clash Meta |
-| `no_region_config.yaml` | 无区域分组 | 不依赖固定地区组，侧重通用自动化 | Mihomo / Clash Meta |
-| `legacy_config.yaml` | 旧版内核兼容 | 移除 TUN/嗅探/MRS/include-all，使用传统 rules | 传统 Clash 内核 |
-| `test.yaml` | 测试模板 | 实验性全量模板，供调试验证 | Mihomo / Clash Meta |
+| `global_full_config.yaml` | 全球全量（按业务自动选路） | 20 个策略组全部 `url-test` + `include-all`/`exclude-filter` 自动选路（无地区组）；启用 TUN + 嗅探；75 个规则源；韩国服务经 `korea` 规则源送入 `🚀 默认代理`；中国大陆流量也走代理 | Mihomo / Clash Meta |
+| `global_config.yaml` | 全球访问（大陆直连） | 与 `global_full_config.yaml` 逐字同构（同 20 组、同 75 个规则源）；唯一差异是中国大陆域名/IP 走 `DIRECT` | Mihomo / Clash Meta |
+| `lite_config.yaml` | 轻量通用 | 16 个策略组、16 个规则源；启用 TUN（`stack: mixed`）+ Fake-IP；不配置嗅探 | Mihomo / Clash Meta |
+| `cn_config.yaml` | 海外回国加速 | 回国核心 / 大陆影音 / 国服游戏 + 上海·北京·深圳·香港自动测速组（11 组）；启用 TUN + 嗅探 | Mihomo / Clash Meta |
+| `stream_config.yaml` | 影视流媒体优化 | 流媒体服务组 + 地区流媒体组 + 地区自动组（31 组）；强制嗅探并重定向流媒体 CDN；不启用 TUN | Mihomo / Clash Meta |
+| `ios_config.yaml` | iOS 专用 | 21 个策略组、合并规则源；`tun` 使用 `stack: system`；显式关闭嗅探（面向 50MB 内存限制） | Mihomo / Clash Meta |
 
-## 与 `config.yaml` 的差异对比
+## 与 `global_full_config.yaml` 的差异对比
 
-`config.yaml` 可视为“默认基线模板”。下表描述其余模板相对 `config.yaml` 的主要差异：
+`global_full_config.yaml` 可视为“全球全量基线模板”。下表描述其余模板相对它的主要差异：
 
-| 模板 | 相对 `config.yaml` 的主要差异 | 典型取舍 |
+| 模板 | 相对基线的主要差异 | 典型取舍 |
 |---|---|---|
-| `full_config.yaml` | 区域分组更全（更多国家/地区自动组） | 更细分、更重，适合海外全场景 |
-| `global_config.yaml` | 大陆域名/IP 更偏向直连，策略重点转向海外服务 | 国内访问更直接，海外分流更集中 |
-| `lite_config.yaml` | 分组与规则聚合，减少分类粒度 | 资源占用更低，但精细控制下降 |
-| `global_lite_config.yaml` | 在轻量基础上强化“海外代理 + 大陆直连” | 轻量全球访问，场景更偏海外 |
-| `cn_config.yaml` | 目标从“出海”变为“回国”；国内服务优先走回国链路 | 海外访问国内更稳，海外服务处理更简单 |
-| `cn_full_config.yaml` | 仅中国服务走代理，非中国流量直连 | 节省代理流量，回国场景更纯粹 |
-| `geoip_config.yaml` | 以 IP 国家分流为核心（GEOIP 权重更高） | 国家级路由更明确，域名细分相对少 |
-| `load-balance_config.yaml` | 引入负载均衡策略（consistent-hashing/round-robin） | 多节点吞吐更好，但策略复杂度更高 |
-| `stream_config.yaml` | 流媒体服务独立分组，观影相关规则优先 | 视频体验更好，通用性相对下降 |
-| `internal_config.yaml` | 增加内网访问相关策略组与规则 | 企业/家庭内网访问更方便 |
-| `ios_config.yaml` | 面向 iOS 内存限制做策略与规模优化 | iOS 稳定性更好，规则规模相对克制 |
-| `no_region_config.yaml` | 弱化固定地区组依赖，偏通用自动分流 | 迁移订阅更省心，地区手动控制较少 |
-| `legacy_config.yaml` | 移除 tun/sniffer/rule-providers/mrs/include-all，使用传统 `rules` | 兼容旧内核，自动化与精细度明显下降 |
-| `test.yaml` | 实验性全量模板，用于测试新规则/新组合 | 功能前沿但稳定性不作主模板保证 |
+| `global_config.yaml` | 仅一处差异：中国大陆域名/IP 规则改为 `DIRECT`；组体系与 75 个规则源与基线逐字同构 | 国内外分流更省心、国内访问延迟更低，但无法手动指定地区出口 |
+| `lite_config.yaml` | 策略组 20→16、规则源 75→16，移除复杂业务分组；不配置嗅探 | 资源占用更低，但精细控制下降 |
+| `cn_config.yaml` | 目标从“出海”变为“回国”：换成回国核心/大陆影音/国服游戏与上海·北京·深圳·香港自动组（11 组）；不使用 `exclude-filter` | 海外访问国内更稳，海外业务处理更简单 |
+| `stream_config.yaml` | 新增流媒体服务组与地区流媒体组（31 组）、强制嗅探并重定向流媒体 CDN；不启用 TUN | 观影体验更好，入站与通用能力下降 |
+| `ios_config.yaml` | 合并规则源、显式关闭嗅探、`tun` 改为 `stack: system`；面向 50MB 内存限制 | iOS 稳定性更好，协议识别能力相对克制 |
 
 ## 重要兼容性说明
 
-- `config.yaml`、`full_config.yaml`、`global_config.yaml` 等主模板依赖以下能力：
+- 本目录全部模板（`global_full_config.yaml`、`global_config.yaml`、`lite_config.yaml`、`cn_config.yaml`、`stream_config.yaml`、`ios_config.yaml`）共同依赖以下能力：
   - `rule-providers` + `mrs`
   - `include-all`
-  - 大部分模板还启用 `tun`/`sniffer`
-- 如果客户端内核较旧，出现 `unknown field` 或 `rule-providers` 相关错误，请改用 `legacy_config.yaml`。
-- `legacy_config.yaml` 是旧内核兜底模板，不依赖新特性。
+  - `rule-anchor` 锚点（`ip`/`domain`/`class`）
+- 入站与嗅探差异：`global_full_config.yaml`、`global_config.yaml`、`cn_config.yaml` 启用 `tun` + `sniffer`；`lite_config.yaml` 启用 `tun` 但未配置 `sniffer`；`ios_config.yaml` 启用 `tun`（`stack: system`）且显式关闭嗅探；`stream_config.yaml` 启用 `sniffer` 但不启用 `tun`。
+- 旧内核对 `include-all`/`rule-providers`/`mrs` 支持不佳时会报 `unknown field` 或规则源加载失败。本仓库已不再提供旧内核兜底模板（历史 `legacy_config.yaml` 已移除），请升级到 Mihomo / Clash Meta；若必须使用旧内核，请自行编写不依赖上述特性的传统 `rules` 配置。
 
 ## 使用方式
 
@@ -62,44 +44,60 @@
 示例：
 
 ```bash
-# 通用模板
-curl -L https://raw.githubusercontent.com/yangzifun/proxypilot/main/rule/configs/config.yaml -o config.yaml
+# 全球全量模板（本站地址，与模板内规则源同源）
+curl -L https://s3.proxypilot.yangzifun.org/rule/configs/global_full_config.yaml -o global_full_config.yaml
 
-# 旧版兼容模板
-curl -L https://raw.githubusercontent.com/yangzifun/proxypilot/main/rule/configs/legacy_config.yaml -o legacy_config.yaml
+# 轻量模板
+curl -L https://s3.proxypilot.yangzifun.org/rule/configs/lite_config.yaml -o lite_config.yaml
 ```
+
+> 以上地址即对象存储（`https://s3.proxypilot.yangzifun.org/rule/`），与模板内的规则源同源、可直接被客户端拉取；GitHub 镜像（`https://raw.githubusercontent.com/yangzifun/proxypilot/main/rule/configs/<文件名>`）仅作备用。
 
 ## 选型建议
 
-- 中国大陆日常：`config.yaml`
-- 海外全能：`full_config.yaml`
-- 海外专注访问国内：`cn_config.yaml` 或 `cn_full_config.yaml`
-- 影视优先：`stream_config.yaml`
-- 多节点提速/下载：`load-balance_config.yaml`
-- 资源敏感设备：`lite_config.yaml` 或 `global_lite_config.yaml`
-- 需要内网访问：`internal_config.yaml`
+- 海外全能 / 按业务自动选路：`global_full_config.yaml`
+- 全球访问 + 大陆直连：`global_config.yaml`
+- 海外回国加速：`cn_config.yaml`
+- 影视流媒体优先：`stream_config.yaml`
+- 低性能设备 / 手机：`lite_config.yaml`
 - iOS 设备：`ios_config.yaml`
-- 旧客户端/旧内核：`legacy_config.yaml`
 
 ## 辅助规则文件
 
 - `rule/proxy.list`：代理补充规则（DNS、测速、常见需代理域名/IP）
 - `rule/direct.list`：直连补充规则
+- `rule/se_asia.list`：东南亚地区补充规则（泰国/新马/越南/印尼等）
+- `rule/korea.list`：韩国地区补充规则（Weverse/HYBE、Naver、Kakao、Melon、TVING、Wavve、Toss、韩国银行/游戏/媒体等，仅收录韩国本地服务）
 
-这些文件会被部分模板通过 `RULE-SET` 引用。
+`rule/proxy.list`、`rule/se_asia.list`、`rule/korea.list` 等文件会被部分模板通过 `RULE-SET` 引用（`korea` 送往 `🚀 默认代理`）。
+
+### 挂载 `rule/korea.list`（其它模板可选）
+
+`rule/korea.list` 已被 `global_full_config.yaml`、`global_config.yaml` 引用（规则送入 `🚀 默认代理`）；其余模板默认不引用，如需可在客户端配置里自行挂载。其行为类型与模板内 `*class` 锚点一致（`behavior: classical`、`format: text`）：
+
+```yaml
+rule-providers:
+  korea: { <<: *class, url: "https://s3.proxypilot.yangzifun.org/rule/korea.list"}
+
+rules:
+  - RULE-SET,korea,🚀 默认代理   # 组名请改成你配置中实际存在的策略组
+```
+
+- 若模板已定义 `rule-anchor` 的 `class` 锚点（`{type: http, interval: 86400, behavior: classical, format: text}`），直接复用即可；没有则按该写法补上。
+- 未添加 `rule-providers` 与 `RULE-SET` 时，`rule/korea.list` 不会生效。
 
 ## 规则源说明
 
 - 主模板默认使用 MetaCubeX 规则数据：
   - Geosite: `https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/`
   - GeoIP: `https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/`
-- `legacy_config.yaml` 使用内置传统规则，不依赖远程 `rule-providers`。
+- 各模板在 MetaCubeX 规则数据之外，部分模板（`global_full_config.yaml`、`global_config.yaml`、`ios_config.yaml`）还会通过 `RULE-SET` 引用本仓库的 `rule/proxy.list`（`proxylite`）、`rule/se_asia.list`（`se_asia`）、`rule/direct.list`（`custom_direct`）；其中 `global_full_config.yaml`、`global_config.yaml` 另引用 `rule/korea.list`（`korea`）。
 
 ## 常见问题
 
 ### 1. 导入后报错 `unknown field`
 
-当前内核不支持模板中的新特性。请使用 `legacy_config.yaml`，或升级到 Mihomo / Clash Meta 内核。
+当前内核不支持模板中的新特性。本仓库已不再提供旧内核兜底模板（历史 `legacy_config.yaml` 已移除），请升级到 Mihomo / Clash Meta 内核；若必须使用旧内核，请自行编写不依赖 `include-all`/`rule-providers`/`mrs` 的传统 `rules` 配置。
 
 ### 2. 导入后只有直连、没有代理节点
 

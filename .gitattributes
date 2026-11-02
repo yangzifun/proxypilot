@@ -1,0 +1,6 @@
+# 行尾策略：仓库以 LF 存储（Windows 工作区由 core.autocrlf 处理）
+# 构建/安装脚本必须保持 LF，否则 Linux 上 shebang 会失效（bad interpreter）
+*.sh text eol=lf
+
+# Go 源码统一 LF（gofmt 输出即为 LF）
+*.go text eol=lf

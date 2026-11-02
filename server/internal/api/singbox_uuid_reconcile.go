@@ -1,0 +1,181 @@
+package api
+
+import (
+	"context"
+	"encoding/json"
+	"regexp"
+	"strings"
+)
+
+type uuidReconcileResult struct {
+	Checked int    `json:"checked"`
+	Drifted int    `json:"drifted"`
+	Fixed   int    `json:"fixed"`
+	Error   string `json:"error,omitempty"`
+}
+
+var uuidTextRe = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+
+// reconcileSingboxUUIDState 对齐 Worker：
+//  1. 节点 uuid_list（平台授权）vs 已渲染配置文件里的用户；
+//  2. 每个授权 UUID 是否都有该节点生成的订阅配置；
+//  3. autoFix 时按授权列表重渲染、重建 configs、排队下发。
+func (h *handlers) reconcileSingboxUUIDState(ctx context.Context, actor string, autoFix bool) uuidReconcileResult {
+	out := uuidReconcileResult{}
+	rows, err := queryRowsAsMaps(ctx, h.db, `SELECT id, server_id, COALESCE(name,''), COALESCE(uuid_list,'[]') FROM singbox_nodes ORDER BY id ASC`)
+	if err != nil {
+		out.Error = "查询节点失败"
+		return out
+	}
+	for _, row := range rows {
+		nodeID := mapInt(row, "id", 0)
+		nodeName := mapStr(row, "name", "")
+		serverID := mapInt(row, "server_id", 0)
+		var expected []string
+		_ = json.Unmarshal([]byte(mapStr(row, "uuid_list", "[]")), &expected)
+		out.Checked++
+
+		var content string
+		_ = h.db.QueryRowContext(ctx,
+			`SELECT COALESCE(content,'') FROM node_configs WHERE name = ? ORDER BY id DESC LIMIT 1`,
+			"sbx:"+nodeName+":sb").Scan(&content)
+		onNode := map[string]bool{}
+		if content != "" {
+			var cfg struct {
+				Inbounds []struct {
+					Users []struct {
+						UUID     string `json:"uuid"`
+						Password string `json:"password"`
+					} `json:"users"`
+				} `json:"inbounds"`
+			}
+			if json.Unmarshal([]byte(content), &cfg) == nil {
+				for _, ib := range cfg.Inbounds {
+					for _, u := range ib.Users {
+						id := strings.TrimSpace(firstNonEmpty(u.UUID, u.Password))
+						if uuidTextRe.MatchString(id) {
+							onNode[strings.ToLower(id)] = true
+						}
+					}
+				}
+			}
+		}
+		expectedLower := make(map[string]bool, len(expected))
+		missingOnNode, extraOnNode, missingConfigs := 0, 0, 0
+		for _, u := range expected {
+			lu := strings.ToLower(strings.TrimSpace(u))
+			expectedLower[lu] = true
+			if !onNode[lu] {
+				missingOnNode++
+			}
+			var c int64
+			_ = h.db.QueryRowContext(ctx,
+				`SELECT COUNT(*) FROM configs WHERE uuid = ? AND singbox_node_id = ?`, u, nodeID).Scan(&c)
+			if c == 0 {
+				missingConfigs++
+			}
+		}
+		for id := range onNode {
+			if !expectedLower[id] {
+				extraOnNode++
+			}
+		}
+		if missingOnNode == 0 && extraOnNode == 0 && missingConfigs == 0 {
+			continue
+		}
+		out.Drifted++
+		h.recordNodeLog(ctx, serverID, 0, "uuid-drift", "warning", 0,
+			"UUID 不一致：缺少 "+itoa64(int64(missingOnNode))+"、多余 "+itoa64(int64(extraOnNode))+"、订阅配置缺 "+itoa64(int64(missingConfigs)),
+			"", actor)
+		if !autoFix {
+			continue
+		}
+
+		tpl, node, _, _, msg := h.loadSingboxNodeFull(ctx, nodeID)
+		if msg != "" {
+			continue
+		}
+		users := singboxUsersFromUUIDs(tpl, expected)
+		files, _, _, _, msg := h.applySingboxNode(ctx, nodeID, users, false)
+		if msg != "" {
+			continue
+		}
+		if _, _, err := h.syncSingboxConfigsForUsers(ctx, nodeID, nodeName, tpl, node, users); err != nil {
+			continue
+		}
+		h.queueSingboxDeploy(ctx, files, actor)
+		out.Fixed++
+		h.recordNodeLog(ctx, serverID, 0, "uuid-reconcile", "success", 0,
+			"已按平台授权重渲染；授权 "+itoa64(int64(len(expected)))+" 个", "", actor)
+	}
+	result, _ := json.Marshal(map[string]any{"checked": out.Checked, "drifted": out.Drifted, "fixed": out.Fixed})
+	_ = h.putSetting(ctx, "uuid_reconcile_last_at", itoa64(nowMillis()))
+	_ = h.putSetting(ctx, "uuid_reconcile_last_result", string(result))
+	return out
+}
+
+// syncSingboxConfigsForUsers 按用户生成/回收该节点的订阅配置（幂等）。
+func (h *handlers) syncSingboxConfigsForUsers(ctx context.Context, nodeID int64, nodeName string, tpl *singboxTemplate, node singboxRenderNode, users []sbUser) (int64, int64, error) {
+	linkNode := singboxNode{Name: node.Name, Domain: node.Domain, CDNDomain: node.CDNDomain}
+	desired := []map[string]any{}
+	for _, u := range users {
+		desired = append(desired, singboxClientLinks(tpl, linkNode, []sbUser{u})...)
+	}
+	uuidOf := map[string]string{}
+	for _, u := range users {
+		uuidOf[u.Name] = u.UUID
+	}
+	existing := map[string]map[string]any{}
+	if rows, err := queryRowsAsMaps(ctx, h.db, `SELECT id, uuid, config_data FROM configs WHERE singbox_node_id = ?`, nodeID); err == nil {
+		for _, e := range rows {
+			existing[mapStr(e, "uuid", "")+"\x00"+mapStr(e, "config_data", "")] = e
+		}
+	}
+	wanted := map[string]bool{}
+	for _, l := range desired {
+		uuid := uuidOf[mapStr(l, "user", "")]
+		if uuid == "" {
+			continue
+		}
+		wanted[uuid+"\x00"+mapStr(l, "link", "")] = true
+	}
+	removed := int64(0)
+	for key, e := range existing {
+		if wanted[key] {
+			continue
+		}
+		if _, err := h.db.ExecContext(ctx, `DELETE FROM configs WHERE id = ?`, mapInt(e, "id", 0)); err == nil {
+			removed++
+		}
+	}
+	added := int64(0)
+	digestParts := make([]string, 0, len(desired))
+	now := nowMillis()
+	for _, l := range desired {
+		link := mapStr(l, "link", "")
+		uuid := uuidOf[mapStr(l, "user", "")]
+		if uuid == "" {
+			continue
+		}
+		digestParts = append(digestParts, link)
+		key := uuid + "\x00" + link
+		if existing[key] != nil {
+			continue
+		}
+		var dup int64
+		_ = h.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM configs WHERE uuid = ? AND config_data = ?`, uuid, link).Scan(&dup)
+		if dup > 0 {
+			continue
+		}
+		remark := nodeName + "-" + mapStr(l, "protocol", "")
+		if _, err := h.db.ExecContext(ctx, `INSERT INTO configs
+		  (uuid, config_data, protocol, remark, domain_hosting, singbox_node_id, created_at, updated_at)
+		  VALUES (?, ?, ?, ?, 'Cloudflare', ?, ?, ?)`,
+			uuid, link, singboxProtocolOf(mapStr(l, "protocol", "")), truncateRunes(remark, 500), nodeID, now, now); err == nil {
+			added++
+		}
+	}
+	_, _ = h.db.ExecContext(ctx, `UPDATE singbox_nodes SET last_link_hash = ?, updated_at = ? WHERE id = ?`,
+		sha256Hex(strings.Join(digestParts, "\n")), now, nodeID)
+	return added, removed, nil
+}

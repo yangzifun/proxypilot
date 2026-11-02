@@ -1,0 +1,27 @@
+{
+  "input": "anytls://pass@example.com:443?sni=example.com&fp=chrome#AnyTLS-01",
+  "proxies": [
+    {
+      "name": "直连",
+      "type": "direct"
+    },
+    {
+      "name": "AnyTLS-01",
+      "type": "anytls",
+      "server": "example.com",
+      "port": 443,
+      "password": "pass",
+      "client-fingerprint": "chrome",
+      "udp": true,
+      "idle-session-check-interval": 30,
+      "idle-session-timeout": 30,
+      "min-idle-session": 0,
+      "sni": "example.com",
+      "alpn": [
+        "h2",
+        "http/1.1"
+      ],
+      "skip-cert-verify": true
+    }
+  ]
+}

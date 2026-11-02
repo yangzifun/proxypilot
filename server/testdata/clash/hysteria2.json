@@ -1,0 +1,25 @@
+{
+  "input": "hysteria2://pass@example.com:443?sni=example.com&insecure=1&obfs=salamander&obfs-password=abc&up=100&down=500#HY2-01",
+  "proxies": [
+    {
+      "name": "直连",
+      "type": "direct"
+    },
+    {
+      "name": "HY2-01",
+      "type": "hysteria2",
+      "server": "example.com",
+      "port": 443,
+      "password": "pass",
+      "sni": "example.com",
+      "skip-cert-verify": true,
+      "alpn": [
+        "h3"
+      ],
+      "up": "100 Mbps",
+      "down": "500 Mbps",
+      "obfs": "salamander",
+      "obfs-password": "abc"
+    }
+  ]
+}

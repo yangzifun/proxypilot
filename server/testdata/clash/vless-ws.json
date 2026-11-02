@@ -1,0 +1,31 @@
+{
+  "input": "vless://11111111-2222-3333-4444-555555555555@example.com:443?security=tls&type=ws&path=%2Fvlws&host=cdn.example.com&sni=example.com#VLWS-01",
+  "proxies": [
+    {
+      "name": "直连",
+      "type": "direct"
+    },
+    {
+      "name": "VLWS-01",
+      "type": "vless",
+      "server": "example.com",
+      "port": 443,
+      "uuid": "11111111-2222-3333-4444-555555555555",
+      "udp": true,
+      "tls": true,
+      "skip-cert-verify": true,
+      "servername": "example.com",
+      "flow": "",
+      "packet-encoding": "xudp",
+      "encryption": "none",
+      "client-fingerprint": "chrome",
+      "network": "ws",
+      "ws-opts": {
+        "path": "/vlws",
+        "headers": {
+          "Host": "cdn.example.com"
+        }
+      }
+    }
+  ]
+}

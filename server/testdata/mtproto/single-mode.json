@@ -1,0 +1,90 @@
+{
+  "template": {
+    "id": 1,
+    "name": "tpl",
+    "domain": "storage.googleapis.com",
+    "port": 13709,
+    "api_port": 13719,
+    "secret_mode": "single",
+    "concurrency": 8192,
+    "prefer_ip": "prefer-ipv4",
+    "public_ipv4": "",
+    "blocklist": 1,
+    "throttle_max": 100,
+    "config_path": "/etc/mtg/config.toml",
+    "service_name": "mtg",
+    "enabled": 1
+  },
+  "node": {
+    "id": 5,
+    "name": "jp-01",
+    "template_id": 1,
+    "host": "203.0.113.7",
+    "bootstrap_secret": "eeabababababababababababababababab73746f726167652e676f6f676c65617069732e636f6d",
+    "secret_mode": "single"
+  },
+  "clients": [
+    {
+      "id": 2,
+      "secret": "eeabababababababababababababababab7777772e6d6963726f736f66742e636f6d",
+      "status": "active"
+    },
+    {
+      "id": 1,
+      "secret": "eeabababababababababababababababab7777772e62696e672e636f6d",
+      "status": "active"
+    },
+    {
+      "id": 3,
+      "secret": "not-a-secret",
+      "status": "active"
+    },
+    {
+      "id": 4,
+      "secret": "eeabababababababababababababababab63646e2e6578616d706c652e636f6d",
+      "status": "revoked"
+    }
+  ],
+  "server": {
+    "last_ip4": "203.0.113.7",
+    "last_ip": "203.0.113.7",
+    "host": ""
+  },
+  "effective": {
+    "id": 5,
+    "name": "jp-01",
+    "domain": "storage.googleapis.com",
+    "host": "203.0.113.7",
+    "port": 13709,
+    "api_port": 13719,
+    "secret_mode": "single",
+    "concurrency": 8192,
+    "prefer_ip": "prefer-ipv4",
+    "public_ipv4": "203.0.113.7",
+    "blocklist": 1,
+    "throttle_max": 100,
+    "config_path": "/etc/mtg/config.toml",
+    "service_name": "mtg",
+    "bootstrap_secret": "eeabababababababababababababababab73746f726167652e676f6f676c65617069732e636f6d",
+    "template_id": 1,
+    "template_name": "tpl",
+    "enabled": 1
+  },
+  "config": {
+    "ok": true,
+    "error": "",
+    "content": "# /etc/mtg/config.toml — 由 ProxyPilot 渲染（V13.4），请勿手改\n# node: jp-01 · mode: single · clients: 1\n\nsecret = \"eeabababababababababababababababab73746f726167652e676f6f676c65617069732e636f6d\"\nbind-to = \"[::]:13709\"\napi-bind-to = \"127.0.0.1:13719\"\nprefer-ip = \"prefer-ipv4\"\nconcurrency = 8192\npublic-ipv4 = \"203.0.113.7\"\n\n[domain-fronting]\nport = 443\n\n[defense.blocklist]\nenabled = true\nurls = [\"https://iplists.firehol.org/files/firehol_abuse_1d.netset\"]\n\n[throttle]\nmax-connections = 100\n",
+    "ports": {
+      "mtproto": 13709,
+      "api": 13719
+    },
+    "mode": "single"
+  },
+  "link": {
+    "host": "203.0.113.7",
+    "port": 13709,
+    "secret": "eeabababababababababababababababab73746f726167652e676f6f676c65617069732e636f6d",
+    "tg": "tg://proxy?server=203.0.113.7&port=13709&secret=eeabababababababababababababababab73746f726167652e676f6f676c65617069732e636f6d",
+    "tme": "https://t.me/proxy?server=203.0.113.7&port=13709&secret=eeabababababababababababababababab73746f726167652e676f6f676c65617069732e636f6d"
+  }
+}

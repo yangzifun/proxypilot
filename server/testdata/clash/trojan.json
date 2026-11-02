@@ -1,0 +1,40 @@
+{
+  "input": "trojan://pass@example.com:443?sni=example.com&fp=chrome&type=ws&path=%2Ftj&host=cdn.example.com#Trojan-01",
+  "proxies": [
+    {
+      "name": "直连",
+      "type": "direct"
+    },
+    {
+      "name": "Trojan-01",
+      "type": "trojan",
+      "server": "example.com",
+      "port": 443,
+      "password": "pass",
+      "udp": true,
+      "sni": "example.com",
+      "alpn": [
+        "h2",
+        "http/1.1"
+      ],
+      "client-fingerprint": "chrome",
+      "fingerprint": "chrome",
+      "skip-cert-verify": true,
+      "ss-opts": {
+        "enabled": false,
+        "method": "aes-128-gcm",
+        "password": "example"
+      },
+      "network": "ws",
+      "smux": {
+        "enabled": false
+      },
+      "ws-opts": {
+        "path": "/tj",
+        "headers": {
+          "Host": "cdn.example.com"
+        }
+      }
+    }
+  ]
+}

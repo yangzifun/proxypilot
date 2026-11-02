@@ -1,0 +1,35 @@
+# 构建产物（勿提交）
+agent-go/dist/
+
+# Go 本地环境
+*.test
+*.exe
+# agent �������� S3��s3.yangzifun.org/proxypilot�������� Git ��ʷ
+agent/dist/proxypilot-agent-linux-amd64
+agent/dist/proxypilot-agent-linux-arm64
+agent/dist/install.sh
+
+# web-antd (Ant Design frontend build)
+web-antd/node_modules/
+web-antd/dist/
+web-antd/preview/
+
+# web-antd build output (npm run build generates these)
+workers/worker-antd-assets.js
+workers/worker-antd.bundle.js
+
+# Wrangler / deploy artifacts
+.wrangler/
+dist-check/
+
+# Go 服务（迁移中）
+server/bin/
+server/data/
+server/.env
+server/proxypilot
+
+# Python 缓存
+__pycache__/
+*.pyc
+web-antd/build.log
+web-antd/render.log
