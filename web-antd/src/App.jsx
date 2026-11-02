@@ -12,6 +12,7 @@ import Templates from './pages/Templates';
 import Servers from './pages/Servers';
 import Nodes from './pages/Nodes';
 import MtprotoPage from './pages/MtprotoPage';
+import MasquePage from './pages/MasquePage';
 import Monitor from './pages/Monitor';
 import Logs from './pages/Logs';
 import System from './pages/System';
@@ -26,6 +27,7 @@ const PAGES = {
   servers: Servers,
   normal: Nodes,
   mtproto: MtprotoPage,
+  masque: MasquePage,
   singbox: Nodes,
   status: Monitor,
   logs: Logs,

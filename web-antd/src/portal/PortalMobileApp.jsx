@@ -16,6 +16,7 @@ import MobileConfigs from './MobileConfigs';
 import MobileStats from './MobileStats';
 import MobileAccount from './MobileAccount';
 import MtprotoCard from './MtprotoCard';
+import MasqueCard from './MasqueCard';
 import { portalApi } from './portalApi';
 import { shortUuid } from '../format';
 
@@ -127,6 +128,9 @@ export default function PortalMobileApp({ email, onLogout }) {
           {tab === 'tg' ? (
             <div style={{ padding: 12 }}>
               <MtprotoCard mobile />
+              <div style={{ marginTop: 18 }}>
+                <MasqueCard mobile />
+              </div>
             </div>
           ) : tab === 'me' ? (
             /* 「我的」页：不依赖 UUID，未绑定也能看账号与退出 */

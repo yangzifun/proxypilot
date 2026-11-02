@@ -6,6 +6,7 @@ import {
   ApartmentOutlined,
   CloudDownloadOutlined,
   CloudServerOutlined,
+  CloudSyncOutlined,
   DashboardOutlined,
   FileSearchOutlined,
   FileTextOutlined,
@@ -107,11 +108,11 @@ export const PAGE_META = {
   },
 };
 
-export const NAV_ORDER = ['dash', 'uuids', 'tpls', 'servers', 'normal', 'mtproto', 'status', 'logs', 'attachments', 'sys', 'backup', 'sec'];
+export const NAV_ORDER = ['dash', 'uuids', 'tpls', 'servers', 'normal', 'mtproto', 'masque', 'status', 'logs', 'attachments', 'sys', 'backup', 'sec'];
 
 export const NAV_GROUPS = [
   { group: '业务', keys: ['dash', 'uuids', 'tpls'] },
-  { group: '运维', keys: ['servers', 'normal', 'mtproto', 'status'] },
+  { group: '运维', keys: ['servers', 'normal', 'mtproto', 'masque', 'status'] },
   { group: '系统', keys: ['logs', 'attachments', 'sys', 'backup', 'sec'] },
 ];
 

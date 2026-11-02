@@ -20,6 +20,7 @@ import { chartPalette } from '../theme';
 import Guide from './Guide';
 import EmailChange from './EmailChange';
 import MtprotoCard from './MtprotoCard';
+import MasqueCard from './MasqueCard';
 import PortalNav from './PortalNav';
 import useIsPc from './useIsPc';
 import { fmtNum, fmtTime, shortUuid } from '../format';
@@ -518,7 +519,12 @@ export default function PortalUuid({ uuid, onBack, onUnauthorized, embedded = fa
               {
                 key: 'tg',
                 label: 'Telegram 代理',
-                children: <MtprotoCard />,
+                children: (
+                  <div>
+                    <MtprotoCard />
+                    <MasqueCard />
+                  </div>
+                ),
               },
               {
                 key: 'stats',
