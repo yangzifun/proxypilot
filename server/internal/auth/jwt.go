@@ -87,6 +87,17 @@ func IssueAdminToken(username, secret string, mfaVerified bool) (string, error) 
 	}, secret)
 }
 
+// IssueMFAToken 签发 5 分钟的一次性 MFA 挑战 token（密码 + Turnstile 通过后使用）。
+// 它不是登录 token：Purpose=mfa，只能用于 /api/login 的 verify_totp 步骤。
+func IssueMFAToken(username, secret string) (string, error) {
+	return Sign(Claims{
+		Sub:         username,
+		Exp:         time.Now().Add(5 * time.Minute).UnixMilli(),
+		Purpose:     "mfa",
+		RequiresMFA: true,
+	}, secret)
+}
+
 // IssuePortalToken 为用户中心签发 7 天 token（role=user）。
 func IssuePortalToken(email, secret string) (string, error) {
 	return Sign(Claims{

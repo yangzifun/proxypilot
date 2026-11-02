@@ -186,7 +186,7 @@ func (h *handlers) externalLinks(ctx context.Context, uuid string) ([]string, ex
 	rows.Close()
 	summary.Sources = len(urls)
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := subSourceHTTPClient()
 	var links []string
 	for _, u := range urls {
 		if !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "https://") {

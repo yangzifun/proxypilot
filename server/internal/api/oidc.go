@@ -135,6 +135,9 @@ func (h *handlers) oidcRedirectURI(r *http.Request) string {
 	if v := strings.TrimSpace(h.effectiveOIDC(r.Context()).RedirectURI); v != "" {
 		return v
 	}
+	if base := strings.TrimRight(strings.TrimSpace(h.cfg.PublicBaseURL), "/"); base != "" {
+		return base + "/api/oidc/callback"
+	}
 	scheme := "https"
 	if r.TLS == nil && strings.HasPrefix(r.Host, "localhost") {
 		scheme = "http"
@@ -159,7 +162,7 @@ func requestIsHTTPS(r *http.Request) bool {
 func oidcTxCookie(r *http.Request, tx oidcTx, maxAge int) *http.Cookie {
 	raw, _ := json.Marshal(tx)
 	return &http.Cookie{
-		Name: "pp_oidc_tx", Value: base64.RawURLEncoding.EncodeToString(raw), Path: "/",
+		Name: "pp_oidc_tx", Value: base64.RawURLEncoding.EncodeToString(raw), Path: "/api/oidc",
 		HttpOnly: true, Secure: requestIsHTTPS(r), SameSite: http.SameSiteLaxMode, MaxAge: maxAge,
 	}
 }

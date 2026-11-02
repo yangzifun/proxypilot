@@ -40,6 +40,7 @@ export default function Login() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [cred, setCred] = useState({ username: '', password: '' });
+  const [mfaToken, setMfaToken] = useState('');
   const [emailState, setEmailState] = useState({ email: '', ticket: '' });
   const [countdown, setCountdown] = useState(0);
   const [backupMode, setBackupMode] = useState(false);
@@ -72,9 +73,9 @@ export default function Login() {
     try {
       if (step === 'totp') {
         if (backupMode) {
-          await loginWithBackup({ ...cred, backupCode: String(values.backup || '').trim() });
+          await loginWithBackup({ mfaToken, backupCode: String(values.backup || '').trim() });
         } else {
-          await loginPassword({ ...cred, totpCode: String(values.totp || '').trim() });
+          await loginPassword({ username: cred.username, mfaToken, totpCode: String(values.totp || '').trim() });
         }
         message.success('登录成功');
         return;
@@ -86,7 +87,8 @@ export default function Login() {
         turnstileToken: turnstile.getToken(),
       });
       if (res.needMfa) {
-        setCred({ username: String(values.username || '').trim(), password: values.password });
+        setCred({ username: String(values.username || '').trim() });
+        setMfaToken(res.mfaToken || '');
         setStep('totp');
         message.info('该账号已开启双因素认证，请输入动态码');
       } else {

@@ -15,10 +15,16 @@ type loginRequest struct {
 	TOTPCode  string `json:"totp_code"`
 	Step      string `json:"step"`
 	Turnstile string `json:"cf_turnstile_response"`
+	MFAToken  string `json:"mfa_token"`
 }
 
 // login 对应 POST /api/login：账号密码 + 可选 TOTP。
-// 与 Worker 的行为差异：未配置 Turnstile secret 时直接放行（Worker 的旧实现要求非空 token）。
+//
+// 安全约束：
+//   - 第一步（密码）必须携带有效 Turnstile；
+//   - 第二步（verify_totp）必须携带第一步签发的 5 分钟 mfa_token，
+//     不再重复校验密码、也不允许用 step 参数绕过 Turnstile；
+//   - 两个步骤共用登录失败限速，避免无限爆破密码 / TOTP。
 func (h *handlers) login(w http.ResponseWriter, r *http.Request) {
 	if !h.passwordLoginEnabled(r.Context()) {
 		writeError(w, http.StatusForbidden, "密码登录已禁用，请使用单点登录")
@@ -30,15 +36,31 @@ func (h *handlers) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Username = strings.TrimSpace(req.Username)
-	if req.Username == "" || req.Password == "" {
+	if req.Username == "" {
 		writeError(w, http.StatusBadRequest, "用户名或密码不能为空")
 		return
 	}
-	if req.Step != "verify_totp" {
-		if err := h.verifyTurnstile(r, req.Turnstile); err != nil {
-			writeError(w, http.StatusForbidden, err.Error())
-			return
-		}
+
+	key := loginRateKey(r, req.Username)
+	if wait, blocked := loginLimiter.Blocked(key); blocked {
+		w.Header().Set("Retry-After", retryAfterSeconds(wait))
+		writeError(w, http.StatusTooManyRequests, "登录尝试过于频繁，请稍后再试")
+		return
+	}
+
+	if req.Step == "verify_totp" {
+		h.loginVerifyMFA(w, r, req, key)
+		return
+	}
+
+	if req.Password == "" {
+		writeError(w, http.StatusBadRequest, "用户名或密码不能为空")
+		return
+	}
+	if err := h.verifyTurnstile(r, req.Turnstile); err != nil {
+		loginLimiter.Fail(key)
+		writeError(w, http.StatusForbidden, err.Error())
+		return
 	}
 
 	var (
@@ -57,6 +79,7 @@ func (h *handlers) login(w http.ResponseWriter, r *http.Request) {
 		_, _ = auth.VerifyPassword(
 			"5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8",
 			req.Password)
+		loginLimiter.Fail(key)
 		writeError(w, http.StatusUnauthorized, "用户名或密码错误")
 		return
 	}
@@ -68,6 +91,7 @@ func (h *handlers) login(w http.ResponseWriter, r *http.Request) {
 
 	ok, needsRehash := auth.VerifyPassword(hash, req.Password)
 	if !ok {
+		loginLimiter.Fail(key)
 		writeError(w, http.StatusUnauthorized, "用户名或密码错误")
 		return
 	}
@@ -81,40 +105,68 @@ func (h *handlers) login(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// step=verify_totp 会跳过 Turnstile，因此必须只对“确实启用了 MFA”的账号生效；
-	// 否则未启用 MFA 的账号可以用该 step 绕过人机验证直接拿 token。
-	if req.Step == "verify_totp" && mfaEnabled != 1 {
-		writeError(w, http.StatusBadRequest, "无效的登录步骤")
+	if mfaEnabled == 1 {
+		mfaToken, err := auth.IssueMFAToken(username, h.cfg.JWTSecret)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "签发 MFA 挑战失败")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"requires_mfa": true,
+			"mfa_token":    mfaToken,
+			"username":     username,
+			"step":         "totp_required",
+		})
 		return
 	}
 
-	if mfaEnabled == 1 {
-		if req.Step != "verify_totp" {
-			writeJSON(w, http.StatusOK, map[string]any{
-				"requires_mfa": true,
-				"username":     username,
-				"step":         "totp_required",
-			})
-			return
-		}
-		if !mfaSecret.Valid || !auth.VerifyTOTP(mfaSecret.String, req.TOTPCode, 1) {
-			writeError(w, http.StatusUnauthorized, "验证码无效或已过期")
-			return
-		}
-		if _, err := h.db.ExecContext(r.Context(),
-			`UPDATE admin_users SET last_mfa_login = ? WHERE id = ?`, nowMillis(), id); err != nil {
-			h.log.Warn("记录 MFA 登录失败", "user", username, "err", err)
-		}
-	}
-
-	token, err := auth.IssueAdminToken(username, h.cfg.JWTSecret, mfaEnabled == 1)
+	loginLimiter.Reset(key)
+	token, err := auth.IssueAdminToken(username, h.cfg.JWTSecret, false)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "签发 token 失败")
 		return
 	}
-	resp := map[string]any{"token": token, "requires_mfa": mfaEnabled == 1}
-	if mfaEnabled == 1 {
-		resp["message"] = "MFA验证成功"
+	writeJSON(w, http.StatusOK, map[string]any{"token": token, "requires_mfa": false})
+}
+
+// loginVerifyMFA 只接受 password+Turnstile 通过后签发的 mfa_token。
+func (h *handlers) loginVerifyMFA(w http.ResponseWriter, r *http.Request, req loginRequest, key string) {
+	claims, err := auth.Parse(strings.TrimSpace(req.MFAToken), h.cfg.JWTSecret)
+	if err != nil || claims.Purpose != "mfa" || claims.Sub == "" || claims.Sub != req.Username {
+		loginLimiter.Fail(key)
+		writeError(w, http.StatusUnauthorized, "验证码无效或已过期")
+		return
 	}
-	writeJSON(w, http.StatusOK, resp)
+
+	var (
+		id         int64
+		mfaEnabled int64
+		mfaSecret  sql.NullString
+	)
+	err = h.db.QueryRowContext(r.Context(),
+		`SELECT id, COALESCE(mfa_enabled,0), mfa_secret FROM admin_users WHERE username = ? LIMIT 1`, claims.Sub).
+		Scan(&id, &mfaEnabled, &mfaSecret)
+	if errors.Is(err, sql.ErrNoRows) || err != nil {
+		loginLimiter.Fail(key)
+		writeError(w, http.StatusUnauthorized, "验证码无效或已过期")
+		return
+	}
+	if mfaEnabled != 1 || !mfaSecret.Valid || !auth.VerifyTOTP(mfaSecret.String, req.TOTPCode, 1) {
+		loginLimiter.Fail(key)
+		writeError(w, http.StatusUnauthorized, "验证码无效或已过期")
+		return
+	}
+
+	loginLimiter.Reset(key)
+	now := nowMillis()
+	if _, err := h.db.ExecContext(r.Context(),
+		`UPDATE admin_users SET last_mfa_login = ? WHERE id = ?`, now, id); err != nil {
+		h.log.Warn("记录 MFA 登录失败", "user", claims.Sub, "err", err)
+	}
+	token, err := auth.IssueAdminToken(claims.Sub, h.cfg.JWTSecret, true)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "签发 token 失败")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"token": token, "requires_mfa": true, "message": "MFA验证成功"})
 }

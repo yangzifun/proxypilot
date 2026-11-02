@@ -50,3 +50,20 @@ func TestTOTPRFC6238Vector(t *testing.T) {
 		t.Fatal("skew=1 应接受上一窗口")
 	}
 }
+
+func TestIssueMFATokenPurpose(t *testing.T) {
+	token, err := IssueMFAToken("admin", "secret")
+	if err != nil || token == "" {
+		t.Fatalf("签发失败: %v", err)
+	}
+	c, err := Parse(token, "secret")
+	if err != nil {
+		t.Fatalf("解析失败: %v", err)
+	}
+	if c.Sub != "admin" || c.Purpose != "mfa" || !c.RequiresMFA {
+		t.Fatalf("claims 不正确: %+v", c)
+	}
+	if _, err := Parse(token, "wrong-secret"); err == nil {
+		t.Fatal("错误 secret 不应通过")
+	}
+}

@@ -268,21 +268,19 @@ func validSubSourceURL(raw string) (string, bool) {
 		return "", false
 	}
 	u, err := url.Parse(s)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil {
 		return "", false
 	}
-	host := u.Hostname()
+	host := strings.TrimSuffix(strings.ToLower(u.Hostname()), ".")
 	if host == "" {
 		return "", false
 	}
-	lower := strings.ToLower(host)
-	if lower == "localhost" || strings.HasSuffix(lower, ".localhost") || strings.HasSuffix(lower, ".local") {
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") || strings.HasSuffix(host, ".local") ||
+		strings.HasSuffix(host, ".internal") || strings.HasSuffix(host, ".home.arpa") {
 		return "", false
 	}
-	if ip := net.ParseIP(host); ip != nil {
-		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsUnspecified() {
-			return "", false
-		}
+	if ip := net.ParseIP(host); ip != nil && isBlockedIP(ip) {
+		return "", false
 	}
 	return u.String(), true
 }

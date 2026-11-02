@@ -64,14 +64,14 @@ export function AuthProvider({ children }) {
 
   /* ---------- 账号密码 ---------- */
   const loginPassword = useCallback(
-    async ({ username, password, totpCode, turnstileToken }) => {
+    async ({ username, password, totpCode, turnstileToken, mfaToken }) => {
       const stepTwo = !!totpCode;
       const body = stepTwo
-        ? { username, password, totp_code: totpCode, step: 'verify_totp' }
+        ? { username, mfa_token: mfaToken || '', totp_code: totpCode, step: 'verify_totp' }
         : { username, password, cf_turnstile_response: turnstileToken || '' };
       const res = await publicApi('login', { method: 'POST', body });
       if (res && res.requires_mfa && !res.token) {
-        return { needMfa: true, mode: 'totp' };
+        return { needMfa: true, mode: 'totp', mfaToken: res.mfa_token || '' };
       }
       if (res && res.token) {
         applySession(res.token);
@@ -120,10 +120,10 @@ export function AuthProvider({ children }) {
 
   /* ---------- 备份码登录（密码 + 备份码代替 TOTP） ---------- */
   const loginWithBackup = useCallback(
-    async ({ username, password, backupCode }) => {
+    async ({ mfaToken, backupCode }) => {
       const res = await publicApi('mfa/login-with-backup', {
         method: 'POST',
-        body: { username, password, backup_code: backupCode },
+        body: { mfa_token: mfaToken || '', backup_code: backupCode },
       });
       if (res && res.token) {
         applySession(res.token);

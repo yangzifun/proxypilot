@@ -232,39 +232,38 @@ func (h *handlers) mfaRegenerateBackupCodes(w http.ResponseWriter, r *http.Reque
 // POST /api/mfa/login-with-backup（公开） body: {"username","password","backup_code"}
 func (h *handlers) mfaLoginWithBackup(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Username   string `json:"username"`
-		Password   string `json:"password"`
+		MFAToken   string `json:"mfa_token"`
 		BackupCode string `json:"backup_code"`
 	}
 	if err := decodeJSON(w, r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "无效 JSON")
 		return
 	}
-	username := strings.TrimSpace(req.Username)
 	code := strings.ToUpper(strings.TrimSpace(req.BackupCode))
-	if username == "" || req.Password == "" || code == "" {
-		writeError(w, http.StatusBadRequest, "用户名、密码与备份码不能为空")
+	if code == "" {
+		writeError(w, http.StatusBadRequest, "备份码不能为空")
 		return
 	}
-
-	var hash string
-	err := h.db.QueryRowContext(r.Context(),
-		`SELECT password_hash FROM admin_users WHERE username = ? AND mfa_enabled = 1 LIMIT 1`, username).
-		Scan(&hash)
-	if errors.Is(err, sql.ErrNoRows) || (err == nil && !h.verifyCurrentPassword(r, hash, req.Password)) {
-		writeError(w, http.StatusUnauthorized, "密码错误")
+	claims, err := auth.Parse(strings.TrimSpace(req.MFAToken), h.cfg.JWTSecret)
+	if err != nil || claims.Purpose != "mfa" || claims.Sub == "" {
+		writeError(w, http.StatusUnauthorized, "验证信息已过期，请重新登录")
 		return
 	}
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "服务器错误")
+	username := claims.Sub
+	key := loginRateKey(r, username)
+	if wait, blocked := loginLimiter.Blocked(key); blocked {
+		w.Header().Set("Retry-After", retryAfterSeconds(wait))
+		writeError(w, http.StatusTooManyRequests, "登录尝试过于频繁，请稍后再试")
 		return
 	}
 
 	var codeID int64
 	err = h.db.QueryRowContext(r.Context(),
-		`SELECT id FROM mfa_backup_codes WHERE username = ? AND code = ? AND used = 0 LIMIT 1`,
+		`SELECT c.id FROM mfa_backup_codes c JOIN admin_users u ON u.username = c.username
+		  WHERE c.username = ? AND u.mfa_enabled = 1 AND c.code = ? AND c.used = 0 LIMIT 1`,
 		username, code).Scan(&codeID)
 	if errors.Is(err, sql.ErrNoRows) {
+		loginLimiter.Fail(key)
 		writeError(w, http.StatusUnauthorized, "备份码无效")
 		return
 	}
@@ -278,6 +277,7 @@ func (h *handlers) mfaLoginWithBackup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	loginLimiter.Reset(key)
 	token, err := auth.Sign(auth.Claims{
 		Sub: username, Exp: nowMillis() + 86_400_000,
 		RequiresMFA: true, MFAVerified: true, ViaBackupCode: true,

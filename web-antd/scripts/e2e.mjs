@@ -82,7 +82,7 @@ function handle(method, url, body) {
   // ---- 登录 ----
   if (p === 'login' && method === 'POST') {
     if (body && body.step === 'verify_totp') return json({ token: 'tok-totp', requires_mfa: true });
-    if (body && body.username === 'needs-mfa') return json({ requires_mfa: true, step: 'totp_required' });
+    if (body && body.username === 'needs-mfa') return json({ requires_mfa: true, mfa_token: 'mfa-ticket', step: 'totp_required' });
     if (!body || !body.username || !body.password) return json({ error: '用户名或密码错误' }, 401);
     return json({ token: 'tok-login', requires_mfa: false });
   }
@@ -851,6 +851,7 @@ console.log('\nProxyPilot · Ant Design 前端 E2E（内存后端 + jsdom 交互
   const second = await waitFor(() => calls.filter((c) => /\/api\/login$/.test(c.url) && c.method === 'POST').length >= 2);
   const last = [...calls].reverse().find((c) => /\/api\/login$/.test(c.url));
   check('S3 第二次带 step/totp_code', !!second && last.body.step === 'verify_totp' && last.body.totp_code === '123456', JSON.stringify(last && last.body));
+  check('S3 第二次使用第一步签发的 mfa_token', last.body.mfa_token === 'mfa-ticket', JSON.stringify(last && last.body));
 }
 
 /* S4 概览加载 */
@@ -1630,7 +1631,7 @@ console.log('\nProxyPilot · Ant Design 前端 E2E（内存后端 + jsdom 交互
   const req = await waitFor(() => lastCall(/mfa\/login-with-backup$/, 'POST'));
   check(
     'S34 POST mfa/login-with-backup',
-    !!req && req.body.backup_code === 'A1B2C3D4' && req.body.username === 'needs-mfa',
+    !!req && req.body.backup_code === 'A1B2C3D4' && req.body.mfa_token === 'mfa-ticket',
     JSON.stringify(req && req.body)
   );
   const ok = await waitFor(() => doc.querySelectorAll('.pp-stat').length >= 4);
