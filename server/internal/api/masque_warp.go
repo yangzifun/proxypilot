@@ -193,7 +193,7 @@ func (h *handlers) masqueWarpProfilesList(w http.ResponseWriter, r *http.Request
 		        p.status, p.last_error, p.authorized_by, p.created_at, p.last_refresh_at,
 		        COALESCE(u.email,''), COALESCE(u.owner,'')
 		   FROM masque_warp_profiles p
-		   LEFT JOIN uuid_info u ON u.uuid = p.uuid
+		   LEFT JOIN uuid_info u ON u.uuid = p.uuid COLLATE utf8mb4_0900_as_cs
 		  ORDER BY p.id DESC`)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "读取 WARP 授权失败")
