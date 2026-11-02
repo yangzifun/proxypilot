@@ -22,13 +22,13 @@ import { shortUuid } from '../format';
 
 const TABS = [
   { key: 'sub', title: '我的订阅', icon: <AppstoreOutlined />, sections: ['sub'] },
-  { key: 'tg', title: 'Telegram', icon: <SendOutlined />, sections: ['mtproto'] },
+  { key: 'tg', title: '代理', icon: <SendOutlined />, sections: ['mtproto'] },
   { key: 'manage', title: '配置管理', icon: <SettingOutlined />, sections: ['configs', 'sources'] },
   { key: 'stats', title: '访问统计', icon: <BarChartOutlined />, sections: ['stats'] },
   { key: 'me', title: '我的', icon: <UserOutlined />, sections: [] },
 ];
 
-const NAV_TITLE = { sub: 'ProxyPilot', me: '账号与信息', tg: 'Telegram 代理' };
+const NAV_TITLE = { sub: 'ProxyPilot', me: '账号与信息', tg: '代理服务' };
 
 const STATUS_TEXT = { active: '正常', suspended: '暂停', inactive: '停用' };
 

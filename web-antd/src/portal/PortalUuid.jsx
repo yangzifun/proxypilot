@@ -518,7 +518,7 @@ export default function PortalUuid({ uuid, onBack, onUnauthorized, embedded = fa
               },
               {
                 key: 'tg',
-                label: 'Telegram 代理',
+                label: '代理服务',
                 children: (
                   <div>
                     <MtprotoCard />
