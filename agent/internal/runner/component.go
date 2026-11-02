@@ -2,8 +2,6 @@ package runner
 
 import (
 	"archive/tar"
-	"archive/zip"
-	"bytes"
 	"compress/gzip"
 	"context"
 	"fmt"
@@ -23,8 +21,7 @@ import (
 var (
 	singboxReleaseBase = "https://github.com/SagerNet/sing-box/releases/download"
 	singboxVersion     = "1.14.4"
-	xrayReleaseBase    = "https://github.com/XTLS/Xray-core/releases/download"
-	xrayVersion        = "v25.9.11"
+	// V15.6：Xray 下线，Agent 不再安装/切换 xray。
 	// V13.3：MTProto（Telegram）代理；mtg-multi 是 mtg 的多 secret 分支
 	mtgReleaseBase  = "https://github.com/dolonet/mtg-multi/releases/download"
 	mtgVersion      = "1.13.0"
@@ -49,9 +46,9 @@ func firstCommandWord(cmd string) string {
 	return w
 }
 
-// ensureComponent 在目标机器上安装缺失的组件：sing-box / xray / mtg-multi。
+// ensureComponent 在目标机器上安装缺失的组件：sing-box / mtg-multi。
 // 只处理白名单里的二进制，避免任意命令执行。
-func (r *Runner) ensureComponent(ctx context.Context, bin string, configPath string) (int, string) {
+func (r *Runner) ensureComponent(ctx context.Context, bin string) (int, string) {
 	switch bin {
 	case "sing-box":
 		if code, out := r.installSingbox(ctx); code != 0 {
@@ -59,16 +56,6 @@ func (r *Runner) ensureComponent(ctx context.Context, bin string, configPath str
 		}
 		r.ensureUnit("sing-box", "/usr/local/bin/sing-box run -c /etc/sing-box/sb.json")
 		return 0, "已自动安装 sing-box"
-	case "xray":
-		if code, out := r.installXray(ctx); code != 0 {
-			return code, out
-		}
-		cfg := configPath
-		if cfg == "" {
-			cfg = "/etc/sing-box/xray.json"
-		}
-		r.ensureUnit("xray", "/usr/local/bin/xray run -config "+cfg)
-		return 0, "已自动安装 xray"
 	case "mtg-multi":
 		if code, out := r.installMtg(ctx); code != 0 {
 			return code, out
@@ -77,7 +64,7 @@ func (r *Runner) ensureComponent(ctx context.Context, bin string, configPath str
 		r.ensureUnit("mtg", "/usr/local/bin/mtg-multi run /etc/mtg/config.toml", "/bin/kill -HUP $MAINPID")
 		return 0, "已自动安装 mtg-multi"
 	}
-	return 1, "缺少组件 " + bin + "，且不在自动安装白名单内（仅支持 sing-box / xray / mtg-multi）"
+	return 1, "缺少组件 " + bin + "，且不在自动安装白名单内（仅支持 sing-box / mtg-multi）"
 }
 
 // ensureUnit 如果 systemd 单元不存在就写一个最小可用的（root 运行）。
@@ -138,15 +125,60 @@ func reloadLine(reload string) string {
 	return "ExecReload=" + reload + "\n"
 }
 
-func componentArch() (linuxArch, xrayArch string) {
+// componentArch 返回 sing-box / mtg 的 Linux 资产架构名。
+func componentArch() string {
 	switch runtime.GOARCH {
 	case "arm64":
-		return "arm64", "arm64-v8a"
+		return "arm64"
 	case "386":
-		return "386", "32"
+		return "386"
 	default:
-		return "amd64", "64"
+		return "amd64"
 	}
+}
+
+// writeTarEntryAtomic 把 tar 条目流式写入临时文件再 rename（不整块进内存）。
+func writeTarEntryAtomic(path string, r io.Reader, limit int64) error {
+	tmp := path + ".pp.new"
+	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(f, io.LimitReader(r, limit)); err != nil {
+		f.Close()
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := os.Chmod(tmp, 0o755); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
+}
+
+// writeExecutableAtomic 先写临时文件再 rename：正在运行的二进制不能原地覆盖（text file busy）。
+func writeExecutableAtomic(path string, data []byte) error {
+	tmp := path + ".pp.new"
+	if err := os.WriteFile(tmp, data, 0o755); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmp, 0o755); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
 }
 
 // installSingbox 安装内置默认版本。
@@ -154,31 +186,67 @@ func (r *Runner) installSingbox(ctx context.Context) (int, string) {
 	return r.installSingboxVersion(ctx, singboxVersion)
 }
 
-// installSingboxVersion 从 GitHub release 下载指定版本的 tar.gz 并安装到 /usr/local/bin/sing-box。
+// installSingboxVersion 安装指定版本：优先从 Agent 分发基址（自建构建）下载，
+// 404 时回落 GitHub release（官方构建）。
 func (r *Runner) installSingboxVersion(ctx context.Context, version string) (int, string) {
 	version = strings.TrimPrefix(strings.TrimSpace(version), "v")
 	if version == "" {
 		version = singboxVersion
 	}
-	arch, _ := componentArch()
-	url := fmt.Sprintf("%s/v%s/sing-box-%s-linux-%s.tar.gz", singboxReleaseBase, version, version, arch)
-	r.log("自动安装 sing-box：%s", url)
+	arch := componentArch()
+	var lastOut string
+	for _, url := range r.singboxDownloadURLs(version, arch) {
+		r.log("自动安装 sing-box：%s", url)
+		code, out, notFound := r.fetchSingboxTarball(ctx, url)
+		if code == 0 {
+			return 0, out
+		}
+		lastOut = out
+		if !notFound {
+			return code, out
+		}
+	}
+	if lastOut == "" {
+		lastOut = "没有可用的 sing-box 下载地址"
+	}
+	return 1, lastOut
+}
 
+// singboxDownloadURLs 候选地址：先组件分发基址（<base>/sing-box-<ver>-linux-<arch>.tar.gz），
+// 再回落 GitHub release。老服务端只给 agent 基址（…/agent）时，也兼容其下的 sing-box/ 子目录。
+func (r *Runner) singboxDownloadURLs(version, arch string) []string {
+	urls := []string{}
+	if base := strings.TrimRight(strings.TrimSpace(r.ComponentBase), "/"); base != "" {
+		name := fmt.Sprintf("sing-box-%s-linux-%s.tar.gz", version, arch)
+		urls = append(urls, base+"/"+name)
+		if !strings.HasSuffix(base, "/singbox") {
+			urls = append(urls, base+"/sing-box/"+name)
+		}
+	}
+	urls = append(urls, fmt.Sprintf("%s/v%s/sing-box-%s-linux-%s.tar.gz", singboxReleaseBase, version, version, arch))
+	return urls
+}
+
+// fetchSingboxTarball 下载并解压安装；notFound 表示 404（调用方可换下一个地址）。
+func (r *Runner) fetchSingboxTarball(ctx context.Context, url string) (int, string, bool) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return 1, "构造 sing-box 下载请求失败：" + err.Error()
+		return 1, "构造 sing-box 下载请求失败：" + err.Error(), false
 	}
 	resp, err := componentHTTP.Do(req)
 	if err != nil {
-		return 1, "下载 sing-box 失败：" + err.Error()
+		return 1, "下载 sing-box 失败：" + err.Error(), false
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return 1, fmt.Sprintf("下载 sing-box 失败：HTTP 404（%s）", url), true
+	}
 	if resp.StatusCode != 200 {
-		return 1, fmt.Sprintf("下载 sing-box 失败：HTTP %d", resp.StatusCode)
+		return 1, fmt.Sprintf("下载 sing-box 失败：HTTP %d", resp.StatusCode), false
 	}
 	gz, err := gzip.NewReader(io.LimitReader(resp.Body, 200<<20))
 	if err != nil {
-		return 1, "解压 sing-box 失败：" + err.Error()
+		return 1, "解压 sing-box 失败：" + err.Error(), false
 	}
 	tr := tar.NewReader(gz)
 	for {
@@ -187,87 +255,24 @@ func (r *Runner) installSingboxVersion(ctx context.Context, version string) (int
 			break
 		}
 		if err != nil {
-			return 1, "读取 sing-box 压缩包失败：" + err.Error()
+			return 1, "读取 sing-box 压缩包失败：" + err.Error(), false
 		}
 		if hdr.Typeflag == tar.TypeReg && filepath.Base(hdr.Name) == "sing-box" {
-			buf, err := io.ReadAll(io.LimitReader(tr, 200<<20))
-			if err != nil {
-				return 1, "读取 sing-box 二进制失败：" + err.Error()
-			}
-			if err := os.WriteFile(filepath.Join(componentBinDir, "sing-box"), buf, 0o755); err != nil {
-				return 1, "写入 sing-box 失败：" + err.Error()
+			// 流式写盘：78MB 的二进制直接落盘，避免整块读进内存把 512MB 小机器 OOM
+			if err := writeTarEntryAtomic(filepath.Join(componentBinDir, "sing-box"), tr, 200<<20); err != nil {
+				return 1, "写入 sing-box 失败：" + err.Error(), false
 			}
 			r.log("sing-box 已安装到 %s", filepath.Join(componentBinDir, "sing-box"))
-			return 0, "已安装 sing-box"
+			return 0, "已安装 sing-box", false
 		}
 	}
-	return 1, "sing-box 压缩包里没有找到二进制"
-}
-
-// installXray 安装内置默认版本。
-func (r *Runner) installXray(ctx context.Context) (int, string) {
-	return r.installXrayVersion(ctx, xrayVersion)
-}
-
-// installXrayVersion 从 GitHub release 下载指定 tag 的 zip 并安装到 /usr/local/bin/xray。
-func (r *Runner) installXrayVersion(ctx context.Context, tag string) (int, string) {
-	tag = strings.TrimSpace(tag)
-	if tag == "" {
-		tag = xrayVersion
-	}
-	if !strings.HasPrefix(tag, "v") {
-		tag = "v" + tag
-	}
-	_, arch := componentArch()
-	url := fmt.Sprintf("%s/%s/Xray-linux-%s.zip", xrayReleaseBase, tag, arch)
-	r.log("自动安装 xray：%s", url)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return 1, "构造 xray 下载请求失败：" + err.Error()
-	}
-	resp, err := componentHTTP.Do(req)
-	if err != nil {
-		return 1, "下载 xray 失败：" + err.Error()
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return 1, fmt.Sprintf("下载 xray 失败：HTTP %d", resp.StatusCode)
-	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 200<<20))
-	if err != nil {
-		return 1, "读取 xray 安装包失败：" + err.Error()
-	}
-	zr, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
-	if err != nil {
-		return 1, "解压 xray 失败：" + err.Error()
-	}
-	for _, f := range zr.File {
-		if filepath.Base(f.Name) != "xray" || f.FileInfo().IsDir() {
-			continue
-		}
-		rc, err := f.Open()
-		if err != nil {
-			return 1, "打开 xray 二进制失败：" + err.Error()
-		}
-		buf, err := io.ReadAll(io.LimitReader(rc, 200<<20))
-		rc.Close()
-		if err != nil {
-			return 1, "读取 xray 二进制失败：" + err.Error()
-		}
-		if err := os.WriteFile(filepath.Join(componentBinDir, "xray"), buf, 0o755); err != nil {
-			return 1, "写入 xray 失败：" + err.Error()
-		}
-		r.log("xray 已安装到 %s", filepath.Join(componentBinDir, "xray"))
-		return 0, "已安装 xray"
-	}
-	return 1, "xray 压缩包里没有找到二进制"
+	return 1, "sing-box 压缩包里没有找到二进制", false
 }
 
 // installMtg 从 GitHub release 下载 tar.gz 并安装到 /usr/local/bin/mtg-multi。
 // 资产命名：mtg-multi-<ver>-linux-<arch>.tar.gz（tag 带 v，文件名不带）。
 func (r *Runner) installMtg(ctx context.Context) (int, string) {
-	arch, _ := componentArch()
+	arch := componentArch()
 	url := fmt.Sprintf("%s/v%s/mtg-multi-%s-linux-%s.tar.gz", mtgReleaseBase, mtgVersion, mtgVersion, arch)
 	r.log("自动安装 mtg-multi：%s", url)
 
@@ -297,11 +302,7 @@ func (r *Runner) installMtg(ctx context.Context) (int, string) {
 			return 1, "读取 mtg-multi 压缩包失败：" + err.Error()
 		}
 		if hdr.Typeflag == tar.TypeReg && filepath.Base(hdr.Name) == "mtg-multi" {
-			buf, err := io.ReadAll(io.LimitReader(tr, 200<<20))
-			if err != nil {
-				return 1, "读取 mtg-multi 二进制失败：" + err.Error()
-			}
-			if err := os.WriteFile(filepath.Join(componentBinDir, "mtg-multi"), buf, 0o755); err != nil {
+			if err := writeTarEntryAtomic(filepath.Join(componentBinDir, "mtg-multi"), tr, 200<<20); err != nil {
 				return 1, "写入 mtg-multi 失败：" + err.Error()
 			}
 			r.log("mtg-multi 已安装到 %s", filepath.Join(componentBinDir, "mtg-multi"))
@@ -339,22 +340,18 @@ func (r *Runner) ensureVersion(ctx context.Context, bin, want string) (int, stri
 		return 0, bin + " 已是 " + cur
 	}
 	code := 0
+	out := ""
 	switch bin {
 	case "sing-box":
-		code, _ = r.installSingboxVersion(ctx, want)
+		code, out = r.installSingboxVersion(ctx, want)
 		if code == 0 {
 			r.ensureUnit("sing-box", "/usr/local/bin/sing-box run -c /etc/sing-box/sb.json")
-		}
-	case "xray":
-		code, _ = r.installXrayVersion(ctx, want)
-		if code == 0 {
-			r.ensureUnit("xray", "/usr/local/bin/xray run -config /etc/sing-box/xray.json")
 		}
 	default:
 		return 1, "不支持的组件版本切换：" + bin
 	}
 	if code != 0 {
-		return code, "安装 " + bin + " " + want + " 失败（原版本 " + cur + "）"
+		return code, "安装 " + bin + " " + want + " 失败（原版本 " + cur + "）：" + strings.TrimSpace(out)
 	}
 	r.log("组件 %s 已切换：%s -> %s", bin, cur, want)
 	return 0, bin + " " + cur + " -> " + want

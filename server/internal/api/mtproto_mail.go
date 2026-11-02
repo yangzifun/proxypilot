@@ -91,6 +91,26 @@ func (h *handlers) mtprotoApplyAll(w http.ResponseWriter, r *http.Request) {
 			doPush = v
 		}
 	}
+	// 多节点且需要排队下发时转后台任务（避免请求线程里逐台 apply）
+	if doPush {
+		var total int64
+		_ = h.db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM mtproto_nodes WHERE enabled = 1`).Scan(&total)
+		if total > 1 {
+			jobID, n, dup, msg := h.batchCreateJob(r.Context(), "mtproto.apply_all", map[string]any{"push": true}, "admin")
+			if msg != "" {
+				writeError(w, http.StatusBadRequest, msg)
+				return
+			}
+			if !dup {
+				h.startBatchJob(jobID, "admin")
+			}
+			writeJSON(w, http.StatusOK, map[string]any{
+				"success": true, "async": true, "job_id": jobID, "total": n, "duplicate": dup,
+				"message": "已创建后台任务，进度见右上角「任务」",
+			})
+			return
+		}
+	}
 	rows, err := queryRowsAsMaps(r.Context(), h.db, `SELECT id, name FROM mtproto_nodes WHERE enabled = 1 ORDER BY id ASC`)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "查询节点失败")

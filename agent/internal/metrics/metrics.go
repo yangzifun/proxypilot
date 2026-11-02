@@ -95,7 +95,7 @@ func Collect(opts Options) Metrics {
 
 // defaultServices 不依赖 config 包，避免包间循环（与 config.DefaultServices 保持一致）。
 func defaultServices() []string {
-	return []string{"sing-box", "xray", "mtg", "cloudflared"}
+	return []string{"sing-box", "mtg", "cloudflared"}
 }
 
 // DefaultRunner 用 PATH 查找并执行命令（不经过 shell）。
@@ -243,7 +243,6 @@ func componentVersions(r Runner) map[string]string {
 		bin, key, arg string
 	}{
 		{"sing-box", "sing-box", "version"},
-		{"xray", "xray", "version"},
 		{"mtg-multi", "mtg", "version"},
 		{"cloudflared", "cloudflared", "--version"},
 	} {

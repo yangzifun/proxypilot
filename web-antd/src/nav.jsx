@@ -40,6 +40,13 @@ export const PAGE_META = {
     group: '业务',
     accent: '#10b981',
   },
+  userst: {
+    title: '用户流量',
+    subtitle: '在线用户 · 今日 / 区间 / 累计用量',
+    icon: <LineChartOutlined />,
+    group: '业务',
+    accent: '#f59e0b',
+  },
   servers: {
     title: '服务器管理',
     subtitle: 'Agent 接入、接入密钥与任务队列',
@@ -115,10 +122,10 @@ export const PAGE_META = {
   },
 };
 
-export const NAV_ORDER = ['dash', 'uuids', 'tpls', 'servers', 'normal', 'mtproto', 'masque', 'status', 'logs', 'attachments', 'sys', 'backup', 'sec'];
+export const NAV_ORDER = ['dash', 'uuids', 'tpls', 'userst', 'servers', 'normal', 'mtproto', 'masque', 'status', 'logs', 'attachments', 'sys', 'backup', 'sec'];
 
 export const NAV_GROUPS = [
-  { group: '业务', keys: ['dash', 'uuids', 'tpls'] },
+  { group: '业务', keys: ['dash', 'uuids', 'tpls', 'userst'] },
   { group: '服务器运维', keys: ['servers', 'status'] },
   { group: '节点运维', keys: ['normal', 'mtproto', 'masque'] },
   { group: '系统', keys: ['logs', 'attachments', 'sys', 'backup', 'sec'] },

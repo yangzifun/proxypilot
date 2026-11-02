@@ -105,10 +105,26 @@ func (h *handlers) monitorUUIDCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rr := h.reconcileSingboxUUIDState(ctx, "admin", true)
 	if v := strings.TrimSpace(mapStr(body, "interval_min", "")); v != "" {
 		_ = h.putSetting(ctx, "uuid_reconcile_interval_min", itoa64(intOrJS(v, 30, 5, 1440)))
 	}
+	// 多节点巡检改走后台任务（逐节点比对/修复，避免请求线程里长时间阻塞）
+	var nodeCount int64
+	_ = h.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM singbox_nodes`).Scan(&nodeCount)
+	if nodeCount > 1 {
+		jobID, n, dup, msg := h.batchCreateJob(ctx, "uuid.reconcile", map[string]any{}, "admin")
+		if msg == "" {
+			if !dup {
+				h.startBatchJob(jobID, "admin")
+			}
+			writeJSON(w, http.StatusOK, map[string]any{
+				"success": true, "async": true, "job_id": jobID, "total": n, "duplicate": dup,
+				"message": "已创建后台巡检任务，进度见右上角「任务」",
+			})
+			return
+		}
+	}
+	rr := h.reconcileSingboxUUIDState(ctx, "admin", true)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"success": rr.Error == "", "checked": rr.Checked, "drifted": rr.Drifted,
 		"fixed": rr.Fixed, "problems": rr.Drifted, "at": nowMillis(), "error": rr.Error,

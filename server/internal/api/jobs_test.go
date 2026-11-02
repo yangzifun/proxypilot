@@ -1,6 +1,29 @@
 package api
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
+
+// 批量动作必须注册成后台任务类型，否则前端 watchBatch 拿不到 job_id。
+func TestBatchKindsRegistered(t *testing.T) {
+	for _, kind := range []string{
+		"singbox.apply_all", "mtproto.apply_all", "mtproto.template_apply",
+		"agent.update", "ssh.toggle", "uuid.reconcile",
+	} {
+		def, ok := batchKinds[kind]
+		if !ok {
+			t.Fatalf("缺少批量任务类型 %s", kind)
+		}
+		if def.Items == nil || def.Run == nil || def.Title == nil {
+			t.Fatalf("%s 定义不完整", kind)
+		}
+	}
+	def := batchKinds["singbox.apply_all"]
+	if title := def.Title(map[string]any{"force": true}, 17); !strings.Contains(title, "17") {
+		t.Fatalf("标题应包含数量：%q", title)
+	}
+}
 
 func TestBatchJobJSON(t *testing.T) {
 	row := map[string]any{

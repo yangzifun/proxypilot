@@ -40,6 +40,7 @@ func (h *handlers) settingsSnapshot(r *http.Request) map[string]any {
 			"turnstile_required": h.turnstileSecret(ctx) != "",
 			"public_base_url":    h.publicBaseURL(ctx),
 			"agent_dist_base":    h.agentBinaryBaseURL(),
+			"component_base":     h.componentBaseURL(),
 		},
 	}
 }
@@ -93,7 +94,7 @@ func (h *handlers) settingsAPI(w http.ResponseWriter, r *http.Request) {
 				v = b
 			}
 			switch key {
-			case settingPublicBaseURL, settingOIDCIssuer:
+			case settingPublicBaseURL, settingOIDCIssuer, settingComponentBase:
 				if v != "" {
 					u, err := url.Parse(v)
 					if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {

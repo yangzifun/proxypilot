@@ -13,7 +13,6 @@
     "reality_dest": "www.microsoft.com:443",
     "reality_sni": "www.microsoft.com",
     "ws_sni": "www.bing.com",
-    "xhttp_path": "/xhttp-auto",
     "protocol_options": "{\"hy2\":{\"port\":25000,\"up_mbps\":100,\"down_mbps\":500},\"vlws\":{\"path\":\"custom/ws\"}}",
     "enable_ss": 1,
     "enable_anytls": 1,
@@ -50,8 +49,6 @@
     "vlws_warp": 21006,
     "masque": 20007,
     "masque_warp": 21007,
-    "xhttp": 20008,
-    "xhttp_warp": 21008,
     "base": 20000,
     "warp_base": 21000
   },

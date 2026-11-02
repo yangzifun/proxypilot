@@ -90,12 +90,16 @@ func singboxRenderBundle(tpl *singboxTemplate, node singboxRenderNode, srv serve
 
 	sbPath := firstNonEmpty(strings.TrimSpace(node.SBPath), "/etc/sing-box/sb.json")
 	if tpl.engineOn("singbox") {
+		// 只有节点回报的版本是自建构建（-proxypilot）时才写 v2ray_api：
+		// 官方 sing-box 没有 with_v2ray_api 标签，提前写会让 sing-box check 失败。
+		// 上线顺序：先切版本（第一次下发），节点回报新版本后再下发一次（第二次带 v2ray_api）。
+		userStats := singboxUserStatsCapable(serverComponentVersion(srv, "sing-box"))
 		files = append(files, map[string]any{
 			"key": "sb", "name": "sb.json", "engine": "sing-box",
 			"path":         sbPath,
 			"service_name": firstNonEmpty(node.ServiceSBName, "sing-box"),
 			"check_cmd":    "sing-box check -c " + sbPath,
-			"content":      mustJSON(singboxRenderSb(tpl, users, ports)),
+			"content":      mustJSON(singboxRenderSb(tpl, users, ports, node.StatsSecret, userStats)),
 		})
 	}
 	if tpl.EnableMasque != 0 {
@@ -106,17 +110,6 @@ func singboxRenderBundle(tpl *singboxTemplate, node singboxRenderNode, srv serve
 			return nil, nil, nil, "MASQUE 需要 sing-box >= 1.15.0（masque-server endpoint），当前节点是 " + ver + "；请升级 sing-box，或暂时关闭该模板的 MASQUE"
 		}
 	}
-	if tpl.engineOn("xray") {
-		xrPath := firstNonEmpty(node.XrayFilePath, "/etc/sing-box/xray.json")
-		files = append(files, map[string]any{
-			"key": "xray", "name": "xray.json", "engine": "xray",
-			"path":         xrPath,
-			"service_name": firstNonEmpty(node.ServiceXrayName, "xray"),
-			"check_cmd":    "xray run -test -config " + xrPath,
-			"content":      mustJSON(singboxRenderXray(tpl, users, ports)),
-		})
-	}
-
 	outUsers := make([]map[string]string, 0, len(users))
 	for _, u := range users {
 		outUsers = append(outUsers, map[string]string{"name": u.Name, "uuid": u.UUID})
@@ -124,8 +117,14 @@ func singboxRenderBundle(tpl *singboxTemplate, node singboxRenderNode, srv serve
 	return files, ports, outUsers, ""
 }
 
-func mustJSON(v any) string {
-	b, err := json.MarshalIndent(v, "", "  ")
+// singboxUserStatsCapable 判断该 sing-box 是否为带 v2ray_api 的自建构建。
+// 官方 release 没有 with_v2ray_api 编译标签，写入 experimental.v2ray_api 会让
+// 节点的 `sing-box check` 直接失败；所以只对版本号带 -proxypilot 的自建构建启用按用户统计。
+func singboxUserStatsCapable(ver string) bool {
+	return strings.Contains(strings.ToLower(strings.TrimSpace(ver)), "proxypilot")
+}
+
+func mustJSON(v any) string {	b, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return ""
 	}
@@ -148,10 +147,10 @@ type singboxRenderNode struct {
 	CDNDomain        string
 	SBPath           string
 	CaddyPath        string
-	XrayFilePath     string
 	ServiceSBName    string
 	ServiceCaddyName string
-	ServiceXrayName  string
+	// StatsSecret 非空时在 sb.json 里注入 experimental（clash_api / v2ray_api）
+	StatsSecret string
 }
 
 // POST /api/singbox/preview
@@ -211,12 +210,10 @@ func inputToTemplate(in map[string]any) *singboxTemplate {
 
 func inputToNode(in map[string]any) singboxRenderNode {
 	return singboxRenderNode{
-		Name:            jsonStr(in["name"]),
-		Domain:          jsonStr(in["domain"]),
-		CDNDomain:       jsonStr(in["cdn_domain"]),
-		SBPath:          jsonStr(in["sb_path"]),
-		XrayFilePath:    jsonStr(in["xray_path"]),
-		ServiceSBName:   jsonStr(in["service_sb"]),
-		ServiceXrayName: jsonStr(in["service_xray"]),
+		Name:          jsonStr(in["name"]),
+		Domain:        jsonStr(in["domain"]),
+		CDNDomain:     jsonStr(in["cdn_domain"]),
+		SBPath:        jsonStr(in["sb_path"]),
+		ServiceSBName: jsonStr(in["service_sb"]),
 	}
 }

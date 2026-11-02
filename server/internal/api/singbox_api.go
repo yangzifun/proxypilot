@@ -102,11 +102,6 @@ func singboxTemplateToJSON(row map[string]any, reveal bool) map[string]any {
 		}
 	}
 
-	enableXHTTP := mapInt(row, "enable_xhttp", 0)
-	enableXray := enableXHTTP
-	if v, ok := row["enable_xray"]; ok && v != nil {
-		enableXray = jsonInt(v)
-	}
 	enableSingbox := int64(1)
 	if v, ok := row["enable_singbox"]; ok && v != nil {
 		enableSingbox = jsonInt(v)
@@ -123,9 +118,7 @@ func singboxTemplateToJSON(row map[string]any, reveal bool) map[string]any {
 		"reality_dest":       mapStr(row, "reality_dest", ""), "reality_sni": mapStr(row, "reality_sni", ""),
 		"ws_sni": mapStr(row, "ws_sni", ""), "disguise_url": mapStr(row, "disguise_url", ""),
 		"cert_path": mapStr(row, "cert_path", ""), "key_path": mapStr(row, "key_path", ""),
-		"xhttp_path":           mapStr(row, "xhttp_path", ""),
 		"singbox_version":      mapStr(row, "singbox_version", ""),
-		"xray_version":         mapStr(row, "xray_version", ""),
 		"port_base":            mapInt(row, "port_base", 13700),
 		"warp_base":            mapInt(row, "warp_base", 13800),
 		"enable_ss":            mapInt(row, "enable_ss", 0),
@@ -134,16 +127,14 @@ func singboxTemplateToJSON(row map[string]any, reveal bool) map[string]any {
 		"enable_reality":       mapInt(row, "enable_reality", 0),
 		"enable_vlws":          mapInt(row, "enable_vlws", 0),
 		"enable_vmess":         mapInt(row, "enable_vmess", 0),
-		"enable_xhttp":         enableXHTTP,
 		"enable_singbox":       enableSingbox,
-		"enable_xray":          enableXray,
 		"enable_masque":        mapInt(row, "enable_masque", 0),
 		"masque_json":          "",
 		"masque_path":          mapStr(row, "masque_path", "/etc/sing-box/masque.json"),
 		"service_masque":       mapStr(row, "service_masque", "masque"),
 		"masque_uri_path":      masquePath,
 		"masque_versions":      masqueVersions,
-		"warp_engines":         mapStr(row, "warp_engines", "singbox,xray"),
+		"warp_engines":         mapStr(row, "warp_engines", "singbox"),
 		"protocol_options":     mapStr(row, "protocol_options", "{}"),
 		"warp_enabled":         mapInt(row, "warp_enabled", 0),
 		"warp_address":         mapStr(row, "warp_address", ""),
@@ -205,9 +196,7 @@ func singboxNodeToJSON(row map[string]any) map[string]any {
 		"domain":        mapStr(row, "domain", ""), "cdn_domain": mapStr(row, "cdn_domain", ""),
 		"port_base": mapInt(row, "port_base", 0), "warp_base": mapInt(row, "warp_base", 0),
 		"sb_path": mapStr(row, "sb_path", ""), "caddy_path": mapStr(row, "caddy_path", ""),
-		"xray_path":  mapStr(row, "xray_path", ""),
 		"service_sb": mapStr(row, "service_sb", "sing-box"), "service_caddy": mapStr(row, "service_caddy", "caddy-naive"),
-		"service_xray": mapStr(row, "service_xray", "xray"),
 		"enabled": func() int64 {
 			if v, ok := row["enabled"]; ok && v != nil {
 				return jsonInt(v)

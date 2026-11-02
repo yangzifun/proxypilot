@@ -710,6 +710,8 @@ func (h *handlers) agentPoll(w http.ResponseWriter, r *http.Request) {
 	if shouldSample {
 		h.insertServerMetric(r.Context(), srv.ID, m, rates)
 	}
+	// V15.6：sing-box 统计快照（用户流量 / 连接明细），失败不影响心跳
+	h.agentIngestStats(r.Context(), srv.ID, body["stats"])
 	if pollCount <= 1 || pollCount%5 == 0 {
 		h.agentReclaimStaleTasks(r.Context(), srv.ID)
 		h.agentExpireTasks(r.Context(), srv.ID)
@@ -727,12 +729,27 @@ func (h *handlers) agentPoll(w http.ResponseWriter, r *http.Request) {
 		wireParts = append(wireParts, agentWireLine(a))
 	}
 
+	// V15.6：告诉 Agent 该采哪些节点的统计（Agent 自己读盘解析 sb.json 的 experimental）
+	statsTargets := make([]map[string]any, 0, 1)
+	if rows, err := queryRowsAsMaps(r.Context(), h.db,
+		`SELECT id, COALESCE(sb_path,'') AS sb_path FROM singbox_nodes
+		  WHERE server_id = ? AND enabled = 1 ORDER BY id ASC`, srv.ID); err == nil {
+		for _, row := range rows {
+			statsTargets = append(statsTargets, map[string]any{
+				"node_id": mapInt(row, "id", 0), "sb_path": mapStr(row, "sb_path", ""),
+			})
+		}
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok": true, "server_id": srv.ID, "server_name": srv.Name,
 		"next_poll_sec": nextPollSec, "metrics_every": metricsEvery,
 		"server_time": now, "agent_script_version": agentScriptVersion,
 		"shell": shell, "actions": agentActionsJSON(actions),
-		"wire": strings.Join(wireParts, "~"),
+		"stats_targets":     statsTargets,
+		"agent_binary_base": h.agentBinaryBaseURL(),
+		"component_base":    h.componentBaseURL(),
+		"wire":              strings.Join(wireParts, "~"),
 	})
 }
 
@@ -800,8 +817,8 @@ func (h *handlers) agentAck(w http.ResponseWriter, r *http.Request) {
 
 		depService := strings.TrimSpace(jsonStr(payload["service"]))
 		missingBin := !ok && (exitCode == 127 || strings.Contains(strings.ToLower(output), "command not found"))
-		optionalDep := depService == "" || strings.Contains(strings.ToLower(depService), "xray") ||
-			strings.Contains(strings.ToLower(depService), "masque") || strings.Contains(strings.ToLower(depService), "caddy")
+		optionalDep := depService == "" || strings.Contains(strings.ToLower(depService), "masque") ||
+			strings.Contains(strings.ToLower(depService), "caddy")
 		skipMissing := missingBin && optionalDep
 
 		newAttempts := attempts

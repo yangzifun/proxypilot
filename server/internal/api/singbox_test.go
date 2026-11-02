@@ -29,7 +29,6 @@ func TestSingboxRenderGolden(t *testing.T) {
 				Ports    map[string]int   `json:"ports"`
 				SB       map[string]any   `json:"sb"`
 				Links    []map[string]any `json:"links"`
-				Xray     string           `json:"xray"`
 			}
 			if err := json.Unmarshal(raw, &fx); err != nil {
 				t.Fatalf("解析用例失败: %v", err)
@@ -41,7 +40,7 @@ func TestSingboxRenderGolden(t *testing.T) {
 			}
 
 			users := singboxParseUsers(fx.Users)
-			got := singboxRenderSb(&fx.Template, users, ports)
+			got := singboxRenderSb(&fx.Template, users, ports, "", false)
 			gotJSON := canonicalJSON(got)
 			wantJSON := canonicalJSON(fx.SB)
 			if gotJSON != wantJSON {
@@ -54,17 +53,17 @@ func TestSingboxRenderGolden(t *testing.T) {
 func TestSingboxPortsDedup(t *testing.T) {
 	tpl := &singboxTemplate{
 		PortBase: 13700, WarpBase: 13800,
-		ProtocolOptions: `{"xhttp":{"port":13706}}`, // 与 vlws 撞车 → 应回落到 13708
+		ProtocolOptions: `{"ss":{"port":13701}}`, // 与 hy2 撞车 → 应回落到 13702
 	}
 	ports := singboxPorts(tpl)
-	if ports["xhttp"] == ports["vlws"] {
-		t.Fatalf("xhttp/vlws 仍冲突: %v", ports)
+	if ports["ss"] == ports["hy2"] {
+		t.Fatalf("ss/hy2 仍冲突: %v", ports)
 	}
-	if ports["xhttp"] != 13708 {
-		t.Fatalf("xhttp = %d，期望 13708", ports["xhttp"])
+	if ports["ss"] != 13702 {
+		t.Fatalf("ss = %d，期望 13702", ports["ss"])
 	}
-	if ports["xhttp_warp"] != 13808 {
-		t.Fatalf("xhttp_warp = %d", ports["xhttp_warp"])
+	if ports["ss_warp"] != 13802 {
+		t.Fatalf("ss_warp = %d", ports["ss_warp"])
 	}
 }
 

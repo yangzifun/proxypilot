@@ -29,7 +29,7 @@ func TestFirstCommandWord(t *testing.T) {
 
 func TestEnsureComponentRejectsUnknownBinary(t *testing.T) {
 	r := &Runner{}
-	code, out := r.ensureComponent(context.Background(), "nginx", "")
+	code, out := r.ensureComponent(context.Background(), "nginx")
 	if code == 0 || out == "" {
 		t.Fatalf("未白名单的组件应拒绝：code=%d out=%s", code, out)
 	}

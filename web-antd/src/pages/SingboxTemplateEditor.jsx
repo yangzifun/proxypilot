@@ -1,4 +1,4 @@
-﻿/* =================================================================
+/* =================================================================
  *  协议模板编辑器（对齐老后台的 JSON 驱动方式）
  *
  *  设计要点：
@@ -147,23 +147,6 @@ function randomB64(n = 32) {
   } catch (e) {
     return '';
   }
-}
-
-function xrayInboundPath(ib) {
-  const ss = (ib && ib.streamSettings) || {};
-  const a = ss.xhttpSettings && ss.xhttpSettings.path;
-  const b = ss.wsSettings && ss.wsSettings.path;
-  const c = ss.grpcSettings && ss.grpcSettings.serviceName;
-  return String(a || b || c || '');
-}
-
-function setXrayPath(ib, p) {
-  if (!ib.streamSettings) ib.streamSettings = {};
-  const ss = ib.streamSettings;
-  if (ss.xhttpSettings) ss.xhttpSettings.path = p;
-  else if (ss.wsSettings) ss.wsSettings.path = p;
-  else if (ss.grpcSettings) ss.grpcSettings.serviceName = p;
-  else ss.xhttpSettings = { path: p };
 }
 
 function InboundEditor({ raw, index, last, mutate }) {
@@ -398,15 +381,11 @@ export default function SingboxTemplateEditor({ state, onClose, onSaved }) {
   const [name, setName] = useState('');
   const [remark, setRemark] = useState('');
   const [engSb, setEngSb] = useState(true);
-  const [engXr, setEngXr] = useState(false);
   const [engMq, setEngMq] = useState(false);
   const [sb, setSb] = useState('');
-  const [xr, setXr] = useState('');
   const [mqPath, setMqPath] = useState('');
   const [sbVer, setSbVer] = useState('');
-  const [xrVer, setXrVer] = useState('');
   const [sbVers, setSbVers] = useState([]);
-  const [xrVers, setXrVers] = useState([]);
   const [busy, setBusy] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -421,25 +400,6 @@ export default function SingboxTemplateEditor({ state, onClose, onSaved }) {
       return { inbounds: [], warp: 0, outbounds: 0, error: e.message };
     }
   }, [sb]);
-
-  const parsedXray = useMemo(() => {
-    if (!String(xr).trim()) return { inbounds: [], error: '' };
-    try {
-      const cfg = JSON.parse(xr);
-      const list = (Array.isArray(cfg.inbounds) ? cfg.inbounds : []).map((ib) => ({
-        protocol: String(ib.protocol || '?'),
-        tag: String(ib.tag || ''),
-        port: Number(ib.port) || 0,
-        network: String((ib.streamSettings && ib.streamSettings.network) || ''),
-        security: String((ib.streamSettings && ib.streamSettings.security) || ''),
-        path: xrayInboundPath(ib),
-        clients: Array.isArray(ib.settings && ib.settings.clients) ? ib.settings.clients.length : 0,
-      }));
-      return { inbounds: list, error: '' };
-    } catch (e) {
-      return { inbounds: [], error: e.message };
-    }
-  }, [xr]);
 
   const inboundsRaw = useMemo(() => {
     if (parsed.error) return [];
@@ -466,26 +426,10 @@ export default function SingboxTemplateEditor({ state, onClose, onSaved }) {
     setSb(JSON.stringify(obj, null, 2));
   };
 
-  const mutateXray = (idx, fn) => {
-    let cfg;
-    try {
-      cfg = JSON.parse(xr);
-    } catch (e) {
-      message.error('xray.json 不是合法 JSON，先修正后再编辑');
-      return;
-    }
-    const ib = cfg.inbounds && cfg.inbounds[idx];
-    if (!ib) return;
-    fn(ib, cfg);
-    setXr(JSON.stringify(cfg, null, 2));
-  };
-
   const applyFiles = (files) => {
     const pick = (n) => (files || []).find((f) => f.name === n);
     const s = pick('sb.json');
     if (s) setSb(s.content);
-    const x = pick('xray.json');
-    if (x) setXr(x.content);
   };
 
   /** 后端渲染一份配置（用来「生成当前配置」/「填入示例」） */
@@ -503,7 +447,6 @@ export default function SingboxTemplateEditor({ state, onClose, onSaved }) {
           users_json: JSON.stringify([{ name: 'user01', uuid: randomUuid(), ss_password: randomB64(32) }]),
           port_base: 13700,
           enable_singbox: engSb ? 1 : 0,
-          enable_xray: engXr ? 1 : 0,
           enable_masque: engMq ? 1 : 0,
           warp_enabled: 0,
         };
@@ -522,7 +465,6 @@ export default function SingboxTemplateEditor({ state, onClose, onSaved }) {
   useEffect(() => {
     let alive = true;
     api('singbox/releases?engine=singbox').then((r) => { if (alive) setSbVers((r && r.data) || []); }).catch(() => {});
-    api('singbox/releases?engine=xray').then((r) => { if (alive) setXrVers((r && r.data) || []); }).catch(() => {});
     return () => { alive = false; };
   }, []);
 
@@ -530,7 +472,6 @@ export default function SingboxTemplateEditor({ state, onClose, onSaved }) {
     if (!state) return;
     setName(state.row ? state.row.name || '' : '');
     setRemark(state.row ? state.row.remark || '' : '');
-    setXr('');
     setMqPath('');
     setSb('');
     if (isEdit) {
@@ -541,11 +482,9 @@ export default function SingboxTemplateEditor({ state, onClose, onSaved }) {
           setName(r.name || '');
           setRemark(r.remark || '');
           setEngSb(Number(r.enable_singbox) !== 0);
-          setEngXr(Number(r.enable_xray) === 1);
           setEngMq(Number(r.enable_masque) === 1);
           setMqPath(r.masque_uri_path || '');
           setSbVer(r.singbox_version || '');
-          setXrVer(r.xray_version || '');
           const prev = await api('singbox/templates/preview', { method: 'POST', body: { ...r, name: 'preview' } });
           applyFiles((prev && prev.files) || []);
         })
@@ -553,7 +492,6 @@ export default function SingboxTemplateEditor({ state, onClose, onSaved }) {
         .finally(() => setLoading(false));
     } else {
       setEngSb(true);
-      setEngXr(false);
       setEngMq(false);
       render('sample');
     }
@@ -565,16 +503,12 @@ export default function SingboxTemplateEditor({ state, onClose, onSaved }) {
       message.warning('模板名称不能为空');
       return;
     }
-    if (!engSb && !engXr) {
-      message.warning('至少要启用 sing-box 或 Xray 之一');
+    if (!engSb) {
+      message.warning('请启用 sing-box');
       return;
     }
-    if (engSb && !sb.trim()) {
+    if (!sb.trim()) {
       message.warning('sb.json 不能为空');
-      return;
-    }
-    if (engXr && !xr.trim()) {
-      message.warning('xray.json 不能为空');
       return;
     }
     // V13.6：MASQUE 走 sb.json 的 masque-server endpoint，不再需要独立 masque.json
@@ -586,15 +520,12 @@ export default function SingboxTemplateEditor({ state, onClose, onSaved }) {
           id: isEdit ? state.row.id : 0,
           name: name.trim(),
           remark: remark.trim(),
-          sb_json: engSb ? sb : '',
-          xray_json: engXr ? xr : '',
-          enable_singbox: engSb ? 1 : 0,
-          enable_xray: engXr ? 1 : 0,
+          sb_json: sb,
+          enable_singbox: 1,
           enable_masque: engMq ? 1 : 0,
           masque_uri_path: engMq ? mqPath.trim() : '',
           singbox_version: sbVer.trim(),
-          xray_version: xrVer.trim(),
-          warp_engines: 'singbox,xray',
+          warp_engines: 'singbox',
         },
       });
       message.success(isEdit ? '模板已更新' : '模板已创建');
@@ -650,14 +581,11 @@ export default function SingboxTemplateEditor({ state, onClose, onSaved }) {
 
         <div style={{ margin: '18px 0 8px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 13, color: '#475569' }}>
-            服务端引擎<span className="pp-muted">（可同时启用；每个引擎一个配置文件，各自独立填写）</span>
+            服务端引擎<span className="pp-muted">（V15.6 起只用 sing-box；Xray 已下线）</span>
           </span>
           <Space size={18} style={{ marginLeft: 'auto' }}>
             <Checkbox checked={engSb} onChange={(e) => setEngSb(e.target.checked)}>
               启用 sing-box
-            </Checkbox>
-            <Checkbox checked={engXr} onChange={(e) => setEngXr(e.target.checked)}>
-              启用 Xray（vless-xhttp）
             </Checkbox>
             <Checkbox checked={engMq} onChange={(e) => setEngMq(e.target.checked)}>
               启用 MASQUE（sing-box endpoint，端口 13707）
@@ -687,21 +615,6 @@ export default function SingboxTemplateEditor({ state, onClose, onSaved }) {
               className="pp-mono"
               spellCheck={false}
               placeholder='{"log":{...},"inbounds":[...]}'
-              style={{ fontSize: 12.5, lineHeight: 1.7 }}
-            />
-          </>
-        ) : null}
-
-        {engXr ? (
-          <>
-            {sectionTitle('xray.json', '（Xray 的 config.json；保存时提取 vless-xhttp 入站端口与路径）')}
-            <Input.TextArea
-              value={xr}
-              onChange={(e) => setXr(e.target.value)}
-              rows={10}
-              className="pp-mono"
-              spellCheck={false}
-              placeholder='{"inbounds":[{"type":"vless","port":13707,...}]}'
               style={{ fontSize: 12.5, lineHeight: 1.7 }}
             />
           </>
@@ -737,29 +650,15 @@ export default function SingboxTemplateEditor({ state, onClose, onSaved }) {
               style={{ width: '100%' }}
             />
           </Col>
-          <Col span={12}>
-            <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>
-              Xray 版本（留空跟随 Agent 内置默认；只影响启用 Xray 的模板）
-            </div>
-            <AutoComplete
-              value={xrVer}
-              onChange={setXrVer}
-              options={versionOptions(xrVers)}
-              allowClear
-              placeholder="如 25.9.11"
-              style={{ width: '100%' }}
-            />
-          </Col>
         </Row>
 
         <div style={{ margin: '16px 0 8px', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: '#334155' }}>解析结果</span>
           <span className="pp-muted" style={{ fontSize: 12 }}>
-            （按上面的 sb.json / xray.json / MASQUE 实时解析；编辑会写回对应配置，用户凭据由节点授权注入）
+            （按上面的 sb.json / MASQUE 实时解析；编辑会写回对应配置，用户凭据由节点授权注入）
           </span>
           {parsed.warp ? <Tag color="cyan">WARP 端点 {parsed.warp} 个</Tag> : null}
           {parsed.outbounds ? <Tag>出站 {parsed.outbounds} 个</Tag> : null}
-          {engXr ? <Tag color="purple">Xray 入站 {parsedXray.inbounds.length} 个</Tag> : null}
           {engMq ? <Tag color="geekblue">MASQUE 端点 1 个</Tag> : null}
         </div>
 
@@ -787,81 +686,11 @@ export default function SingboxTemplateEditor({ state, onClose, onSaved }) {
           )
         ) : null}
 
-        {engXr ? (
-          <div style={{ marginTop: engSb ? 12 : 0 }}>
-            {parsedXray.error ? (
-              <Alert type="error" showIcon style={{ borderRadius: 10 }} message={`xray.json 解析失败：${parsedXray.error}`} />
-            ) : parsedXray.inbounds.length === 0 ? (
-              <Empty
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description={<span className="pp-muted">xray.json 没有 inbounds</span>}
-                style={{ padding: '14px 0' }}
-              />
-            ) : (
-              <div style={{ border: '1px solid #eef2f7', borderRadius: 10, overflow: 'hidden' }}>
-                {parsedXray.inbounds.map((r, i) => (
-                  <div
-                    key={i}
-                    style={{
-                      padding: '10px 12px',
-                      borderBottom: i === parsedXray.inbounds.length - 1 ? 'none' : '1px dashed #eef2f7',
-                      background: i % 2 ? '#fbfcfe' : '#fff',
-                    }}
-                  >
-                    <Row gutter={8} align="middle" wrap>
-                      <Col flex="none"><Tag color="purple" style={{ marginInlineEnd: 0 }}>xray</Tag></Col>
-                      <Col flex="none"><span className="pp-muted" style={{ fontSize: 12 }}>{r.protocol}</span></Col>
-                      <Col flex="none"><span className="pp-muted" style={{ fontSize: 12 }}>标签</span></Col>
-                      <Col flex="150px">
-                        <Input
-                          size="small"
-                          value={r.tag}
-                          placeholder="tag"
-                          onChange={(e) => mutateXray(i, (ib) => { ib.tag = e.target.value; })}
-                        />
-                      </Col>
-                      <Col flex="none"><span className="pp-muted" style={{ fontSize: 12 }}>端口</span></Col>
-                      <Col flex="92px">
-                        <InputNumber
-                          size="small"
-                          min={1}
-                          max={65535}
-                          value={r.port || undefined}
-                          onChange={(v) => mutateXray(i, (ib) => { ib.port = Number(v) || undefined; })}
-                          style={{ width: '100%' }}
-                        />
-                      </Col>
-                      {r.network ? <Col flex="none"><Tag>network {r.network}</Tag></Col> : null}
-                      {r.security ? <Col flex="none"><Tag>security {r.security}</Tag></Col> : null}
-                      <Col flex="auto" style={{ textAlign: 'right', minWidth: 60 }}>
-                        <span className="pp-muted" style={{ fontSize: 12 }}>{r.clients} 客户端</span>
-                      </Col>
-                    </Row>
-                    {r.path ? (
-                      <Row gutter={8} align="middle" style={{ marginTop: 8 }}>
-                        <Col flex="1 1 320px">
-                          <Input
-                            size="small"
-                            addonBefore="路径"
-                            className="pp-mono"
-                            value={r.path}
-                            onChange={(e) => mutateXray(i, (ib) => setXrayPath(ib, e.target.value))}
-                          />
-                          <Hint>客户端 xhttp / ws 路径，需保持一致；保存时会反推为模板参数。</Hint>
-                        </Col>
-                      </Row>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        ) : null}
 
         {engMq ? (
           <div
             style={{
-              marginTop: engSb || engXr ? 12 : 0,
+              marginTop: engSb ? 12 : 0,
               border: '1px solid #eef2f7',
               borderRadius: 10,
               padding: '10px 12px',

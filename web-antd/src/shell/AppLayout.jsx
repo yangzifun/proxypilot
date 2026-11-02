@@ -57,7 +57,6 @@ export default function AppLayout({ activeKey, onNavigate, children }) {
           onClick={({ key }) => onNavigate(key)}
           style={{ borderInlineEnd: 'none', padding: '0 8px', background: 'transparent' }}
         />
-        <div style={{ flex: 1 }} />
         <div
           style={{
             padding: '12px 18px 16px',

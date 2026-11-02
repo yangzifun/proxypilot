@@ -19,6 +19,7 @@ import (
 	"proxypilot-agent/internal/runner"
 	"proxypilot-agent/internal/shell"
 	"proxypilot-agent/internal/state"
+	"proxypilot-agent/internal/stats"
 )
 
 // Version Agent 版本（随 poll 上报，后台「服务器管理」列表显示）。
@@ -31,7 +32,14 @@ import (
 // 1.5.4：长轮询等任务（Durable Object 唤醒），下发延迟从轮询间隔降到秒级；旧 Worker 自动回退轮询
 // 1.5.5：长轮询覆盖完整轮询周期（默认 60s），任务/WebSSH 仍秒级唤醒；旧服务端自动回退
 // 1.6.0：改用 WebSocket（DO Hibernation）接收 wake，空闲不再占用 DO Duration；连不上时回退长轮询
-const Version = "1.7.3"
+// 1.8.0：随 V15.6 下线 Xray —— 不再自动安装/切换 xray，服务探针去掉 xray
+// 1.8.1：sing-box 支持从 Agent 分发基址下载自建构建（<base>/sing-box/…），404 回落 GitHub
+// 1.8.2：部署时先切组件版本再写配置；内容未变但组件换过也会校验 + 重启
+// 1.8.3：sing-box 改从独立组件目录下载（桶根 singbox/，与服务端 component_base 对齐）
+// 1.8.4：组件安装失败时把底层错误（下载地址 / HTTP 状态）带进任务输出，便于排障
+// 1.8.5：组件二进制改为「临时文件 + rename」写入，修复运行中覆盖导致的 text file busy
+// 1.8.6：解包改流式写盘，避免小内存节点在安装 78MB sing-box 时被 OOM kill
+const Version = "1.8.6"
 
 // maxActionsPerRound 单轮执行任务数上限（服务端 AGENT_ACTIONS_PER_POLL = 5，这里留足余量）。
 const maxActionsPerRound = 20
@@ -53,6 +61,8 @@ type Agent struct {
 	mu   sync.Mutex
 	// activeShell 当前正在跑的实时终端 session（同一时间只保留一个）
 	activeShell string
+	// lastStats 上一轮采集好的统计快照（随本轮 poll 上报）
+	lastStats []client.NodeStats
 	// wake WebSocket 收到消息后唤醒主循环立即 poll；wsConnected 为真时不再走长轮询
 	wake        chan struct{}
 	wsConnected atomic.Bool
@@ -122,6 +132,7 @@ func (a *Agent) Once(ctx context.Context) error {
 		Conns:        m.Conns,
 		Procs:        m.Procs,
 		Applied:      a.opts.Store.Applied(),
+		Stats:        a.takeStats(),
 	}
 	resp, err := a.opts.Client.Poll(ctx, req)
 	if err != nil {
@@ -131,6 +142,14 @@ func (a *Agent) Once(ctx context.Context) error {
 	next := clampInterval(resp.NextPollSec, a.opts.Config.Interval)
 	if resp.NextPollSec > 0 {
 		_ = a.opts.Store.SetNextPoll(next)
+	}
+	// 服务端下发的组件基址（自建 sing-box 从 <base>/sing-box-<ver>-linux-<arch>.tar.gz 下载）
+	if a.opts.Runner != nil {
+		base := resp.ComponentBase
+		if base == "" {
+			base = resp.AgentBinaryBase
+		}
+		a.opts.Runner.ComponentBase = base
 	}
 	a.opts.Log("poll 成功：服务器=%s 下一轮=%ds 任务=%d", nameOr(resp.ServerName, fmt.Sprintf("#%d", resp.ServerID)), next, len(client.ParseWire(resp.Wire)))
 
@@ -146,15 +165,40 @@ func (a *Agent) Once(ctx context.Context) error {
 		}
 		results = append(results, a.opts.Runner.Run(ctx, action))
 	}
-	if len(results) == 0 {
-		return nil
+	if len(results) > 0 {
+		if err := a.ack(ctx, results); err != nil {
+			a.opts.Log("ack 失败：%v（服务端将在 10 分钟后回收任务）", err)
+			a.collectStats(resp.StatsTargets)
+			return err
+		}
+		a.opts.Log("ack 成功：%d 条结果", len(results))
 	}
-	if err := a.ack(ctx, results); err != nil {
-		a.opts.Log("ack 失败：%v（服务端将在 10 分钟后回收任务）", err)
-		return err
-	}
-	a.opts.Log("ack 成功：%d 条结果", len(results))
+	// V15.6：采下一轮要上报的统计（连接明细 / 用户流量）；失败不影响心跳
+	a.collectStats(resp.StatsTargets)
 	return nil
+}
+
+// takeStats 取走上一轮采集的统计快照（本轮 poll 上报一次）。
+func (a *Agent) takeStats() []client.NodeStats {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	out := a.lastStats
+	a.lastStats = nil
+	return out
+}
+
+// collectStats 采集服务端下发的统计目标（串行，单节点失败不影响其它节点）。
+func (a *Agent) collectStats(targets []client.StatsTarget) {
+	if len(targets) == 0 {
+		a.mu.Lock()
+		a.lastStats = nil
+		a.mu.Unlock()
+		return
+	}
+	res := stats.CollectAll(targets)
+	a.mu.Lock()
+	a.lastStats = res
+	a.mu.Unlock()
 }
 
 // maybeStartShell 收到 shell hint 时起一个实时终端 goroutine（同一时间只允许一个）。

@@ -68,6 +68,9 @@ type PollRequest struct {
 	Procs  metrics.ProcInfo   `json:"proc"`
 
 	Applied []Applied `json:"applied"`
+
+	// V15.6：sing-box 统计快照（上一轮采集的结果，随本轮 poll 上报）
+	Stats []NodeStats `json:"stats,omitempty"`
 }
 
 // PollResponse 服务端响应（只取用得到的字段）。
@@ -82,6 +85,51 @@ type PollResponse struct {
 	Wire               string     `json:"wire"`
 	Shell              *ShellHint `json:"shell,omitempty"`
 	Error              string     `json:"error"`
+
+	// V15.6：本机需要采集统计的节点（Agent 自己读 sb.json 解析 experimental）
+	StatsTargets []StatsTarget `json:"stats_targets,omitempty"`
+
+	// V15.6：组件分发基址（自建 sing-box 等放在 <base>/sing-box/ 下）
+	AgentBinaryBase string `json:"agent_binary_base,omitempty"`
+	// V15.6：组件（sing-box）独立分发基址，桶里单独一个目录
+	ComponentBase string `json:"component_base,omitempty"`
+}
+
+// StatsTarget 一个统计采集目标（一台服务器可能绑定多个节点）。
+type StatsTarget struct {
+	NodeID int64  `json:"node_id"`
+	SBPath string `json:"sb_path,omitempty"`
+}
+
+// UserTraffic 单个用户的累计上下行（来自 sing-box v2ray_api 的 user>>> 计数器）。
+type UserTraffic struct {
+	Name string `json:"name"`
+	Up   int64  `json:"up"`
+	Down int64  `json:"down"`
+}
+
+// ConnInfo 单条连接（来自 sing-box clash_api 的 /connections）。
+type ConnInfo struct {
+	ID         string `json:"id"`
+	SourceIP   string `json:"source_ip"`
+	SourcePort int64  `json:"source_port"`
+	Host       string `json:"host"`
+	Network    string `json:"network"`
+	Inbound    string `json:"inbound"`
+	Upload     int64  `json:"upload"`
+	Download   int64  `json:"download"`
+	StartedAt  int64  `json:"started_at"`
+}
+
+// NodeStats 一个节点的一次统计快照。
+type NodeStats struct {
+	NodeID      int64         `json:"node_id"`
+	OK          bool          `json:"ok"`
+	Error       string        `json:"error,omitempty"`
+	TotalUp     int64         `json:"total_up"`
+	TotalDown   int64         `json:"total_down"`
+	Users       []UserTraffic `json:"users,omitempty"`
+	Connections []ConnInfo    `json:"connections,omitempty"`
 }
 
 // ShellHint 表示后台有人打开了实时终端，Agent 应主动拨号接入。

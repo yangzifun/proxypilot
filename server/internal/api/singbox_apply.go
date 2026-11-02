@@ -35,10 +35,12 @@ func (h *handlers) loadSingboxNodeFull(ctx context.Context, id int64) (*singboxT
 		CDNDomain:        mapStr(nodeRow, "cdn_domain", ""),
 		SBPath:           mapStr(nodeRow, "sb_path", ""),
 		CaddyPath:        mapStr(nodeRow, "caddy_path", ""),
-		XrayFilePath:     mapStr(nodeRow, "xray_path", ""),
 		ServiceSBName:    mapStr(nodeRow, "service_sb", ""),
 		ServiceCaddyName: mapStr(nodeRow, "service_caddy", ""),
-		ServiceXrayName:  mapStr(nodeRow, "service_xray", ""),
+	}
+	// 统计：默认开启；secret 不存在时在首次渲染前生成并加密落库
+	if nodeStatsEnabled(nodeRow) {
+		node.StatsSecret = h.ensureNodeStatsSecret(ctx, mapInt(nodeRow, "id", 0))
 	}
 	return tpl, node, server, nodeRow, ""
 }
@@ -153,7 +155,7 @@ func (h *handlers) singboxNodeApply(w http.ResponseWriter, r *http.Request) {
 		checkCmd := mapStr(f, "check_cmd", "")
 		engine := mapStr(f, "engine", "")
 		hash := sha256Hex(content)
-		restartCmd := singboxRestartCommand(engine, service, path)
+		restartCmd := singboxRestartCommand(service)
 		hashParts = append(hashParts, key+"\x00"+content)
 
 		var (
@@ -228,21 +230,11 @@ func (h *handlers) singboxNodeApply(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func singboxRestartCommand(engine, service, path string) string {
+// singboxRestartCommand 生成重启命令。V15.6 起只承载 sing-box 单一引擎。
+func singboxRestartCommand(service string) string {
 	svc := strings.TrimSpace(service)
 	if svc == "" {
-		if engine == "xray" {
-			svc = "xray"
-		} else {
-			svc = "sing-box"
-		}
-	}
-	if engine == "xray" {
-		cfg := firstNonEmpty(strings.TrimSpace(path), "/etc/sing-box/xray.json")
-		dir := "/etc/systemd/system/" + svc + ".service.d"
-		return "mkdir -p " + dir +
-			" && printf '[Service]\\nUser=root\\nGroup=root\\nExecStart=\\nExecStart=/usr/local/bin/xray run -config " + cfg + "\\n' > " + dir + "/99-proxypilot.conf" +
-			" && systemctl daemon-reload && systemctl enable " + svc + " 2>/dev/null; systemctl restart " + svc
+		svc = "sing-box"
 	}
 	return "systemctl enable " + svc + " 2>/dev/null; systemctl restart " + svc
 }

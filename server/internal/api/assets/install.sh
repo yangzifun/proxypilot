@@ -167,7 +167,7 @@ umask 077
     echo 'PROXYPILOT_TOKEN="'"$KEY"'"'
     echo "INTERVAL=$INTERVAL"
     echo 'STATE_DIR="/var/lib/proxypilot-agent"'
-    echo 'SERVICE_LIST="sshd xray sing-box mtg cloudflared clash mihomo nginx"'
+    echo 'SERVICE_LIST="sshd sing-box mtg cloudflared clash mihomo nginx"'
 } > "$CONF" || die "写入配置失败（$CONF）"
 chmod 600 "$CONF"
 log "已写入配置：$CONF（600）"
@@ -334,29 +334,6 @@ fi
 
 # ---------------- 自检（非致命） ----------------
 if [ -x "$BIN" ]; then
-
-# ---------------- 可选：安装 Xray 服务（vless-xhttp） ----------------
-if [ "$WITH_XRAY" = 1 ]; then
-    log '安装 Xray（vless-xhttp 用，独立进程）...'
-    if [ ! -x /usr/local/bin/xray ]; then
-        XR_INSTALL=$(mktemp 2>/dev/null || echo "/tmp/xray-install.$$")
-        if curl -fsSL -m 90 -o "$XR_INSTALL" https://github.com/XTLS/Xray-install/raw/main/install-release.sh 2>/dev/null; then
-            bash "$XR_INSTALL" install >/dev/null 2>&1 || log 'Xray 官方安装脚本执行失败（可稍后手动安装）'
-        else
-            log '下载 Xray 安装脚本失败（网络受限），跳过'
-        fi
-        rm -f "$XR_INSTALL"
-    fi
-    if [ -x /usr/local/bin/xray ]; then
-        log "Xray 已安装：$(/usr/local/bin/xray version 2>/dev/null | head -1)"
-        mkdir -p /etc/systemd/system/xray.service.d
-        printf '[Service]\nUser=root\nGroup=root\nExecStart=\nExecStart=/usr/local/bin/xray run -config /etc/sing-box/xray.json\n' > /etc/systemd/system/xray.service.d/99-proxypilot.conf
-        systemctl daemon-reload
-        systemctl enable --now xray >/dev/null 2>&1 && log 'xray 服务已启用' || log 'xray 服务启用失败（等配置下发后再启动）'
-    else
-        log '未安装 Xray；启用 vless-xhttp 前需要先装 xray'
-    fi
-fi
     log '连通性自检（doctor：只做一次 poll，不执行任务）...'
     "$BIN" doctor -c "$CONF" || log '自检未通过：请查看 proxypilot-agent doctor 与 journalctl -u proxypilot-agent'
 fi

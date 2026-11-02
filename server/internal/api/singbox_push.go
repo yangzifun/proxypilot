@@ -162,10 +162,12 @@ var (
 )
 
 func (h *handlers) singboxReleases(w http.ResponseWriter, r *http.Request) {
-	engine := "singbox"
-	if strings.ToLower(r.URL.Query().Get("engine")) == "xray" {
-		engine = "xray"
+	// V15.6：Xray 已下线，只提供 sing-box 的版本列表。
+	if strings.ToLower(strings.TrimSpace(r.URL.Query().Get("engine"))) == "xray" {
+		writeError(w, http.StatusBadRequest, "Xray 已下线，仅在节点管理里使用 sing-box")
+		return
 	}
+	engine := "singbox"
 	releaseMu.Lock()
 	if e, ok := releaseCache[engine]; ok && time.Since(e.At) < 6*time.Hour {
 		releaseMu.Unlock()
@@ -175,9 +177,6 @@ func (h *handlers) singboxReleases(w http.ResponseWriter, r *http.Request) {
 	releaseMu.Unlock()
 
 	repo := "SagerNet/sing-box"
-	if engine == "xray" {
-		repo = "XTLS/Xray-core"
-	}
 	client := &http.Client{Timeout: 10 * time.Second}
 	req, _ := http.NewRequestWithContext(r.Context(), http.MethodGet,
 		"https://api.github.com/repos/"+repo+"/releases?per_page=20", nil)

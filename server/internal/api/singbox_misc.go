@@ -44,8 +44,8 @@ func (h *handlers) singboxTemplatePreview(w http.ResponseWriter, r *http.Request
 	tpl := inputToTemplate(input)
 	node := singboxRenderNode{
 		Name: "preview", Domain: firstNonEmpty(strings.TrimSpace(mapStr(body, "domain", "")), "preview.example.com"),
-		SBPath: "/etc/sing-box/sb.json", CaddyPath: "/etc/sing-box/Caddyfile", XrayFilePath: "/etc/sing-box/xray.json",
-		ServiceSBName: "sing-box", ServiceCaddyName: "caddy-naive", ServiceXrayName: "xray",
+		SBPath: "/etc/sing-box/sb.json", CaddyPath: "/etc/sing-box/Caddyfile",
+		ServiceSBName: "sing-box", ServiceCaddyName: "caddy-naive",
 	}
 	files, ports, _, msg := singboxRenderBundle(tpl, node, serverRow{})
 	if msg != "" {

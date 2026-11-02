@@ -26,10 +26,9 @@ func TestIsSecretSetting(t *testing.T) {
 }
 
 func TestSingboxInstallVersions(t *testing.T) {
-	on := int64(1)
-	tpl := &singboxTemplate{SingboxVersion: "v1.15.0", XrayVersion: "v25.1.1", EnableXray: &on}
+	tpl := &singboxTemplate{SingboxVersion: "v1.15.0"}
 	got := singboxInstallVersions(tpl)
-	want := `{"sing-box":"v1.15.0","xray":"v25.1.1"}`
+	want := `{"sing-box":"v1.15.0"}`
 	if got != want {
 		t.Fatalf("got %s want %s", got, want)
 	}

@@ -13,7 +13,6 @@
     "reality_dest": "www.microsoft.com:443",
     "reality_sni": "www.microsoft.com",
     "ws_sni": "www.bing.com",
-    "xhttp_path": "/xhttp-auto",
     "protocol_options": "{}",
     "enable_ss": 1,
     "enable_anytls": 1,
@@ -22,7 +21,6 @@
     "enable_reality": 1,
     "enable_vlws": 1,
     "enable_masque": 0,
-    "enable_xray": 1,
     "cdn_domain": "cdn.example.com"
   },
   "users": [
@@ -57,8 +55,6 @@
     "vlws_warp": 13806,
     "masque": 13707,
     "masque_warp": 13807,
-    "xhttp": 13708,
-    "xhttp_warp": 13808,
     "base": 13700,
     "warp_base": 13800
   },

@@ -11,7 +11,7 @@ import (
 )
 
 // Version 由 main 通过 ldflags 注入。
-var Version = "V15.5"
+var Version = "V15.6"
 
 // New 构造 HTTP 处理器。已迁移的路由走真实实现，其余转发给旧 Worker 或返回 501。
 func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
@@ -234,6 +234,12 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /api/stats/uuid-details", h.authed(authOpts{}, h.statsUUIDDetails))
 	mux.HandleFunc("GET /api/uuid-configs/stats", h.authed(authOpts{}, h.uuidConfigsStats))
 
+	// 流量 / 连接统计（V15.6）
+	mux.HandleFunc("GET /api/stats/traffic/users", h.authed(authOpts{}, h.statsTrafficUsers))
+	mux.HandleFunc("GET /api/stats/traffic/users/{uuid}", h.authed(authOpts{}, h.statsTrafficUserDetail))
+	mux.HandleFunc("GET /api/stats/traffic/nodes", h.authed(authOpts{}, h.statsTrafficNodes))
+	mux.HandleFunc("GET /api/nodes/{id}/connections", h.authed(authOpts{}, h.nodeConnections))
+
 	// 批量任务
 	mux.HandleFunc("GET /api/jobs", h.authed(authOpts{}, h.jobsList))
 	mux.HandleFunc("POST /api/jobs", h.authed(authOpts{}, h.jobsCreate))
@@ -261,6 +267,7 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("POST /api/monitor/notify", h.authed(authOpts{}, h.monitorNotify))
 	mux.HandleFunc("POST /api/monitor/notify/test", h.authed(authOpts{}, h.monitorNotifyTest))
 	mux.HandleFunc("GET /api/monitor/uuid-check", h.authed(authOpts{}, h.monitorUUIDCheck))
+	mux.HandleFunc("POST /api/monitor/uuid-check", h.authed(authOpts{}, h.monitorUUIDCheck))
 	mux.HandleFunc("GET /api/agent/ws", h.agentWS)
 
 	mux.HandleFunc("GET /api/bucket/files", h.authed(authOpts{}, h.bucketFiles))

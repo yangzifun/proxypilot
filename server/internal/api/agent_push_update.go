@@ -77,6 +77,31 @@ func (h *handlers) agentPushUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// 多台服务器时转后台任务（逐台排队 update_agent，避免请求线程里逐台处理）
+	if len(targets) > 1 {
+		params := map[string]any{"all": all}
+		if !all {
+			idsAny := make([]any, 0, len(ids))
+			for _, id := range ids {
+				idsAny = append(idsAny, id)
+			}
+			params["server_ids"] = idsAny
+		}
+		jobID, n, dup, msg := h.batchCreateJob(r.Context(), "agent.update", params, "admin")
+		if msg != "" {
+			writeError(w, http.StatusBadRequest, msg)
+			return
+		}
+		if !dup {
+			h.startBatchJob(jobID, "admin")
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"success": true, "async": true, "job_id": jobID, "total": n, "duplicate": dup,
+			"latest": manifest.Version, "message": "已创建后台任务，进度见右上角「任务」",
+		})
+		return
+	}
+
 	out := make([]map[string]any, 0, len(targets))
 	for _, srv := range targets {
 		id := mapInt(srv, "id", 0)

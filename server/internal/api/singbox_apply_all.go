@@ -42,10 +42,14 @@ func singboxUsersFromUUIDs(tpl *singboxTemplate, uuids []string) []sbUser {
 }
 
 // applySingboxNode 渲染并落库单节点；usersOverride 非 nil 时覆盖模板用户。
+// 未显式覆盖时优先用节点授权的 uuid_list（与 UUID 巡检口径一致），避免把模板占位用户下发到线上。
 func (h *handlers) applySingboxNode(ctx context.Context, nodeID int64, usersOverride []sbUser, force bool) ([]map[string]any, map[string]int, []map[string]string, int, string) {
 	tpl, node, server, nodeRow, msg := h.loadSingboxNodeFull(ctx, nodeID)
 	if msg != "" {
 		return nil, nil, nil, 0, msg
+	}
+	if usersOverride == nil {
+		usersOverride = singboxAuthorizedUsers(tpl, nodeRow)
 	}
 	if usersOverride != nil {
 		b, _ := json.Marshal(usersOverride)
@@ -70,7 +74,7 @@ func (h *handlers) applySingboxNode(ctx context.Context, nodeID int64, usersOver
 		checkCmd := mapStr(f, "check_cmd", "")
 		engine := mapStr(f, "engine", "")
 		hash := sha256Hex(content)
-		restartCmd := singboxRestartCommand(engine, service, path)
+		restartCmd := singboxRestartCommand(service)
 		hashParts = append(hashParts, key+"\x00"+content)
 
 		var (
@@ -135,6 +139,24 @@ func (h *handlers) applySingboxNode(ctx context.Context, nodeID int64, usersOver
 	return out, ports, users, changed, ""
 }
 
+// singboxAuthorizedUsers 读节点 uuid_list 生成用户列表；为空返回 nil（保持模板用户）。
+func singboxAuthorizedUsers(tpl *singboxTemplate, nodeRow map[string]any) []sbUser {
+	var list []string
+	if raw := mapStr(nodeRow, "uuid_list", ""); raw != "" {
+		_ = json.Unmarshal([]byte(raw), &list)
+	}
+	clean := make([]string, 0, len(list))
+	for _, u := range list {
+		if s := strings.TrimSpace(u); s != "" {
+			clean = append(clean, s)
+		}
+	}
+	if len(clean) == 0 {
+		return nil
+	}
+	return singboxUsersFromUUIDs(tpl, clean)
+}
+
 // queueSingboxDeploy 把 node_configs 排成 Agent deploy 任务。
 func (h *handlers) queueSingboxDeploy(ctx context.Context, files []map[string]any, actor string) []map[string]any {
 	results := []map[string]any{}
@@ -193,6 +215,25 @@ func (h *handlers) singboxApplyAll(w http.ResponseWriter, r *http.Request) {
 	if v, ok := body["push"].(bool); ok {
 		doPush = v
 	}
+	// 多节点时转为后台任务，避免请求线程里逐台渲染/排队导致超时
+	var total int64
+	_ = h.db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM singbox_nodes`).Scan(&total)
+	if total > 1 {
+		jobID, n, dup, msg := h.batchCreateJob(r.Context(), "singbox.apply_all",
+			map[string]any{"force": force, "push": doPush}, "admin")
+		if msg != "" {
+			writeError(w, http.StatusBadRequest, msg)
+			return
+		}
+		if !dup {
+			h.startBatchJob(jobID, "admin")
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"success": true, "async": true, "job_id": jobID, "total": n, "duplicate": dup,
+			"message": "已创建后台任务，进度见右上角「任务」",
+		})
+		return
+	}
 	rows, err := queryRowsAsMaps(r.Context(), h.db, `SELECT id, name FROM singbox_nodes ORDER BY id ASC`)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "查询节点失败")
@@ -240,6 +281,25 @@ func (h *handlers) singboxDeployAll(w http.ResponseWriter, r *http.Request) {
 	doPush := true
 	if v, ok := body["push"].(bool); ok {
 		doPush = v
+	}
+	// 多节点时转为后台任务（与 apply-all 共用任务类型，force=false）
+	var total int64
+	_ = h.db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM singbox_nodes WHERE enabled = 1`).Scan(&total)
+	if total > 1 {
+		jobID, n, dup, msg := h.batchCreateJob(r.Context(), "singbox.apply_all",
+			map[string]any{"force": false, "push": doPush}, "admin")
+		if msg != "" {
+			writeError(w, http.StatusBadRequest, msg)
+			return
+		}
+		if !dup {
+			h.startBatchJob(jobID, "admin")
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"success": true, "async": true, "job_id": jobID, "total": n, "duplicate": dup,
+			"message": "已创建后台任务，进度见右上角「任务」",
+		})
+		return
 	}
 	rows, err := queryRowsAsMaps(r.Context(), h.db, `SELECT id, name FROM singbox_nodes WHERE enabled = 1 ORDER BY id ASC`)
 	if err != nil {

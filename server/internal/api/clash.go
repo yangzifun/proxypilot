@@ -305,13 +305,6 @@ func convertVmess(config string) map[string]any {
 			"path": firstNonEmpty(str("path"), "/"), "headers": hostHeader(str("host")),
 			"v2ray-http-upgrade": true,
 		}
-	case "xhttp":
-		p["network"] = "xhttp"
-		opts := map[string]any{"path": firstNonEmpty(str("path"), "/"), "mode": firstNonEmpty(str("mode"), "auto"), "extra": map[string]any{}}
-		if str("host") != "" {
-			opts["headers"] = map[string]any{"Host": str("host")}
-		}
-		p["xhttp-opts"] = opts
 	case "quic":
 		return nil
 	}
@@ -404,12 +397,6 @@ func convertVless(config string) map[string]any {
 		p["ws-opts"] = map[string]any{"path": firstNonEmpty(q.Get("path"), "/"), "headers": hostHeader(q.Get("host"))}
 	case "grpc":
 		p["grpc-opts"] = map[string]any{"grpc-service-name": firstNonEmpty(q.Get("serviceName"), q.Get("path"))}
-	case "xhttp":
-		opts := map[string]any{"path": firstNonEmpty(q.Get("path"), "/"), "mode": firstNonEmpty(q.Get("mode"), "auto"), "extra": map[string]any{}}
-		if q.Get("host") != "" {
-			opts["headers"] = map[string]any{"Host": q.Get("host")}
-		}
-		p["xhttp-opts"] = opts
 	case "h2":
 		p["h2-opts"] = map[string]any{"path": firstNonEmpty(q.Get("path"), "/"), "host": []string{q.Get("host")}}
 	case "http":

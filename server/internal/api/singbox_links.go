@@ -16,11 +16,6 @@ type singboxNode struct {
 
 func (t *singboxTemplate) engineOn(key string) bool {
 	switch key {
-	case "xray":
-		if t.EnableXray != nil {
-			return *t.EnableXray == 1
-		}
-		return t.EnableXHTTP == 1
 	case "masque":
 		return t.EnableMasque == 1
 	}
@@ -64,10 +59,8 @@ func singboxClientLinks(tpl *singboxTemplate, node singboxNode, users []sbUser) 
 	multi := len(users) > 1
 
 	engineSb := tpl.engineOn("singbox")
-	engineXr := tpl.engineOn("xray")
 	opts := tpl.protoOptions()
 	realityPub := tpl.realityPublicKey()
-	xPath := firstNonEmpty(strings.TrimSpace(jsonStr(optMap(opts, "xhttp")["path"])), strings.TrimSpace(tpl.XHTTPPath), "/xhttp-auto")
 	wsPath := firstNonEmpty(strings.TrimSpace(jsonStr(optMap(opts, "vlws")["path"])), "/vlws")
 	realitySni := firstNonEmpty(strings.TrimSpace(jsonStr(optMap(opts, "reality")["server_name"])), strings.TrimSpace(tpl.RealitySNI), "www.microsoft.com")
 	wsSni := firstNonEmpty(strings.TrimSpace(tpl.WSSNI), "www.bing.com")
@@ -102,13 +95,6 @@ func singboxClientLinks(tpl *singboxTemplate, node singboxNode, users []sbUser) 
 			link := "hysteria2://" + u.UUID + "@" + domain + ":" + strconv.Itoa(ports["hy2"]) +
 				"/?sni=" + enc(wsSni) + "&insecure=1&alpn=h3#" + enc(tag("hy2"))
 			add("hysteria2", ports["hy2"], u.Name, link, "UDP 端口：注意放行与 NAT 映射")
-		}
-		if engineXr && domain != "" {
-			link := "vless://" + u.UUID + "@" + domain + ":" + strconv.Itoa(ports["xhttp"]) +
-				"/?security=reality&encryption=none&pbk=" + enc(realityPub) +
-				"&fp=chrome&sni=" + enc(realitySni) + "&sid=" + enc(tpl.RealityShortID) +
-				"&type=xhttp&path=" + enc(xPath) + "&mode=auto#" + enc(tag("xhttp"))
-			add("vless-xhttp", ports["xhttp"], u.Name, link, "xray 进程（vless-xhttp over REALITY）")
 		}
 		if engineSb && tpl.EnableReality != 0 && realityPub != "" {
 			link := "vless://" + u.UUID + "@" + domain + ":" + strconv.Itoa(ports["reality"]) +

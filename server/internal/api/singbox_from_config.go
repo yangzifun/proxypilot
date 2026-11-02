@@ -65,7 +65,7 @@ func parseSbConfig(text string) (*sbParsed, string) {
 	}
 	p := &sbParsed{
 		Ports: map[string]int{}, Paths: map[string]string{},
-		Enable:  map[string]int{"ss": 0, "anytls": 0, "hy2": 0, "reality": 0, "vlws": 0, "vmess": 0, "xhttp": 0, "masque": 0},
+		Enable:  map[string]int{"ss": 0, "anytls": 0, "hy2": 0, "reality": 0, "vlws": 0, "vmess": 0, "masque": 0},
 		Reality: map[string]string{}, Warp: map[string]string{},
 	}
 	users := map[string]*sbUser{}
@@ -235,41 +235,13 @@ func (h *handlers) singboxTemplateFromConfig(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	sbText := strings.TrimSpace(mapStr(body, "sb_json", ""))
-	xrText := strings.TrimSpace(mapStr(body, "xray_json", ""))
-	var parsed *sbParsed
-	if sbText != "" {
-		var msg string
-		parsed, msg = parseSbConfig(sbText)
-		if msg != "" {
-			writeError(w, http.StatusBadRequest, msg)
-			return
-		}
-	} else if xrText != "" {
-		var xr map[string]any
-		if err := json.Unmarshal([]byte(xrText), &xr); err != nil {
-			writeError(w, http.StatusBadRequest, "xray.json 不是合法 JSON："+err.Error())
-			return
-		}
-		ids := []string{}
-		for _, raw := range asSlice(xr["inbounds"]) {
-			ib := asMap(raw)
-			for _, c := range asSlice(asMap(ib["settings"])["clients"]) {
-				id := strings.TrimSpace(asString(asMap(c)["id"]))
-				if id != "" && !containsString(ids, id) {
-					ids = append(ids, id)
-				}
-			}
-		}
-		if len(ids) == 0 {
-			writeError(w, http.StatusBadRequest, "xray.json 里没有任何客户端（settings.clients[].id 为空）")
-			return
-		}
-		parsed = &sbParsed{}
-		for _, id := range ids {
-			parsed.Users = append(parsed.Users, sbUser{Name: truncateRunes(id, 8), UUID: id})
-		}
-	} else {
-		writeError(w, http.StatusBadRequest, "至少要启用 sing-box 或 Xray，并提供对应配置文件")
+	if sbText == "" {
+		writeError(w, http.StatusBadRequest, "请提供 sb.json（Xray 已下线，不再导入 xray.json）")
+		return
+	}
+	parsed, errMsg := parseSbConfig(sbText)
+	if errMsg != "" {
+		writeError(w, http.StatusBadRequest, errMsg)
 		return
 	}
 	if len(parsed.Users) == 0 {
@@ -308,7 +280,7 @@ func (h *handlers) singboxTemplateFromConfig(w http.ResponseWriter, r *http.Requ
 		}
 		opts[k] = cur
 	}
-	for _, k := range []string{"ss", "anytls", "hy2", "reality", "xhttp"} {
+	for _, k := range []string{"ss", "anytls", "hy2", "reality"} {
 		if v := parsed.Ports[k]; v > 0 {
 			setOpt(k, map[string]any{"port": v})
 		}
@@ -345,39 +317,7 @@ func (h *handlers) singboxTemplateFromConfig(w http.ResponseWriter, r *http.Requ
 		setOpt("masque", map[string]any{"versions": parsed.MasqueVersions})
 	}
 
-	xhttpPort, xhttpPath := 0, ""
-	if xrText != "" {
-		var xr map[string]any
-		if json.Unmarshal([]byte(xrText), &xr) == nil {
-			ibs := asSlice(xr["inbounds"])
-			if len(ibs) > 0 {
-				ib := asMap(ibs[0])
-				xhttpPort = int(asInt(ib["port"]))
-				xhttpPath = asString(asMap(asMap(ib["streamSettings"])["xhttpSettings"])["path"])
-			}
-		}
-	}
-	if xhttpPort > 0 || xhttpPath != "" {
-		o := map[string]any{}
-		if xhttpPort > 0 {
-			o["port"] = xhttpPort
-		}
-		if xhttpPath != "" {
-			o["path"] = xhttpPath
-		}
-		setOpt("xhttp", o)
-	}
 	optsJSON, _ := json.Marshal(opts)
-
-	enableXray := 0
-	if xrText != "" || xhttpPort > 0 {
-		enableXray = 1
-	}
-	if v, ok := body["enable_xray"]; ok {
-		enableXray = int(singboxBool(v, false))
-	} else if v, ok := body["enable_xhttp"]; ok {
-		enableXray = int(singboxBool(v, false))
-	}
 
 	warpOn := parsed.HasWarp
 	if v, ok := body["warp_enabled"]; ok {
@@ -405,7 +345,6 @@ func (h *handlers) singboxTemplateFromConfig(w http.ResponseWriter, r *http.Requ
 		"ws_sni":              firstNonEmpty(mapStr(body, "ws_sni", ""), "www.bing.com"),
 		"cert_path":           firstNonEmpty(mapStr(body, "cert_path", ""), "/etc/sing-box/cert.crt"),
 		"key_path":            firstNonEmpty(mapStr(body, "key_path", ""), "/etc/sing-box/private.key"),
-		"xhttp_path":          firstNonEmpty(xhttpPath, "/xhttp-auto"),
 		"port_base":           base,
 		"warp_base":           intOrJS(body["warp_base"], 13800, 1, 65000),
 		"enable_ss":           parsed.Enable["ss"], "enable_anytls": parsed.Enable["anytls"],
@@ -420,7 +359,6 @@ func (h *handlers) singboxTemplateFromConfig(w http.ResponseWriter, r *http.Requ
 			}
 			return 0
 		}(),
-		"enable_xray": enableXray, "enable_xhttp": enableXray,
 		"enable_masque": func() int64 {
 			if parsed.Masque {
 				return 1

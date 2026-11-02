@@ -37,17 +37,4 @@ func TestSingboxRenderBundleValidation(t *testing.T) {
 	if len(users) != 1 || users[0]["uuid"] != "11111111-2222-3333-4444-555555555555" {
 		t.Fatalf("users = %#v", users)
 	}
-
-	// 启用 xray → 2 份文件
-	xrayOn := int64(1)
-	tplX := *base
-	tplX.EnableXray = &xrayOn
-	tplX.EnableVLWS = 1
-	files2, _, _, msg := singboxRenderBundle(&tplX, node, serverRow{})
-	if msg != "" {
-		t.Fatalf("xray msg = %s", msg)
-	}
-	if len(files2) != 2 {
-		t.Fatalf("files = %d，期望 2", len(files2))
-	}
 }

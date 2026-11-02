@@ -133,7 +133,7 @@ func (h *handlers) notifyStatus(ctx context.Context, title string, notices []ser
 	for _, n := range notices {
 		var (
 			name, host, ip, ip4, ip6, version, lastErr string
-			lastSeen                                     int64
+			lastSeen                                   int64
 		)
 		err := h.db.QueryRowContext(ctx, `SELECT COALESCE(name,''), COALESCE(host,''),
 		  COALESCE(last_ip,''), COALESCE(last_ip4,''), COALESCE(last_ip6,''),
@@ -245,6 +245,10 @@ func (h *handlers) cronCleanup(ctx context.Context, now int64) {
 
 	metricsCutoff := now - metricsDays*24*3600*1000
 	_, _ = h.db.ExecContext(ctx, `DELETE FROM server_metrics WHERE created_at > 0 AND created_at < ? LIMIT 5000`, metricsCutoff)
+
+	// V15.6：用户流量小时聚合保留 90 天；连接快照只留最近 1 天
+	trafficDays := int64(intOrJS(h.getSetting(ctx, "traffic_retention_days", "90"), 90, 7, 3650))
+	h.pruneUserTraffic(ctx, trafficDays)
 
 	_ = h.putSetting(ctx, "batch_cleanup_at", itoa64(now))
 }

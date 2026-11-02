@@ -41,8 +41,11 @@ type Runner struct {
 	Log   func(format string, args ...any)
 	Now   func() time.Time
 	Probe func() string // probe 任务的输出（默认用 metrics 采集摘要）
-	// InstallMissing=true 时，校验命令用到的 sing-box / xray 缺失会自动下载安装
+	// InstallMissing=true 时，校验命令用到的 sing-box / mtg-multi 缺失会自动下载安装
 	InstallMissing bool
+	// ComponentBase 组件下载基址（服务端 poll 下发；空 = 只走 GitHub release）。
+	// 自建 sing-box（带 v2ray_api）就放在 <ComponentBase>/sing-box/ 下。
+	ComponentBase string
 }
 
 // DefaultShell 用 /bin/sh -c 执行脚本（Agent 目标平台为 Linux）。
@@ -153,6 +156,29 @@ func (r *Runner) exec(ctx context.Context, a client.Action) (int, string) {
 	return 0, strings.TrimSpace(out)
 }
 
+// applyInstallVersions 按模板要求切换组件版本（在写配置之前执行）。
+// 返回说明、是否真的换了版本、错误信息。
+func (r *Runner) applyInstallVersions(ctx context.Context, a client.Action) ([]string, bool, string) {
+	notes := make([]string, 0, 2)
+	changed := false
+	for bin, want := range a.InstallVersions {
+		if strings.TrimSpace(want) == "" {
+			continue
+		}
+		code, out := r.ensureVersion(ctx, bin, want)
+		if code != 0 {
+			return notes, changed, out
+		}
+		if out != "" {
+			notes = append(notes, out)
+			if strings.Contains(out, "->") {
+				changed = true
+			}
+		}
+	}
+	return notes, changed, ""
+}
+
 // deploy 下发配置：先校验、后替换，任何一步失败都不改动目标文件。
 func (r *Runner) deploy(ctx context.Context, a client.Action) (int, string) {
 	if a.Path == "" {
@@ -169,8 +195,32 @@ func (r *Runner) deploy(ctx context.Context, a client.Action) (int, string) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return 1, "无法创建目录 " + dir + "：" + err.Error()
 	}
-	// 内容完全一致：不备份、不重写；但服务没在跑时仍要拉起来（单元缺失/进程崩溃后的重试）
+	// 先切组件版本：失败时完全不动目标文件（避免「新配置 + 旧二进制」的坏组合）
+	compNotes, compChanged, verr := r.applyInstallVersions(ctx, a)
+	if verr != "" {
+		return 1, verr
+	}
+	// 内容完全一致：不备份、不重写；但组件换过或服务没在跑时仍要校验 + 重启
 	if cur, err := os.ReadFile(a.Path); err == nil && bytes.Equal(cur, []byte(a.Content)) {
+		msg := fmt.Sprintf("内容未变化，已跳过写入（%s，v%d）", a.Path, a.Version)
+		if len(compNotes) > 0 {
+			msg += "\n[component] " + strings.Join(compNotes, "; ")
+		}
+		if compChanged {
+			if a.CheckCmd != "" {
+				out, code := r.shell()(ctx, a.CheckCmd, 0)
+				if code != 0 {
+					return 1, msg + "\n[check] " + strings.TrimSpace(out) + "\n组件已切换但校验失败"
+				}
+			}
+			if restart := r.restartCmd(a); restart != "" {
+				out, rc := r.shell()(ctx, restart, 0)
+				if rc != 0 {
+					return rc, msg + fmt.Sprintf("\n[restart] 组件已切换，但服务重启失败：%s", strings.TrimSpace(out))
+				}
+				return 0, msg + "\n[restart] 组件已切换，已重启"
+			}
+		}
 		if svc := firstServiceName(a.ServiceName); svc != "" {
 			if _, code := r.shell()(ctx, "systemctl is-active --quiet "+svc, 0); code != 0 {
 				if restart := r.restartCmd(a); restart != "" {
@@ -182,7 +232,7 @@ func (r *Runner) deploy(ctx context.Context, a client.Action) (int, string) {
 				}
 			}
 		}
-		return 0, fmt.Sprintf("内容未变化，已跳过写入（%s，v%d）", a.Path, a.Version)
+		return 0, msg
 	}
 	if a.Backup {
 		if _, err := os.Stat(a.Path); err == nil {
@@ -210,25 +260,11 @@ func (r *Runner) deploy(ctx context.Context, a client.Action) (int, string) {
 	if a.Backup {
 		pruneBackups(a.Path, 5) // 只留最近 5 个 .bak，避免长期下发把磁盘塞满
 	}
-	// V13.7：模板指定的引擎版本优先——不一致就下载并切换（含首次安装）
-	compNotes := make([]string, 0, 2)
-	for bin, want := range a.InstallVersions {
-		if strings.TrimSpace(want) == "" {
-			continue
-		}
-		code, out := r.ensureVersion(ctx, bin, want)
-		if code != 0 {
-			return code, out
-		}
-		if out != "" {
-			compNotes = append(compNotes, out)
-		}
-	}
-	// 校验命令用到的二进制如果不存在，先自动安装（sing-box / xray）
+	// 校验命令用到的二进制如果不存在，先自动安装（sing-box / mtg-multi）
 	if r.InstallMissing {
 		if bin := firstCommandWord(a.CheckCmd); bin != "" {
 			if _, err := exec.LookPath(bin); err != nil {
-				if code, out := r.ensureComponent(ctx, bin, a.Path); code != 0 {
+				if code, out := r.ensureComponent(ctx, bin); code != 0 {
 					return code, out
 				}
 			}
@@ -302,11 +338,6 @@ func (r *Runner) ensureServiceUnit(a client.Action) {
 			cfg = "/etc/sing-box/sb.json"
 		}
 		r.ensureUnit("sing-box", "/usr/local/bin/sing-box run -c "+cfg)
-	case "xray":
-		if cfg == "" {
-			cfg = "/etc/sing-box/xray.json"
-		}
-		r.ensureUnit("xray", "/usr/local/bin/xray run -config "+cfg)
 	case "mtg":
 		if cfg == "" {
 			cfg = "/etc/mtg/config.toml"

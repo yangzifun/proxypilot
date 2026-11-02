@@ -1,4 +1,4 @@
-﻿import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ApiOutlined,
   CloudDownloadOutlined,
@@ -52,7 +52,6 @@ const PROTO_LABEL = {
   reality: 'Reality',
   vlws: 'VLESS-WS',
   vmess: 'TUIC',
-  xhttp: 'XHTTP',
   masque: 'MASQUE',
 };
 
@@ -88,11 +87,6 @@ const PROTO_DOCS = {
     desc: 'TUIC v5，基于 QUIC，使用 BBR，关闭 0-RTT；字段名 vmess 为历史兼容。',
     tips: ['必须放行 UDP 13704', '对 UDP 质量敏感，弱网可能抖动', '客户端需支持 TUIC v5'],
   },
-  xhttp: {
-    label: 'VLESS-XHTTP', port: 13708, transport: 'xhttp + REALITY',
-    desc: 'VLESS + XHTTP，由独立 Xray 进程承载，支持 REALITY，双栈监听。',
-    tips: ['客户端需支持 XHTTP（较新的 Xray / Mihomo）', 'spiderX 为派生诱饵路径，不要随意修改', '与普通 VLESS 节点分开排查'],
-  },
   masque: {
     label: 'MASQUE', port: 13707, transport: 'HTTP/3 · CONNECT-IP',
     desc: '由 sing-box masque-server endpoint 承载，基于 HTTP/3 CONNECT-IP。',
@@ -107,7 +101,6 @@ const SWITCHES = [
   { name: 'enable_reality', label: 'Reality' },
   { name: 'enable_vlws', label: 'VLESS-WS' },
   { name: 'enable_vmess', label: 'TUIC' },
-  { name: 'enable_xhttp', label: 'XHTTP（Xray）' },
   { name: 'enable_masque', label: 'MASQUE' },
   { name: 'enabled', label: '模板启用' },
 ];
@@ -414,7 +407,7 @@ export default function Nodes() {
               label: `协议模板（${tplRows.length}）`,
               children: (
                 <PageCard
-                  title={<span className="pp-section-title">协议模板（sing-box / Xray / MASQUE）</span>}
+                  title={<span className="pp-section-title">协议模板（sing-box / MASQUE）</span>}
                   extra={
                     <Space>
                       <Button icon={<ReadOutlined />} onClick={() => setProtoDocOpen(true)}>
@@ -564,7 +557,7 @@ export default function Nodes() {
 /* =================================================================
  *  模板编辑器：从配置导入 / 手动配置 / 编辑 / 预览
  * ================================================================= */
-const IMP_DEFAULT = { name: '', sb_json: '', xray_json: '', masque_json: '', enable_masque: false, port_base: 0 };
+const IMP_DEFAULT = { name: '', sb_json: '', masque_json: '', enable_masque: false, port_base: 0 };
 
 const TPL_DEFAULTS = {
   remark: '',
@@ -577,14 +570,12 @@ const TPL_DEFAULTS = {
   disguise_url: 'https://www.bing.com',
   cert_path: '/etc/sing-box/cert.crt',
   key_path: '/etc/sing-box/private.key',
-  xhttp_path: '/xhttp-auto',
   enable_ss: true,
   enable_anytls: true,
   enable_hy2: true,
   enable_reality: true,
   enable_vlws: true,
   enable_vmess: true,
-  enable_xhttp: false,
   enable_masque: false,
   enabled: true,
   warp_enabled: false,
@@ -613,10 +604,8 @@ function NodeEditor({ state, servers, templates, onClose, onSaved }) {
         cdn_domain: r.cdn_domain || '',
         sb_path: r.sb_path || '/etc/sing-box/sb.json',
         caddy_path: r.caddy_path || '/etc/sing-box/Caddyfile',
-        xray_path: r.xray_path || '/etc/sing-box/xray.json',
         service_sb: r.service_sb || 'sing-box',
         service_caddy: r.service_caddy || 'caddy-naive',
-        service_xray: r.service_xray || 'xray',
         enabled: Number(r.enabled) === 1,
         remark: r.remark || '',
         auto_deploy: false,
@@ -628,10 +617,8 @@ function NodeEditor({ state, servers, templates, onClose, onSaved }) {
         auto_deploy: true,
         sb_path: '/etc/sing-box/sb.json',
         caddy_path: '/etc/sing-box/Caddyfile',
-        xray_path: '/etc/sing-box/xray.json',
         service_sb: 'sing-box',
         service_caddy: 'caddy-naive',
-        service_xray: 'xray',
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -653,10 +640,8 @@ function NodeEditor({ state, servers, templates, onClose, onSaved }) {
         warp_enabled: Number(v.warp_enabled),
         sb_path: v.sb_path,
         caddy_path: v.caddy_path,
-        xray_path: v.xray_path,
         service_sb: v.service_sb,
         service_caddy: v.service_caddy,
-        service_xray: v.service_xray,
         enabled: !!v.enabled,
         remark: v.remark || '',
         auto_deploy: !!v.auto_deploy,
@@ -756,11 +741,6 @@ function NodeEditor({ state, servers, templates, onClose, onSaved }) {
                         <Input />
                       </Form.Item>
                     </Col>
-                    <Col span={8}>
-                      <Form.Item name="xray_path" label="xray.json 路径">
-                        <Input />
-                      </Form.Item>
-                    </Col>
                   </Row>
                   <Row gutter={12}>
                     <Col span={8}>
@@ -770,11 +750,6 @@ function NodeEditor({ state, servers, templates, onClose, onSaved }) {
                     </Col>
                     <Col span={8}>
                       <Form.Item name="service_caddy" label="caddy 服务名">
-                        <Input />
-                      </Form.Item>
-                    </Col>
-                    <Col span={8}>
-                      <Form.Item name="service_xray" label="xray 服务名">
                         <Input />
                       </Form.Item>
                     </Col>

@@ -4,3 +4,7 @@
 
 # Go 源码统一 LF（gofmt 输出即为 LF）
 *.go text eol=lf
+
+# Agent 分发的校验和清单：保持 LF，避免 sha256sum -c 在 Linux 上因 CRLF 报错
+agent/dist/SHA256SUMS text eol=lf
+agent/dist/manifest.json text eol=lf

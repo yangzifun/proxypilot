@@ -351,7 +351,7 @@ func (h *handlers) jobsCreate(w http.ResponseWriter, r *http.Request) {
 	if !duplicate {
 		h.startBatchJob(jobID, "admin")
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"success": true, "job_id": jobID, "total": total, "duplicate": duplicate})
+	writeJSON(w, http.StatusOK, map[string]any{"success": true, "async": true, "job_id": jobID, "total": total, "duplicate": duplicate})
 }
 
 // GET /api/jobs/{id}

@@ -39,6 +39,23 @@ func (h *handlers) mtprotoTemplateApply(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusInternalServerError, "查询节点失败")
 		return
 	}
+	// 模板下多个节点时转后台任务（逐节点 apply + 排队下发）
+	if len(nodes) > 1 {
+		jobID, n, dup, msg := h.batchCreateJob(r.Context(), "mtproto.template_apply",
+			map[string]any{"template_id": id}, "admin")
+		if msg != "" {
+			writeError(w, http.StatusBadRequest, msg)
+			return
+		}
+		if !dup {
+			h.startBatchJob(jobID, "admin")
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"success": true, "async": true, "job_id": jobID, "total": n, "duplicate": dup,
+			"message": "已创建后台任务，进度见右上角「任务」",
+		})
+		return
+	}
 	out := make([]map[string]any, 0, len(nodes))
 	for _, n := range nodes {
 		nodeID := mapInt(n, "id", 0)

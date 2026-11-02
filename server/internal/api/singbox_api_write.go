@@ -121,11 +121,6 @@ func normalizeSingboxTemplateInput(body map[string]any) (sbTemplateInput, string
 		realityPub = x25519PublicKeyFromPrivate(realityKey)
 	}
 
-	enableXray := body["enable_xray"]
-	if enableXray == nil {
-		enableXray = body["enable_xhttp"]
-	}
-
 	return sbTemplateInput{
 		"name":                 name,
 		"remark":               mapStr(body, "remark", ""),
@@ -141,7 +136,6 @@ func normalizeSingboxTemplateInput(body map[string]any) (sbTemplateInput, string
 		"disguise_url":         firstNonEmpty(mapStr(body, "disguise_url", ""), "https://www.bing.com"),
 		"cert_path":            firstNonEmpty(mapStr(body, "cert_path", ""), "/etc/sing-box/cert.crt"),
 		"key_path":             firstNonEmpty(mapStr(body, "key_path", ""), "/etc/sing-box/private.key"),
-		"xhttp_path":           firstNonEmpty(mapStr(body, "xhttp_path", ""), "/xhttp-auto"),
 		"protocol_options":     string(optsJSON),
 		"port_base":            intOrJS(body["port_base"], 13700, 1, 65000),
 		"warp_base":            intOrJS(body["warp_base"], 13800, 1, 65000),
@@ -153,11 +147,8 @@ func normalizeSingboxTemplateInput(body map[string]any) (sbTemplateInput, string
 		"enable_vmess":         singboxBool(body["enable_vmess"], true),
 		"enable_masque":        singboxBool(body["enable_masque"], false),
 		"singbox_version":      strings.TrimSpace(mapStr(body, "singbox_version", "")),
-		"xray_version":         strings.TrimSpace(mapStr(body, "xray_version", "")),
 		"enable_singbox":       singboxBool(body["enable_singbox"], true),
-		"enable_xray":          singboxBool(enableXray, false),
-		"enable_xhttp":         singboxBool(enableXray, false),
-		"warp_engines":         normalizeWarpEngines(mapStr(body, "warp_engines", "singbox,xray")),
+		"warp_engines":         normalizeWarpEngines(mapStr(body, "warp_engines", "singbox")),
 		"warp_enabled":         singboxBool(body["warp_enabled"], false),
 		"warp_private_key":     mapStr(body, "warp_private_key", ""),
 		"warp_address":         mapStr(body, "warp_address", ""),
@@ -166,18 +157,9 @@ func normalizeSingboxTemplateInput(body map[string]any) (sbTemplateInput, string
 	}, ""
 }
 
+// normalizeWarpEngines V15.6 起只保留 sing-box（Xray 已下线）。
 func normalizeWarpEngines(raw string) string {
-	out := []string{}
-	for _, part := range strings.Split(raw, ",") {
-		k := strings.ToLower(strings.TrimSpace(part))
-		if (k == "singbox" || k == "xray") && !containsString(out, k) {
-			out = append(out, k)
-		}
-	}
-	if len(out) == 0 {
-		return "singbox,xray"
-	}
-	return strings.Join(out, ",")
+	return "singbox"
 }
 
 func containsString(list []string, v string) bool {
@@ -339,10 +321,8 @@ func normalizeSingboxNodeInput(body map[string]any) (map[string]any, string) {
 		"warp_base":     intOrJS(body["warp_base"], 0, 0, 65000),
 		"sb_path":       firstNonEmpty(mapStr(body, "sb_path", ""), "/etc/sing-box/sb.json"),
 		"caddy_path":    firstNonEmpty(mapStr(body, "caddy_path", ""), "/etc/sing-box/Caddyfile"),
-		"xray_path":     firstNonEmpty(mapStr(body, "xray_path", ""), "/etc/sing-box/xray.json"),
 		"service_sb":    firstNonEmpty(mapStr(body, "service_sb", ""), "sing-box"),
 		"service_caddy": firstNonEmpty(mapStr(body, "service_caddy", ""), "caddy-naive"),
-		"service_xray":  firstNonEmpty(mapStr(body, "service_xray", ""), "xray"),
 		"enabled":       singboxBool(body["enabled"], true),
 		"warp_enabled":  warp,
 		"remark":        strings.TrimSpace(mapStr(body, "remark", "")),

@@ -168,6 +168,46 @@ func init() {
 			return true, "检查 " + strconv.Itoa(r.Checked) + " 个，漂移 " + strconv.Itoa(r.Drifted) + "，修复 " + strconv.Itoa(r.Fixed)
 		},
 	}
+
+	// singbox.apply_all 一键下发全部节点（每个节点一个任务项，后台逐台渲染 + 排队 deploy）
+	batchKinds["singbox.apply_all"] = jobKind{
+		Title: func(params map[string]any, n int) string {
+			verb := "一键下发全部节点"
+			if b, _ := params["force"].(bool); b {
+				verb = "强制重下发全部节点"
+			}
+			return verb + "（" + strconv.Itoa(n) + " 个）"
+		},
+		EmptyHint: "没有 sing-box 节点",
+		Items: func(h *handlers, ctx context.Context, _ map[string]any) ([]jobItem, error) {
+			rows, err := queryRowsAsMaps(ctx, h.db, `SELECT id, COALESCE(name,'') FROM singbox_nodes ORDER BY id ASC`)
+			if err != nil {
+				return nil, err
+			}
+			out := make([]jobItem, 0, len(rows))
+			for _, r := range rows {
+				out = append(out, jobItem{Target: "singbox_node", TargetID: mapInt(r, "id", 0), Label: mapStr(r, "name", "")})
+			}
+			return out, nil
+		},
+		Run: func(h *handlers, ctx context.Context, params map[string]any, item jobItem, _ string) (bool, string) {
+			force, _ := params["force"].(bool)
+			push, _ := params["push"].(bool)
+			files, _, users, changed, msg := h.applySingboxNode(ctx, item.TargetID, nil, force)
+			if msg != "" {
+				return false, msg
+			}
+			queued := 0
+			if push {
+				for _, it := range h.queueSingboxDeploy(ctx, files, "batch-job") {
+					if ok, _ := it["ok"].(bool); ok {
+						queued++
+					}
+				}
+			}
+			return true, "用户=" + strconv.Itoa(len(users)) + " 变更=" + strconv.Itoa(changed) + " 排队=" + strconv.Itoa(queued)
+		},
+	}
 }
 
 // queueAgentUpdateForJob 与 /api/agent/push-update 共用同一套升级判断。

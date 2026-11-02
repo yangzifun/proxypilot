@@ -24,7 +24,7 @@ func singboxRuntimeConfig() (string, error) {
 	}
 	users := []sbUser{{Name: "user01", UUID: uuid, SSPassword: ssUser}}
 	ports := singboxPorts(tpl)
-	cfg := singboxRenderSb(tpl, users, ports)
+	cfg := singboxRenderSb(tpl, users, ports, "", false)
 	return mustJSON(cfg), nil
 }
 

@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"database/sql"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 const (
 	settingPublicBaseURL   = "site_public_base_url"
 	settingAgentBinaryBase = "agent_binary_base_url"
+	settingComponentBase   = "component_base_url"
 	settingPasswordEnabled = "auth_password_enabled"
 	settingEmailCode       = "auth_email_code_enabled"
 	settingOIDCEnabled     = "auth_oidc_enabled"
@@ -49,6 +51,7 @@ type settingDef struct {
 var settingDefs = []settingDef{
 	{Key: settingPublicBaseURL},
 	{Key: settingAgentBinaryBase},
+	{Key: settingComponentBase},
 	{Key: settingPasswordEnabled, Bool: true},
 	{Key: settingEmailCode, Bool: true},
 	{Key: settingOIDCEnabled, Bool: true},
@@ -275,6 +278,19 @@ func (h *handlers) settingDefault(key string) string {
 		return strings.TrimSpace(h.cfg.PublicBaseURL)
 	case settingAgentBinaryBase:
 		return strings.TrimSpace(h.cfg.AgentBinaryBaseURL)
+	case settingComponentBase:
+		if v := strings.TrimRight(strings.TrimSpace(os.Getenv("PP_COMPONENT_BASE_URL")), "/"); v != "" {
+			return v
+		}
+		base := strings.TrimSpace(h.cfg.AgentBinaryBaseURL)
+		if base == "" {
+			return ""
+		}
+		base = strings.TrimRight(base, "/")
+		if strings.HasSuffix(base, "/agent") {
+			return strings.TrimSuffix(base, "/agent") + "/singbox"
+		}
+		return base + "/singbox"
 	case settingSMTPAddr:
 		return strings.TrimSpace(h.cfg.SMTPAddr)
 	case settingSMTPUser:

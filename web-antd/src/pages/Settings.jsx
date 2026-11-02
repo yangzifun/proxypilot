@@ -363,6 +363,13 @@ export default function Settings({ embedded = false }) {
                   <Form.Item name="agent_binary_base_url" label="Agent 分发基址" extra="留空使用本站 /agent-dist">
                     <Input placeholder="https://cdn.example.com/agent-dist" allowClear />
                   </Form.Item>
+                  <Form.Item
+                    name="component_base_url"
+                    label="sing-box 分发基址"
+                    extra="自建 sing-box 单独一个目录（与 Agent 分开）；留空按 Agent 基址推导为同级 singbox/，仍为空则回落 GitHub Release"
+                  >
+                    <Input placeholder="https://s3.example.com/singbox" allowClear />
+                  </Form.Item>
                   <Divider orientation="left">巡检与保留</Divider>
                   <Form.Item name="uuid_reconcile_interval_min" label="UUID 巡检间隔（分钟）">
                     <InputNumber min={5} max={1440} style={{ width: 180 }} />

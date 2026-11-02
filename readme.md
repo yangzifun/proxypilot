@@ -1,6 +1,6 @@
 # ProxyPilot
 
-![Go](https://img.shields.io/badge/Go-1.23-00ADD8?logo=go&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white) ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black) ![Ant Design](https://img.shields.io/badge/Ant%20Design-6-1677FF?logo=antdesign&logoColor=white) ![Agent](https://img.shields.io/badge/Agent-Go-00ADD8?logo=go&logoColor=white) ![Version](https://img.shields.io/badge/Version-V15.5-blue.svg) ![License](https://img.shields.io/badge/License-MIT-green.svg)
+![Go](https://img.shields.io/badge/Go-1.23-00ADD8?logo=go&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white) ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black) ![Ant Design](https://img.shields.io/badge/Ant%20Design-6-1677FF?logo=antdesign&logoColor=white) ![Agent](https://img.shields.io/badge/Agent-Go-00ADD8?logo=go&logoColor=white) ![Version](https://img.shields.io/badge/Version-V15.7-blue.svg) ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
 ---
 
@@ -42,7 +42,7 @@
                      └────────────┘  └──────────────────┘
                             ▲
                             │ Agent 出站：poll / ack / WS / shell
-                     proxypilot-agent ──▶ sing-box / xray / mtg
+                     proxypilot-agent ──▶ sing-box / mtg
 ```
 
 - 后端：`server/`（Go 1.23，标准库 HTTP，150 条路径）
@@ -129,7 +129,7 @@ proxypilot/
 | `/login` | 三种登录方式：账号密码 / 邮箱验证码 / OIDC 单点登录；支持 TOTP 双重验证与备份码 |
 | `/sub`、`/clash-config` 等 | 面向客户端的订阅输出（UUID 鉴权 + 可选人机验证） |
 
-### 管理后台（左侧菜单 9 个页面）
+### 管理后台（左侧菜单）
 
 | 页面 | 内容 |
 | ---- | ---- |
@@ -137,7 +137,10 @@ proxypilot/
 | **订阅分组** `#uuids` | 按 UUID 管理节点配置、订阅源、外部订阅合并、分组授权；**一个邮箱只能绑定一个 UUID**（重复绑定返回 409） |
 | **订阅模板** `#tpls` | Clash / Mihomo 订阅模板（含默认模板）；页面底部可直接浏览/编辑对象存储 `rule/` 下的模板与地区配置（R2 绑定 `bucket`） |
 | **服务器管理** `#servers` | Agent 接入、安装命令（**可选安装后停用 SSH**）、**SSH 状态列与单台 / 批量启停**、密钥轮换、一键更新、任务队列、**实时终端（WebSSH）** |
-| **节点管理** `#singbox` | 协议模板（sb.json / xray.json；MASQUE 由 sb.json 的 masque-server endpoint 承载；**可选 sing-box / Xray 正式版或预览版**）+ 节点绑定（服务器 / 域名 / 授权 UUID）+ 编排下发；**MTProto** 独立页签（mtg-multi，模板 + 节点两级、按用户授权，链接不进订阅） |
+| **普通代理** `#normal` | 协议模板（sb.json；MASQUE 由 sb.json 的 masque-server endpoint 承载；**可选 sing-box 正式版或预览版**）+ 节点绑定（服务器 / 域名 / 授权 UUID）+ 编排下发；**V15.6 起移除 Xray**（vless-xhttp 下线，改由 sing-box 的 vless-reality 承接） |
+| **流量统计** `#traffic` | **按用户的上行 / 下行 / 活跃状态 / 趋势**，以及**节点实时连接明细**（源 IP、目标域名、协议、上下行、持续时间）；数据来自 sing-box 的 `clash_api` / `v2ray_api` |
+| **MTProto** `#mtproto` | mtg-multi 模板 + 节点两级、按用户授权，链接不进订阅 |
+| **WARP** `#masque` | Cloudflare WARP 设备注册、按 UUID 授权、MASQUE 配置下载 |
 | **日志管理** `#logs` | 节点下发与命令执行日志、结果与耗时 |
 | **服务器监控** `#status` | 顶部三张等高卡片：**集群在线率**（在线率环图 + 服务异常 / 未安装）、**资源均值**（CPU / 内存仪表 + 磁盘进度）、**全球分布**（Natural Earth 底图，按经纬度打点、点击进详情；可开大图，滚轮缩放 / 拖动平移；小图悬停圆点查看地区与资源信息，大图直接在地图内标注地区名）+ 卡片式面板（CPU / 内存 / 磁盘 / 负载 / 网络 / 磁盘 IO / 连接 / 进程数 / **IPv4 + IPv6 分行显示**）；「详情」内分区展示概览、**运行信息（内核 / 平台 / Tunnel / Top 进程）**、服务状态（可一键重启）、下发配置、任务队列与性能折线图 |
 | **系统管理** `#sys` | 用户管理、访问日志维护、API 密钥 —— **仅 `admin` 可见** |
@@ -148,7 +151,7 @@ proxypilot/
 - **订阅生成**：本地配置 + 外部订阅源合并，支持 Clash / Mihomo 与原始链接
 - **用户中心（PC / 移动端）**：PC 单页、移动端 4 页签；订阅生成（原始 / Clash / 批量 + 模板 + 本机二维码）、配置管理（搜索 / 8 种协议 / 外部订阅源增删启停）、访问统计、账号信息与换绑邮箱
 - **监控双栈地址**：Agent 上报的本机 IPv4 / IPv6 分别落库（`last_ip4` / `last_ip6`），页面按有无各显示一行，不再只剩 IPv6 或同一地址显示两遍
-- **协议编排**：一份模板最多两个配置文件（sing-box / Xray），互相独立；MASQUE 不再是独立进程，改为 sing-box 的 `masque-server` endpoint
+- **协议编排**：一份模板一个配置文件（sb.json），只由 sing-box 承载；Xray 已下线（V15.6），MASQUE 用 sing-box 的 `masque-server` endpoint
 - **MTProto（Telegram）**：`mtg-multi` 单进程多 secret，按 UUID 授权、撤销只断该用户；配置独立成表，不写入 `configs`，也就不进任何订阅；门户可看二维码或发到邮箱
 - **版本化下发**：内容未变不升版本；变更自动 +1；Agent 回执 applied_version
 - **UUID 一致性巡检**：Cron 每 30 分钟比对「平台授权 ↔ 节点配置 ↔ 订阅配置」，发现漂移自动修复；也支持事件触发与手动检查
@@ -172,7 +175,6 @@ proxypilot/
 | vless-reality | sing-box | 13705 | TCP + REALITY | `xtls-rprx-vision`，无需自有证书 |
 | vless-ws | sing-box | 13706 | TLS + WebSocket | 路径 `/vlws`，可直接接 CDN |
 | MASQUE | sing-box（masque-server） | 13707 | HTTP/3 · CONNECT-IP | 随 sb.json 下发（endpoint），需 sing-box ≥ 1.15.0；默认模板不启用，不生成订阅链接 |
-| vless-xhttp | Xray | 13708 | xhttp + REALITY | 双栈监听，`::`，spiderX 为派生诱饵路径 |
 | MTProto（Telegram） | mtg-multi | 13709 | TCP | 仅 TG 使用，**不进订阅**；每用户独立 secret，SIGHUP 热加载 |
 
 补充：
@@ -376,7 +378,7 @@ disk_io（累计读写、次数）
 conn（TCP/UDP 状态计数）
 proc（进程总数 + Top RSS）
 services（systemd 服务状态，含 mtg / cloudflared）
-versions（sing-box / xray / mtg-multi 的实际版本号，5 分钟缓存，供「服务状态」展示）
+versions（sing-box / mtg-multi 的实际版本号，5 分钟缓存，供「服务状态」展示）
 ssh（sshd / ssh 的 enabled / active 状态，供「服务器管理」与监控详情只读展示）
 ip（IPv4）/ ipv6（本机全局 IPv6）
 ```
@@ -474,6 +476,26 @@ npm run check      # build + render-check + e2e
 ---
 
 ## 更新日志
+
+### V15.7（2026-11-02）
+
+- **自建 sing-box 正式上线**：`1.14.4-proxypilot.1`（官方默认标签 + `with_v2ray_api`，官方 release 不含该标签）。新增「系统设置 → 高级设置 → sing-box 分发基址」（`component_base_url`），组件走独立目录 `singbox/`，与 `agent/` 分开；Agent 按 `<base>/sing-box-<ver>-linux-<arch>.tar.gz` 下载，404 回落 GitHub Release。
+- **业务 → 用户流量**（`#userst`）：在线用户 / 今日流量 / 区间流量 / 累计流量；按 UUID、归属、邮箱搜索与排序；详情含小时趋势与**按节点分布**；`stats/traffic/users` 增加 `up_today` / `down_today`，详情增加 `nodes[]`。
+- **服务器监控**新增「节点连接与采集统计」区块：节点采集状态、连接数、实时上下行、累计流量，以及选定节点的实时连接明细（源 IP、目标、协议、入站、上下行、持续时长）。原独立「节点连接明细」页移除。
+- **修复「更换 sing-box 后节点不可用」**：`applySingboxNode` 在未显式传入用户时优先按节点 `uuid_list` 渲染（与 UUID 巡检同口径），不再用模板占位用户覆盖线上授权。
+- **Agent 1.8.6**：部署时**先切组件版本再写配置**；组件二进制改为「临时文件 + rename」（修复 `text file busy`）；解包改**流式写盘**（修复小内存节点 OOM）；安装失败把下载地址 / HTTP 状态带进任务输出。
+- **修复统计上报中断**：Agent 轮询间隔由 2s 调整为 30s，消除 429 限流导致的统计空窗。
+- **界面**：侧栏品牌区固定 64px 与顶部栏等高，菜单区独立滚动，标题不再被裁切。
+
+### V15.6（2026-11-02）
+
+- **移除 Xray**：节点管理只剩 sing-box 单一引擎；`xray.json`、Xray 版本选择、`vless-xhttp`（13708）与 `spiderX` 逻辑一并下线。同类场景改用 sing-box 的 **vless-reality（13705）**。
+- **Agent 侧**：不再自动安装 / 切换 xray，服务探测名单去掉 xray（`sing-box / mtg / cloudflared`）；下发仍兼容老模板（历史 `enable_xray` 不再生效）。
+- **数据清理**：迁移 `0010_remove_xray` 关掉模板的 xray 开关、删除 `node_configs` 里的 xray 记录与节点管理生成的 xhttp 订阅配置，并清空节点指纹触发重新对账。
+- **API**：`/api/singbox/releases?engine=xray` 返回 400；模板/节点接口不再返回 `xray_*` 字段；`from-config` 只接受 sb.json。
+- **新增「流量统计」页**（`#traffic`）：按用户展示上行 / 下行 / 活跃状态 / 小时趋势，并按节点展示实时连接明细（源 IP、目标域名、协议、上下行、持续时间）。
+- **统计链路**：下发 sb.json 时注入 `experimental`（`clash_api` + `v2ray_api.stats`），**只绑 127.0.0.1** 并带每节点随机 secret；统计开启时入站用户名切成 UUID（稳定唯一，重排不串号）。Agent 每轮 poll 读本机两个接口，快照随下一次 poll 上报，服务端差分后写入 `user_traffic` / `user_traffic_hourly` / `node_connections`。
+- **新接口**：`GET /api/stats/traffic/users`、`/api/stats/traffic/users/{uuid}`、`/api/stats/traffic/nodes`、`/api/nodes/{id}/connections`；小时聚合默认保留 90 天（`traffic_retention_days`）。
 
 ### V15.5（2026-11-02）
 
@@ -851,7 +873,7 @@ npm run check      # build + render-check + e2e
 
 ## 适用场景
 
-- 自建节点（sing-box / Xray / MASQUE）统一编排与下发
+- 自建节点（sing-box / MASQUE）统一编排与下发
 - 多台服务器、多 UUID 的订阅分发与访问统计
 - 想要「面板 + Agent」但不想开放管理端口的环境
 

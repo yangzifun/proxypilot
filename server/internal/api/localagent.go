@@ -8,8 +8,8 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"regexp"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -108,7 +108,6 @@ func localComponentVersions() map[string]string {
 		arg      string
 	}{
 		{"sing-box", "sing-box", "version"},
-		{"xray", "xray", "version"},
 		{"mtg-multi", "mtg", "version"},
 		{"cloudflared", "cloudflared", "--version"},
 	} {
@@ -260,7 +259,7 @@ func collectLocal() localSample {
 	ip, ip4, ip6 := localIPs()
 	out.ip, out.ip4, out.ip6 = ip, ip4, ip6
 	// 服务状态（常见服务）
-	for _, svc := range []string{"sshd", "ssh", "sing-box", "xray", "cloudflared", "mihomo", "clash", "nginx", "caddy"} {
+	for _, svc := range []string{"sshd", "ssh", "sing-box", "cloudflared", "mihomo", "clash", "nginx", "caddy"} {
 		if _, err := exec.LookPath("systemctl"); err != nil {
 			break
 		}
@@ -324,7 +323,7 @@ func collectLocal() localSample {
 		"uptimeSec": uptime, "hostname": hostname, "kernel": kernel, "os": osName,
 		"platform": "local", "services": out.services, "versions": out.versions,
 		"ssh": localSSHStatus(),
-		"ip": out.ip, "ip4": out.ip4, "ip6": out.ip6,
+		"ip":  out.ip, "ip4": out.ip4, "ip6": out.ip6,
 		"checkedAt": now.UnixMilli(),
 		"net": map[string]any{
 			"rxBytes": out.netRx, "txBytes": out.netTx,

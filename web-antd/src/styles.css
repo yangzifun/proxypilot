@@ -81,8 +81,23 @@ body {
   position: sticky !important;
   top: 0;
   height: 100vh;
-  overflow: auto;
+  overflow: hidden;
   z-index: 20;
+  display: flex;
+  flex-direction: column;
+}
+/* 品牌区固定 64px（与顶部栏等高），菜单在中间独立滚动，标题永远不被裁切 */
+.pp-sider .ant-layout-sider-children {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.pp-sider .ant-layout-sider-children > .ant-menu {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 .pp-sider::-webkit-scrollbar { width: 6px; }
 .pp-sider::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.25); border-radius: 6px; }
@@ -91,7 +106,10 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 18px 16px 14px;
+  flex: 0 0 64px;
+  height: 64px;
+  padding: 0 16px;
+  box-sizing: border-box;
   overflow: hidden;
   white-space: nowrap;
 }
@@ -140,10 +158,10 @@ body {
 .ant-layout-header.pp-header {
   position: sticky;
   top: 0;
-  height: auto;
+  height: 64px;
   min-height: 64px;
   line-height: normal;
-  padding: 10px 22px;
+  padding: 0 22px;
   flex-wrap: nowrap;
   background: rgba(255, 255, 255, 0.86);
   border-bottom: 1px solid #eef2f7;
@@ -196,7 +214,8 @@ body {
 @media (max-width: 720px) {
   .pp-hide-sm { display: none !important; }
   .pp-header-sub { display: none; }
-  .ant-layout-header.pp-header { min-height: 58px; padding: 8px 14px; }
+  .ant-layout-header.pp-header { height: 58px; min-height: 58px; padding: 0 14px; }
+  .pp-brand { flex-basis: 58px; height: 58px; }
 }
 
 /* 内容区铺满可用宽度（不再居中留白）：宽屏下卡片与图表一起变宽 */

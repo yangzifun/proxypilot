@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 )
@@ -9,10 +10,11 @@ import (
 const singboxDefaultSSMethod = "2022-blake3-aes-256-gcm"
 
 // singboxPortDelta 的顺序与 Worker 的 Object.keys 一致（端口冲突处理依赖顺序）。
-var singboxPortDeltaOrder = []string{"hy2", "ss", "anytls", "vmess", "reality", "vlws", "masque", "xhttp"}
+// V15.6：Xray 下线，vless-xhttp 与 13708 端口一并移除。
+var singboxPortDeltaOrder = []string{"hy2", "ss", "anytls", "vmess", "reality", "vlws", "masque"}
 
 var singboxPortDelta = map[string]int{
-	"hy2": 1, "ss": 2, "anytls": 3, "vmess": 4, "reality": 5, "vlws": 6, "masque": 7, "xhttp": 8,
+	"hy2": 1, "ss": 2, "anytls": 3, "vmess": 4, "reality": 5, "vlws": 6, "masque": 7,
 }
 
 type singboxTemplate struct {
@@ -30,7 +32,6 @@ type singboxTemplate struct {
 	RealityDest       string `json:"reality_dest"`
 	RealitySNI        string `json:"reality_sni"`
 	WSSNI             string `json:"ws_sni"`
-	XHTTPPath         string `json:"xhttp_path"`
 	ProtocolOptions   string `json:"protocol_options"`
 	UsersJSON         string `json:"users_json"`
 	EnableSS          int64  `json:"enable_ss"`
@@ -39,13 +40,10 @@ type singboxTemplate struct {
 	EnableVMess       int64  `json:"enable_vmess"`
 	EnableReality     int64  `json:"enable_reality"`
 	EnableVLWS        int64  `json:"enable_vlws"`
-	EnableXHTTP       int64  `json:"enable_xhttp"`
 	EnableMasque      int64  `json:"enable_masque"`
 	EnableSingbox     *int64 `json:"enable_singbox"`
-	EnableXray        *int64 `json:"enable_xray"`
 	MasquePath        string `json:"masque_path"`
 	SingboxVersion    string `json:"singbox_version"`
-	XrayVersion       string `json:"xray_version"`
 }
 
 type sbUser struct {
@@ -142,7 +140,7 @@ func singboxPorts(tpl *singboxTemplate) map[string]int {
 	}
 
 	used := map[int]bool{}
-	for _, k := range []string{"hy2", "ss", "anytls", "vmess", "reality", "vlws", "xhttp"} {
+	for _, k := range []string{"hy2", "ss", "anytls", "vmess", "reality", "vlws"} {
 		v := p[k]
 		if v == 0 {
 			continue
@@ -172,8 +170,34 @@ func singboxWsPath(p string) string {
 	return "/" + v
 }
 
+// singboxStatsPorts 计算统计控制面的本机端口（clash_api / v2ray_api）。
+// 固定 port_base+90 / +91，撞上协议端口时顺延 +100（只绑 127.0.0.1，不对外）。
+func singboxStatsPorts(ports map[string]int) (clash, v2ray int) {
+	base := ports["base"]
+	if base <= 0 {
+		base = 13700
+	}
+	used := map[int]bool{}
+	for _, k := range []string{"hy2", "ss", "anytls", "vmess", "reality", "vlws", "masque"} {
+		if v := ports[k]; v > 0 {
+			used[v] = true
+		}
+	}
+	clash = base + 90
+	for used[clash] {
+		clash += 100
+	}
+	v2ray = base + 91
+	for used[v2ray] || v2ray == clash {
+		v2ray += 100
+	}
+	return clash, v2ray
+}
+
 // singboxRenderSb 渲染 sb.json（map 形式，调用方负责序列化）。
-func singboxRenderSb(tpl *singboxTemplate, users []sbUser, ports map[string]int) map[string]any {
+// statsSecret 非空时注入 experimental.clash_api；userStats 为真时再加 v2ray_api
+// （仅自建 sing-box 支持），并把入站用户名切成 UUID（稳定唯一），避免列表重排导致流量串号。
+func singboxRenderSb(tpl *singboxTemplate, users []sbUser, ports map[string]int, statsSecret string, userStats bool) map[string]any {
 	inbounds := []any{}
 	tlsPair := func() map[string]any {
 		return map[string]any{
@@ -183,6 +207,16 @@ func singboxRenderSb(tpl *singboxTemplate, users []sbUser, ports map[string]int)
 	}
 	ssKey := strings.TrimSpace(tpl.SSServerKey)
 	opts := tpl.protoOptions()
+	statsOn := strings.TrimSpace(statsSecret) != ""
+	// 统计开启时用 UUID 作为入站用户名：稳定唯一，重排不会串号；关闭时保持原来的 userNN。
+	userName := func(u sbUser) string {
+		if statsOn {
+			if v := strings.TrimSpace(u.UUID); v != "" {
+				return v
+			}
+		}
+		return u.Name
+	}
 
 	if tpl.EnableSS != 0 {
 		ssOpt := optMap(opts, "ss")
@@ -193,7 +227,7 @@ func singboxRenderSb(tpl *singboxTemplate, users []sbUser, ports map[string]int)
 		ssUsers := make([]any, 0, len(users))
 		for _, u := range users {
 			if u.SSPassword != "" {
-				ssUsers = append(ssUsers, map[string]any{"name": u.Name, "password": u.SSPassword})
+				ssUsers = append(ssUsers, map[string]any{"name": userName(u), "password": u.SSPassword})
 			}
 		}
 		inbounds = append(inbounds, map[string]any{
@@ -204,7 +238,7 @@ func singboxRenderSb(tpl *singboxTemplate, users []sbUser, ports map[string]int)
 	if tpl.EnableAnyTLS != 0 {
 		u := make([]any, 0, len(users))
 		for _, x := range users {
-			u = append(u, map[string]any{"name": x.Name, "password": x.UUID})
+			u = append(u, map[string]any{"name": userName(x), "password": x.UUID})
 		}
 		inbounds = append(inbounds, map[string]any{
 			"type": "anytls", "tag": "anytls-sb", "listen": "::", "listen_port": ports["anytls"],
@@ -223,7 +257,7 @@ func singboxRenderSb(tpl *singboxTemplate, users []sbUser, ports map[string]int)
 		}
 		u := make([]any, 0, len(users))
 		for _, x := range users {
-			u = append(u, map[string]any{"name": x.Name, "password": x.UUID})
+			u = append(u, map[string]any{"name": userName(x), "password": x.UUID})
 		}
 		hy2["users"] = u
 		if up := intOrJS(hy2Opt["up_mbps"], 0, 0, 1<<30); up > 0 {
@@ -237,7 +271,7 @@ func singboxRenderSb(tpl *singboxTemplate, users []sbUser, ports map[string]int)
 	if tpl.EnableVMess != 0 {
 		u := make([]any, 0, len(users))
 		for _, x := range users {
-			u = append(u, map[string]any{"name": x.Name, "uuid": x.UUID, "password": x.UUID})
+			u = append(u, map[string]any{"name": userName(x), "uuid": x.UUID, "password": x.UUID})
 		}
 		inbounds = append(inbounds, map[string]any{
 			"type": "tuic", "tag": "tuic-sb", "listen": "::", "listen_port": ports["vmess"],
@@ -261,7 +295,7 @@ func singboxRenderSb(tpl *singboxTemplate, users []sbUser, ports map[string]int)
 		}
 		u := make([]any, 0, len(users))
 		for _, x := range users {
-			u = append(u, map[string]any{"name": x.Name, "uuid": x.UUID, "flow": "xtls-rprx-vision"})
+			u = append(u, map[string]any{"name": userName(x), "uuid": x.UUID, "flow": "xtls-rprx-vision"})
 		}
 		inbounds = append(inbounds, map[string]any{
 			"type": "vless", "tag": "vless-tcp-reality-vision", "listen": "::", "listen_port": ports["reality"],
@@ -283,7 +317,7 @@ func singboxRenderSb(tpl *singboxTemplate, users []sbUser, ports map[string]int)
 	if tpl.EnableVLWS != 0 {
 		u := make([]any, 0, len(users))
 		for _, x := range users {
-			u = append(u, map[string]any{"name": x.Name, "uuid": x.UUID, "flow": ""})
+			u = append(u, map[string]any{"name": userName(x), "uuid": x.UUID, "flow": ""})
 		}
 		inbounds = append(inbounds, map[string]any{
 			"type": "vless", "tag": "vless-ws-in", "listen": "::", "listen_port": ports["vlws"],
@@ -348,17 +382,38 @@ func singboxRenderSb(tpl *singboxTemplate, users []sbUser, ports map[string]int)
 	if len(endpoints) > 0 {
 		cfg["endpoints"] = endpoints
 	}
+	if statsOn {
+		clashPort, v2rayPort := singboxStatsPorts(ports)
+		experimental := map[string]any{
+			"clash_api": map[string]any{
+				"external_controller": fmt.Sprintf("127.0.0.1:%d", clashPort),
+				"secret":              strings.TrimSpace(statsSecret),
+			},
+		}
+		// 官方 sing-box 没有 with_v2ray_api 标签，写入这段会让 sing-box check 失败
+		if userStats {
+			userList := make([]any, 0, len(users))
+			for _, u := range users {
+				if n := userName(u); n != "" {
+					userList = append(userList, n)
+				}
+			}
+			experimental["v2ray_api"] = map[string]any{
+				"listen": fmt.Sprintf("127.0.0.1:%d", v2rayPort),
+				"stats":  map[string]any{"enabled": true, "users": userList},
+			}
+		}
+		cfg["experimental"] = experimental
+	}
 	return cfg
 }
 
 // singboxInstallVersions 生成随 deploy 下发的引擎版本（Agent 按需安装/切换）。
+// V15.6：Xray 下线，只下发 sing-box。
 func singboxInstallVersions(tpl *singboxTemplate) string {
 	m := map[string]string{}
 	if tpl.engineOn("singbox") && strings.TrimSpace(tpl.SingboxVersion) != "" {
 		m["sing-box"] = strings.TrimSpace(tpl.SingboxVersion)
-	}
-	if tpl.engineOn("xray") && strings.TrimSpace(tpl.XrayVersion) != "" {
-		m["xray"] = strings.TrimSpace(tpl.XrayVersion)
 	}
 	b, _ := json.Marshal(m)
 	return string(b)

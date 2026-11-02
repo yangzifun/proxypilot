@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -141,6 +142,25 @@ func (h *handlers) agentBinaryBaseURL() string {
 		return strings.TrimRight(s, "/") + "/agent-dist"
 	}
 	return ""
+}
+
+// componentBaseURL 组件（自建 sing-box）分发基址：桶里单独一个目录。
+// 优先级：后台设置（系统设置 → 高级设置）> PP_COMPONENT_BASE_URL > Agent 基址同级 singbox/。
+func (h *handlers) componentBaseURL() string {
+	if s := strings.TrimRight(strings.TrimSpace(h.setting(context.Background(), settingComponentBase, "")), "/"); s != "" {
+		return s
+	}
+	if s := strings.TrimRight(strings.TrimSpace(os.Getenv("PP_COMPONENT_BASE_URL")), "/"); s != "" {
+		return s
+	}
+	base := h.agentBinaryBaseURL()
+	if base == "" {
+		return ""
+	}
+	if strings.HasSuffix(base, "/agent") {
+		return strings.TrimSuffix(base, "/agent") + "/singbox"
+	}
+	return base + "/singbox"
 }
 
 // agentBaseFor 优先用显式基址，否则按当前请求推导本地 /agent-dist。

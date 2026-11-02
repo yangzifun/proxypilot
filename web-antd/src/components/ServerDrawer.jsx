@@ -86,7 +86,7 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
     return { text: '已停用', color: 'orange' };
   })();
   /* 只关注这几个服务的安装 / 运行状态，其余历史探针不再展示 */
-  const MONITOR_SERVICES = ['sing-box', 'xray', 'mtg', 'cloudflared'];
+  const MONITOR_SERVICES = ['sing-box', 'mtg', 'cloudflared'];
   const services = useMemo(() => {
     const map = m.services || {};
     const vers = m.versions || {};
@@ -253,7 +253,7 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
 
           <div style={{ margin: '20px 0 8px', display: 'flex', alignItems: 'center', gap: 8 }}>
             <b style={{ fontSize: 14 }}>服务状态</b>
-            <span className="pp-muted" style={{ fontSize: 12 }}>只监控 sing-box / xray / mtg / cloudflared（版本由 Agent 上报）；点「重启」会排队一条 restart 任务</span>
+            <span className="pp-muted" style={{ fontSize: 12 }}>只监控 sing-box / mtg / cloudflared（版本由 Agent 上报）；点「重启」会排队一条 restart 任务</span>
             <span style={{ marginLeft: 'auto' }}>
               {sshState ? (
                 <Tag color={sshState.color} style={{ marginInlineEnd: 0 }}>
@@ -328,7 +328,7 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
             size="small"
             dataSource={state.configs}
             pagination={false}
-            locale={{ emptyText: '没有节点配置（sing-box / xray 配置由「节点管理」下发）' }}
+            locale={{ emptyText: '没有节点配置（sing-box 配置由「节点管理」下发）' }}
             columns={[
               { title: 'ID', dataIndex: 'id', width: 60 },
               { title: '名称', dataIndex: 'name', width: 180 },
