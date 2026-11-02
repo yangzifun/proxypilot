@@ -14,16 +14,23 @@ import {
   Tabs,
   Tag,
 } from 'antd';
-import { CloudDownloadOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
+import { CloudDownloadOutlined, PlusOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons';
 import { api, apiDelete, apiPost, apiPut, getToken } from '../api';
 import { PageCard } from '../components';
-
-const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
 const WARP_DEFAULTS = {
   enabled: false,
   sni: 'zt-masque.cloudflareclient.com',
-  server_ips: ['162.159.198.1', '162.159.198.2', '162.159.199.1', '162.159.199.2', '2606:4700:103::1', '2606:4700:103::2', '2606:4700:104::1', '2606:4700:104::2'],
+  server_ips: [
+    '162.159.198.1',
+    '162.159.198.2',
+    '162.159.199.1',
+    '162.159.199.2',
+    '2606:4700:103::1',
+    '2606:4700:103::2',
+    '2606:4700:104::1',
+    '2606:4700:104::2',
+  ],
   ports: [443, 500, 1701, 4500, 4443, 8443, 8095],
   dns: ['1.1.1.1', '2606:4700:4700::1111'],
   mtu: 1280,
@@ -39,6 +46,11 @@ function fmtTime(v) {
   }
 }
 
+function statusOf(profile) {
+  if (!profile) return 'none';
+  return profile.status || 'none';
+}
+
 export default function MasquePage() {
   const { message } = AntdApp.useApp();
   const [form] = Form.useForm();
@@ -46,7 +58,8 @@ export default function MasquePage() {
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState(null);
   const [profiles, setProfiles] = useState([]);
-  const [uuid, setUuid] = useState('');
+  const [uuids, setUuids] = useState([]);
+  const [q, setQ] = useState('');
   const [busyUuid, setBusyUuid] = useState('');
 
   const loadSettings = async () => {
@@ -56,10 +69,10 @@ export default function MasquePage() {
     form.setFieldsValue({
       enabled: !!data.enabled,
       sni: data.sni || 'zt-masque.cloudflareclient.com',
-      server_ips: data.server_ips || [],
-      ports: data.ports || [],
+      server_ips: data.server_ips || WARP_DEFAULTS.server_ips,
+      ports: data.ports || WARP_DEFAULTS.ports,
       mtu: data.mtu || 1280,
-      dns: data.dns || [],
+      dns: data.dns || WARP_DEFAULTS.dns,
     });
   };
 
@@ -68,10 +81,15 @@ export default function MasquePage() {
     setProfiles(Array.isArray(res && res.data) ? res.data : []);
   };
 
+  const loadUuids = async () => {
+    const res = await api('uuids', { query: { all: 1, size: 1000 } });
+    setUuids(Array.isArray(res && res.data) ? res.data : []);
+  };
+
   const reload = async () => {
     setLoading(true);
     try {
-      await Promise.all([loadSettings(), loadProfiles()]);
+      await Promise.all([loadSettings(), loadProfiles(), loadUuids()]);
     } catch (e) {
       message.error(e.message || '加载 WARP 失败');
     } finally {
@@ -106,18 +124,14 @@ export default function MasquePage() {
     }
   };
 
-  const authorize = async () => {
-    const v = String(uuid || '').trim();
-    if (!UUID_RE.test(v)) {
-      message.error('请输入正确的 UUID');
-      return;
-    }
+  const authorize = async (target) => {
+    const v = String(target || '').trim();
+    if (!v) return;
     setBusyUuid(v);
     try {
       const res = await apiPost('masque/warp/profiles', { uuid: v });
       message.success(res && res.reused ? '该 UUID 已有授权' : '已授权并注册 WARP');
-      setUuid('');
-      await loadProfiles();
+      await Promise.all([loadProfiles(), loadUuids()]);
     } catch (e) {
       message.error(e.message || '授权失败');
     } finally {
@@ -173,7 +187,7 @@ export default function MasquePage() {
       const blob = new Blob([text], { type: 'text/yaml;charset=utf-8' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = `masque-${row.uuid}.yaml`;
+      a.download = `warp-${row.uuid}.yaml`;
       document.body.appendChild(a);
       a.click();
       setTimeout(() => {
@@ -187,70 +201,109 @@ export default function MasquePage() {
     }
   };
 
+  const profileMap = useMemo(() => {
+    const m = {};
+    for (const p of profiles) m[p.uuid] = p;
+    return m;
+  }, [profiles]);
+
+  const rows = useMemo(() => {
+    const kw = String(q || '').trim().toLowerCase();
+    return (uuids || [])
+      .map((u) => ({ ...u, profile: profileMap[u.uuid] || null }))
+      .filter((u) => {
+        if (!kw) return true;
+        return [u.uuid, u.owner, u.email, u.remark].some((x) => String(x || '').toLowerCase().includes(kw));
+      });
+  }, [uuids, profileMap, q]);
+
+  const authorizedCount = profiles.filter((p) => p.status === 'active').length;
+
   const columns = useMemo(
     () => [
       {
-        title: 'UUID',
+        title: 'UUID / 用户',
         dataIndex: 'uuid',
-        width: 300,
+        width: 340,
         render: (v, row) => (
           <div>
             <div style={{ fontFamily: 'monospace', fontSize: 12 }}>{v}</div>
-            <div style={{ color: '#94a3b8', fontSize: 12 }}>{row.email || row.owner || '—'}</div>
+            <div style={{ color: '#94a3b8', fontSize: 12 }}>
+              {row.email || row.owner || row.remark || '—'}
+            </div>
           </div>
         ),
       },
       {
-        title: '状态',
-        dataIndex: 'status',
-        width: 100,
-        render: (v) => (
-          <Tag color={v === 'active' ? 'green' : v === 'revoked' ? 'default' : 'red'}>
-            {v === 'active' ? '已授权' : v === 'revoked' ? '已撤销' : '异常'}
-          </Tag>
-        ),
+        title: 'WARP 状态',
+        width: 110,
+        render: (_, row) => {
+          const s = statusOf(row.profile);
+          return (
+            <Tag color={s === 'active' ? 'green' : s === 'revoked' ? 'default' : s === 'error' ? 'red' : 'blue'}>
+              {s === 'active' ? '已授权' : s === 'revoked' ? '已撤销' : s === 'error' ? '异常' : '未授权'}
+            </Tag>
+          );
+        },
       },
       {
         title: 'WARP 地址',
-        width: 220,
+        width: 230,
         render: (_, row) => (
           <div style={{ fontFamily: 'monospace', fontSize: 12 }}>
-            <div>{row.warp_ipv4 || '—'}</div>
-            <div style={{ color: '#94a3b8' }}>{row.warp_ipv6 || ''}</div>
+            <div>{row.profile?.warp_ipv4 || '—'}</div>
+            <div style={{ color: '#94a3b8' }}>{row.profile?.warp_ipv6 || ''}</div>
           </div>
         ),
       },
-      { title: '授权时间', dataIndex: 'created_at', width: 170, render: fmtTime },
-      { title: '授权人', dataIndex: 'authorized_by', width: 100, render: (v) => v || '—' },
+      { title: '授权时间', width: 170, render: (_, row) => fmtTime(row.profile?.created_at) },
+      { title: '授权人', width: 100, render: (_, row) => row.profile?.authorized_by || '—' },
       {
         title: '操作',
-        width: 300,
-        render: (_, row) => (
-          <Space size={6} wrap>
-            <Button
-              size="small"
-              icon={<CloudDownloadOutlined />}
-              disabled={row.status !== 'active' || busyUuid === row.uuid}
-              onClick={() => download(row)}
-            >
-              下载 YAML
-            </Button>
-            <Button
-              size="small"
-              icon={<ReloadOutlined />}
-              loading={busyUuid === row.uuid}
-              disabled={row.status !== 'active'}
-              onClick={() => refresh(row)}
-            >
-              刷新
-            </Button>
-            <Popconfirm title="撤销后旧配置将失效，确认？" onConfirm={() => revoke(row)}>
-              <Button size="small" danger disabled={row.status !== 'active' || busyUuid === row.uuid}>
-                撤销
-              </Button>
-            </Popconfirm>
-          </Space>
-        ),
+        width: 320,
+        render: (_, row) => {
+          const active = statusOf(row.profile) === 'active';
+          return (
+            <Space size={6} wrap>
+              {!active ? (
+                <Button
+                  size="small"
+                  type="primary"
+                  icon={<PlusOutlined />}
+                  loading={busyUuid === row.uuid}
+                  onClick={() => authorize(row.uuid)}
+                >
+                  {row.profile ? '重新授权' : '授权'}
+                </Button>
+              ) : null}
+              {active ? (
+                <>
+                  <Button
+                    size="small"
+                    icon={<CloudDownloadOutlined />}
+                    disabled={busyUuid === row.uuid}
+                    onClick={() => download(row)}
+                  >
+                    下载 YAML
+                  </Button>
+                  <Button
+                    size="small"
+                    icon={<ReloadOutlined />}
+                    loading={busyUuid === row.uuid}
+                    onClick={() => refresh(row)}
+                  >
+                    刷新
+                  </Button>
+                  <Popconfirm title="撤销后旧配置将失效，确认？" onConfirm={() => revoke(row)}>
+                    <Button size="small" danger disabled={busyUuid === row.uuid}>
+                      撤销
+                    </Button>
+                  </Popconfirm>
+                </>
+              ) : null}
+            </Space>
+          );
+        },
       },
     ],
     [busyUuid]
@@ -258,16 +311,16 @@ export default function MasquePage() {
 
   const settingsTab = (
     <Form form={form} layout="vertical" style={{ maxWidth: 760 }} initialValues={WARP_DEFAULTS}>
-      <Form.Item name="enabled" label="启用 MASQUE (WARP)" valuePropName="checked">
+      <Form.Item name="enabled" label="启用 WARP" valuePropName="checked">
         <Switch />
       </Form.Item>
       <Form.Item name="sni" label="MASQUE SNI" extra="客户端 TLS ServerName，默认 zt-masque.cloudflareclient.com">
         <Input placeholder="zt-masque.cloudflareclient.com" />
       </Form.Item>
-      <Form.Item name="server_ips" label="接入地址（IP）" extra="Cloudflare MASQUE Anycast，可填多个用于客户端测速切换">
+      <Form.Item name="server_ips" label="MASQUE 接入地址（IP）" extra="Cloudflare MASQUE Anycast，可填多个用于客户端测速切换">
         <Select mode="tags" tokenSeparators={[',', ' ']} placeholder="162.159.198.2" />
       </Form.Item>
-      <Form.Item name="ports" label="端口" extra="默认 443 / 500 / 1701 / 4500 / 4443 / 8443 / 8095">
+      <Form.Item name="ports" label="MASQUE 端口" extra="默认 443 / 500 / 1701 / 4500 / 4443 / 8443 / 8095">
         <Select mode="tags" tokenSeparators={[',', ' ']} placeholder="443" />
       </Form.Item>
       <Form.Item name="dns" label="隧道内 DNS">
@@ -286,15 +339,16 @@ export default function MasquePage() {
     <div>
       <Space style={{ marginBottom: 14 }} wrap>
         <Input
-          style={{ width: 420 }}
-          value={uuid}
-          onChange={(e) => setUuid(e.target.value)}
-          placeholder="输入要授权的 UUID"
+          style={{ width: 360 }}
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="搜索 UUID / 邮箱 / 所有者"
+          prefix={<SearchOutlined style={{ color: '#94a3b8' }} />}
           allowClear
         />
-        <Button type="primary" icon={<PlusOutlined />} loading={!!busyUuid} onClick={authorize}>
-          授权并注册
-        </Button>
+        <span style={{ color: '#64748b', fontSize: 13 }}>
+          共 {uuids.length} 个 UUID，已授权 {authorizedCount} 个
+        </span>
         <Button icon={<ReloadOutlined />} onClick={reload} loading={loading}>
           刷新列表
         </Button>
@@ -304,7 +358,8 @@ export default function MasquePage() {
         size="small"
         loading={loading}
         columns={columns}
-        dataSource={profiles}
+        dataSource={rows}
+        scroll={{ x: 1150 }}
         pagination={{ pageSize: 20, showSizeChanger: false }}
       />
     </div>
