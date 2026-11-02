@@ -64,7 +64,7 @@ export default function MasquePage() {
     try {
       await Promise.all([loadSettings(), loadProfiles()]);
     } catch (e) {
-      message.error(e.message || '加载 MASQUE 失败');
+      message.error(e.message || '加载 WARP 失败');
     } finally {
       setLoading(false);
     }
@@ -302,7 +302,7 @@ export default function MasquePage() {
   );
 
   return (
-    <PageCard title="MASQUE" subtitle="Cloudflare WARP · 按 UUID 授权，节点无需部署">
+    <PageCard title="WARP" subtitle="Cloudflare WARP · 按 UUID 授权，节点无需部署">
       <Card styles={{ body: { paddingTop: 8 } }}>
         <Tabs
           items={[

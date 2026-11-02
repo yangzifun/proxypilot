@@ -54,7 +54,7 @@ export default function MasqueCard({ mobile = false }) {
     <div style={{ padding: mobile ? 0 : 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
         <div>
-          <b>MASQUE</b>
+          <b>WARP</b>
           <span className="pp-muted" style={{ marginLeft: 8, fontSize: 12 }}>
             Cloudflare WARP · 需要 mihomo Alpha
           </span>
@@ -69,9 +69,9 @@ export default function MasqueCard({ mobile = false }) {
       ) : state.error ? (
         <Alert type="error" showIcon message={state.error.message || '加载失败'} />
       ) : !data.enabled ? (
-        <Alert type="info" showIcon message="管理员还没有启用 MASQUE" />
+        <Alert type="info" showIcon message="管理员还没有启用 WARP" />
       ) : !data.granted ? (
-        <Alert type="info" showIcon message="管理员还没有为你的账号授权 MASQUE" />
+        <Alert type="info" showIcon message="管理员还没有为你的账号授权 WARP" />
       ) : (
         <div style={{ border: '1px solid #eef2f7', borderRadius: 12, padding: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>

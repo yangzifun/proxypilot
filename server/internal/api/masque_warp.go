@@ -196,7 +196,7 @@ func (h *handlers) masqueWarpProfilesList(w http.ResponseWriter, r *http.Request
 		   LEFT JOIN uuid_info u ON u.uuid = p.uuid
 		  ORDER BY p.id DESC`)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "读取 MASQUE 授权失败")
+		writeError(w, http.StatusInternalServerError, "读取 WARP 授权失败")
 		return
 	}
 	defer rows.Close()
@@ -274,7 +274,7 @@ func (h *handlers) masqueWarpProfileCreate(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if !settings.Enabled {
-		writeError(w, http.StatusBadRequest, "请先在 MASQUE 设置里启用 WARP")
+		writeError(w, http.StatusBadRequest, "请先在 WARP 设置里启用")
 		return
 	}
 	var exists int

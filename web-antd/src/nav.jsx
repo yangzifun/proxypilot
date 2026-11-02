@@ -61,6 +61,13 @@ export const PAGE_META = {
     group: '运维',
     accent: '#0ea5e9',
   },
+  masque: {
+    title: 'WARP',
+    subtitle: 'Cloudflare WARP · 按 UUID 授权',
+    icon: <CloudSyncOutlined />,
+    group: '运维',
+    accent: '#22c55e',
+  },
   status: {
     title: '服务器监控',
     subtitle: '在线率、资源占用与服务器明细',
