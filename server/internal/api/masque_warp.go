@@ -76,7 +76,7 @@ func (h *handlers) loadMasqueWarpSettings(r *http.Request) (masqueWarpSettings, 
 	var enabled int
 	err := h.db.QueryRowContext(r.Context(),
 		`SELECT enabled, sni, server_ips, ports, mtu, dns, updated_at FROM masque_warp_settings WHERE id = 1`).
-		Scan(&enabled, &s.SNI, &ips, &ports, &dns, &s.MTU, &s.UpdatedAt)
+		Scan(&enabled, &s.SNI, &ips, &ports, &s.MTU, &dns, &s.UpdatedAt)
 	if err == sql.ErrNoRows {
 		if _, err := h.db.ExecContext(r.Context(),
 			`INSERT INTO masque_warp_settings (id, enabled, sni, server_ips, ports, mtu, dns, updated_at)
