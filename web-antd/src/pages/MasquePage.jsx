@@ -20,6 +20,15 @@ import { PageCard } from '../components';
 
 const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
+const WARP_DEFAULTS = {
+  enabled: false,
+  sni: 'zt-masque.cloudflareclient.com',
+  server_ips: ['162.159.198.1', '162.159.198.2', '162.159.199.1', '162.159.199.2', '2606:4700:103::1', '2606:4700:103::2', '2606:4700:104::1', '2606:4700:104::2'],
+  ports: [443, 500, 1701, 4500, 4443, 8443, 8095],
+  dns: ['1.1.1.1', '2606:4700:4700::1111'],
+  mtu: 1280,
+};
+
 function fmtTime(v) {
   const n = Number(v || 0);
   if (!n) return '—';
@@ -248,7 +257,7 @@ export default function MasquePage() {
   );
 
   const settingsTab = (
-    <Form form={form} layout="vertical" style={{ maxWidth: 760 }}>
+    <Form form={form} layout="vertical" style={{ maxWidth: 760 }} initialValues={WARP_DEFAULTS}>
       <Form.Item name="enabled" label="启用 MASQUE (WARP)" valuePropName="checked">
         <Switch />
       </Form.Item>
@@ -307,7 +316,7 @@ export default function MasquePage() {
         <Tabs
           items={[
             { key: 'grants', label: '用户授权', children: grantsTab },
-            { key: 'settings', label: 'WARP 设置', children: settingsTab },
+            { key: 'settings', label: 'WARP 设置', children: settingsTab, forceRender: true },
           ]}
         />
       </Card>
