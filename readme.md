@@ -1,11 +1,6 @@
-# ProxyPilot（Go + MySQL + Ant Design）V15.4
+# ProxyPilot
 
-![Go](https://img.shields.io/badge/Go-1.23-00ADD8?logo=go&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white) ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black) ![Ant Design](https://img.shields.io/badge/Ant%20Design-6-1677FF?logo=antdesign&logoColor=white) ![Agent](https://img.shields.io/badge/Agent-Go-00ADD8?logo=go&logoColor=white) ![Version](https://img.shields.io/badge/Version-V15.0-blue.svg) ![License](https://img.shields.io/badge/License-MIT-green.svg)
-
-> **本分支（`feat/go-backend-migration`）的生产主架构：Go 后端 + MySQL 8 + Ant Design 前端 + Go Agent。**
-> 旧 Cloudflare Worker 实现已移除，历史迁移记录保留在 `docs/migration/`。
-
-详细设计见 **[ARCHITECTURE.md](ARCHITECTURE.md)**，迁移记录见 [`docs/migration/`](docs/migration/README.md)。
+![Go](https://img.shields.io/badge/Go-1.23-00ADD8?logo=go&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white) ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black) ![Ant Design](https://img.shields.io/badge/Ant%20Design-6-1677FF?logo=antdesign&logoColor=white) ![Agent](https://img.shields.io/badge/Agent-Go-00ADD8?logo=go&logoColor=white) ![Version](https://img.shields.io/badge/Version-V15.4-blue.svg) ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
 ---
 
