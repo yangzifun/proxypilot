@@ -399,7 +399,7 @@ func (h *handlers) statsTrafficUserDetail(w http.ResponseWriter, r *http.Request
 // GET /api/stats/traffic/nodes
 func (h *handlers) statsTrafficNodes(w http.ResponseWriter, r *http.Request) {
 	rows, err := queryRowsAsMaps(r.Context(), h.db, `SELECT n.id AS node_id, n.name AS node_name,
-	      COALESCE(s.name,'') AS server_name, n.stats_enabled,
+	      n.server_id, COALESCE(s.name,'') AS server_name, n.stats_enabled,
 	      COALESCE(snap.sampled_at,0) AS sampled_at, COALESCE(snap.conn_count,0) AS conn_count,
 	      COALESCE(snap.up_total,0) AS up_total, COALESCE(snap.down_total,0) AS down_total,
 	      COALESCE(snap.up_rate,0) AS up_rate, COALESCE(snap.down_rate,0) AS down_rate,
@@ -416,7 +416,8 @@ func (h *handlers) statsTrafficNodes(w http.ResponseWriter, r *http.Request) {
 	for _, row := range rows {
 		data = append(data, map[string]any{
 			"node_id": mapInt(row, "node_id", 0), "node_name": mapStr(row, "node_name", ""),
-			"server_name":   mapStr(row, "server_name", ""),
+			"server_id":   mapInt(row, "server_id", 0),
+			"server_name": mapStr(row, "server_name", ""),
 			"stats_enabled": mapInt(row, "stats_enabled", 1) != 0,
 			"sampled_at":    mapInt(row, "sampled_at", 0),
 			"conn_count":    mapInt(row, "conn_count", 0),

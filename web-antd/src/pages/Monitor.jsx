@@ -84,15 +84,16 @@ export default function Monitor() {
   const [unlockFor, setUnlockFor] = useState(null);
 
   const { data, loading, error, reload } = useAsync(() => api('servers/monitor'), []);
-  // 节点连接与采集统计（sing-box 节点）
-  const [connNodeId, setConnNodeId] = useState(0);
+  // 节点连接与采集统计（sing-box 节点，按 server_id 合并进服务器卡片）
   const nodeStats = useAsync(() => api('stats/traffic/nodes'), []);
-  const conns = useAsync(
-    () => (connNodeId ? api(`nodes/${connNodeId}/connections`) : Promise.resolve({ data: [] })),
-    [connNodeId]
-  );
   const nodeRows = (nodeStats.data && nodeStats.data.data) || [];
-  const connRows = (conns.data && conns.data.data) || [];
+  const nodeByServer = useMemo(() => {
+    const m = new Map();
+    nodeRows.forEach((n) => {
+      if (n.server_id) m.set(Number(n.server_id), n);
+    });
+    return m;
+  }, [nodeRows]);
 
   usePolling(() => reload().catch(() => {}), auto ? 5000 : 0);
   usePolling(() => nodeStats.reload().catch(() => {}), auto ? 15000 : 0);
@@ -390,111 +391,6 @@ export default function Monitor() {
         </PageCard>
       </div>
 
-      <div style={{ marginTop: 16 }}>
-        <PageCard
-          title={<span className="pp-section-title">节点连接与采集统计</span>}
-          extra={
-            <Space wrap>
-              <span className="pp-muted" style={{ fontSize: 12 }}>{nodeRows.length} 个 sing-box 节点</span>
-              <Button
-                size="small"
-                icon={<ReloadOutlined />}
-                loading={nodeStats.loading}
-                onClick={() => nodeStats.reload().catch(() => {})}
-              >
-                刷新
-              </Button>
-            </Space>
-          }
-          bodyStyle={{ padding: 0 }}
-          loading={nodeStats.loading}
-        >
-          {nodeStats.error ? (
-            <div style={{ padding: 16 }}>
-              <ErrorBlock error={nodeStats.error} onRetry={() => nodeStats.reload().catch(() => {})} />
-            </div>
-          ) : null}
-          <Table
-            className="pp-table"
-            rowKey="node_id"
-            size="small"
-            dataSource={nodeRows}
-            pagination={false}
-            scroll={{ x: 980 }}
-            columns={[
-              { title: '节点', dataIndex: 'node_name', width: 160 },
-              { title: '服务器', dataIndex: 'server_name', width: 150 },
-              {
-                title: '状态',
-                dataIndex: 'stats_enabled',
-                width: 110,
-                render: (on, row) =>
-                  on ? (
-                    row.error ? <Tag color="orange">采集异常</Tag> : <Tag color="green">正常</Tag>
-                  ) : (
-                    <Tag>未启用</Tag>
-                  ),
-              },
-              { title: '连接数', dataIndex: 'conn_count', width: 90, align: 'right' },
-              { title: '实时下行', dataIndex: 'down_rate', width: 120, align: 'right', render: (v) => fmtBytes(v) + '/s' },
-              { title: '实时上行', dataIndex: 'up_rate', width: 120, align: 'right', render: (v) => fmtBytes(v) + '/s' },
-              { title: '累计下行', dataIndex: 'down_total', width: 120, align: 'right', render: (v) => fmtBytes(v) },
-              { title: '累计上行', dataIndex: 'up_total', width: 120, align: 'right', render: (v) => fmtBytes(v) },
-              {
-                title: '最后采集',
-                dataIndex: 'sampled_at',
-                width: 160,
-                render: (v, row) => (row.error ? <span className="pp-muted">{row.error}</span> : fmtAgo(v)),
-              },
-            ]}
-            locale={{ emptyText: '还没有节点：先在「普通代理」里绑定节点并下发' }}
-          />
-          <div style={{ padding: '12px 16px 16px' }}>
-            <Space wrap style={{ marginBottom: 10 }}>
-              <span className="pp-muted" style={{ fontSize: 12 }}>实时连接</span>
-              <Select
-                style={{ minWidth: 260 }}
-                placeholder="选择节点查看实时连接"
-                value={connNodeId || undefined}
-                onChange={setConnNodeId}
-                options={nodeRows.map((n) => ({
-                  value: n.node_id,
-                  label: `${n.node_name}${n.server_name ? ' · ' + n.server_name : ''}`,
-                }))}
-              />
-              <Button
-                size="small"
-                icon={<ReloadOutlined />}
-                disabled={!connNodeId}
-                loading={conns.loading}
-                onClick={() => conns.reload().catch(() => {})}
-              >
-                刷新连接
-              </Button>
-              <span className="pp-muted" style={{ fontSize: 12 }}>用户维度用量见「业务 → 用户流量」</span>
-            </Space>
-            <Table
-              className="pp-table"
-              rowKey={(r) => `${r.source_ip}:${r.source_port}-${r.started_at}`}
-              size="small"
-              loading={conns.loading}
-              dataSource={connNodeId ? connRows : []}
-              pagination={{ pageSize: 10, showTotal: (t) => `共 ${t} 条连接` }}
-              scroll={{ x: 860 }}
-              columns={[
-                { title: '源 IP', dataIndex: 'source_ip', width: 180, render: (v, row) => (v ? v + ':' + (row.source_port || 0) : '—') },
-                { title: '目标', dataIndex: 'host', render: (v) => v || '—' },
-                { title: '协议', dataIndex: 'network', width: 90, render: (v) => v || '—' },
-                { title: '入站', dataIndex: 'inbound', width: 170, render: (v) => v || '—' },
-                { title: '上行', dataIndex: 'upload', width: 100, align: 'right', render: (v) => fmtBytes(v) },
-                { title: '下行', dataIndex: 'download', width: 100, align: 'right', render: (v) => fmtBytes(v) },
-                { title: '持续', dataIndex: 'started_at', width: 110, render: (v) => (v ? fmtAgo(v) : '—') },
-              ]}
-              locale={{ emptyText: connNodeId ? '当前没有活动连接' : '先选择节点' }}
-            />
-          </div>
-        </PageCard>
-      </div>
 
       <div style={{ marginTop: 16 }}>
         <PageCard
@@ -503,7 +399,7 @@ export default function Monitor() {
           bodyStyle={{ padding: 16 }}
           loading={showSkeleton}
         >
-          <ServerCards servers={servers} onPick={(s) => setDetailId(s.id)} onUnlock={setUnlockFor} />
+          <ServerCards servers={servers} nodeByServer={nodeByServer} onPick={(s) => setDetailId(s.id)} onUnlock={setUnlockFor} />
         </PageCard>
       </div>
 
@@ -549,7 +445,7 @@ function CountryFlag({ code }) {
   );
 }
 
-function ServerCards({ servers, onPick, onUnlock }) {
+function ServerCards({ servers, nodeByServer, onPick, onUnlock }) {
   if (!servers.length) {
     return <Empty description="还没有服务器" image={Empty.PRESENTED_IMAGE_SIMPLE} style={{ padding: '26px 0' }} />;
   }
@@ -557,7 +453,12 @@ function ServerCards({ servers, onPick, onUnlock }) {
     <Row gutter={[12, 12]}>
       {servers.map((s) => (
         <Col key={s.id} xs={24} sm={12} xl={8} xxl={6}>
-          <ServerCard s={s} onPick={onPick} onUnlock={onUnlock} />
+          <ServerCard
+            s={s}
+            node={nodeByServer ? nodeByServer.get(Number(s.id)) : null}
+            onPick={onPick}
+            onUnlock={onUnlock}
+          />
         </Col>
       ))}
     </Row>
@@ -597,7 +498,7 @@ function osBadge(osName) {
   };
 }
 
-function ServerCard({ s, onPick, onUnlock }) {
+function ServerCard({ s, node, onPick, onUnlock }) {
   const net = s.net || {};
   const io = s.disk_io || {};
   const conn = s.conn || {};
@@ -711,6 +612,31 @@ function ServerCard({ s, onPick, onUnlock }) {
           <span>Agent</span>
           <span>{s.agent_version || '—'}</span>
         </div>
+        {node ? (
+          <>
+            <div>
+              <span>sing-box 节点连接</span>
+              <span>
+                {fmtNum(node.conn_count)}
+                {node.error ? (
+                  <Tag color="orange" style={{ marginInlineStart: 6 }}>采集异常</Tag>
+                ) : null}
+              </span>
+            </div>
+            <div>
+              <span>节点实时 ↓ / ↑</span>
+              <span>
+                {fmtBytes(node.down_rate)}/s / {fmtBytes(node.up_rate)}/s
+              </span>
+            </div>
+            <div>
+              <span>节点累计 ↓ / ↑</span>
+              <span>
+                {fmtBytes(node.down_total)} / {fmtBytes(node.up_total)}
+              </span>
+            </div>
+          </>
+        ) : null}
       </div>
 
       {bad.length ? <div className="pp-srv-bad">服务异常：{bad.map(([k]) => k).join('、')}</div> : null}
