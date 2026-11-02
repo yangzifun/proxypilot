@@ -48,10 +48,10 @@ export const PAGE_META = {
     accent: '#0ea5e9',
   },
   normal: {
-    title: '普通节点',
-    subtitle: '协议模板与节点绑定',
+    title: '普通代理',
+    subtitle: '普通节点 · 协议模板与节点绑定',
     icon: <NodeIndexOutlined />,
-    group: '运维',
+    group: '节点运维',
     accent: '#8b5cf6',
   },
   mtproto: {
@@ -119,7 +119,8 @@ export const NAV_ORDER = ['dash', 'uuids', 'tpls', 'servers', 'normal', 'mtproto
 
 export const NAV_GROUPS = [
   { group: '业务', keys: ['dash', 'uuids', 'tpls'] },
-  { group: '运维', keys: ['servers', 'normal', 'mtproto', 'masque', 'status'] },
+  { group: '服务器运维', keys: ['servers', 'status'] },
+  { group: '节点运维', keys: ['normal', 'mtproto', 'masque'] },
   { group: '系统', keys: ['logs', 'attachments', 'sys', 'backup', 'sec'] },
 ];
 
