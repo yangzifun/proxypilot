@@ -111,8 +111,8 @@ func (h *handlers) uuidDetail(w http.ResponseWriter, r *http.Request) {
 
 // GET/PUT /api/uuids/{uuid}/nodes —— 查看/调整该 UUID 的 sing-box 节点授权
 func (h *handlers) uuidNodes(w http.ResponseWriter, r *http.Request) {
-	uuid := pathParam(r, "uuid")
-	if !uuidRe.MatchString(strings.ToLower(uuid)) {
+	uuid := strings.ToLower(strings.TrimSpace(pathParam(r, "uuid")))
+	if !uuidRe.MatchString(uuid) {
 		writeError(w, http.StatusBadRequest, "UUID格式无效")
 		return
 	}
@@ -132,7 +132,7 @@ func (h *handlers) uuidNodes(w http.ResponseWriter, r *http.Request) {
 				"id": mapInt(row, "id", 0), "name": mapStr(row, "name", ""),
 				"server_name":   firstNonEmpty(mapStr(row, "server_name", ""), "#"+strconv.FormatInt(mapInt(row, "id", 0), 10)),
 				"template_name": mapStr(row, "template_name", ""),
-				"users":         len(list), "authorized": containsString(list, uuid),
+				"users":         len(list), "authorized": containsUUIDFold(list, uuid),
 			})
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"success": true, "uuid": uuid, "data": data})
@@ -155,10 +155,11 @@ func (h *handlers) uuidNodes(w http.ResponseWriter, r *http.Request) {
 	}
 	results := []map[string]any{}
 	affected := []int64{}
+	nextByNode := map[int64][]string{}
 	for _, row := range rows {
 		id := mapInt(row, "id", 0)
 		cur := parseUUIDList(mapStr(row, "uuid_list", "[]"))
-		has := containsString(cur, uuid)
+		has := containsUUIDFold(cur, uuid)
 		should := want[id]
 		if has == should {
 			continue
@@ -178,15 +179,40 @@ func (h *handlers) uuidNodes(w http.ResponseWriter, r *http.Request) {
 		raw, _ := json.Marshal(next)
 		if _, err := h.db.ExecContext(r.Context(),
 			`UPDATE singbox_nodes SET uuid_list = ?, updated_at = ? WHERE id = ?`, raw, nowMillis(), id); err == nil {
-			results = append(results, map[string]any{"node_id": id, "authorized": should})
+			results = append(results, map[string]any{"node_id": id, "authorized": should, "ok": true})
 			affected = append(affected, id)
+			nextByNode[id] = next
+		} else {
+			results = append(results, map[string]any{"node_id": id, "authorized": has, "ok": false, "error": "写入授权失败"})
 		}
 	}
-	// 授权变化后立即重新渲染并排队下发
+	// 授权变化后立即重新渲染并排队下发（多个授权/解除一次性处理，失败的节点回传原因）
+	// 同时按最新用户列表重建该节点在 configs 里的订阅配置：授权即增加，解除即回收。
+	applyErr := map[int64]string{}
 	for _, id := range affected {
-		_, _, _, _, _ = h.applySingboxNode(r.Context(), id, nil, false)
+		if _, _, _, _, msg := h.applySingboxNode(r.Context(), id, nil, false); msg != "" {
+			applyErr[id] = msg
+			continue
+		}
+		if tpl, node, _, _, msg := h.loadSingboxNodeFull(r.Context(), id); msg == "" {
+			users := singboxUsersFromUUIDs(tpl, nextByNode[id])
+			_, _, _ = h.syncSingboxConfigsForUsers(r.Context(), id, node.Name, tpl, node, users)
+		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"success": true, "uuid": uuid, "data": results, "affected": len(affected)})
+	if len(applyErr) > 0 {
+		for _, item := range results {
+			if id, ok := item["node_id"].(int64); ok {
+				if msg, bad := applyErr[id]; bad {
+					item["ok"] = false
+					item["error"] = msg
+				}
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success": true, "uuid": uuid, "data": results, "results": results,
+		"changed": len(affected), "affected": len(affected),
+	})
 }
 
 // GET/POST /api/uuids/{uuid}/configs
@@ -372,6 +398,15 @@ func (h *handlers) uuidConfigItem(w http.ResponseWriter, r *http.Request) {
 
 func pathParam(r *http.Request, name string) string {
 	return r.PathValue(name)
+}
+
+func containsUUIDFold(list []string, v string) bool {
+	for _, s := range list {
+		if strings.EqualFold(strings.TrimSpace(s), v) {
+			return true
+		}
+	}
+	return false
 }
 
 func parseUUIDList(raw string) []string {

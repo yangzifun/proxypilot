@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"net/http"
 	"strings"
 )
@@ -292,13 +293,62 @@ func (h *handlers) uuidConfigsDelete(w http.ResponseWriter, r *http.Request) {
 		if n < before {
 			n = before
 		}
+		// 一键清理 = 同时解除所有节点对该 UUID 的授权，并立即重渲染下发，
+		// 否则节点 uuid_list 仍保留该 UUID，重新授权时会被判定为「无变化」而不下发。
+		revoked, deployed := h.revokeUUIDFromNodes(r.Context(), target)
 		writeJSON(w, http.StatusOK, map[string]any{
-			"success": true, "deleted": n, "nodes_revoked": 0, "nodes_deployed": 0,
-			"warning": "节点上的授权需由 UUID 巡检或旧 Worker 重渲染后才完全移除",
+			"success": true, "deleted": n,
+			"nodes_revoked": revoked, "nodes_deployed": deployed,
 		})
 		return
 	}
 	writeError(w, http.StatusBadRequest, "缺少 id / ids / uuid")
+}
+
+// revokeUUIDFromNodes 从所有 sing-box 节点的 uuid_list 移除该 UUID，并立即重渲染下发。
+// 返回（解除授权的节点数, 成功下发的节点数）。
+func (h *handlers) revokeUUIDFromNodes(ctx context.Context, uuid string) (int, int) {
+	rows, err := queryRowsAsMaps(ctx, h.db, `SELECT id, COALESCE(uuid_list,'[]') AS uuid_list FROM singbox_nodes`)
+	if err != nil {
+		return 0, 0
+	}
+	affected := make([]int64, 0, len(rows))
+	nextByNode := map[int64][]string{}
+	for _, row := range rows {
+		id := mapInt(row, "id", 0)
+		cur := parseUUIDList(mapStr(row, "uuid_list", "[]"))
+		if id == 0 || !containsString(cur, uuid) {
+			continue
+		}
+		next := make([]string, 0, len(cur))
+		for _, u := range cur {
+			if !strings.EqualFold(strings.TrimSpace(u), uuid) {
+				next = append(next, u)
+			}
+		}
+		raw, err := json.Marshal(next)
+		if err != nil {
+			continue
+		}
+		if _, err := h.db.ExecContext(ctx,
+			`UPDATE singbox_nodes SET uuid_list = ?, updated_at = ? WHERE id = ?`, raw, nowMillis(), id); err == nil {
+			affected = append(affected, id)
+			nextByNode[id] = next
+		}
+	}
+	deployed := 0
+	for _, id := range affected {
+		if _, _, _, _, msg := h.applySingboxNode(ctx, id, nil, false); msg != "" {
+			continue
+		}
+		deployed++
+		// 节点侧用户列表变化后同步回收 subscriptions 里该节点的配置
+		if tpl, node, _, _, msg := h.loadSingboxNodeFull(ctx, id); msg == "" {
+			users := singboxUsersFromUUIDs(tpl, nextByNode[id])
+			_, _, _ = h.syncSingboxConfigsForUsers(ctx, id, node.Name, tpl, node, users)
+		}
+	}
+	return len(affected), deployed
 }
 
 func deleteConfigsByIDs(ctx context.Context, db *sql.DB, ids []int64) (int64, error) {
