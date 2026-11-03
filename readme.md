@@ -1,6 +1,6 @@
 # ProxyPilot
 
-![Go](https://img.shields.io/badge/Go-1.23-00ADD8?logo=go&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white) ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black) ![Ant Design](https://img.shields.io/badge/Ant%20Design-6-1677FF?logo=antdesign&logoColor=white) ![Agent](https://img.shields.io/badge/Agent-Go-00ADD8?logo=go&logoColor=white) ![Version](https://img.shields.io/badge/Version-V15.13-blue.svg) ![License](https://img.shields.io/badge/License-MIT-green.svg)
+![Go](https://img.shields.io/badge/Go-1.23-00ADD8?logo=go&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white) ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black) ![Ant Design](https://img.shields.io/badge/Ant%20Design-6-1677FF?logo=antdesign&logoColor=white) ![Agent](https://img.shields.io/badge/Agent-Go-00ADD8?logo=go&logoColor=white) ![Version](https://img.shields.io/badge/Version-V15.14-blue.svg) ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
 ---
 
@@ -477,6 +477,12 @@ npm run check      # build + render-check + e2e
 
 ## 更新日志
 
+### V15.14（2026-11-03）
+
+- **「授权节点」改为「授权服务」**：同一台服务器的 sing-box 与 MTProto 服务统一列出，勾选即同时授权/撤销两类服务。
+- **接口**：新增 `GET/PUT /api/uuids/{uuid}/services`，返回 `{kind, id, name, server_name, template_name, users, authorized}`；PUT 接收 `services:[{kind,id}]`，按目标集合增删。
+- **MTProto 授权联动**：授权时自动为 UUID 创建 active 客户端（按节点伪装域名生成 secret），撤销时置为 revoked，并重渲染下发节点配置。
+- **sing-box 授权联动**：沿用 uuid_list + 重渲染 + 订阅配置同步 + 授权后一致性复核。
 ### V15.13（2026-11-03）
 
 - **修复 MTProto 创建报错「无法生成 bootstrap_secret：请先填写有效伪装域名」**：生成 secret 时误用了空的 `bootstrap_secret` 字段而不是节点填写的 `domain`，导致填了合法域名仍被拒绝；现改为优先用节点伪装域名，未填时才回落模板域名。

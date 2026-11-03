@@ -111,7 +111,7 @@ export default function GroupDetail({ uuid, onClose }) {
           },
           {
             key: 'nodes',
-            label: (<span><SafetyCertificateOutlined /> 授权节点</span>),
+            label: (<span><SafetyCertificateOutlined /> 授权服务</span>),
             children: <AuthorizeNodes uuid={uuid} onChanged={loadRow} />,
           },
           {
@@ -388,7 +388,7 @@ function Configs({ uuid, onChanged }) {
   );
 }
 
-/* ---------------- 授权节点 ---------------- */
+/* ---------------- 授权服务 ---------------- */
 function AuthorizeNodes({ uuid, onChanged }) {
   const { message } = AntdApp.useApp();
   const [state, setState] = useState({ data: [], loading: false, error: null });
@@ -400,10 +400,10 @@ function AuthorizeNodes({ uuid, onChanged }) {
     if (!uuid) return;
     setState((s) => ({ ...s, loading: true, error: null }));
     try {
-      const res = await api(`uuids/${uuid}/nodes`);
+      const res = await api(`uuids/${uuid}/services`);
       const data = (res && res.data) || [];
       setState({ data, loading: false, error: null });
-      setSelected(data.filter((n) => n.authorized).map((n) => n.id));
+      setSelected(data.filter((n) => n.authorized).map((n) => `${n.kind}:${n.id}`));
       setDirty(false);
     } catch (e) {
       setState({ data: [], loading: false, error: e });
@@ -417,10 +417,14 @@ function AuthorizeNodes({ uuid, onChanged }) {
   const save = async () => {
     setSaving(true);
     try {
-      const res = await api(`uuids/${uuid}/nodes`, { method: 'PUT', body: { node_ids: selected } });
+      const services = selected.map((k) => {
+        const [kind, id] = String(k).split(':');
+        return { kind, id: Number(id) };
+      });
+      const res = await api(`uuids/${uuid}/services`, { method: 'PUT', body: { services } });
       const failed = (res.results || []).filter((r) => r.ok === false);
-      if (failed.length) message.warning(`已提交 ${res.changed || 0} 个变更，${failed.length} 个节点下发失败`);
-      else message.success(`已保存，${res.changed || 0} 个节点发生变化并重新下发`);
+      if (failed.length) message.warning(`已提交 ${res.changed || 0} 个变更，${failed.length} 个服务处理失败`);
+      else message.success(`已保存，${res.changed || 0} 个服务授权发生变化`);
       load();
       if (onChanged) onChanged();
     } catch (e) {
@@ -431,7 +435,13 @@ function AuthorizeNodes({ uuid, onChanged }) {
   };
 
   const columns = [
-    { title: '节点', dataIndex: 'name', width: 170, render: (v) => <b>{v}</b> },
+    {
+      title: '类型',
+      dataIndex: 'kind',
+      width: 110,
+      render: (v) => (v === 'mtproto' ? <Tag color="volcano">MTProto</Tag> : <Tag color="geekblue">sing-box</Tag>),
+    },
+    { title: '服务', dataIndex: 'name', width: 170, render: (v) => <b>{v}</b> },
     { title: '服务器', dataIndex: 'server_name', width: 150 },
     {
       title: '模板',
@@ -439,13 +449,7 @@ function AuthorizeNodes({ uuid, onChanged }) {
       width: 150,
       render: (v) => (v ? <Tag color="purple">{v}</Tag> : <span className="pp-muted">内置默认</span>),
     },
-    {
-      title: '当前授权用户数',
-      dataIndex: 'users',
-      width: 130,
-      align: 'right',
-      render: (v) => fmtNum(v),
-    },
+    { title: '当前授权用户数', dataIndex: 'users', width: 130, align: 'right', render: (v) => fmtNum(v) },
     {
       title: '状态',
       dataIndex: 'authorized',
@@ -461,7 +465,7 @@ function AuthorizeNodes({ uuid, onChanged }) {
         showIcon
         style={{ borderRadius: 10, marginBottom: 12 }}
         message="勾选即授权，取消勾选即撤销"
-        description="保存后会立即重渲染并下发受影响节点；变更同时会刷新该 UUID 的订阅配置。"
+        description="授权覆盖该服务器上的 sing-box 与 MTProto 两种服务：sing-box 立即重渲染下发，MTProto 启用/撤销客户端并重渲染下发；变更同时刷新该 UUID 的订阅配置。"
       />
       <Toolbar
         left={
@@ -490,11 +494,12 @@ function AuthorizeNodes({ uuid, onChanged }) {
       {state.error ? <ErrorBlock error={state.error} onRetry={load} /> : null}
       <Table
         className="pp-table"
-        rowKey="id"
+        rowKey={(row) => `${row.kind}:${row.id}`}
         size="small"
         loading={state.loading}
         dataSource={state.data}
         columns={columns}
+        pagination={false}
         rowSelection={{
           selectedRowKeys: selected,
           onChange: (keys) => {
@@ -502,8 +507,7 @@ function AuthorizeNodes({ uuid, onChanged }) {
             setDirty(true);
           },
         }}
-        pagination={false}
-        locale={{ emptyText: <EmptyBlock text="还没有任何 sing-box 节点绑定" /> }}
+        locale={{ emptyText: '暂无 sing-box / MTProto 服务' }}
       />
     </div>
   );

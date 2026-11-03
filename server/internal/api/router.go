@@ -80,6 +80,8 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("PUT /api/uuids/{uuid}", h.authed(authOpts{}, h.uuidDetail))
 	mux.HandleFunc("DELETE /api/uuids/{uuid}", h.authed(authOpts{}, h.uuidDetail))
 	mux.HandleFunc("GET /api/uuids/{uuid}/nodes", h.authed(authOpts{}, h.uuidNodes))
+	mux.HandleFunc("GET /api/uuids/{uuid}/services", h.authed(authOpts{}, h.uuidServices))
+	mux.HandleFunc("PUT /api/uuids/{uuid}/services", h.authed(authOpts{}, h.uuidServices))
 	mux.HandleFunc("PUT /api/uuids/{uuid}/nodes", h.authed(authOpts{}, h.uuidNodes))
 	mux.HandleFunc("POST /api/uuids/{uuid}/nodes", h.authed(authOpts{}, h.uuidNodes))
 	mux.HandleFunc("GET /api/uuids/{uuid}/configs", h.authed(authOpts{}, h.uuidConfigsRest))
