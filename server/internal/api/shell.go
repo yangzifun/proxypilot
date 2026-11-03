@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
@@ -354,9 +355,26 @@ func (h *handlers) agentWS(w http.ResponseWriter, r *http.Request) {
 		}
 		agentWSHub.Unlock()
 	}()
+	remoteIP := clientIP(r)
 	for {
-		if _, _, err := ws.ReadMessage(); err != nil {
+		op, body, err := ws.ReadMessage()
+		if err != nil {
 			return
+		}
+		if op != 0x1 || len(body) == 0 || body[0] != '{' {
+			continue
+		}
+		var frame map[string]any
+		if json.Unmarshal(body, &frame) != nil {
+			continue
+		}
+		switch mapStr(frame, "type", "") {
+		case "metrics":
+			if sample, ok := frame["sample"].(map[string]any); ok {
+				h.ingestAgentWSMetrics(r.Context(), srv, sample, remoteIP)
+			}
+		case "wake":
+			// 老格式兼容：Agent 主动要任务时也唤醒自己
 		}
 	}
 }

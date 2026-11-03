@@ -28,7 +28,12 @@ func manifestAsset(manifest manifestData, platform string) (url, sha string, siz
 		return "", "", 0, false
 	}
 	base := strings.TrimRight(manifest.Base, "/")
-	return base + "/" + file, mapStr(m, "sha256", ""), mapInt(m, "size", 0), true
+	sha = mapStr(m, "sha256", "")
+	u := base + "/" + file
+	if sha != "" { // 同名文件每版覆盖：带 sha 参数绕过 CDN 缓存
+		u += "?sha256=" + sha
+	}
+	return u, sha, mapInt(m, "size", 0), true
 }
 
 // POST /api/agent/push-update —— 给 Agent 下发升级任务

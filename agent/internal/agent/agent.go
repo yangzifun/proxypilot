@@ -3,6 +3,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -40,7 +41,7 @@ import (
 // 1.8.5：组件二进制改为「临时文件 + rename」写入，修复运行中覆盖导致的 text file busy
 // 1.8.6：解包改流式写盘，避免小内存节点在安装 78MB sing-box 时被 OOM kill
 // 1.8.7：新增 inspect 动作（只读检查配置文件，供 UUID 一致性巡检核对机器实际配置）
-const Version = "1.8.7"
+const Version = "1.8.8"
 
 // maxActionsPerRound 单轮执行任务数上限（服务端 AGENT_ACTIONS_PER_POLL = 5，这里留足余量）。
 const maxActionsPerRound = 20
@@ -200,6 +201,37 @@ func (a *Agent) collectStats(targets []client.StatsTarget) {
 	a.mu.Lock()
 	a.lastStats = res
 	a.mu.Unlock()
+}
+
+// sampleRequest 构造一次监控样本（WebSocket 实时上报复用 poll 的字段）。
+func (a *Agent) sampleRequest() client.PollRequest {
+	m := a.opts.Collect()
+	return client.PollRequest{
+		AgentVersion: Version,
+		Hostname:     m.Hostname,
+		OS:           m.OS,
+		Kernel:       m.Kernel,
+		Platform:     m.Platform,
+		Arch:         m.Arch,
+		Cores:        m.Cores,
+		UptimeSec:    m.UptimeSec,
+		Load:         m.Load,
+		MemUsedMB:    m.MemUsedMB,
+		MemTotalMB:   m.MemTotalMB,
+		DiskPercent:  m.DiskPercent,
+		CPUTicks:     m.CPUTicks,
+		Services:     m.Services,
+		Versions:     m.Versions,
+		SSH:          m.SSH,
+		TCPPorts:     m.TCPPorts,
+		IP:           m.IP,
+		IPv6:         m.IPv6,
+		Net:          m.Net,
+		DiskIO:       m.DiskIO,
+		Conns:        m.Conns,
+		Procs:        m.Procs,
+		Applied:      a.opts.Store.Applied(),
+	}
 }
 
 // maybeStartShell 收到 shell hint 时起一个实时终端 goroutine（同一时间只允许一个）。
@@ -393,6 +425,30 @@ func (a *Agent) wsOnce(ctx context.Context) error {
 				pcancel()
 				if err != nil {
 					_ = ws.Close(websocket.StatusGoingAway, "ping failed")
+					return
+				}
+			}
+		}
+	}()
+
+	// 实时监控：WS 连接期间每 5s 上报一次样本，面板无需等下一次 30s poll
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-pingCtx.Done():
+				return
+			case <-ticker.C:
+				payload, err := json.Marshal(map[string]any{"type": "metrics", "sample": a.sampleRequest()})
+				if err != nil {
+					continue
+				}
+				wctx, wcancel := context.WithTimeout(ctx, 10*time.Second)
+				werr := ws.Write(wctx, websocket.MessageText, payload)
+				wcancel()
+				if werr != nil {
+					_ = ws.Close(websocket.StatusGoingAway, "metrics write failed")
 					return
 				}
 			}

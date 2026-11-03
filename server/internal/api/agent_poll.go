@@ -906,3 +906,27 @@ func isSystemExecPayload(p map[string]any) bool {
 	}
 	return false
 }
+
+// ingestAgentWSMetrics 处理 Agent 通过 WebSocket 实时上报的监控样本：
+// 每次都刷新快照（面板立即变化），明细采样最多 60s 落一条，避免表膨胀。
+func (h *handlers) ingestAgentWSMetrics(ctx context.Context, srv *agentServer, body map[string]any, ip string) {
+	m := parseAgentMetrics(body)
+	prev := h.agentPrevMetric(ctx, srv.ID)
+	const wsIntervalSec = int64(5)
+	m.CpuPercent = agentCpuPercentFromSample(prev, m, wsIntervalSec)
+	rates := agentThroughputFromSample(prev, m, wsIntervalSec)
+	version := firstNonEmpty(jsonStr(body["agent_version"]), jsonStr(body["agentVersion"]))
+	opts := struct {
+		NextPollSec    int64
+		PersistPollSec int64
+		PollCount      int64
+		AgentVersion   string
+		IP, IP4, IP6   string
+	}{srv.NextPollSec, srv.NextPollSec, srv.AgentPollCount, version, ip, "", ""}
+	if err := h.agentUpdateSnapshot(ctx, srv, m, opts, rates); err != nil {
+		h.log.Warn("WS 快照更新失败", "err", err)
+	}
+	if prev == nil || nowMillis()-prev.CreatedAt >= 60000 {
+		h.insertServerMetric(ctx, srv.ID, m, rates)
+	}
+}

@@ -206,7 +206,7 @@ func (h *handlers) agentLatestManifest(ctx context.Context, force bool) manifest
 	}
 
 	client := &http.Client{Timeout: 8 * time.Second}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/manifest.json", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/manifest.json?t="+strconv.FormatInt(time.Now().UnixMilli(), 10), nil)
 	if err != nil {
 		data.Error = "manifest.json 读取失败：" + err.Error()
 		manifestMemo, manifestAt = &data, time.Now()
