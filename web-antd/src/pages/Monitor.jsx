@@ -645,7 +645,7 @@ function osBadge(osName) {
   };
 }
 
-export function ServerCard({ s, node, onPick, onUnlock }) {
+export function ServerCard({ s, node, onPick, onUnlock, leading }) {
   const net = s.net || {};
   const io = s.disk_io || {};
   const conn = s.conn || {};
@@ -675,6 +675,15 @@ export function ServerCard({ s, node, onPick, onUnlock }) {
       }}
     >
       <div className="pp-srv-head">
+        {leading ? (
+          <span
+            style={{ display: 'inline-flex', alignItems: 'center', marginRight: 8, flex: '0 0 auto' }}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            {leading}
+          </span>
+        ) : null}
         <span className="pp-srv-name">
           <i className={`pp-dot ${dot}`} />
           {s.name || `#${s.id}`}

@@ -882,24 +882,18 @@ export default function ServersUnified() {
                 <Row gutter={[12, 12]}>
                   {rows.map((row) => (
                     <Col key={row.id} xs={24} sm={12} xl={8} xxl={6}>
-                      <div style={{ position: 'relative' }}>
-                        <div
-                          style={{ position: 'absolute', top: 12, right: 12, zIndex: 3 }}
-                          onClick={(e) => e.stopPropagation()}
-                          onKeyDown={(e) => e.stopPropagation()}
-                        >
+                      <FullServerCard
+                        s={row}
+                        node={nodeById.get(Number(row.id))}
+                        onPick={(r) => setDetailId(r.id)}
+                        leading={
                           <Checkbox
                             checked={selected.some((id) => Number(id) === Number(row.id))}
                             onChange={(e) => toggleOne(row.id, e.target.checked)}
                             aria-label={`选择 ${row.name || '#' + row.id}`}
                           />
-                        </div>
-                        <FullServerCard
-                          s={row}
-                          node={nodeById.get(Number(row.id))}
-                          onPick={(r) => setDetailId(r.id)}
-                        />
-                      </div>
+                        }
+                      />
                     </Col>
                   ))}
                 </Row>
