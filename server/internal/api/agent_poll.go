@@ -345,6 +345,7 @@ func (m *agentMetrics) summary(rates agentRates, agentVersion string) map[string
 // ---------------- 快照与采样 ----------------
 
 func (h *handlers) agentUpdateSnapshot(ctx context.Context, srv *agentServer, m *agentMetrics,
+	touchPoll bool,
 	opts struct {
 		NextPollSec    int64
 		PersistPollSec int64
@@ -376,9 +377,14 @@ func (h *handlers) agentUpdateSnapshot(ctx context.Context, srv *agentServer, m 
 	platform := firstNonEmpty(m.Platform, srv.AgentPlatform)
 	version := firstNonEmpty(opts.AgentVersion, srv.AgentVersion)
 
+	pollFlag := 0
+	if touchPoll {
+		pollFlag = 1
+	}
 	_, err := h.db.ExecContext(ctx, `UPDATE servers SET last_status = ?, last_error = ?, last_check_at = ?,
 	      last_metrics = ?, os_info = ?, link_mode = ?, agent_platform = ?, agent_version = ?,
-	      agent_last_seen = ?, agent_last_poll_at = ?, agent_next_poll_sec = ?, agent_poll_count = ?,
+	      agent_last_seen = ?, agent_last_poll_at = IF(?, ?, agent_last_poll_at),
+	      agent_next_poll_sec = ?, agent_poll_count = IF(?, ?, agent_poll_count),
 	      last_ip = COALESCE(NULLIF(?, ''), last_ip),
 	      last_ip4 = COALESCE(NULLIF(?, ''), last_ip4),
 	      last_ip6 = COALESCE(NULLIF(?, ''), last_ip6),
@@ -386,7 +392,7 @@ func (h *handlers) agentUpdateSnapshot(ctx context.Context, srv *agentServer, m 
 	      updated_at = ?
 	    WHERE id = ?`,
 		"online", "", now, string(summaryJSON), osInfo, "agent", platform, version,
-		now, now, opts.PersistPollSec, opts.PollCount,
+		now, pollFlag, now, opts.PersistPollSec, pollFlag, opts.PollCount,
 		opts.IP, opts.IP4, opts.IP6, now, now, srv.ID)
 	if err == nil && srv.LastStatus == "offline" {
 		go h.notifyStatus(context.Background(), "服务器恢复", []serverStatusNotice{{ID: srv.ID, Detail: "Agent 心跳恢复"}})
@@ -697,7 +703,7 @@ func (h *handlers) agentPoll(w http.ResponseWriter, r *http.Request) {
 
 	rates := agentThroughputFromSample(prev, m, nextPollSec)
 	agentVersion := firstNonEmpty(jsonStr(body["agent_version"]), jsonStr(body["agentVersion"]))
-	if err := h.agentUpdateSnapshot(r.Context(), srv, m, struct {
+	if err := h.agentUpdateSnapshot(r.Context(), srv, m, true, struct {
 		NextPollSec    int64
 		PersistPollSec int64
 		PollCount      int64
@@ -923,7 +929,7 @@ func (h *handlers) ingestAgentWSMetrics(ctx context.Context, srv *agentServer, b
 		AgentVersion   string
 		IP, IP4, IP6   string
 	}{srv.NextPollSec, srv.NextPollSec, srv.AgentPollCount, version, ip, "", ""}
-	if err := h.agentUpdateSnapshot(ctx, srv, m, opts, rates); err != nil {
+	if err := h.agentUpdateSnapshot(ctx, srv, m, false, opts, rates); err != nil {
 		h.log.Warn("WS 快照更新失败", "err", err)
 	}
 	if prev == nil || nowMillis()-prev.CreatedAt >= 60000 {
