@@ -462,7 +462,7 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
                       {meta[1]}
                     </Tag>
                     <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                      {svc.name === 'cloudflared' ? (
+                      {svc.name === 'cloudflared' && svc.state !== 'not-installed' ? (
                         <Popconfirm
                           title="更新 cloudflared？"
                           description="下载最新版本，替换 systemd 实际使用的二进制并自动重启；会创建后台任务。"
