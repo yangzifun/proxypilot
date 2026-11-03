@@ -207,7 +207,7 @@ export default function Monitor({ embedded = false }) {
         </Col>
       </Row>
       {/* 顶部三张卡用 grid 排：同一行内自动等高（左二 + 右地图） */}
-      <div className="pp-mon-top-grid">
+      <div className={cluster ? 'pp-mon-top-grid' : 'pp-mon-top-grid pp-mon-top-grid-2'}>
         <PageCard
           className="pp-mon-top"
           title={<span className="pp-section-title"><DashboardOutlined style={{ color: '#4f46e5' }} />集群在线率</span>}
@@ -469,7 +469,7 @@ function ServerCards({ servers, nodeByServer, onPick, onUnlock }) {
 
 
 /** 监控概览：实时流量 + 集群在线率 + 资源均值 + 全球分布（供「服务器」页复用） */
-export function MonitorTop({ servers = [], summary = {}, avg = { cpu: 0, mem: 0, disk: 0 }, loading = false, stats = true, onPick, onUnlock }) {
+export function MonitorTop({ servers = [], summary = {}, avg = { cpu: 0, mem: 0, disk: 0 }, loading = false, stats = true, cluster = true, onPick, onUnlock }) {
   const [mapOpen, setMapOpen] = useState(false);
   const online = servers.filter((s) => s.status === 'online').length;
   const offline = servers.filter((s) => s.status === 'offline').length;
@@ -511,7 +511,8 @@ export function MonitorTop({ servers = [], summary = {}, avg = { cpu: 0, mem: 0,
       </Row>
       ) : null}
 
-      <div className="pp-mon-top-grid">
+      <div className={cluster ? 'pp-mon-top-grid' : 'pp-mon-top-grid pp-mon-top-grid-2'}>
+        {cluster ? (
         <PageCard
           className="pp-mon-top"
           title={<span className="pp-section-title"><DashboardOutlined style={{ color: '#4f46e5' }} />集群在线率</span>}
@@ -537,6 +538,8 @@ export function MonitorTop({ servers = [], summary = {}, avg = { cpu: 0, mem: 0,
             </div>
           </div>
         </PageCard>
+
+        ) : null}
 
         <PageCard
           className="pp-mon-top"

@@ -740,6 +740,7 @@ body {
 
 /* 顶部三张卡（集群在线率 / 资源均值 / 全球分布）：同一行自动等高
    —— 用 grid 而不是 Row/Col：grid 的 align-items:stretch 会把三张卡拉成同一高度 */
+.pp-mon-top-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .pp-mon-top-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -780,11 +781,13 @@ body {
 .pp-map-card .pp-map { flex: 0 0 auto; }
 
 @media (max-width: 1199px) {
-  .pp-mon-top-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pp-mon-top-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pp-mon-top-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pp-mon-top-grid > .pp-map-card { grid-column: 1 / -1; }
 }
 @media (max-width: 991px) {
-  .pp-mon-top-grid { grid-template-columns: minmax(0, 1fr); }
+  .pp-mon-top-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pp-mon-top-grid { grid-template-columns: minmax(0, 1fr); }
   .pp-mon-top-grid > .pp-map-card { grid-column: auto; }
 }
 

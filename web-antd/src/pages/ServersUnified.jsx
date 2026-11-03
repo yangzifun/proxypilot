@@ -748,6 +748,9 @@ export default function ServersUnified() {
             </div>
           ))}
         </div>
+        <div className="pp-muted" style={{ fontSize: 12, padding: '0 18px 8px' }}>
+          服务异常 {fmtNum(summary.failed_services || 0)} · 未安装 {fmtNum(summary.not_installed || 0)} 项
+        </div>
       </PageCard>
 
       <div style={{ marginTop: 16 }}>
@@ -757,6 +760,7 @@ export default function ServersUnified() {
           avg={avg}
           loading={false}
           stats={false}
+          cluster={false}
           onPick={(r) => setDetailId(r.id)}
         />
       </div>
