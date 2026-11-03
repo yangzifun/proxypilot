@@ -468,6 +468,151 @@ function ServerCards({ servers, nodeByServer, onPick, onUnlock }) {
 }
 
 
+/** 监控概览：实时流量 + 集群在线率 + 资源均值 + 全球分布（供「服务器」页复用） */
+export function MonitorTop({ servers = [], summary = {}, avg = { cpu: 0, mem: 0, disk: 0 }, loading = false, onPick, onUnlock }) {
+  const [mapOpen, setMapOpen] = useState(false);
+  const online = servers.filter((s) => s.status === 'online').length;
+  const offline = servers.filter((s) => s.status === 'offline').length;
+  const unknown = servers.length - online - offline;
+  return (
+    <>
+      <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
+        <Col xs={12} md={8}>
+          <StatCard
+            icon={<ArrowDownOutlined />}
+            label="实时下行"
+            value={fmtBytes(summary.rx_rate || 0)}
+            unit="/s"
+            hint={`${online} 台在线 · 5 秒刷新`}
+            accent="#0ea5e9"
+          />
+        </Col>
+        <Col xs={12} md={8}>
+          <StatCard
+            icon={<ArrowUpOutlined />}
+            label="实时上行"
+            value={fmtBytes(summary.tx_rate || 0)}
+            unit="/s"
+            hint={`${online} 台在线 · 5 秒刷新`}
+            accent="#8b5cf6"
+          />
+        </Col>
+        <Col xs={24} md={8}>
+          <StatCard
+            icon={<ThunderboltOutlined />}
+            label="集群总流量"
+            value={fmtBytes((summary.rx_rate || 0) + (summary.tx_rate || 0))}
+            unit="/s"
+            hint={`下行 + 上行 · ${servers.length} 台服务器`}
+            accent="#f59e0b"
+          />
+        </Col>
+      </Row>
+
+      <div className="pp-mon-top-grid">
+        <PageCard
+          className="pp-mon-top"
+          title={<span className="pp-section-title"><DashboardOutlined style={{ color: '#4f46e5' }} />集群在线率</span>}
+          extra={<span className="pp-muted" style={{ fontSize: 12 }}>在线率 {servers.length ? ((online / servers.length) * 100).toFixed(0) : 0}%</span>}
+          loading={loading}
+        >
+          <div className="pp-mon-fill">
+            <div className="pp-cluster-chart">
+              <DonutChart
+                size={156}
+                centerLabel="台服务器"
+                centerValue={servers.length}
+                data={[
+                  { name: '在线', value: online, color: chartPalette[3] },
+                  { name: '离线', value: offline, color: chartPalette[4] },
+                  { name: '未知', value: unknown, color: '#cbd5e1' },
+                ]}
+              />
+            </div>
+            <div className="pp-cluster-foot">
+              服务异常 <b style={{ color: summary.failed_services ? '#f59e0b' : '#0f172a' }}>{fmtNum(summary.failed_services || 0)}</b>
+              <span className="pp-muted">· 未安装 {fmtNum(summary.not_installed || 0)} 项</span>
+            </div>
+          </div>
+        </PageCard>
+
+        <PageCard
+          className="pp-mon-top"
+          title={<span className="pp-section-title"><ThunderboltOutlined style={{ color: '#f59e0b' }} />资源均值</span>}
+          extra={<span className="pp-muted" style={{ fontSize: 12 }}>仅在线节点</span>}
+          loading={loading}
+        >
+          <div className="pp-mon-fill">
+            <div className="pp-avg-body">
+              <Row gutter={8} style={{ textAlign: 'center' }}>
+                <Col span={12}>
+                  <GaugeChart value={avg.cpu} label="CPU" size={148} />
+                </Col>
+                <Col span={12}>
+                  <GaugeChart value={avg.mem} label="内存" size={148} />
+                </Col>
+              </Row>
+              <Row gutter={8} style={{ marginTop: 8 }}>
+                <Col span={24}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#64748b' }}>
+                    <span>磁盘均值</span>
+                    <b style={{ color: levelColor(avg.disk) }}>{Number(avg.disk || 0).toFixed(0)}%</b>
+                  </div>
+                  <Progress percent={Math.round(Number(avg.disk || 0))} showInfo={false} strokeColor={levelColor(avg.disk)} />
+                </Col>
+              </Row>
+            </div>
+          </div>
+        </PageCard>
+
+        <PageCard
+          className="pp-map-card"
+          title={<span className="pp-section-title"><EnvironmentOutlined style={{ color: '#06b6d4' }} />全球分布</span>}
+          extra={
+            <Space size={12}>
+              <ChartLegend
+                items={[
+                  { name: '在线', color: '#10b981' },
+                  { name: '离线', color: '#f43f5e' },
+                  { name: '未知', color: '#cbd5e1' },
+                ]}
+              />
+              <Button size="small" icon={<ExpandOutlined />} onClick={() => setMapOpen(true)}>
+                查看大图
+              </Button>
+            </Space>
+          }
+          loading={loading}
+        >
+          <WorldMap servers={servers} onPick={onPick} onExpand={() => setMapOpen(true)} />
+        </PageCard>
+      </div>
+
+      <Modal
+        className="pp-map-modal"
+        open={mapOpen}
+        title={<span><EnvironmentOutlined style={{ color: '#06b6d4', marginRight: 6 }} />全球分布</span>}
+        onCancel={() => setMapOpen(false)}
+        footer={<Button onClick={() => setMapOpen(false)}>关闭</Button>}
+        width={1120}
+        centered
+        destroyOnHidden
+      >
+        <WorldMap
+          large
+          zoomable
+          servers={servers}
+          onPick={(s) => {
+            setMapOpen(false);
+            if (onPick) onPick(s);
+          }}
+          onUnlock={onUnlock}
+        />
+      </Modal>
+    </>
+  );
+}
+
 /** 根据 Agent 上报的系统名称返回发行版图标与简称。 */
 function osBadge(osName) {
   const name = String(osName || '').toLowerCase();

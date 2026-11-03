@@ -42,7 +42,7 @@ import { useAsync, usePolling, readForm } from '../hooks';
 import { CopyText, ErrorBlock, JsonView, PageCard, StatCard, StatusPill } from '../components';
 import { watchBatch } from '../components/JobCenter';
 import ServerDrawer from '../components/ServerDrawer';
-import { ServerCard as FullServerCard } from './Monitor';
+import { ServerCard as FullServerCard, MonitorTop } from './Monitor';
 import { fmtAgo, fmtBytes, fmtNum, fmtTime, fmtUptime, levelColor, splitIps } from '../format';
 import { chartPalette } from '../theme';
 
@@ -408,6 +408,16 @@ export default function ServersUnified() {
     return c;
   }, [rows]);
 
+  const avg = useMemo(() => {
+    const live = rows.filter((r) => r.status === 'online');
+    const pick = live.length ? live : rows;
+    if (!pick.length) return { cpu: 0, mem: 0, disk: 0 };
+    const sum = (k) => pick.reduce((acc, r) => acc + (Number(r[k]) || 0), 0) / pick.length;
+    return { cpu: sum('cpu'), mem: sum('mem'), disk: sum('disk') };
+  }, [rows]);
+
+  const summary = (monitor.data && monitor.data.summary) || {};
+
   const changeView = (v) => {
     setView(v);
     try {
@@ -731,6 +741,14 @@ export default function ServersUnified() {
           />
         </Col>
       </Row>
+
+      <MonitorTop
+        servers={rows}
+        summary={summary}
+        avg={avg}
+        loading={false}
+        onPick={(r) => setDetailId(r.id)}
+      />
 
       <div style={{ marginTop: 16 }}>
         <PageCard
