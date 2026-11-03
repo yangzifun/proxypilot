@@ -421,28 +421,8 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
                 更新 Agent
               </Button>
             </Popconfirm>
-            <Popconfirm
-              title="更新 cloudflared？"
-              description="下载最新版本，替换 systemd 实际使用的二进制并自动重启；会创建后台任务。"
-              okText="更新"
-              onConfirm={updateCloudflared}
-            >
-              <Button size="small" icon={<CloudDownloadOutlined />} loading={busy === 'cloudflared'}>
-                更新 cloudflared
-              </Button>
-            </Popconfirm>
-            <Popconfirm
-              title={ssh ? (ssh.toggleToEnable ? '启用 SSH？' : '停用 SSH？') : 'Agent 尚未上报 SSH 状态'}
-              description={!ssh ? undefined : ssh.toggleToEnable ? '确认 Agent 在线；启用后可从 WebSSH 登录。' : '停用后只能从面板再启用。'}
-              okText={ssh && ssh.toggleToEnable ? '启用' : '停用'}
-              okButtonProps={ssh && ssh.toggleToEnable ? undefined : { danger: true }}
-              disabled={!ssh}
-              onConfirm={toggleSsh}
-            >
-              <Button size="small" icon={<DisconnectOutlined />} loading={busy === 'ssh'} disabled={!ssh}>
-                {ssh ? (ssh.toggleToEnable ? '启用 SSH' : '停用 SSH') : 'SSH 启停'}
-              </Button>
-            </Popconfirm>
+
+
             <Popconfirm
               title="安装 Agent 并轮换接入密钥？"
               description="旧密钥会立即失效，已安装的 Agent 需要重新执行安装命令。"
@@ -485,16 +465,7 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
 
           <div style={{ margin: '20px 0 8px', display: 'flex', alignItems: 'center', gap: 8 }}>
             <b style={{ fontSize: 14 }}>服务状态</b>
-            <span className="pp-muted" style={{ fontSize: 12 }}>只监控 sing-box / mtg / cloudflared（版本由 Agent 上报）；点「重启」会排队一条 restart 任务；cloudflared 更新在上方「快捷操作」</span>
-            <span style={{ marginLeft: 'auto' }}>
-              {ssh ? (
-                <Tag color={ssh.color} style={{ marginInlineEnd: 0 }}>
-                  SSH {ssh.text}
-                </Tag>
-              ) : (
-                <span className="pp-muted" style={{ fontSize: 12 }}>SSH 状态待 Agent ≥ 1.5.1 上报</span>
-              )}
-            </span>
+            <span className="pp-muted" style={{ fontSize: 12 }}>sing-box / mtg / cloudflared / SSH 的启停与更新都在对应行右侧</span>
           </div>
           {services.length ? (
             <Space orientation="vertical" style={{ width: '100%' }} size={8}>
@@ -520,19 +491,64 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
                     <Tag color={meta[0] === 'online' ? 'success' : meta[0] === 'offline' ? 'error' : 'default'} style={{ marginInlineEnd: 0 }}>
                       {meta[1]}
                     </Tag>
-                    <Button
-                      size="small"
-                      type="link"
-                      style={{ marginLeft: 'auto' }}
-                      disabled={svc.state === 'not-installed'}
-                      loading={busy === 'svc-' + svc.name}
-                      onClick={() => restartService(svc)}
-                    >
-                      重启
-                    </Button>
+                    <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      {svc.name === 'cloudflared' ? (
+                        <Popconfirm
+                          title="更新 cloudflared？"
+                          description="下载最新版本，替换 systemd 实际使用的二进制并自动重启；会创建后台任务。"
+                          okText="更新"
+                          onConfirm={updateCloudflared}
+                        >
+                          <Button size="small" type="link" icon={<CloudDownloadOutlined />} loading={busy === 'cloudflared'}>
+                            更新
+                          </Button>
+                        </Popconfirm>
+                      ) : null}
+                      <Button
+                        size="small"
+                        type="link"
+                        disabled={svc.state === 'not-installed'}
+                        loading={busy === 'svc-' + svc.name}
+                        onClick={() => restartService(svc)}
+                      >
+                        重启
+                      </Button>
+                    </span>
                   </div>
                 );
               })}
+              <div
+                className="pp-svc-row"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: '8px 12px',
+                  border: '1px solid #eef2f7',
+                  borderRadius: 10,
+                  background: '#fbfcfe',
+                }}
+              >
+                <i className={`pp-dot ${ssh && String(ssh.text).startsWith('已启用') ? 'online' : ssh ? 'warn' : 'unknown'}`} />
+                <span style={{ fontWeight: 500 }}>SSH</span>
+                <Tag color={ssh ? ssh.color : 'default'} style={{ marginInlineEnd: 0 }}>
+                  {ssh ? ssh.text : '未上报'}
+                </Tag>
+                <span style={{ marginLeft: 'auto' }}>
+                  <Popconfirm
+                    title={ssh ? (ssh.toggleToEnable ? '启用 SSH？' : '停用 SSH？') : 'Agent 尚未上报 SSH 状态'}
+                    description={!ssh ? undefined : ssh.toggleToEnable ? '确认 Agent 在线；启用后可从 WebSSH 登录。' : '停用后只能从面板再启用。'}
+                    okText={ssh && ssh.toggleToEnable ? '启用' : '停用'}
+                    okButtonProps={ssh && ssh.toggleToEnable ? undefined : { danger: true }}
+                    disabled={!ssh}
+                    onConfirm={toggleSsh}
+                  >
+                    <Button size="small" type="link" loading={busy === 'ssh'} disabled={!ssh}>
+                      {ssh ? (ssh.toggleToEnable ? '启用' : '停用') : '—'}
+                    </Button>
+                  </Popconfirm>
+                </span>
+              </div>
             </Space>
           ) : (
             <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该服务器还没上报服务状态" style={{ padding: '20px 0' }} />
