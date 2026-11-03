@@ -251,6 +251,7 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /api/jobs/{id}", h.authed(authOpts{}, h.jobsGet))
 	mux.HandleFunc("POST /api/jobs/{id}/cancel", h.authed(authOpts{}, h.jobsCancel))
 	mux.HandleFunc("POST /api/jobs/{id}/retry", h.authed(authOpts{}, h.jobsRetry))
+	mux.HandleFunc("POST /api/jobs/clear", h.authed(authOpts{}, h.jobsClear))
 
 	mux.HandleFunc("GET /api/backup/export", h.authed(authOpts{superOnly: true}, h.backupExport))
 	mux.HandleFunc("POST /api/backup/import", h.authed(authOpts{superOnly: true}, h.backupImport))

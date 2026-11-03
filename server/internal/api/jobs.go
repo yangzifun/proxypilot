@@ -431,3 +431,27 @@ func (h *handlers) jobsRetry(w http.ResponseWriter, r *http.Request) {
 	h.startBatchJob(id, "admin")
 	writeJSON(w, http.StatusOK, map[string]any{"success": true, "retry_items": failedCount})
 }
+
+// POST /api/jobs/clear —— 一键清理已结束的后台任务（成功/失败/部分失败/已取消），运行中的保留。
+func (h *handlers) jobsClear(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "Method Not Allowed")
+		return
+	}
+	const doneCond = `status IN ('success','failed','partial','canceled')`
+	itemRes, _ := h.db.ExecContext(r.Context(),
+		`DELETE FROM batch_job_items WHERE job_id IN (SELECT id FROM batch_jobs WHERE `+doneCond+`)`)
+	jobRes, err := h.db.ExecContext(r.Context(), `DELETE FROM batch_jobs WHERE `+doneCond)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "清理失败")
+		return
+	}
+	deleted, _ := jobRes.RowsAffected()
+	items, _ := itemRes.RowsAffected()
+	var active int64
+	_ = h.db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM batch_jobs WHERE status IN ('queued','running')`).Scan(&active)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success": true, "deleted": deleted, "items_deleted": items, "active": active,
+		"message": "已清理 " + itoa64(deleted) + " 个已结束任务",
+	})
+}

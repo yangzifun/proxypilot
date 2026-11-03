@@ -5,7 +5,7 @@
  * ================================================================= */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { App as AntdApp, Badge, Button, Drawer, Empty, Popconfirm, Progress, Space, Table, Tag, Tooltip } from 'antd';
-import { ReloadOutlined, ThunderboltOutlined, CloseCircleOutlined, RedoOutlined } from '@ant-design/icons';
+import { ReloadOutlined, ThunderboltOutlined, CloseCircleOutlined, RedoOutlined, DeleteOutlined } from '@ant-design/icons';
 import { api, apiPost } from '../api';
 import { fmtAgo } from '../format';
 
@@ -125,6 +125,17 @@ export default function JobCenter() {
         }
     };
 
+    const clearFinished = async () => {
+        try {
+            const r = await apiPost('jobs/clear', {});
+            message.success((r && r.message) || `已清理 ${(r && r.deleted) || 0} 个已结束任务`);
+            setDetail(null);
+            load();
+        } catch (e) {
+            message.error(e.message || '清理失败');
+        }
+    };
+
     const columns = useMemo(() => [
         { title: 'ID', dataIndex: 'id', width: 56 },
         {
@@ -205,7 +216,20 @@ export default function JobCenter() {
                 width={760}
                 onClose={() => setOpen(false)}
                 title={<span>后台任务 <span className="pp-muted" style={{ fontSize: 12, marginLeft: 8 }}>点批量操作后在这里看进度，关掉页面也会继续跑</span></span>}
-                extra={<Button size="small" icon={<ReloadOutlined />} onClick={() => { load(); if (detail && detail.job) loadDetail(detail.job.id); }} loading={loading}>刷新</Button>}
+                extra={
+                    <Space>
+                        <Popconfirm
+                            title="清理已结束的任务？"
+                            description="成功 / 失败 / 部分失败 / 已取消的任务及明细会被删除，运行中的任务保留。"
+                            okText="清理"
+                            okButtonProps={{ danger: true }}
+                            onConfirm={clearFinished}
+                        >
+                            <Button size="small" danger icon={<DeleteOutlined />}>清理已完成</Button>
+                        </Popconfirm>
+                        <Button size="small" icon={<ReloadOutlined />} onClick={() => { load(); if (detail && detail.job) loadDetail(detail.job.id); }} loading={loading}>刷新</Button>
+                    </Space>
+                }
                 destroyOnClose
             >
                 {detail && detail.job ? (
