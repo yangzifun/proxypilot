@@ -724,7 +724,7 @@ export default function ServersUnified() {
         extra={<span className="pp-muted" style={{ fontSize: 12 }}>更新 {fmtTime(updatedAt, '').slice(11, 19) || '—'}</span>}
         bodyStyle={{ padding: 0 }}
       >
-        <div style={{ display: 'flex', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', flexWrap: 'nowrap', overflowX: 'auto' }}>
           {[
             { label: '服务器总数', value: fmtNum(rows.length) },
             { label: '在线', value: fmtNum(counts.online), hint: rows.length ? `在线率 ${((counts.online / rows.length) * 100).toFixed(0)}%` : '—' },
@@ -741,10 +741,10 @@ export default function ServersUnified() {
           ].map((it, i) => (
             <div
               key={it.label}
-              style={{ flex: '1 1 180px', minWidth: 160, padding: '10px 18px', borderLeft: i ? '1px solid #f1f5f9' : 'none' }}
+              style={{ flex: '1 1 0', minWidth: 0, padding: '8px 14px', borderLeft: i ? '1px solid #f1f5f9' : 'none' }}
             >
-              <div className="pp-muted" style={{ fontSize: 12 }}>{it.label}</div>
-              <div style={{ fontSize: 24, fontWeight: 700, lineHeight: 1.25, fontVariantNumeric: 'tabular-nums' }}>
+              <div className="pp-muted" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{it.label}</div>
+              <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.25, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
                 {it.value}
                 {it.unit ? <span style={{ fontSize: 12, fontWeight: 500, color: '#94a3b8', marginLeft: 4 }}>{it.unit}</span> : null}
               </div>
