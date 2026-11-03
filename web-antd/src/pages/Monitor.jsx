@@ -608,10 +608,6 @@ function ServerCard({ s, node, onPick, onUnlock }) {
             {Number(s.load1 || 0).toFixed(2)} / {Number(s.load5 || 0).toFixed(2)} / {Number(s.load15 || 0).toFixed(2)}
           </span>
         </div>
-        <div>
-          <span>Agent</span>
-          <span>{s.agent_version || '—'}</span>
-        </div>
         {node ? (
           <>
             <div>
