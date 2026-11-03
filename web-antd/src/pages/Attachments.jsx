@@ -1,11 +1,16 @@
 import React, { useMemo, useState } from 'react';
 import {
+  ArrowUpOutlined,
   CloudOutlined,
+  CopyOutlined,
   DeleteOutlined,
   DownloadOutlined,
   EditOutlined,
+  EyeOutlined,
+  FolderAddOutlined,
   FolderOpenOutlined,
   LinkOutlined,
+  MoreOutlined,
   ReloadOutlined,
   UploadOutlined,
 } from '@ant-design/icons';
@@ -14,6 +19,7 @@ import {
   App as AntdApp,
   Breadcrumb,
   Button,
+  Dropdown,
   Input,
   Modal,
   Popconfirm,
@@ -29,9 +35,7 @@ import { ErrorBlock, PageCard, Toolbar } from '../components';
 import { fmtBytes } from '../format';
 
 function parentsOf(prefix) {
-  const parts = String(prefix || '')
-    .split('/')
-    .filter(Boolean);
+  const parts = String(prefix || '').split('/').filter(Boolean);
   const out = [{ title: <span><FolderOpenOutlined /> 根目录</span>, prefix: '' }];
   let cur = '';
   parts.forEach((p) => {
@@ -41,13 +45,29 @@ function parentsOf(prefix) {
   return out;
 }
 
+function parentPrefix(prefix) {
+  const parts = String(prefix || '').split('/').filter(Boolean);
+  parts.pop();
+  return parts.length ? parts.join('/') + '/' : '';
+}
+
+function extOf(name) {
+  const i = String(name || '').lastIndexOf('.');
+  return i > 0 ? name.slice(i + 1).toLowerCase() : '';
+}
+
 export default function Attachments() {
-  const { message } = AntdApp.useApp();
+  const { message, modal } = AntdApp.useApp();
   const [prefix, setPrefix] = useState('');
   const [uploading, setUploading] = useState(false);
   const [loadingKey, setLoadingKey] = useState('');
   const [saving, setSaving] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [mkdirOpen, setMkdirOpen] = useState(false);
+  const [mkdirName, setMkdirName] = useState('');
+  const [rename, setRename] = useState(null); // { row, mode: 'rename'|'copy', value }
   const status = useAsync(() => api('attachments/status'), []);
   const list = useAsync(() => api('attachments', { query: { prefix } }), [prefix]);
 
@@ -89,7 +109,7 @@ export default function Attachments() {
     return false;
   };
 
-  const fetchDownload = async (row) => {
+  const fetchBlob = async (row) => {
     const res = await fetch('/api/attachments/download?key=' + encodeURIComponent(row.key), {
       headers: { Authorization: 'Bearer ' + getToken() },
     });
@@ -102,7 +122,7 @@ export default function Attachments() {
 
   const download = async (row) => {
     try {
-      const blob = await fetchDownload(row);
+      const blob = await fetchBlob(row);
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = row.name || 'download';
@@ -124,16 +144,10 @@ export default function Attachments() {
     try {
       const j = await api('attachments/content', { query: { key: row.key } });
       if (j.editable) {
-        setEditing({
-          ...j,
-          open: true,
-          content: j.content || '',
-        });
+        setEditing({ ...j, open: true, content: j.content || '' });
       } else if ((j.content_type || '').startsWith('image/')) {
-        const blob = await fetchDownload(row);
-        const u = URL.createObjectURL(blob);
-        window.open(u, '_blank', 'noopener');
-        setTimeout(() => URL.revokeObjectURL(u), 60000);
+        const blob = await fetchBlob(row);
+        setPreview({ name: row.name, url: URL.createObjectURL(blob) });
       } else {
         await download(row);
       }
@@ -150,11 +164,7 @@ export default function Attachments() {
     try {
       await api('attachments/content', {
         method: 'PUT',
-        body: {
-          key: editing.key,
-          content: editing.content,
-          content_type: editing.content_type,
-        },
+        body: { key: editing.key, content: editing.content, content_type: editing.content_type },
       });
       message.success('已保存 ' + editing.key);
       setEditing(null);
@@ -178,13 +188,120 @@ export default function Attachments() {
 
   const remove = async (row) => {
     try {
-      await api('attachments', { method: 'DELETE', query: { key: row.key } });
-      message.success('已删除 ' + row.key);
+      if (row.__type === 'folder') {
+        const res = await api('attachments', { method: 'DELETE', query: { prefix: row.prefix } });
+        message.success(`已删除目录 ${row.name}（${res.deleted || 0} 个对象）`);
+      } else {
+        await api('attachments', { method: 'DELETE', query: { key: row.key } });
+        message.success('已删除 ' + row.key);
+      }
       list.reload();
     } catch (e) {
       message.error(e.message || '删除失败');
     }
   };
+
+  const doMkdir = async () => {
+    const name = mkdirName.trim();
+    if (!name) {
+      message.warning('请输入目录名');
+      return;
+    }
+    setBusy(true);
+    try {
+      await api('attachments/folder', { method: 'POST', body: { prefix, name } });
+      message.success('已创建目录 ' + name);
+      setMkdirOpen(false);
+      setMkdirName('');
+      list.reload();
+    } catch (e) {
+      message.error(e.message || '创建失败');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doRelocate = async () => {
+    if (!rename) return;
+    const value = String(rename.value || '').trim().replace(/^\/+/, '');
+    if (!value) {
+      message.warning('请输入新名称');
+      return;
+    }
+    setBusy(true);
+    const row = rename.row;
+    try {
+      const isFolder = row.__type === 'folder';
+      const from = isFolder ? row.prefix : row.key;
+      const to = isFolder ? prefix + value.replace(/\/+$/, '') + '/' : prefix + value;
+      const res = await api(rename.mode === 'copy' ? 'attachments/copy' : 'attachments/move', {
+        method: 'POST',
+        body: { from, to, folder: isFolder },
+      });
+      message.success(
+        `${rename.mode === 'copy' ? '已复制' : '已重命名为'} ${to}${isFolder ? `（${res.objects || 0} 个对象）` : ''}`
+      );
+      setRename(null);
+      list.reload();
+    } catch (e) {
+      message.error(e.message || '操作失败');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const moreMenu = (row) => ({
+    items: [
+      {
+        key: 'edit',
+        icon: row.__type === 'folder' ? <FolderOpenOutlined /> : <EditOutlined />,
+        label: row.__type === 'folder' ? '打开目录' : '打开 / 编辑',
+      },
+      ...(row.__type === 'file'
+        ? [
+            { key: 'preview', icon: <EyeOutlined />, label: '预览' },
+            { key: 'download', icon: <DownloadOutlined />, label: '下载' },
+          ]
+        : []),
+      { key: 'rename', icon: <EditOutlined />, label: '重命名' },
+      ...(row.__type === 'file'
+        ? [
+            { key: 'copy', icon: <CopyOutlined />, label: '复制副本' },
+            { key: 'cdn', icon: <LinkOutlined />, label: '复制 CDN 链接', disabled: !row.cdn_url },
+          ]
+        : []),
+      { type: 'divider' },
+      { key: 'delete', icon: <DeleteOutlined />, label: '删除', danger: true },
+    ],
+    onClick: ({ key, domEvent }) => {
+      domEvent.stopPropagation();
+      if (key === 'edit') openFile(row);
+      if (key === 'preview') openFile(row);
+      if (key === 'download') download(row);
+      if (key === 'cdn') copyCDN(row);
+      if (key === 'rename') setRename({ row, mode: 'rename', value: row.name });
+      if (key === 'copy') setRename({ row, mode: 'copy', value: 'copy-' + row.name });
+      if (key === 'delete') {
+        if (row.__type === 'folder') {
+          modal.confirm({
+            title: `删除目录 ${row.name}？`,
+            content: '将递归删除该目录下的全部文件，无法恢复。',
+            okText: '删除',
+            okButtonProps: { danger: true },
+            onOk: () => remove(row),
+          });
+        } else {
+          modal.confirm({
+            title: `删除文件 ${row.name}？`,
+            content: row.key,
+            okText: '删除',
+            okButtonProps: { danger: true },
+            onOk: () => remove(row),
+          });
+        }
+      }
+    },
+  });
 
   const columns = [
     {
@@ -196,17 +313,15 @@ export default function Attachments() {
             <FolderOpenOutlined /> {row.name}
           </Button>
         ) : (
-          <Button type="link" style={{ padding: 0 }} loading={loadingKey === row.key} onClick={() => openFile(row)}>
-            <EditOutlined /> {row.name}
-          </Button>
+          <Space size={6}>
+            <Button type="link" style={{ padding: 0 }} loading={loadingKey === row.key} onClick={() => openFile(row)}>
+              <EditOutlined /> {row.name}
+            </Button>
+            {extOf(row.name) ? <Tag style={{ marginInlineEnd: 0 }}>{extOf(row.name)}</Tag> : null}
+          </Space>
         ),
     },
-    {
-      title: '大小',
-      dataIndex: 'size',
-      width: 120,
-      render: (v, row) => (row.__type === 'file' ? fmtBytes(v) : '—'),
-    },
+    { title: '大小', dataIndex: 'size', width: 110, render: (v, row) => (row.__type === 'file' ? fmtBytes(v) : '—') },
     {
       title: '更新时间',
       dataIndex: 'updated_at',
@@ -215,30 +330,20 @@ export default function Attachments() {
     },
     {
       title: '操作',
-      width: 260,
-      render: (_, row) =>
-        row.__type === 'folder' ? (
-          <Button size="small" onClick={() => setPrefix(row.prefix)}>
-            打开
+      width: 210,
+      render: (_, row) => (
+        <Space size={4}>
+          <Button size="small" onClick={() => openFile(row)}>
+            {row.__type === 'folder' ? '打开' : '编辑'}
           </Button>
-        ) : (
-          <Space>
-            <Button size="small" icon={<EditOutlined />} onClick={() => openFile(row)}>
-              打开/编辑
-            </Button>
-            <Button size="small" icon={<DownloadOutlined />} onClick={() => download(row)}>
-              下载
-            </Button>
-            {row.cdn_url ? (
-              <Button size="small" icon={<LinkOutlined />} onClick={() => copyCDN(row)}>
-                CDN
-              </Button>
-            ) : null}
-            <Popconfirm title={'删除 ' + row.key + ' ?'} onConfirm={() => remove(row)}>
-              <Button size="small" danger icon={<DeleteOutlined />} />
-            </Popconfirm>
-          </Space>
-        ),
+          {row.__type === 'file' ? (
+            <Button size="small" icon={<DownloadOutlined />} onClick={() => download(row)} />
+          ) : null}
+          <Dropdown menu={moreMenu(row)} trigger={['click']}>
+            <Button size="small" icon={<MoreOutlined />} />
+          </Dropdown>
+        </Space>
+      ),
     },
   ];
 
@@ -256,6 +361,9 @@ export default function Attachments() {
             {configured ? 'R2: ' + (status.data.bucket || '') : 'R2 未配置'}
           </Tag>
           {cdnBase ? <Tag color="purple">CDN: {cdnBase}</Tag> : null}
+          <Button icon={<FolderAddOutlined />} disabled={!configured} onClick={() => setMkdirOpen(true)}>
+            新建文件夹
+          </Button>
           <Upload showUploadList={false} customRequest={({ file, onSuccess, onError }) => upload(file).then(onSuccess).catch(onError)}>
             <Button type="primary" icon={<UploadOutlined />} loading={uploading} disabled={!configured}>
               上传文件
@@ -278,13 +386,27 @@ export default function Attachments() {
       )}
       <Toolbar
         left={
-          <Breadcrumb
-            items={parentsOf(prefix).map((p) => ({
-              title: p.prefix ? <a onClick={() => setPrefix(p.prefix)}>{p.title}</a> : p.title,
-            }))}
-          />
+          <Space>
+            <Button
+              size="small"
+              icon={<ArrowUpOutlined />}
+              disabled={!prefix}
+              onClick={() => setPrefix(parentPrefix(prefix))}
+            >
+              上一级
+            </Button>
+            <Breadcrumb
+              items={parentsOf(prefix).map((p) => ({
+                title: p.prefix ? <a onClick={() => setPrefix(p.prefix)}>{p.title}</a> : p.title,
+              }))}
+            />
+          </Space>
         }
-        right={<Typography.Text type="secondary">文本文件可在线编辑；CDN 链接来自系统设置</Typography.Text>}
+        right={
+          <Typography.Text type="secondary">
+            文本 / 配置 / 代码类文件均可在线编辑（≤2 MiB）；图片可预览；目录支持重命名与递归删除
+          </Typography.Text>
+        }
       />
       {list.error ? (
         <ErrorBlock error={list.error} onRetry={() => list.reload()} title="附件列表读取失败" />
@@ -303,7 +425,7 @@ export default function Attachments() {
       <Modal
         open={!!(editing && editing.open)}
         title={<span><EditOutlined /> 编辑 {editing ? editing.key : ''}</span>}
-        width={960}
+        width={1100}
         onCancel={() => setEditing(null)}
         onOk={save}
         okText="保存"
@@ -311,20 +433,79 @@ export default function Attachments() {
         destroyOnHidden
       >
         <Space direction="vertical" style={{ width: '100%' }} size={8}>
-          <Typography.Text type="secondary">
-            {editing ? editing.content_type : ''} · {fmtBytes(editing ? editing.size : 0)} · 最大 2 MiB
-          </Typography.Text>
-          {editing && editing.cdn_url ? (
-            <Typography.Text copyable={{ text: editing.cdn_url }}>
-              CDN: {editing.cdn_url}
+          <Space size={16}>
+            <Typography.Text type="secondary">
+              {editing ? editing.content_type : ''} · {fmtBytes(editing ? editing.size : 0)} · 最大 2 MiB
             </Typography.Text>
-          ) : null}
+            {editing && editing.cdn_url ? (
+              <Typography.Text copyable={{ text: editing.cdn_url }}>CDN: {editing.cdn_url}</Typography.Text>
+            ) : null}
+          </Space>
           <Input.TextArea
             value={editing ? editing.content : ''}
             onChange={(e) => setEditing((cur) => (cur ? { ...cur, content: e.target.value } : cur))}
-            rows={22}
+            autoSize={{ minRows: 22, maxRows: 34 }}
             style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: 13 }}
             spellCheck={false}
+          />
+        </Space>
+      </Modal>
+
+      <Modal
+        open={!!preview}
+        title={preview ? preview.name : ''}
+        footer={null}
+        width={900}
+        onCancel={() => {
+          if (preview && preview.url) URL.revokeObjectURL(preview.url);
+          setPreview(null);
+        }}
+        destroyOnHidden
+      >
+        {preview ? (
+          <div style={{ textAlign: 'center' }}>
+            <img src={preview.url} alt={preview.name} style={{ maxWidth: '100%', maxHeight: '70vh' }} />
+          </div>
+        ) : null}
+      </Modal>
+
+      <Modal
+        open={mkdirOpen}
+        title="新建文件夹"
+        onCancel={() => setMkdirOpen(false)}
+        onOk={doMkdir}
+        okText="创建"
+        confirmLoading={busy}
+        destroyOnHidden
+      >
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <Typography.Text type="secondary">位置：{prefix || '根目录'}</Typography.Text>
+          <Input
+            placeholder="目录名，例如 assets"
+            value={mkdirName}
+            onChange={(e) => setMkdirName(e.target.value)}
+            onPressEnter={doMkdir}
+          />
+        </Space>
+      </Modal>
+
+      <Modal
+        open={!!rename}
+        title={rename ? (rename.mode === 'copy' ? '复制副本' : '重命名') : ''}
+        onCancel={() => setRename(null)}
+        onOk={doRelocate}
+        okText={rename && rename.mode === 'copy' ? '复制' : '重命名'}
+        confirmLoading={busy}
+        destroyOnHidden
+      >
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <Typography.Text type="secondary">
+            位置：{prefix || '根目录'} · {rename ? rename.row.name : ''}
+          </Typography.Text>
+          <Input
+            value={rename ? rename.value : ''}
+            onChange={(e) => setRename((cur) => (cur ? { ...cur, value: e.target.value } : cur))}
+            onPressEnter={doRelocate}
           />
         </Space>
       </Modal>

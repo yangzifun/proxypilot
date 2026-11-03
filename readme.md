@@ -1,6 +1,6 @@
 # ProxyPilot
 
-![Go](https://img.shields.io/badge/Go-1.23-00ADD8?logo=go&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white) ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black) ![Ant Design](https://img.shields.io/badge/Ant%20Design-6-1677FF?logo=antdesign&logoColor=white) ![Agent](https://img.shields.io/badge/Agent-Go-00ADD8?logo=go&logoColor=white) ![Version](https://img.shields.io/badge/Version-V15.8-blue.svg) ![License](https://img.shields.io/badge/License-MIT-green.svg)
+![Go](https://img.shields.io/badge/Go-1.23-00ADD8?logo=go&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white) ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black) ![Ant Design](https://img.shields.io/badge/Ant%20Design-6-1677FF?logo=antdesign&logoColor=white) ![Agent](https://img.shields.io/badge/Agent-Go-00ADD8?logo=go&logoColor=white) ![Version](https://img.shields.io/badge/Version-V15.9-blue.svg) ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
 ---
 
@@ -477,6 +477,12 @@ npm run check      # build + render-check + e2e
 
 ## 更新日志
 
+### V15.9（2026-11-03）
+
+- **附件管理增强**：新增「上一级」返回、可点击面包屑、新建文件夹、重命名/移动、复制副本、图片预览、递归删除目录。
+- **更多类型可在线编辑**：不再只认固定扩展名，只要是合法 UTF-8 文本（无 NUL 字节、≤2 MiB）即可编辑；图片/音视频/PDF/压缩包等仍只下载。
+- **接口**：新增 `POST /api/attachments/folder`、`POST /api/attachments/move`、`POST /api/attachments/copy`；`DELETE /api/attachments?prefix=` 支持递归删除目录；目录占位对象不再显示为文件。
+- **R2 客户端**：新增 `listAll`（自动翻页）与 `copy`（读取+写入）能力。
 ### V15.8（2026-11-03）
 
 - **UUID 一致性巡检改为核对节点机器上的真实配置**：巡检先让每台节点的 Agent 以只读 `inspect` 动作读取实际 `sb.json`（返回 sha256、大小、去重后的用户名列表），再与数据库 `uuid_list`（平台授权）逐节点比对；漂移时按数据库授权重渲染、重建订阅配置并下发。

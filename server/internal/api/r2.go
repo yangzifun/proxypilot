@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -293,4 +294,70 @@ func (c *r2Client) delete(ctx context.Context, key string) error {
 		return fmt.Errorf("R2 删除失败（HTTP %d）：%s", resp.StatusCode, strings.TrimSpace(string(raw)))
 	}
 	return nil
+}
+
+// listAll �г�ǰ׺�µ�ȫ�������Զ���ҳ����� 10 ҳ �� 1000����
+func (c *r2Client) listAll(ctx context.Context, prefix string) ([]r2Object, error) {
+	out := []r2Object{}
+	token := ""
+	for page := 0; page < 10; page++ {
+		q := url.Values{}
+		q.Set("list-type", "2")
+		q.Set("max-keys", "1000")
+		if prefix != "" {
+			q.Set("prefix", prefix)
+		}
+		if token != "" {
+			q.Set("continuation-token", token)
+		}
+		req, err := c.newRequest(ctx, http.MethodGet, "", q, nil, -1)
+		if err != nil {
+			return nil, err
+		}
+		c.sign(req, sha256Hex(""))
+		resp, err := c.hc.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		var res r2ListResult
+		err = xml.NewDecoder(resp.Body).Decode(&res)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("R2 �б�ʧ�ܣ�HTTP %d��", resp.StatusCode)
+		}
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, res.Contents...)
+		if !res.IsTruncated || res.NextContinuationToken == "" {
+			break
+		}
+		token = res.NextContinuationToken
+	}
+	return out, nil
+}
+
+// copy ��ȡԴ������д��Ŀ�� key������������ / ���Ƹ�������
+func (c *r2Client) copy(ctx context.Context, from, to string) error {
+	resp, err := c.get(ctx, from)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return fmt.Errorf("Դ���󲻴��ڣ�%s", from)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("��ȡԴ����ʧ�ܣ�HTTP %d��", resp.StatusCode)
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 256<<20))
+	if err != nil {
+		return err
+	}
+	ct := resp.Header.Get("Content-Type")
+	if ct == "" {
+		ct = "application/octet-stream"
+	}
+	sum := sha256.Sum256(data)
+	return c.put(ctx, to, bytes.NewReader(data), int64(len(data)), hex.EncodeToString(sum[:]), ct)
 }

@@ -62,10 +62,14 @@ func (h *handlers) attachmentsList(w http.ResponseWriter, r *http.Request) {
 	}
 	files := make([]map[string]any, 0, len(res.Contents))
 	for _, o := range res.Contents {
+		// 目录占位对象（key 以 / 结尾）不计入文件列表
+		if strings.HasSuffix(o.Key, "/") {
+			continue
+		}
 		files = append(files, map[string]any{
 			"key": o.Key, "name": path.Base(o.Key), "size": o.Size,
 			"updated_at": o.LastModified, "etag": strings.Trim(o.ETag, `"`),
-			"url": "/api/attachments/download?key=" + url.QueryEscape(o.Key),
+			"url":     "/api/attachments/download?key=" + url.QueryEscape(o.Key),
 			"cdn_url": objectCDNURL(h.effectiveCDNBase(r.Context()), o.Key),
 		})
 	}
@@ -181,11 +185,28 @@ func (h *handlers) attachmentsDownload(w http.ResponseWriter, r *http.Request) {
 	_, _ = io.Copy(w, resp.Body)
 }
 
-// DELETE /api/attachments?key=
+// DELETE /api/attachments?key= 或 ?prefix=（递归删除目录）
 func (h *handlers) attachmentsDelete(w http.ResponseWriter, r *http.Request) {
 	cfg := h.effectiveR2(r.Context())
 	if !cfg.Ready() {
 		writeError(w, http.StatusServiceUnavailable, "R2 未配置")
+		return
+	}
+	client := newR2Client(cfg)
+	if raw := strings.TrimSpace(r.URL.Query().Get("prefix")); raw != "" {
+		prefix, ok := cleanFolderPath(raw)
+		if !ok {
+			writeError(w, http.StatusBadRequest, "prefix 无效")
+			return
+		}
+		n, msg := deletePrefixObjects(r.Context(), client, prefix)
+		if msg != "" {
+			writeError(w, http.StatusBadGateway, msg)
+			return
+		}
+		h.recordNodeLog(r.Context(), 0, 0, "attachment-delete", "success", 0,
+			"删除目录 "+prefix+"（"+itoa64(int64(n))+" 个对象）", "", "admin")
+		writeJSON(w, http.StatusOK, map[string]any{"success": true, "prefix": prefix, "deleted": n})
 		return
 	}
 	key, ok := safeObjectKey(r.URL.Query().Get("key"))
@@ -193,7 +214,7 @@ func (h *handlers) attachmentsDelete(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "key 无效")
 		return
 	}
-	if err := newR2Client(cfg).delete(r.Context(), key); err != nil {
+	if err := client.delete(r.Context(), key); err != nil {
 		writeError(w, http.StatusBadGateway, err.Error())
 		return
 	}

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -32,25 +33,19 @@ func attachmentEditable(ct, key string, data []byte) bool {
 	if len(data) > attachmentEditMax || !utf8.Valid(data) {
 		return false
 	}
+	// 含 NUL 的一律按二进制处理
+	if bytes.IndexByte(data, 0) >= 0 {
+		return false
+	}
 	ct = strings.ToLower(strings.TrimSpace(ct))
-	if strings.HasPrefix(ct, "text/") {
-		return true
+	for _, bad := range []string{"image/", "audio/", "video/", "font/", "application/pdf",
+		"application/zip", "application/gzip", "application/x-tar", "application/x-7z-compressed"} {
+		if strings.HasPrefix(ct, bad) {
+			return false
+		}
 	}
-	switch ct {
-	case "application/json", "application/xml", "application/javascript",
-		"application/x-javascript", "application/x-yaml", "application/yaml",
-		"application/toml", "application/x-sh", "application/x-httpd-php":
-		return true
-	}
-	ext := strings.ToLower(filepath.Ext(key))
-	switch ext {
-	case ".txt", ".md", ".markdown", ".json", ".yaml", ".yml", ".toml", ".ini",
-		".conf", ".cfg", ".env", ".sh", ".bash", ".zsh", ".js", ".mjs", ".cjs",
-		".ts", ".tsx", ".jsx", ".css", ".scss", ".html", ".htm", ".xml", ".log",
-		".sql", ".go", ".py", ".rb", ".php", ".lua", ".service", ".properties":
-		return true
-	}
-	return false
+	// 其余只要是合法 UTF-8 文本（含未知扩展名）都允许在线编辑
+	return true
 }
 
 func (h *handlers) effectiveCDNBase(ctx context.Context) string {
