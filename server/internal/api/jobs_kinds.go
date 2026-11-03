@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Worker BATCH_KINDS 的剩余实现：mtproto / agent 升级 / SSH 开关 / UUID 巡检。
@@ -249,4 +250,92 @@ func (h *handlers) queueAgentUpdateForJob(ctx context.Context, serverID int64, a
 		return false, msg
 	}
 	return true, "已排队升级到 " + manifest.Version
+}
+
+func init() {
+	batchKinds["cloudflared.update"] = jobKind{
+		Title: func(_ map[string]any, n int) string {
+			return "更新 cloudflared（" + strconv.Itoa(n) + " 台）"
+		},
+		EmptyHint: "没有可更新的服务器",
+		Items: func(h *handlers, ctx context.Context, params map[string]any) ([]jobItem, error) {
+			if sid := jsonInt(params["server_id"]); sid > 0 {
+				var name string
+				if err := h.db.QueryRowContext(ctx, `SELECT COALESCE(name,'') FROM servers WHERE id = ?`, sid).Scan(&name); err != nil {
+					return nil, nil
+				}
+				return []jobItem{{Target: "server", TargetID: sid, Label: name}}, nil
+			}
+			rows, err := queryRowsAsMaps(ctx, h.db, `SELECT id, COALESCE(name,'') AS name FROM servers WHERE enabled = 1 ORDER BY id ASC`)
+			if err != nil {
+				return nil, nil
+			}
+			out := make([]jobItem, 0, len(rows))
+			for _, r := range rows {
+				out = append(out, jobItem{Target: "server", TargetID: mapInt(r, "id", 0), Label: mapStr(r, "name", "")})
+			}
+			return out, nil
+		},
+		Run: func(h *handlers, ctx context.Context, _ map[string]any, item jobItem, actor string) (bool, string) {
+			srv, err := h.fetchAgentServer(ctx, item.TargetID)
+			if err != nil {
+				return false, "服务器不存在"
+			}
+			taskID, _, msg := h.agentQueueTask(ctx, srv, "exec", 0,
+				map[string]any{"command": cloudflaredUpdateCommand(), "timeout": 240, "system_action": "cloudflared_update"}, actor)
+			if msg != "" {
+				return false, msg
+			}
+			deadline := time.Now().Add(4 * time.Minute)
+			for time.Now().Before(deadline) {
+				var status, output string
+				_ = h.db.QueryRowContext(ctx, `SELECT status, COALESCE(output,'') FROM agent_tasks WHERE id = ?`, taskID).Scan(&status, &output)
+				switch status {
+				case "done":
+					return true, summarizeCloudflaredOutput(output)
+				case "failed", "skipped":
+					return false, tailCloudflaredOutput(output)
+				}
+				select {
+				case <-ctx.Done():
+					return false, "任务已取消"
+				case <-time.After(3 * time.Second):
+				}
+			}
+			return false, "等待 Agent 回执超时"
+		},
+	}
+}
+
+// summarizeCloudflaredOutput 从脚本输出里摘出版本变化。
+func summarizeCloudflaredOutput(out string) string {
+	kept := []string{}
+	for _, l := range strings.Split(out, "\n") {
+		t := strings.TrimSpace(l)
+		if strings.HasPrefix(t, "BIN=") || strings.HasPrefix(t, "OLD=") ||
+			strings.HasPrefix(t, "NEW=") || strings.HasPrefix(t, "ACTIVE=") {
+			kept = append(kept, t)
+		}
+	}
+	if len(kept) == 0 {
+		return truncateRunes(strings.TrimSpace(out), 300)
+	}
+	return strings.Join(kept, "；")
+}
+
+// tailCloudflaredOutput 过滤 curl 进度噪声，保留最后几行有效输出。
+func tailCloudflaredOutput(s string) string {
+	kept := []string{}
+	for _, l := range strings.Split(s, "\n") {
+		t := strings.TrimSpace(l)
+		if t == "" || strings.Contains(t, "Dload") || strings.Contains(t, "% Total") ||
+			strings.HasPrefix(t, "%") || strings.HasPrefix(t, "0 ") || strings.HasPrefix(t, "100 ") {
+			continue
+		}
+		kept = append(kept, t)
+	}
+	if len(kept) > 6 {
+		kept = kept[len(kept)-6:]
+	}
+	return truncateRunes(strings.Join(kept, "；"), 400)
 }

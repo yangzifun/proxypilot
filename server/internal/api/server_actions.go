@@ -168,46 +168,24 @@ func (h *handlers) serverAction(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "仅支持 Agent / 本地接入方式")
 			return
 		}
-		agent, err := h.fetchAgentServer(r.Context(), id)
-		if err != nil {
+		if _, err := h.fetchAgentServer(r.Context(), id); err != nil {
 			writeError(w, http.StatusNotFound, "服务器不存在")
 			return
 		}
-		cmd := `set -e
-arch=$(uname -m)
-case "$arch" in x86_64|amd64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) echo "unsupported arch: $arch"; exit 1 ;; esac
-tmp=$(mktemp)
-trap 'rm -f "$tmp"' EXIT
-curl -L --fail --max-time 180 -o "$tmp" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$arch"
-chmod 755 "$tmp"
-# 以 systemd 单元实际使用的二进制为准（apt 安装通常在 /usr/bin，而 /usr/local 只是 PATH 覆盖）
-unit_bin=$(systemctl show -p ExecStart --value cloudflared 2>/dev/null | sed -n 's/.*path=\([^ ;]*\).*/\1/p' | head -1)
-[ -n "$unit_bin" ] || unit_bin=$(command -v cloudflared || echo /usr/local/bin/cloudflared)
-old=$("$unit_bin" --version 2>&1 | head -1 || true)
-[ -f "$unit_bin" ] && cp -a "$unit_bin" "$unit_bin.bak.$(date +%s)" 2>/dev/null || true
-install -m 755 "$tmp" "$unit_bin"
-[ "$unit_bin" = "/usr/local/bin/cloudflared" ] || install -m 755 "$tmp" /usr/local/bin/cloudflared 2>/dev/null || true
-systemctl restart cloudflared 2>/dev/null || systemctl start cloudflared 2>/dev/null || true
-sleep 2
-now=$("$unit_bin" --version 2>&1 | head -1 || true)
-echo "BIN=$unit_bin"
-echo "OLD=$old"
-echo "NEW=$now"
-echo "ACTIVE=$(systemctl is-active cloudflared 2>/dev/null || true)"
-if [ "$old" = "$now" ]; then echo "更新未生效：版本未变化"; exit 1; fi
-`
-		taskID, dup, msg := h.agentQueueTask(r.Context(), agent, "exec", 0,
-			map[string]any{"command": cmd, "timeout": 240, "system_action": "cloudflared_update"}, "admin")
+		// 进入后台任务：任务中心可见进度与 OLD/NEW 版本结果
+		jobID, n, dup, msg := h.batchCreateJob(r.Context(), "cloudflared.update", map[string]any{"server_id": id}, "admin")
 		if msg != "" {
 			writeError(w, http.StatusBadRequest, msg)
 			return
 		}
-		h.recordNodeLog(r.Context(), 0, id, "update-cloudflared", "success", 0, "更新 cloudflared", "", "admin")
+		if !dup {
+			h.startBatchJob(jobID, "admin")
+		}
+		h.recordNodeLog(r.Context(), 0, id, "update-cloudflared", "success", 0, "更新 cloudflared（后台任务）", "", "admin")
 		writeJSON(w, http.StatusOK, map[string]any{
-			"success": true, "queued": true, "task_id": taskID, "duplicate": dup,
-			"message": "cloudflared 更新任务已下发，完成后会自动重启服务",
+			"success": true, "async": true, "job_id": jobID, "total": n, "duplicate": dup,
+			"message": "已创建后台任务，进度见右上角「任务」",
 		})
-
 	case "exec":
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "Method Not Allowed")
@@ -281,4 +259,38 @@ func (h *handlers) agentTaskDelete(w http.ResponseWriter, r *http.Request) {
 	_, _ = h.db.ExecContext(r.Context(),
 		`UPDATE agent_tasks SET status = 'expired', finished_at = ?, output = ? WHERE id = ?`, nowMillis(), "已由管理员取消", id)
 	writeJSON(w, http.StatusOK, map[string]any{"success": true, "message": "任务已取消"})
+}
+
+// cloudflaredUpdateCommand 更新 cloudflared 的固定脚本（后台任务复用）。
+func cloudflaredUpdateCommand() string {
+	return `set -e
+arch=$(uname -m)
+case "$arch" in x86_64|amd64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) echo "unsupported arch: $arch"; exit 1 ;; esac
+tmp=$(mktemp)
+trap 'rm -f "$tmp"' EXIT
+curl -sS -L --fail --max-time 180 -o "$tmp" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$arch"
+chmod 755 "$tmp"
+unit_bin=$(systemctl show -p ExecStart --value cloudflared 2>/dev/null | sed -n 's/.*path=\([^ ;]*\).*/\1/p' | head -1)
+[ -n "$unit_bin" ] || unit_bin=$(command -v cloudflared || echo /usr/local/bin/cloudflared)
+old=$("$unit_bin" --version 2>&1 | head -1 || true)
+new_ver=$("$tmp" --version 2>&1 | head -1 || true)
+if [ "$old" = "$new_ver" ]; then
+  echo "BIN=$unit_bin"
+  echo "OLD=$old"
+  echo "NEW=$new_ver"
+  echo "ACTIVE=$(systemctl is-active cloudflared 2>/dev/null || true)"
+  echo "ALREADY=$old"
+  exit 0
+fi
+[ -f "$unit_bin" ] && cp -a "$unit_bin" "$unit_bin.bak.$(date +%s)" 2>/dev/null || true
+install -m 755 "$tmp" "$unit_bin"
+[ "$unit_bin" = "/usr/local/bin/cloudflared" ] || install -m 755 "$tmp" /usr/local/bin/cloudflared 2>/dev/null || true
+systemctl restart cloudflared 2>/dev/null || systemctl start cloudflared 2>/dev/null || true
+sleep 2
+now=$("$unit_bin" --version 2>&1 | head -1 || true)
+echo "BIN=$unit_bin"
+echo "OLD=$old"
+echo "NEW=$now"
+echo "ACTIVE=$(systemctl is-active cloudflared 2>/dev/null || true)"
+if [ "$old" = "$now" ]; then echo "更新未生效：版本未变化"; exit 1; fi`
 }

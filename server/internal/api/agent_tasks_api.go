@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 )
 
 // GET /api/agent/tasks?server_id=&status=&limit=
@@ -101,4 +102,91 @@ func (h *handlers) agentTaskCancel(w http.ResponseWriter, r *http.Request) {
 		`UPDATE agent_tasks SET status = 'failed', output = ?, finished_at = ? WHERE id = ?`,
 		"后台取消", nowMillis(), id)
 	writeJSON(w, http.StatusOK, map[string]any{"success": true, "message": "任务已取消"})
+}
+
+// POST /api/agent/tasks {server_id, type, service_name?, command?, timeout?}
+// 服务器监控里的「重启服务」等固定动作；exec 仍受 allow_exec 限制。
+func (h *handlers) agentTaskCreate(w http.ResponseWriter, r *http.Request) {
+	var body map[string]any
+	if err := decodeJSON(w, r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "请求体无效")
+		return
+	}
+	srvID := jsonInt(body["server_id"])
+	if srvID <= 0 {
+		writeError(w, http.StatusBadRequest, "缺少 server_id")
+		return
+	}
+	typ := strings.ToLower(strings.TrimSpace(mapStr(body, "type", "")))
+	srv, err := h.fetchAgentServer(r.Context(), srvID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "服务器不存在")
+		return
+	}
+	if !strings.EqualFold(srv.LinkMode, "agent") && !strings.EqualFold(srv.LinkMode, "local") {
+		writeError(w, http.StatusBadRequest, "仅支持 Agent / 本地接入方式")
+		return
+	}
+	var payload map[string]any
+	var taskType string
+	message := ""
+	switch typ {
+	case "restart":
+		svc := strings.TrimSpace(mapStr(body, "service_name", ""))
+		if svc == "" {
+			writeError(w, http.StatusBadRequest, "缺少 service_name")
+			return
+		}
+		if !validServiceName(svc) {
+			writeError(w, http.StatusBadRequest, "服务名不合法")
+			return
+		}
+		payload = map[string]any{"service_name": svc, "restart_cmd": "systemctl restart " + svc}
+		taskType = "restart"
+		message = "已排队重启 " + svc
+	case "exec":
+		if srv.AllowExec != 1 {
+			writeError(w, http.StatusForbidden, "该服务器未开启「允许执行命令」（allow_exec）")
+			return
+		}
+		cmd := strings.TrimSpace(mapStr(body, "command", ""))
+		if cmd == "" {
+			writeError(w, http.StatusBadRequest, "命令为空")
+			return
+		}
+		timeout := jsonInt(body["timeout"])
+		if timeout <= 0 {
+			timeout = 30
+		}
+		payload = map[string]any{"command": cmd, "timeout": timeout}
+		taskType = "exec"
+		message = "已排队执行命令"
+	default:
+		writeError(w, http.StatusBadRequest, "不支持的任务类型")
+		return
+	}
+	taskID, dup, msg := h.agentQueueTask(r.Context(), srv, taskType, 0, payload, "admin")
+	if msg != "" {
+		writeError(w, http.StatusBadRequest, msg)
+		return
+	}
+	h.recordNodeLog(r.Context(), 0, srvID, "agent-"+taskType, "success", 0, message, "", "admin")
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success": true, "queued": true, "task_id": taskID, "duplicate": dup, "message": message,
+	})
+}
+
+// validServiceName 只允许 systemd 服务名常见字符，避免命令注入。
+func validServiceName(s string) bool {
+	if s == "" || len(s) > 128 {
+		return false
+	}
+	for _, c := range s {
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+			c == '@' || c == '.' || c == '_' || c == '-' {
+			continue
+		}
+		return false
+	}
+	return true
 }
