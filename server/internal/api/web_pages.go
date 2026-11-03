@@ -215,7 +215,7 @@ func (h *handlers) pageIndex(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	// 外壳不含用户数据，按路径缓存 30 秒，避免每次打开都回源。
-	w.Header().Set("Cache-Control", "public, max-age=0, s-maxage=30, stale-while-revalidate=30")
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	ver := h.assetVersion()
 	w.Header().Set("Link", "</admin-app.js?v="+ver+">; rel=preload; as=script, </admin-app.css?v="+ver+">; rel=preload; as=style")
 	_, _ = w.Write([]byte(h.shellHTML(mode)))

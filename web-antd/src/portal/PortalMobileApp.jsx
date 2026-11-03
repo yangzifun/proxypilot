@@ -167,9 +167,10 @@ export default function PortalMobileApp({ email, onLogout }) {
         </div>
       ) : (
         <div className="ppm-body">
+          {/* 用户卡在所有页签共用：名称 / 节点数 / UUID / 状态 */}
+          {renderHero()}
           {tab === 'tg' ? (
             <>
-              {renderHero()}
               <div style={{ padding: 12 }}>
                 <MtprotoCard mobile />
                 <div style={{ marginTop: 18 }}>
@@ -180,7 +181,6 @@ export default function PortalMobileApp({ email, onLogout }) {
           ) : tab === 'me' ? (
             /* 「我的」页：不依赖 UUID，未绑定也能看账号与退出 */
             <div className="ppm-me">
-              {renderHero()}
               <MobileAccount
 
                 email={email}
@@ -198,7 +198,6 @@ export default function PortalMobileApp({ email, onLogout }) {
             <div className="ppm-tip">{phase === 'error' ? '加载失败，请重新进入' : '这个邮箱还没有绑定 UUID'}</div>
           ) : (
             <>
-              {renderHero()}
 
               {tab === 'sub' ? (
                 <MobileSubscribe key={`sub-${uuid}`} uuid={uuid} />
