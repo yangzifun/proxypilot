@@ -42,6 +42,7 @@ import { useAsync, usePolling, readForm } from '../hooks';
 import { CopyText, ErrorBlock, JsonView, PageCard, StatCard, StatusPill } from '../components';
 import { watchBatch } from '../components/JobCenter';
 import ServerDrawer from '../components/ServerDrawer';
+import ServerUnlockModal from '../components/ServerUnlockModal';
 import { GaugeChart, ChartLegend } from '../charts';
 import { ServerCard as FullServerCard, WorldMap } from './Monitor';
 import { fmtAgo, fmtBytes, fmtNum, fmtTime, fmtUptime, levelColor, splitIps } from '../format';
@@ -331,6 +332,7 @@ export default function ServersUnified() {
   const [updatedAt, setUpdatedAt] = useState(Date.now());
   const [form] = Form.useForm();
   const [mapOpen, setMapOpen] = useState(false);
+  const [unlockFor, setUnlockFor] = useState(null);
 
   /* 管理字段（名称 / 地区 / Agent / 心跳 …） */
   const list = useAsync(() => api('servers', { query: { q, status } }), [q, status]);
@@ -943,6 +945,7 @@ export default function ServersUnified() {
                         s={row}
                         node={nodeById.get(Number(row.id))}
                         onPick={(r) => setDetailId(r.id)}
+                        onUnlock={(s) => setUnlockFor(s)}
                         leading={
                           <Checkbox
                             checked={selected.some((id) => Number(id) === Number(row.id))}
@@ -977,6 +980,8 @@ export default function ServersUnified() {
           )}
         </PageCard>
       </div>
+
+      <ServerUnlockModal server={unlockFor} onClose={() => setUnlockFor(null)} />
 
       <ServerDrawer
         serverId={detailId}
