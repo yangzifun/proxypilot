@@ -720,9 +720,9 @@ export default function ServersUnified() {
   return (
     <div>
       <PageCard
-        title={<span className="pp-section-title">集群概览</span>}
+        title={<span className="pp-section-title">服务器概览</span>}
         extra={<span className="pp-muted" style={{ fontSize: 12 }}>更新 {fmtTime(updatedAt, '').slice(11, 19) || '—'}</span>}
-        bodyStyle={{ padding: '4px 8px' }}
+        bodyStyle={{ padding: 0 }}
       >
         <div style={{ display: 'flex', flexWrap: 'wrap' }}>
           {[
@@ -752,41 +752,40 @@ export default function ServersUnified() {
             </div>
           ))}
         </div>
-        <div className="pp-muted" style={{ fontSize: 12, padding: '0 18px 8px' }}>
+        <div className="pp-muted" style={{ fontSize: 12, padding: '0 18px 10px' }}>
           服务异常 {fmtNum(summary.failed_services || 0)} · 未安装 {fmtNum(summary.not_installed || 0)} 项
         </div>
-      </PageCard>
 
-      <PageCard
-        title={<span className="pp-section-title">资源与分布</span>}
-        style={{ marginTop: 16 }}
-        extra={
-          <Space size={12}>
-            <ChartLegend items={[{ name: '在线', color: '#10b981' }, { name: '离线', color: '#f43f5e' }, { name: '未知', color: '#cbd5e1' }]} />
-            <Button size="small" onClick={() => setMapOpen(true)}>查看大图</Button>
-          </Space>
-        }
-        bodyStyle={{ padding: 16 }}
-      >
-        <Row gutter={24} align="middle">
-          <Col xs={24} lg={9}>
-            <div className="pp-muted" style={{ fontSize: 12, marginBottom: 8 }}>资源均值（仅在线节点）</div>
-            <Row gutter={8} style={{ textAlign: 'center' }}>
-              <Col span={12}><GaugeChart value={avg.cpu} label="CPU" size={140} /></Col>
-              <Col span={12}><GaugeChart value={avg.mem} label="内存" size={140} /></Col>
-            </Row>
-            <div style={{ marginTop: 8 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#64748b' }}>
-                <span>磁盘均值</span>
-                <b style={{ color: levelColor(avg.disk) }}>{Number(avg.disk || 0).toFixed(0)}%</b>
+        <div style={{ borderTop: '1px dashed #e2e8f0', margin: '0 16px' }} />
+
+        <div style={{ padding: '12px 16px 16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8, flexWrap: 'wrap' }}>
+            <b style={{ fontSize: 14 }}>资源与分布</b>
+            <span className="pp-muted" style={{ fontSize: 12 }}>资源均值（仅在线节点）</span>
+            <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 12 }}>
+              <ChartLegend items={[{ name: '在线', color: '#10b981' }, { name: '离线', color: '#f43f5e' }, { name: '未知', color: '#cbd5e1' }]} />
+              <Button size="small" onClick={() => setMapOpen(true)}>查看大图</Button>
+            </span>
+          </div>
+          <Row gutter={24} align="middle">
+            <Col xs={24} lg={9}>
+              <Row gutter={8} style={{ textAlign: 'center' }}>
+                <Col span={12}><GaugeChart value={avg.cpu} label="CPU" size={140} /></Col>
+                <Col span={12}><GaugeChart value={avg.mem} label="内存" size={140} /></Col>
+              </Row>
+              <div style={{ marginTop: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#64748b' }}>
+                  <span>磁盘均值</span>
+                  <b style={{ color: levelColor(avg.disk) }}>{Number(avg.disk || 0).toFixed(0)}%</b>
+                </div>
+                <Progress percent={Math.round(Number(avg.disk || 0))} showInfo={false} strokeColor={levelColor(avg.disk)} />
               </div>
-              <Progress percent={Math.round(Number(avg.disk || 0))} showInfo={false} strokeColor={levelColor(avg.disk)} />
-            </div>
-          </Col>
-          <Col xs={24} lg={15}>
-            <WorldMap servers={rows} onPick={(r) => setDetailId(r.id)} onExpand={() => setMapOpen(true)} />
-          </Col>
-        </Row>
+            </Col>
+            <Col xs={24} lg={15}>
+              <WorldMap servers={rows} onPick={(r) => setDetailId(r.id)} onExpand={() => setMapOpen(true)} />
+            </Col>
+          </Row>
+        </div>
       </PageCard>
 
       <Modal
