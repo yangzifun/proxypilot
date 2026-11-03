@@ -824,7 +824,7 @@ function RingGauge({ percent, label, sub }) {
 }
 
 /* ---------------- 世界地图 ---------------- */
-function WorldMap({ servers, onPick, large = false, onExpand, zoomable = false }) {
+export function WorldMap({ servers, onPick, large = false, onExpand, zoomable = false, onUnlock }) {
   const [hover, setHover] = useState(null);
   const [hoverCluster, setHoverCluster] = useState(null);
   const mapRef = useRef(null);

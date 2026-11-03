@@ -42,7 +42,8 @@ import { useAsync, usePolling, readForm } from '../hooks';
 import { CopyText, ErrorBlock, JsonView, PageCard, StatCard, StatusPill } from '../components';
 import { watchBatch } from '../components/JobCenter';
 import ServerDrawer from '../components/ServerDrawer';
-import { ServerCard as FullServerCard, MonitorTop } from './Monitor';
+import { GaugeChart, ChartLegend } from '../charts';
+import { ServerCard as FullServerCard, WorldMap } from './Monitor';
 import { fmtAgo, fmtBytes, fmtNum, fmtTime, fmtUptime, levelColor, splitIps } from '../format';
 import { chartPalette } from '../theme';
 
@@ -329,6 +330,7 @@ export default function ServersUnified() {
   const [pushing, setPushing] = useState(false);
   const [updatedAt, setUpdatedAt] = useState(Date.now());
   const [form] = Form.useForm();
+  const [mapOpen, setMapOpen] = useState(false);
 
   /* 管理字段（名称 / 地区 / Agent / 心跳 …） */
   const list = useAsync(() => api('servers', { query: { q, status } }), [q, status]);
@@ -753,17 +755,57 @@ export default function ServersUnified() {
         </div>
       </PageCard>
 
-      <div style={{ marginTop: 16 }}>
-        <MonitorTop
+      <PageCard
+        title={<span className="pp-section-title">资源与分布</span>}
+        style={{ marginTop: 16 }}
+        extra={
+          <Space size={12}>
+            <ChartLegend items={[{ name: '在线', color: '#10b981' }, { name: '离线', color: '#f43f5e' }, { name: '未知', color: '#cbd5e1' }]} />
+            <Button size="small" onClick={() => setMapOpen(true)}>查看大图</Button>
+          </Space>
+        }
+        bodyStyle={{ padding: 16 }}
+      >
+        <Row gutter={24} align="middle">
+          <Col xs={24} lg={9}>
+            <div className="pp-muted" style={{ fontSize: 12, marginBottom: 8 }}>资源均值（仅在线节点）</div>
+            <Row gutter={8} style={{ textAlign: 'center' }}>
+              <Col span={12}><GaugeChart value={avg.cpu} label="CPU" size={140} /></Col>
+              <Col span={12}><GaugeChart value={avg.mem} label="内存" size={140} /></Col>
+            </Row>
+            <div style={{ marginTop: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#64748b' }}>
+                <span>磁盘均值</span>
+                <b style={{ color: levelColor(avg.disk) }}>{Number(avg.disk || 0).toFixed(0)}%</b>
+              </div>
+              <Progress percent={Math.round(Number(avg.disk || 0))} showInfo={false} strokeColor={levelColor(avg.disk)} />
+            </div>
+          </Col>
+          <Col xs={24} lg={15}>
+            <WorldMap servers={rows} onPick={(r) => setDetailId(r.id)} onExpand={() => setMapOpen(true)} />
+          </Col>
+        </Row>
+      </PageCard>
+
+      <Modal
+        open={mapOpen}
+        title="全球分布"
+        onCancel={() => setMapOpen(false)}
+        footer={<Button onClick={() => setMapOpen(false)}>关闭</Button>}
+        width={1120}
+        centered
+        destroyOnHidden
+      >
+        <WorldMap
+          large
+          zoomable
           servers={rows}
-          summary={summary}
-          avg={avg}
-          loading={false}
-          stats={false}
-          cluster={false}
-          onPick={(r) => setDetailId(r.id)}
+          onPick={(r) => {
+            setMapOpen(false);
+            setDetailId(r.id);
+          }}
         />
-      </div>
+      </Modal>
 
       <div style={{ marginTop: 16 }}>
         <PageCard
