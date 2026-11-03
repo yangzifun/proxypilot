@@ -852,6 +852,8 @@ func (h *handlers) agentAck(w http.ResponseWriter, r *http.Request) {
 				   last_push_status = 'success', last_push_message = ?, updated_at = ?
 				 WHERE id = ?`,
 				version, now, now, truncateRunes(fmt.Sprintf("Agent 已应用 v%d", version), 200), now, configID)
+			// 节点上线并应用后，复核该服务器上 sing-box 节点的三向一致性（最终一致）
+			h.verifyServerNodesAsync(r.Context(), srv.ID)
 		}
 
 		logStatus := "failed"

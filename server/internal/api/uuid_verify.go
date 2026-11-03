@@ -4,17 +4,38 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
+	"sync"
 	"time"
 )
 
 // verifySem 限制同时进行的授权后一致性校验数量。
 var verifySem = make(chan struct{}, 4)
 
+// verifyAt 记录每个节点上次复核时间，常规触发 2 分钟内不重复。
+var verifyAt sync.Map
+
 // verifyNodeConsistencyAsync 在授权/解除授权后异步核对「机器实际配置 + uuid_list + configs」，
 // 发现不一致立即修复（重渲染、重建订阅配置、排队下发）。
 func (h *handlers) verifyNodeConsistencyAsync(nodeID int64) {
+	// 授权类操作每次都复核（不限流），并发由 verifySem 控制
+	h.scheduleVerify(nodeID, true)
+}
+
+// verifyNodeConsistencyAfterDeploy 节点上线并成功应用下发后强制复核一次。
+func (h *handlers) verifyNodeConsistencyAfterDeploy(nodeID int64) {
+	h.scheduleVerify(nodeID, true)
+}
+
+func (h *handlers) scheduleVerify(nodeID int64, force bool) {
 	if nodeID <= 0 {
 		return
+	}
+	now := time.Now().UnixMilli()
+	if !force {
+		if v, ok := verifyAt.Load(nodeID); ok && now-v.(int64) < 2*60*1000 {
+			return
+		}
+		verifyAt.Store(nodeID, now)
 	}
 	go func() {
 		select {
@@ -40,6 +61,18 @@ func (h *handlers) verifyNodeConsistency(ctx context.Context, nodeID int64) {
 	}
 	var expected []string
 	_ = json.Unmarshal([]byte(mapStr(rows[0], "uuid_list", "[]")), &expected)
+	serverID := mapInt(rows[0], "server_id", 0)
+	var status string
+	_ = h.db.QueryRowContext(ctx, `SELECT COALESCE(last_status,'') FROM servers WHERE id = ?`, serverID).Scan(&status)
+	if !strings.EqualFold(status, "online") {
+		// 节点离线：按授权重渲染并把 deploy 排进队列，Agent 上线后自动补下发（最终一致）
+		if files, _, _, _, msg := h.applySingboxNode(ctx, nodeID, nil, false); msg == "" {
+			h.queueSingboxDeploy(ctx, files, "auth-verify")
+		}
+		h.recordNodeLog(ctx, serverID, 0, "uuid-verify", "pending", 0,
+			"节点离线，已排队待上线后同步（授权 "+itoa64(int64(len(expected)))+" 个）", "", "auth-verify")
+		return
+	}
 	expectedLower := map[string]bool{}
 	for _, u := range expected {
 		if s := strings.ToLower(strings.TrimSpace(u)); s != "" {
@@ -124,4 +157,18 @@ func (h *handlers) countNodeConfigsFor(ctx context.Context, nodeID int64) int64 
 	_ = h.db.QueryRowContext(ctx,
 		`SELECT COUNT(DISTINCT uuid) FROM configs WHERE singbox_node_id = ?`, nodeID).Scan(&n)
 	return n
+}
+
+// verifyServerNodesAsync 该服务器上的 sing-box 节点在部署成功后复核一致性。
+func (h *handlers) verifyServerNodesAsync(ctx context.Context, serverID int64) {
+	if serverID <= 0 {
+		return
+	}
+	rows, err := queryRowsAsMaps(ctx, h.db, `SELECT id FROM singbox_nodes WHERE server_id = ?`, serverID)
+	if err != nil {
+		return
+	}
+	for _, row := range rows {
+		h.verifyNodeConsistencyAfterDeploy(mapInt(row, "id", 0))
+	}
 }
