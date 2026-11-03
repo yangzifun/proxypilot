@@ -1,6 +1,6 @@
 # ProxyPilot
 
-![Go](https://img.shields.io/badge/Go-1.23-00ADD8?logo=go&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white) ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black) ![Ant Design](https://img.shields.io/badge/Ant%20Design-6-1677FF?logo=antdesign&logoColor=white) ![Agent](https://img.shields.io/badge/Agent-Go-00ADD8?logo=go&logoColor=white) ![Version](https://img.shields.io/badge/Version-V15.12-blue.svg) ![License](https://img.shields.io/badge/License-MIT-green.svg)
+![Go](https://img.shields.io/badge/Go-1.23-00ADD8?logo=go&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white) ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black) ![Ant Design](https://img.shields.io/badge/Ant%20Design-6-1677FF?logo=antdesign&logoColor=white) ![Agent](https://img.shields.io/badge/Agent-Go-00ADD8?logo=go&logoColor=white) ![Version](https://img.shields.io/badge/Version-V15.13-blue.svg) ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
 ---
 
@@ -477,6 +477,9 @@ npm run check      # build + render-check + e2e
 
 ## 更新日志
 
+### V15.13（2026-11-03）
+
+- **修复 MTProto 创建报错「无法生成 bootstrap_secret：请先填写有效伪装域名」**：生成 secret 时误用了空的 `bootstrap_secret` 字段而不是节点填写的 `domain`，导致填了合法域名仍被拒绝；现改为优先用节点伪装域名，未填时才回落模板域名。
 ### V15.12（2026-11-03）
 
 - **离线节点最终一致**：授权/解除授权等操作后的复核若发现节点离线，不再等待探测超时，而是直接按授权重渲染并把 `deploy` 排入队列（日志 `uuid-verify` 标记 pending）；Agent 上线后自动补下发。
