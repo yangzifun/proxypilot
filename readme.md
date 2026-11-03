@@ -1,6 +1,6 @@
 # ProxyPilot
 
-![Go](https://img.shields.io/badge/Go-1.23-00ADD8?logo=go&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white) ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black) ![Ant Design](https://img.shields.io/badge/Ant%20Design-6-1677FF?logo=antdesign&logoColor=white) ![Agent](https://img.shields.io/badge/Agent-Go-00ADD8?logo=go&logoColor=white) ![Version](https://img.shields.io/badge/Version-V15.7-blue.svg) ![License](https://img.shields.io/badge/License-MIT-green.svg)
+![Go](https://img.shields.io/badge/Go-1.23-00ADD8?logo=go&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white) ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black) ![Ant Design](https://img.shields.io/badge/Ant%20Design-6-1677FF?logo=antdesign&logoColor=white) ![Agent](https://img.shields.io/badge/Agent-Go-00ADD8?logo=go&logoColor=white) ![Version](https://img.shields.io/badge/Version-V15.8-blue.svg) ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
 ---
 
@@ -476,6 +476,14 @@ npm run check      # build + render-check + e2e
 ---
 
 ## 更新日志
+
+### V15.8（2026-11-03）
+
+- **UUID 一致性巡检改为核对节点机器上的真实配置**：巡检先让每台节点的 Agent 以只读 `inspect` 动作读取实际 `sb.json`（返回 sha256、大小、去重后的用户名列表），再与数据库 `uuid_list`（平台授权）逐节点比对；漂移时按数据库授权重渲染、重建订阅配置并下发。
+- **Agent 1.8.7**：新增 `inspect` 动作（只读检查配置文件，返回 sha256 / 用户名列表），不修改任何文件。
+- **巡检任务**：结果新增 `probed` / `probe_failed`，任务详情显示「检查 N 个，读取节点配置 M 个（失败 K），漂移 D，修复 F」；读取失败的节点回退到数据库渲染内容比对。
+- **修复**：巡检 SQL 未给 `uuid_list` 取别名导致解析为空、进而把节点用户列表重渲染为空的问题（已恢复全部节点并验证与授权完全一致）。
+- **授权联动**：一键清理同步解除节点授权；重新授权时按最新用户列表重建订阅配置（`configs`），授权即新增、解除即回收。
 
 ### V15.7（2026-11-02）
 

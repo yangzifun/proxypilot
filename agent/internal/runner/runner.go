@@ -110,6 +110,8 @@ func (r *Runner) Run(ctx context.Context, a client.Action) client.Result {
 		exitCode, output = r.unlock(ctx, a)
 	case "probe":
 		exitCode, output = 0, r.probe()
+	case "inspect":
+		exitCode, output = 0, r.inspectConfig(a.Path)
 	default:
 		exitCode, output = 1, "未知任务类型："+a.Type
 	}

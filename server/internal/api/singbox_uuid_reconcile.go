@@ -8,10 +8,12 @@ import (
 )
 
 type uuidReconcileResult struct {
-	Checked int    `json:"checked"`
-	Drifted int    `json:"drifted"`
-	Fixed   int    `json:"fixed"`
-	Error   string `json:"error,omitempty"`
+	Checked     int    `json:"checked"`
+	Probed      int    `json:"probed"`
+	ProbeFailed int    `json:"probe_failed"`
+	Drifted     int    `json:"drifted"`
+	Fixed       int    `json:"fixed"`
+	Error       string `json:"error,omitempty"`
 }
 
 var uuidTextRe = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
@@ -22,11 +24,16 @@ var uuidTextRe = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{
 //  3. autoFix 时按授权列表重渲染、重建 configs、排队下发。
 func (h *handlers) reconcileSingboxUUIDState(ctx context.Context, actor string, autoFix bool) uuidReconcileResult {
 	out := uuidReconcileResult{}
-	rows, err := queryRowsAsMaps(ctx, h.db, `SELECT id, server_id, COALESCE(name,''), COALESCE(uuid_list,'[]') FROM singbox_nodes ORDER BY id ASC`)
+	rows, err := queryRowsAsMaps(ctx, h.db, `SELECT n.id AS id, n.server_id AS server_id,
+	      COALESCE(n.name,'') AS name, COALESCE(n.uuid_list,'[]') AS uuid_list,
+	      COALESCE((SELECT c.target_path FROM node_configs c WHERE c.name = CONCAT('sbx:', n.name, ':sb') ORDER BY c.id DESC LIMIT 1), '') AS target_path
+	    FROM singbox_nodes n ORDER BY n.id ASC`)
 	if err != nil {
 		out.Error = "查询节点失败"
 		return out
 	}
+	// 先按数据库授权去读每台节点机器上的真实配置文件（Agent 只读 inspect），再逐节点比对。
+	probes := h.probeNodeConfigs(ctx, rows)
 	for _, row := range rows {
 		nodeID := mapInt(row, "id", 0)
 		nodeName := mapStr(row, "name", "")
@@ -35,26 +42,42 @@ func (h *handlers) reconcileSingboxUUIDState(ctx context.Context, actor string, 
 		_ = json.Unmarshal([]byte(mapStr(row, "uuid_list", "[]")), &expected)
 		out.Checked++
 
-		var content string
-		_ = h.db.QueryRowContext(ctx,
-			`SELECT COALESCE(content,'') FROM node_configs WHERE name = ? ORDER BY id DESC LIMIT 1`,
-			"sbx:"+nodeName+":sb").Scan(&content)
 		onNode := map[string]bool{}
-		if content != "" {
-			var cfg struct {
-				Inbounds []struct {
-					Users []struct {
-						UUID     string `json:"uuid"`
-						Password string `json:"password"`
-					} `json:"users"`
-				} `json:"inbounds"`
+		fromMachine := false
+		if p := probes[nodeID]; p != nil {
+			if len(p.Users) > 0 {
+				fromMachine = true
+				out.Probed++
+				for _, u := range p.Users {
+					if s := strings.ToLower(strings.TrimSpace(u)); s != "" {
+						onNode[s] = true
+					}
+				}
+			} else if p.Err != "" {
+				out.ProbeFailed++
 			}
-			if json.Unmarshal([]byte(content), &cfg) == nil {
-				for _, ib := range cfg.Inbounds {
-					for _, u := range ib.Users {
-						id := strings.TrimSpace(firstNonEmpty(u.UUID, u.Password))
-						if uuidTextRe.MatchString(id) {
-							onNode[strings.ToLower(id)] = true
+		}
+		if !fromMachine {
+			var content string
+			_ = h.db.QueryRowContext(ctx,
+				`SELECT COALESCE(content,'') FROM node_configs WHERE name = ? ORDER BY id DESC LIMIT 1`,
+				"sbx:"+nodeName+":sb").Scan(&content)
+			if content != "" {
+				var cfg struct {
+					Inbounds []struct {
+						Users []struct {
+							UUID     string `json:"uuid"`
+							Password string `json:"password"`
+						} `json:"users"`
+					} `json:"inbounds"`
+				}
+				if json.Unmarshal([]byte(content), &cfg) == nil {
+					for _, ib := range cfg.Inbounds {
+						for _, u := range ib.Users {
+							id := strings.TrimSpace(firstNonEmpty(u.UUID, u.Password))
+							if uuidTextRe.MatchString(id) {
+								onNode[strings.ToLower(id)] = true
+							}
 						}
 					}
 				}
@@ -84,8 +107,12 @@ func (h *handlers) reconcileSingboxUUIDState(ctx context.Context, actor string, 
 			continue
 		}
 		out.Drifted++
+		source := "数据库渲染内容"
+		if fromMachine {
+			source = "节点机器实际配置"
+		}
 		h.recordNodeLog(ctx, serverID, 0, "uuid-drift", "warning", 0,
-			"UUID 不一致：缺少 "+itoa64(int64(missingOnNode))+"、多余 "+itoa64(int64(extraOnNode))+"、订阅配置缺 "+itoa64(int64(missingConfigs)),
+			"UUID 不一致（比对"+source+"）：缺少 "+itoa64(int64(missingOnNode))+"、多余 "+itoa64(int64(extraOnNode))+"、订阅配置缺 "+itoa64(int64(missingConfigs)),
 			"", actor)
 		if !autoFix {
 			continue
@@ -108,7 +135,10 @@ func (h *handlers) reconcileSingboxUUIDState(ctx context.Context, actor string, 
 		h.recordNodeLog(ctx, serverID, 0, "uuid-reconcile", "success", 0,
 			"已按平台授权重渲染；授权 "+itoa64(int64(len(expected)))+" 个", "", actor)
 	}
-	result, _ := json.Marshal(map[string]any{"checked": out.Checked, "drifted": out.Drifted, "fixed": out.Fixed})
+	result, _ := json.Marshal(map[string]any{
+		"checked": out.Checked, "probed": out.Probed, "probe_failed": out.ProbeFailed,
+		"drifted": out.Drifted, "fixed": out.Fixed,
+	})
 	_ = h.putSetting(ctx, "uuid_reconcile_last_at", itoa64(nowMillis()))
 	_ = h.putSetting(ctx, "uuid_reconcile_last_result", string(result))
 	return out

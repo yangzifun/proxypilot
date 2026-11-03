@@ -165,7 +165,8 @@ func init() {
 			if r.Error != "" {
 				return false, r.Error
 			}
-			return true, "检查 " + strconv.Itoa(r.Checked) + " 个，漂移 " + strconv.Itoa(r.Drifted) + "，修复 " + strconv.Itoa(r.Fixed)
+			return true, "检查 " + strconv.Itoa(r.Checked) + " 个，读取节点配置 " + strconv.Itoa(r.Probed) +
+				" 个（失败 " + strconv.Itoa(r.ProbeFailed) + "），漂移 " + strconv.Itoa(r.Drifted) + "，修复 " + strconv.Itoa(r.Fixed)
 		},
 	}
 
