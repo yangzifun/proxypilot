@@ -16,6 +16,7 @@ import MobileConfigs from './MobileConfigs';
 import MobileStats from './MobileStats';
 import MobileAccount from './MobileAccount';
 import MtprotoCard from './MtprotoCard';
+import MobileTraffic from './MobileTraffic';
 import MasqueCard from './MasqueCard';
 import { portalApi } from './portalApi';
 import { shortUuid } from '../format';
@@ -169,6 +170,7 @@ export default function PortalMobileApp({ email, onLogout }) {
         <div className="ppm-body">
           {/* 用户卡在所有页签共用：名称 / 节点数 / UUID / 状态 */}
           {renderHero()}
+          {uuid ? <MobileTraffic uuid={uuid} /> : null}
           {tab === 'tg' ? (
             <>
               <div style={{ padding: 12 }}>
