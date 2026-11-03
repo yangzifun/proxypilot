@@ -388,6 +388,8 @@ func (h *handlers) singboxNodeCreate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "创建失败")
 		return
 	}
+	// 该服务器已授权过的 UUID 自动继承到新节点，并按最终一致排队下发
+	h.inheritAuthorizationToSingboxNode(r.Context(), id)
 	h.writeSingboxNode(w, r, id)
 }
 

@@ -1,6 +1,6 @@
 # ProxyPilot
 
-![Go](https://img.shields.io/badge/Go-1.23-00ADD8?logo=go&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white) ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black) ![Ant Design](https://img.shields.io/badge/Ant%20Design-6-1677FF?logo=antdesign&logoColor=white) ![Agent](https://img.shields.io/badge/Agent-Go-00ADD8?logo=go&logoColor=white) ![Version](https://img.shields.io/badge/Version-V15.14-blue.svg) ![License](https://img.shields.io/badge/License-MIT-green.svg)
+![Go](https://img.shields.io/badge/Go-1.23-00ADD8?logo=go&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white) ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black) ![Ant Design](https://img.shields.io/badge/Ant%20Design-6-1677FF?logo=antdesign&logoColor=white) ![Agent](https://img.shields.io/badge/Agent-Go-00ADD8?logo=go&logoColor=white) ![Version](https://img.shields.io/badge/Version-V15.15-blue.svg) ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
 ---
 
@@ -477,6 +477,12 @@ npm run check      # build + render-check + e2e
 
 ## 更新日志
 
+### V15.15（2026-11-03）
+
+- **新节点继承机器已授权用户**：在已授权过 UUID 的服务器上新增普通代理（sing-box）或 MTProto 节点时，自动继承该服务器已授权的 UUID 集合（sing-box `uuid_list` ∪ MTProto active 客户端）。
+- **sing-box**：写入新节点 `uuid_list` → 重渲染 → 生成订阅配置 → 排队下发 → 授权后一致性复核。
+- **MTProto**：为每个继承 UUID 创建 active 客户端（按节点伪装域名生成 secret）→ 重渲染下发。
+- 离线服务器同样适用：下发排队，Agent 上线后补齐并在应用成功后触发复核（最终一致）；日志 `node-inherit` 记录继承数量。
 ### V15.14（2026-11-03）
 
 - **「授权节点」改为「授权服务」**：同一台服务器的 sing-box 与 MTProto 服务统一列出，勾选即同时授权/撤销两类服务。

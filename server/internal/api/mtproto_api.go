@@ -395,6 +395,8 @@ func (h *handlers) mtprotoNodeCreate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "创建失败")
 		return
 	}
+	// 该服务器已授权过的 UUID 自动继承到新 MTProto 节点（创建 active 客户端并下发）
+	h.inheritAuthorizationToMtprotoNode(r.Context(), id)
 	h.mtprotoWriteNode(w, r, id)
 }
 
