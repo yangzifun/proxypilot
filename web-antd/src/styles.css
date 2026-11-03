@@ -2969,3 +2969,15 @@ body {
   padding: 2px 8px;
   line-height: 1.4;
 }
+/* ---------------- 移动端「我的流量」 ---------------- */
+.mtraffic { margin: 12px 12px 4px; padding: 12px 14px; background: #fff; border: 1px solid #eef2f7; border-radius: 14px; }
+.mtraffic-head { display: flex; align-items: center; gap: 8px; }
+.mtraffic-title { font-size: 13px; font-weight: 600; color: #0f172a; }
+.mtraffic-on { font-size: 11px; color: #10b981; background: #ecfdf5; border-radius: 8px; padding: 1px 6px; }
+.mtraffic-off { font-size: 11px; color: #94a3b8; background: #f1f5f9; border-radius: 8px; padding: 1px 6px; }
+.mtraffic-refresh { margin-left: auto; }
+.mtraffic-grid { display: flex; margin-top: 10px; }
+.mtraffic-grid > div { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.mtraffic-grid b { font-size: 16px; color: #0f172a; }
+.mtraffic-grid span { font-size: 11px; color: #94a3b8; }
+.mtraffic-foot { margin-top: 8px; font-size: 11px; color: #94a3b8; }

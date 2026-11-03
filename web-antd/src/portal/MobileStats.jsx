@@ -8,6 +8,7 @@ import {
   ApiOutlined, CalendarOutlined, CloudDownloadOutlined, EyeOutlined, ReloadOutlined,
 } from '@ant-design/icons';
 import { AreaChart, DonutChart } from '../charts';
+import MobileTraffic from './MobileTraffic';
 import { useUuidStats } from './hooks/usePortalData';
 import { fmtNum, fmtTime, shortUuid } from '../format';
 
@@ -49,6 +50,7 @@ export default function MobileStats({ uuid }) {
   return (
     <PullToRefresh onRefresh={reload}>
       <div className="mstat">
+        <MobileTraffic uuid={uuid} />
         <div className="mstat-head">
           <span className="mstat-head-text">近 30 天 · 客户端拉取订阅才会记录</span>
           <Button size="mini" fill="none" onClick={reload} loading={loading} className="mstat-refresh">

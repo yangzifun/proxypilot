@@ -6,6 +6,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Card, Picker, Popup, Segmented, Toast } from 'antd-mobile';
 import { QRCode } from 'antd';
 import { CheckCircleFilled, QrcodeOutlined } from '@ant-design/icons';
+import MobileTraffic from './MobileTraffic';
 import { portalReq } from './portalApi';
 
 const FORMATS = [
@@ -132,6 +133,7 @@ export default function MobileSubscribe({ uuid }) {
 
   return (
     <div className="msub">
+      <MobileTraffic uuid={uuid} />
       <Segmented
         block
         value={fmt}
