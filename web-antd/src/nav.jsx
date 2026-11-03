@@ -55,8 +55,8 @@ export const PAGE_META = {
     accent: '#0ea5e9',
   },
   normal: {
-    title: '普通代理',
-    subtitle: '普通节点 · 协议模板与节点绑定',
+    title: 'singbox',
+    subtitle: 'sing-box 节点 · 协议模板与节点绑定',
     icon: <NodeIndexOutlined />,
     group: '节点运维',
     accent: '#8b5cf6',
