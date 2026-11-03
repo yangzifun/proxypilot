@@ -1,34 +1,48 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  CloudDownloadOutlined,
   CloudServerOutlined,
   CloudUploadOutlined,
+  CodeOutlined,
   DatabaseOutlined,
+  DeleteOutlined,
+  DisconnectOutlined,
+  EditOutlined,
+  KeyOutlined,
+  PoweroffOutlined,
   ReloadOutlined,
   SyncOutlined,
   ThunderboltOutlined,
+  UnorderedListOutlined,
 } from '@ant-design/icons';
 import {
   Alert,
   App as AntdApp,
   Button,
   Collapse,
+  Col,
   Descriptions,
   Drawer,
   Empty,
+  Form,
+  Input,
+  InputNumber,
+  Modal,
   Popconfirm,
-  Progress,
   Row,
-  Col,
   Space,
+  Switch,
   Table,
   Tag,
   Tooltip,
 } from 'antd';
 import { api, apiPost } from '../api';
-import { AreaChart, ChartLegend, Sparkline } from '../charts';
-import { ErrorBlock, JsonView, StatCard } from '../components';
+import { readForm } from '../hooks';
+import { AreaChart, ChartLegend } from '../charts';
+import { CopyText, ErrorBlock, JsonView, StatCard, StatusPill } from '../components';
+import { watchBatch } from './JobCenter';
 import { chartPalette } from '../theme';
-import { fmtAgo, fmtNum, fmtTime, fmtUptime, levelColor, splitIps } from '../format';
+import { fmtAgo, fmtTime, fmtUptime, levelColor, splitIps } from '../format';
 
 const SVC_TEXT = {
   online: ['online', '在线'],
@@ -42,12 +56,16 @@ const SVC_TEXT = {
 };
 
 /**
- * 服务器详情抽屉：资源折线 / 服务状态（可重启）/ 运行信息 / 下发配置 / Agent 升级
+ * 服务器详情抽屉：资源折线 / 快捷操作（单台全部动作） / 服务状态 / 运行信息 / 下发配置
  */
 export default function ServerDrawer({ serverId, onClose, onChanged }) {
   const { message } = AntdApp.useApp();
   const [state, setState] = useState({ data: null, metrics: [], configs: [], loading: false, error: null });
   const [busy, setBusy] = useState('');
+  const [install, setInstall] = useState(null);
+  const [execOpen, setExecOpen] = useState(false);
+  const [tasksOpen, setTasksOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!serverId) return;
@@ -71,19 +89,31 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
     else setState({ data: null, metrics: [], configs: [], loading: false, error: null });
   }, [serverId, load]);
 
+  /* 切换服务器时关掉上一台留下的弹窗 */
+  useEffect(() => {
+    setInstall(null);
+    setExecOpen(false);
+    setTasksOpen(false);
+    setEditOpen(false);
+  }, [serverId]);
+
   const d = state.data;
   const m = (d && d.last_metrics) || {};
   const sshInfo = m.ssh || null;
-  const sshState = (() => {
+  const ssh = (() => {
     if (!sshInfo) return null;
-    if (sshInfo.enabled === 'not-installed') return { text: '未安装', color: 'default' };
+    if (sshInfo.enabled === 'not-installed') {
+      return { text: '未安装', color: 'default', toggleToEnable: true };
+    }
     const enabled = sshInfo.enabled === 'enabled';
     const active = sshInfo.active === 'active';
-    if (enabled && active) return { text: '已启用', color: 'green' };
-    if (enabled) return { text: '已启用（未运行）', color: 'orange' };
-    if (active) return { text: '运行中（未自启）', color: 'gold' };
-    return { text: '已停用', color: 'orange' };
+    if (enabled && active) return { text: '已启用', color: 'green', toggleToEnable: false };
+    if (enabled) return { text: '已启用（未运行）', color: 'orange', toggleToEnable: false };
+    if (active) return { text: '运行中（未自启）', color: 'gold', toggleToEnable: false };
+    return { text: '已停用', color: 'orange', toggleToEnable: true };
   })();
+  const local = !!d && d.link_mode === 'local';
+
   /* 只关注这几个服务的安装 / 运行状态，其余历史探针不再展示 */
   const MONITOR_SERVICES = ['sing-box', 'mtg', 'cloudflared'];
   const services = useMemo(() => {
@@ -109,8 +139,6 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
 
   const latencies = useMemo(() => (state.metrics || []).map((x) => Number(x.latency_ms) || 0), [state.metrics]);
 
-
-
   const restartService = async (svc) => {
     setBusy('svc-' + svc.name);
     try {
@@ -123,7 +151,121 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
     }
   };
 
-  const statusText = SVC_TEXT[String(d && d.last_status || 'unknown')] || ['unknown', '未知'];
+  /* ---------------- 快捷操作（单台） ---------------- */
+
+  const rebootServer = async () => {
+    setBusy('reboot');
+    try {
+      const res = await apiPost(`servers/${serverId}/reboot`, {});
+      message.success((res && res.message) || '重启指令已下发');
+      onChanged && onChanged();
+    } catch (e) {
+      message.error(e.message || '重启失败');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const pushAgent = async () => {
+    setBusy('agent');
+    try {
+      const r = await api('agent/push-update', { method: 'POST', body: { server_ids: [serverId] } });
+      if (watchBatch(r)) {
+        message.success('已创建后台更新任务 #' + r.job_id + '，进度见右上角「任务」');
+        return;
+      }
+      const x = ((r && r.results) || [])[0] || {};
+      if (!x.ok) message.error(x.error || '推送失败');
+      else if (x.skipped) message.info(`已是最新（${(r && r.latest) || ''}）`);
+      else message.success(`已排队更新到 ${(r && r.latest) || ''}`);
+      load().catch(() => {});
+      onChanged && onChanged();
+    } catch (e) {
+      message.error(e.message || '推送失败');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const updateCloudflared = async () => {
+    setBusy('cloudflared');
+    try {
+      const r = await apiPost(`servers/${serverId}/update-cloudflared`, {});
+      if (r && r.job_id) {
+        message.success(`已创建后台任务 #${r.job_id}（更新 cloudflared），进度见右上角「任务」`);
+      } else {
+        message.success((r && r.message) || 'cloudflared 更新任务已下发');
+      }
+    } catch (e) {
+      message.error(e.message || '更新 cloudflared 失败');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const toggleSsh = async () => {
+    if (!ssh) return;
+    const enable = !!ssh.toggleToEnable;
+    setBusy('ssh');
+    try {
+      const res = await apiPost('jobs', {
+        kind: 'ssh.toggle',
+        params: { server_ids: [serverId], enable },
+      });
+      if (watchBatch(res)) {
+        message.success(`已创建后台任务 #${res.job_id}（${enable ? '启用' : '停用'} SSH）`);
+      } else {
+        message.success((res && res.message) || `已下发${enable ? '启用' : '停用'} SSH`);
+      }
+      setTimeout(() => {
+        load().catch(() => {});
+        onChanged && onChanged();
+      }, 1500);
+    } catch (e) {
+      message.error(e.message || '操作失败');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const rotateKey = async () => {
+    setBusy('key');
+    try {
+      const res = await apiPost(`servers/${serverId}/agent-token`, {});
+      setInstall({
+        title: `服务器「${d.name}」的新接入密钥`,
+        command: res.install_command,
+        token: res.agent_token,
+        note: res.message,
+      });
+      load().catch(() => {});
+      onChanged && onChanged();
+    } catch (e) {
+      setInstall({
+        title: `服务器「${d ? d.name : ''}」`,
+        error: e.message,
+        note: e.payload && e.payload.token_hint ? `当前密钥指纹：${e.payload.token_hint}` : '',
+      });
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const removeServer = async () => {
+    setBusy('delete');
+    try {
+      await api(`servers/${serverId}`, { method: 'DELETE' });
+      message.success('服务器已删除');
+      onClose && onClose();
+      onChanged && onChanged();
+    } catch (e) {
+      message.error(e.message || '删除失败');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const statusText = SVC_TEXT[String((d && d.last_status) || 'unknown')] || ['unknown', '未知'];
 
   return (
     <Drawer
@@ -240,13 +382,114 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
             <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有采样数据" style={{ padding: '26px 0' }} />
           )}
 
+          {/* 快捷操作：单台服务器的全部动作都收在这里 */}
+          <div style={{ margin: '20px 0 8px', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <b style={{ fontSize: 14 }}>快捷操作</b>
+            <span className="pp-muted" style={{ fontSize: 12 }}>单台操作都在这里；批量动作请回列表勾选后在工具条操作</span>
+            {d.agent_update ? <Tag color="gold" style={{ marginInlineEnd: 0 }}>Agent 可更新{d.agent_latest ? ` → ${d.agent_latest}` : ''}</Tag> : null}
+          </div>
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 8,
+              padding: '10px 12px',
+              border: '1px solid #eef2f7',
+              borderRadius: 12,
+              background: '#fbfcfe',
+            }}
+          >
+            <Popconfirm
+              title={`重启服务器「${d.name}」？`}
+              description={local ? '本机重启会中断控制面板，需通过云厂商控制台确认恢复。' : '重启期间服务器会离线，Agent 与代理连接会短暂中断。'}
+              okText="重启"
+              okButtonProps={{ danger: true }}
+              onConfirm={rebootServer}
+            >
+              <Button size="small" danger icon={<PoweroffOutlined />} loading={busy === 'reboot'}>
+                重启服务器
+              </Button>
+            </Popconfirm>
+            <Popconfirm
+              title={`向「${d.name}」推送 Agent 更新？`}
+              description={local ? '本地直控服务器不需要 Agent 更新。' : '会创建后台更新任务，进度见右上角「任务」。'}
+              okText="推送"
+              disabled={local}
+              onConfirm={pushAgent}
+            >
+              <Button size="small" icon={<CloudUploadOutlined />} loading={busy === 'agent'} disabled={local}>
+                更新 Agent
+              </Button>
+            </Popconfirm>
+            <Popconfirm
+              title="更新 cloudflared？"
+              description="下载最新版本，替换 systemd 实际使用的二进制并自动重启；会创建后台任务。"
+              okText="更新"
+              onConfirm={updateCloudflared}
+            >
+              <Button size="small" icon={<CloudDownloadOutlined />} loading={busy === 'cloudflared'}>
+                更新 cloudflared
+              </Button>
+            </Popconfirm>
+            <Popconfirm
+              title={ssh ? (ssh.toggleToEnable ? '启用 SSH？' : '停用 SSH？') : 'Agent 尚未上报 SSH 状态'}
+              description={!ssh ? undefined : ssh.toggleToEnable ? '确认 Agent 在线；启用后可从 WebSSH 登录。' : '停用后只能从面板再启用。'}
+              okText={ssh && ssh.toggleToEnable ? '启用' : '停用'}
+              okButtonProps={ssh && ssh.toggleToEnable ? undefined : { danger: true }}
+              disabled={!ssh}
+              onConfirm={toggleSsh}
+            >
+              <Button size="small" icon={<DisconnectOutlined />} loading={busy === 'ssh'} disabled={!ssh}>
+                {ssh ? (ssh.toggleToEnable ? '启用 SSH' : '停用 SSH') : 'SSH 启停'}
+              </Button>
+            </Popconfirm>
+            <Popconfirm
+              title="安装 Agent 并轮换接入密钥？"
+              description="旧密钥会立即失效，已安装的 Agent 需要重新执行安装命令。"
+              okText="安装并轮换"
+              disabled={local}
+              onConfirm={rotateKey}
+            >
+              <Button size="small" icon={<KeyOutlined />} loading={busy === 'key'} disabled={local}>
+                安装 / 轮换密钥
+              </Button>
+            </Popconfirm>
+            <Button
+              size="small"
+              icon={<CodeOutlined />}
+              onClick={() => {
+                if (!d.allow_exec) message.warning('该服务器未开启「允许远程命令」');
+                else setExecOpen(true);
+              }}
+            >
+              命令执行
+            </Button>
+            <Button size="small" icon={<UnorderedListOutlined />} onClick={() => setTasksOpen(true)}>
+              任务队列
+            </Button>
+            <Button size="small" icon={<EditOutlined />} onClick={() => setEditOpen(true)}>
+              编辑
+            </Button>
+            <Popconfirm
+              title="删除该服务器？"
+              description="删除后 Agent 与节点配置都会解除绑定。"
+              okText="删除"
+              okButtonProps={{ danger: true }}
+              onConfirm={removeServer}
+            >
+              <Button size="small" danger icon={<DeleteOutlined />} loading={busy === 'delete'}>
+                删除
+              </Button>
+            </Popconfirm>
+          </div>
+
           <div style={{ margin: '20px 0 8px', display: 'flex', alignItems: 'center', gap: 8 }}>
             <b style={{ fontSize: 14 }}>服务状态</b>
-            <span className="pp-muted" style={{ fontSize: 12 }}>只监控 sing-box / mtg / cloudflared（版本由 Agent 上报）；点「重启」会排队一条 restart 任务；cloudflared 更新请在「服务器 → 表格视图」操作</span>
+            <span className="pp-muted" style={{ fontSize: 12 }}>只监控 sing-box / mtg / cloudflared（版本由 Agent 上报）；点「重启」会排队一条 restart 任务；cloudflared 更新在上方「快捷操作」</span>
             <span style={{ marginLeft: 'auto' }}>
-              {sshState ? (
-                <Tag color={sshState.color} style={{ marginInlineEnd: 0 }}>
-                  SSH {sshState.text}
+              {ssh ? (
+                <Tag color={ssh.color} style={{ marginInlineEnd: 0 }}>
+                  SSH {ssh.text}
                 </Tag>
               ) : (
                 <span className="pp-muted" style={{ fontSize: 12 }}>SSH 状态待 Agent ≥ 1.5.1 上报</span>
@@ -287,7 +530,6 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
                     >
                       重启
                     </Button>
-
                   </div>
                 );
               })}
@@ -345,8 +587,340 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
               },
             ]}
           />
+
+          {/* 安装命令 / 密钥 */}
+          <Modal
+            open={!!install}
+            title={install && install.title}
+            onCancel={() => setInstall(null)}
+            footer={
+              <Button type="primary" onClick={() => setInstall(null)}>
+                知道了
+              </Button>
+            }
+            width={720}
+            destroyOnHidden
+          >
+            {install && install.error ? (
+              <Alert type="warning" showIcon message={install.error} description={install.note || undefined} />
+            ) : (
+              <>
+                {install && install.token ? (
+                  <div style={{ marginBottom: 14 }}>
+                    <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>
+                      接入密钥（仅本次显示，请立即保存）
+                    </div>
+                    <CopyText value={install.token} display={<span className="pp-mono">{install.token}</span>} />
+                  </div>
+                ) : null}
+                <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>
+                  在目标服务器上执行
+                </div>
+                <JsonView value={String((install && install.command) || '')} maxHeight={260} />
+                {install && install.note ? (
+                  <div style={{ marginTop: 10, fontSize: 12, color: '#94a3b8', lineHeight: 1.7 }}>{install.note}</div>
+                ) : null}
+              </>
+            )}
+          </Modal>
+
+          <ExecModal
+            server={d}
+            open={execOpen}
+            onClose={() => setExecOpen(false)}
+            onOpenTasks={() => setTasksOpen(true)}
+          />
+
+          <TasksModal row={tasksOpen ? d : null} onClose={() => setTasksOpen(false)} />
+
+          <ServerEditModal
+            row={editOpen ? d : null}
+            onClose={() => setEditOpen(false)}
+            onSaved={() => {
+              setEditOpen(false);
+              load().catch(() => {});
+              onChanged && onChanged();
+            }}
+          />
         </>
       ) : null}
     </Drawer>
+  );
+}
+
+/* ---------------- 命令执行 ---------------- */
+function ExecModal({ server, open, onClose, onOpenTasks }) {
+  const { message } = AntdApp.useApp();
+  const [command, setCommand] = useState('');
+  const [timeoutSec, setTimeoutSec] = useState(30);
+  const [sending, setSending] = useState(false);
+  const [result, setResult] = useState(null);
+
+  useEffect(() => {
+    if (open) {
+      setCommand('');
+      setTimeoutSec(30);
+      setResult(null);
+    }
+  }, [open]);
+
+  const submit = async () => {
+    const cmd = command.trim();
+    if (!cmd) {
+      message.warning('请输入要执行的命令');
+      return;
+    }
+    setSending(true);
+    try {
+      const res = await apiPost(`servers/${server.id}/exec`, {
+        command: cmd,
+        timeout: Math.round(Number(timeoutSec) || 30) * 1000,
+      });
+      setResult(res || {});
+      message.success((res && res.message) || '命令已排队');
+    } catch (e) {
+      message.error(e.message || '执行失败');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <Modal
+      open={open}
+      title={`命令执行 · ${(server && server.name) || ''}`}
+      onCancel={onClose}
+      width={720}
+      destroyOnHidden
+      footer={
+        <Space>
+          {result ? <Button onClick={() => { onClose(); if (onOpenTasks) onOpenTasks(); }}>任务队列</Button> : null}
+          <Button onClick={onClose}>关闭</Button>
+          <Button type="primary" loading={sending} onClick={submit}>
+            下发命令
+          </Button>
+        </Space>
+      }
+    >
+      <Alert
+        type="info"
+        showIcon
+        style={{ marginBottom: 12, borderRadius: 10 }}
+        message="命令由 Agent 在下次轮询时执行"
+        description="排队后可在「任务队列」查看执行状态与输出；超时时间到达后任务会被标记失败。"
+      />
+      <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>
+        命令
+      </div>
+      <Input.TextArea
+        rows={4}
+        value={command}
+        onChange={(e) => setCommand(e.target.value)}
+        placeholder="例如：systemctl status sing-box"
+        className="pp-mono"
+      />
+      <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span className="pp-muted" style={{ fontSize: 12 }}>
+          超时（秒，2–60）
+        </span>
+        <InputNumber min={2} max={60} value={timeoutSec} onChange={(v) => setTimeoutSec(v || 30)} />
+      </div>
+      {result ? (
+        <Alert
+          style={{ marginTop: 12 }}
+          type="success"
+          showIcon
+          message={result.message || '已下发'}
+          description={result.task_id ? `任务 #${result.task_id}${result.duplicate ? '（重复任务已合并）' : ''}` : undefined}
+        />
+      ) : null}
+    </Modal>
+  );
+}
+
+/* ---------------- 编辑服务器 ---------------- */
+function ServerEditModal({ row, onClose, onSaved }) {
+  const { message } = AntdApp.useApp();
+  const [form] = Form.useForm();
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!row) return;
+    form.setFieldsValue({
+      name: row.name,
+      host: row.host || '',
+      tags: row.tags || '',
+      remark: row.remark || '',
+      enabled: !!row.enabled,
+      allow_exec: !!row.allow_exec,
+      metrics_every: row.metrics_every || 1,
+      agent_next_poll_sec: row.agent_next_poll_sec || 10,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [row]);
+
+  const save = async () => {
+    const v = await readForm(form);
+    if (!v) return;
+    setSaving(true);
+    try {
+      await api(`servers/${row.id}`, { method: 'PUT', body: v });
+      message.success('服务器已更新');
+      onSaved();
+    } catch (e) {
+      message.error(e.message || '保存失败');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal
+      open={!!row}
+      title={row ? `编辑服务器 · ${row.name}` : ''}
+      onCancel={onClose}
+      onOk={save}
+      confirmLoading={saving}
+      okText="保存"
+      width={600}
+      destroyOnHidden
+    >
+      <Form form={form} layout="vertical" requiredMark={false} style={{ marginTop: 12 }}>
+        <Row gutter={12}>
+          <Col span={12}>
+            <Form.Item name="name" label="名称" rules={[{ required: true, message: '请填写名称' }]}>
+              <Input maxLength={64} />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item name="host" label="机器地址" extra="可留空（通常由 Agent 上报）">
+              <Input placeholder="1.2.3.4 或 host.example.com" />
+            </Form.Item>
+          </Col>
+        </Row>
+        <Row gutter={12}>
+          <Col span={12}>
+            <Form.Item name="tags" label="标签">
+              <Input placeholder="香港,核心" maxLength={128} />
+            </Form.Item>
+          </Col>
+          <Col span={6}>
+            <Form.Item name="agent_next_poll_sec" label="轮询间隔（秒）">
+              <InputNumber min={2} max={900} style={{ width: '100%' }} />
+            </Form.Item>
+          </Col>
+          <Col span={6}>
+            <Form.Item name="metrics_every" label="每 N 次采指标">
+              <InputNumber min={1} max={10} style={{ width: '100%' }} />
+            </Form.Item>
+          </Col>
+        </Row>
+        <Row gutter={12}>
+          <Col span={8}>
+            <Form.Item name="enabled" label="启用" valuePropName="checked">
+              <Switch size="small" />
+            </Form.Item>
+          </Col>
+          <Col span={8}>
+            <Form.Item name="allow_exec" label="允许远程命令" valuePropName="checked">
+              <Switch size="small" />
+            </Form.Item>
+          </Col>
+        </Row>
+        <Form.Item name="remark" label="备注">
+          <Input.TextArea rows={2} maxLength={500} />
+        </Form.Item>
+      </Form>
+    </Modal>
+  );
+}
+
+/* ---------------- 任务队列 ---------------- */
+function TasksModal({ row, onClose }) {
+  const { message } = AntdApp.useApp();
+  const [state, setState] = useState({ data: [], loading: false, error: null });
+
+  const load = useCallback(async () => {
+    if (!row) return;
+    setState({ data: [], loading: true, error: null });
+    try {
+      const res = await api(`servers/${row.id}/tasks`, { query: { limit: 30 } });
+      setState({ data: (res && res.data) || [], loading: false, error: null });
+    } catch (e) {
+      setState({ data: [], loading: false, error: e });
+    }
+  }, [row]);
+
+  useEffect(() => {
+    if (row) load();
+  }, [row, load]);
+
+  const cancel = async (task) => {
+    try {
+      await api(`agent/tasks/${task.id}`, { method: 'DELETE' });
+      message.success('任务已取消');
+      load();
+    } catch (e) {
+      message.error(e.message || '取消失败');
+    }
+  };
+
+  return (
+    <Modal
+      open={!!row}
+      title={row ? `任务队列 · ${row.name}` : '任务队列'}
+      onCancel={onClose}
+      footer={<Button onClick={onClose}>关闭</Button>}
+      width={760}
+    >
+      {state.error ? <ErrorBlock error={state.error} onRetry={load} /> : null}
+      <Table
+        rowKey={(r) => r.id || r.task_id || Math.random()}
+        size="small"
+        loading={state.loading}
+        dataSource={state.data}
+        pagination={{ pageSize: 10, size: 'small' }}
+        locale={{ emptyText: '暂无任务' }}
+        columns={[
+          { title: 'ID', dataIndex: 'id', width: 64 },
+          {
+            title: '类型',
+            width: 110,
+            render: (_, r) => <Tag color="geekblue">{r.type || r.action || r.task_type || '—'}</Tag>,
+          },
+          {
+            title: '状态',
+            width: 96,
+            render: (_, r) => <StatusPill status={r.status} />,
+          },
+          {
+            title: '更新时间',
+            width: 150,
+            render: (_, r) => <span className="pp-muted">{fmtTime(r.updated_at || r.created_at)}</span>,
+          },
+          {
+            title: '结果',
+            ellipsis: true,
+            render: (_, r) => (
+              <span className="pp-mono" style={{ color: '#64748b', fontSize: 12 }}>
+                {String(r.result || r.message || r.error || r.output || '—').slice(0, 120)}
+              </span>
+            ),
+          },
+          {
+            title: '',
+            width: 72,
+            render: (_, r) =>
+              String(r.status) === 'pending' ? (
+                <Popconfirm title="取消该任务？" okText="取消任务" onConfirm={() => cancel(r)}>
+                  <Button type="link" size="small" danger>
+                    取消
+                  </Button>
+                </Popconfirm>
+              ) : null,
+          },
+        ]}
+      />
+    </Modal>
   );
 }
