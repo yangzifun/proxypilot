@@ -449,6 +449,8 @@ export default function SingboxTemplateEditor({ state, onClose, onSaved }) {
           enable_singbox: engSb ? 1 : 0,
           enable_masque: engMq ? 1 : 0,
           warp_enabled: 0,
+          // 示例里带一个 CDN 域名，示例配置中会出现 vless-ws-cdn（127.0.0.1:13707，明文 WS）
+          cdn_domain: 'cdn.example.com',
         };
       }
       const res = await api('singbox/templates/preview', { method: 'POST', body });
@@ -588,7 +590,7 @@ export default function SingboxTemplateEditor({ state, onClose, onSaved }) {
               启用 sing-box
             </Checkbox>
             <Checkbox checked={engMq} onChange={(e) => setEngMq(e.target.checked)}>
-              启用 MASQUE（sing-box endpoint，端口 13707）
+              启用 MASQUE（sing-box endpoint，端口 13708）
             </Checkbox>
           </Space>
         </div>
@@ -622,7 +624,7 @@ export default function SingboxTemplateEditor({ state, onClose, onSaved }) {
 
         {engMq ? (
           <div style={{ marginTop: 12 }}>
-            {sectionTitle('MASQUE（sing-box masque-server endpoint）', '（端口 13707；需要 sing-box >= 1.15.0）')}
+            {sectionTitle('MASQUE（sing-box masque-server endpoint）', '（端口 13708；需要 sing-box >= 1.15.0）')}
             <Input
               value={mqPath}
               onChange={(e) => setMqPath(e.target.value)}
@@ -701,7 +703,7 @@ export default function SingboxTemplateEditor({ state, onClose, onSaved }) {
               <Col flex="none"><Tag color="geekblue" style={{ marginInlineEnd: 0 }}>masque</Tag></Col>
               <Col flex="none"><span className="pp-muted" style={{ fontSize: 12 }}>masque-server</span></Col>
               <Col flex="none"><span className="pp-muted" style={{ fontSize: 12 }}>端口</span></Col>
-              <Col flex="none"><Input size="small" value="13707" disabled style={{ width: 92 }} /></Col>
+              <Col flex="none"><Input size="small" value="13708" disabled style={{ width: 92 }} /></Col>
               <Col flex="none"><Tag>TLS 复用模板证书</Tag></Col>
               <Col flex="auto" style={{ textAlign: 'right', minWidth: 60 }}>
                 <span className="pp-muted" style={{ fontSize: 12 }}>用户按授权 UUID 注入</span>

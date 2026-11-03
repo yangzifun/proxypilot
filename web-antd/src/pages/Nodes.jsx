@@ -88,9 +88,9 @@ const PROTO_DOCS = {
     tips: ['必须放行 UDP 13704', '对 UDP 质量敏感，弱网可能抖动', '客户端需支持 TUIC v5'],
   },
   masque: {
-    label: 'MASQUE', port: 13707, transport: 'HTTP/3 · CONNECT-IP',
+    label: 'MASQUE', port: 13708, transport: 'HTTP/3 · CONNECT-IP',
     desc: '由 sing-box masque-server endpoint 承载，基于 HTTP/3 CONNECT-IP。',
-    tips: ['需要 sing-box ≥ 1.15.0', '默认模板不启用，需确认客户端支持 MASQUE', 'UDP 13707，注意防火墙放行'],
+    tips: ['需要 sing-box ≥ 1.15.0', '默认模板不启用，需确认客户端支持 MASQUE', 'UDP 13708，注意防火墙放行'],
   },
 };
 
@@ -715,7 +715,7 @@ function NodeEditor({ state, servers, templates, onClose, onSaved }) {
             <Form.Item
               name="cdn_domain"
               label="CDN 域名（可选）"
-              extra="填了会给 VLESS-WS 额外生成一条 CDN 加速链接（客户端连 CDN 的 443，源站端口不变）"
+              extra="填了会部署 13707（127.0.0.1 明文 WS，供 Cloudflare Tunnel 回源），并给用户生成一条 CDN 链接（客户端连 CDN 域名:443）"
             >
               <Input placeholder="cdn.example.com" />
             </Form.Item>

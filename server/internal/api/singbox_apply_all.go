@@ -59,6 +59,14 @@ func (h *handlers) applySingboxNode(ctx context.Context, nodeID int64, usersOver
 	if msg != "" {
 		return nil, nil, nil, 0, msg
 	}
+	// 下发节点同时刷新该节点的用户订阅配置（含 CDN 链接与 -cdn 备注），保证「设定后即出现在用户配置里」
+	syncUsers := singboxAuthorizedUsers(tpl, nodeRow)
+	if syncUsers == nil {
+		_ = json.Unmarshal([]byte(tpl.UsersJSON), &syncUsers)
+	}
+	if len(syncUsers) > 0 {
+		_, _, _ = h.syncSingboxConfigsForUsers(ctx, nodeID, node.Name, tpl, node, syncUsers)
+	}
 
 	now := nowMillis()
 	out := make([]map[string]any, 0, len(files))

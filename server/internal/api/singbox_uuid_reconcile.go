@@ -187,7 +187,7 @@ func (h *handlers) syncSingboxConfigsForUsers(ctx context.Context, nodeID int64,
 		uuidOf[u.Name] = u.UUID
 	}
 	existing := map[string]map[string]any{}
-	if rows, err := queryRowsAsMaps(ctx, h.db, `SELECT id, uuid, config_data FROM configs WHERE singbox_node_id = ?`, nodeID); err == nil {
+	if rows, err := queryRowsAsMaps(ctx, h.db, `SELECT id, uuid, config_data, COALESCE(remark,'') AS remark FROM configs WHERE singbox_node_id = ?`, nodeID); err == nil {
 		for _, e := range rows {
 			existing[mapStr(e, "uuid", "")+"\x00"+mapStr(e, "config_data", "")] = e
 		}
@@ -220,7 +220,16 @@ func (h *handlers) syncSingboxConfigsForUsers(ctx context.Context, nodeID int64,
 		}
 		digestParts = append(digestParts, link)
 		key := uuid + "\x00" + link
-		if existing[key] != nil {
+		remark := nodeName + "-" + mapStr(l, "protocol", "")
+		if isCDN, _ := l["cdn"].(bool); isCDN {
+			remark += "-cdn"
+		}
+		if e := existing[key]; e != nil {
+			// 链接不变但备注需要更新（例如新增 -cdn 标识）
+			if mapStr(e, "remark", "") != remark {
+				_, _ = h.db.ExecContext(ctx, `UPDATE configs SET remark = ?, updated_at = ? WHERE id = ?`,
+					truncateRunes(remark, 500), now, mapInt(e, "id", 0))
+			}
 			continue
 		}
 		var dup int64
@@ -228,7 +237,6 @@ func (h *handlers) syncSingboxConfigsForUsers(ctx context.Context, nodeID int64,
 		if dup > 0 {
 			continue
 		}
-		remark := nodeName + "-" + mapStr(l, "protocol", "")
 		if _, err := h.db.ExecContext(ctx, `INSERT INTO configs
 		  (uuid, config_data, protocol, remark, domain_hosting, singbox_node_id, created_at, updated_at)
 		  VALUES (?, ?, ?, ?, 'Cloudflare', ?, ?, ?)`,

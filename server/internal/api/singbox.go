@@ -14,7 +14,7 @@ const singboxDefaultSSMethod = "2022-blake3-aes-256-gcm"
 var singboxPortDeltaOrder = []string{"hy2", "ss", "anytls", "vmess", "reality", "vlws", "masque"}
 
 var singboxPortDelta = map[string]int{
-	"hy2": 1, "ss": 2, "anytls": 3, "vmess": 4, "reality": 5, "vlws": 6, "masque": 7,
+	"hy2": 1, "ss": 2, "anytls": 3, "vmess": 4, "reality": 5, "vlws": 6, "masque": 8,
 }
 
 type singboxTemplate struct {
@@ -337,11 +337,8 @@ func singboxRenderSb(tpl *singboxTemplate, users []sbUser, ports map[string]int,
 		if strings.TrimSpace(cdnDomain) != "" {
 			cdnPort := int(jsonInt(optMap(opts, "vlws")["cdn_port"]))
 			if cdnPort <= 0 {
-				// 默认 13707（base+7，仅 CDN 明文 WS）；MASQUE 占用该端口时退到 base+16
+				// 默认 13707（base+7）；MASQUE 已改用 13708，不再冲突
 				cdnPort = ports["vlws"] + 1
-				if tpl.EnableMasque != 0 {
-					cdnPort = ports["vlws"] + 10
-				}
 			}
 			inbounds = append(inbounds, map[string]any{
 				"type": "vless", "tag": "vless-ws-cdn", "listen": "127.0.0.1", "listen_port": cdnPort,
@@ -437,13 +434,10 @@ func singboxInstallVersions(tpl *singboxTemplate) string {
 	return string(b)
 }
 
-// cdnPortOf CDN 明文 WS 回源端口：默认 base+7（13707）；MASQUE 占用时用 base+16。
+// cdnPortOf CDN 明文 WS 回源端口：默认 base+7（13707），可用模板 vlws.cdn_port 覆盖。
 func cdnPortOf(tpl *singboxTemplate, ports map[string]int) int {
 	if v := int(jsonInt(optMap(tpl.protoOptions(), "vlws")["cdn_port"])); v > 0 {
 		return v
-	}
-	if tpl.EnableMasque != 0 {
-		return ports["vlws"] + 10
 	}
 	return ports["vlws"] + 1
 }
