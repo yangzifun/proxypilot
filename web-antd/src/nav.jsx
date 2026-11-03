@@ -48,8 +48,8 @@ export const PAGE_META = {
     accent: '#f59e0b',
   },
   servers: {
-    title: '服务器管理',
-    subtitle: 'Agent 接入、接入密钥与任务队列',
+    title: '服务器',
+    subtitle: '在线率、资源监控与 Agent 管理',
     icon: <CloudServerOutlined />,
     group: '运维',
     accent: '#0ea5e9',
@@ -74,13 +74,6 @@ export const PAGE_META = {
     icon: <CloudSyncOutlined />,
     group: '运维',
     accent: '#22c55e',
-  },
-  status: {
-    title: '服务器监控',
-    subtitle: '在线率、资源占用与服务器明细',
-    icon: <LineChartOutlined />,
-    group: '运维',
-    accent: '#f59e0b',
   },
   logs: {
     title: '日志管理',
@@ -122,11 +115,11 @@ export const PAGE_META = {
   },
 };
 
-export const NAV_ORDER = ['dash', 'uuids', 'tpls', 'userst', 'servers', 'normal', 'mtproto', 'masque', 'status', 'logs', 'attachments', 'sys', 'backup', 'sec'];
+export const NAV_ORDER = ['dash', 'uuids', 'tpls', 'userst', 'servers', 'normal', 'mtproto', 'masque', 'logs', 'attachments', 'sys', 'backup', 'sec'];
 
 export const NAV_GROUPS = [
   { group: '业务', keys: ['dash', 'uuids', 'tpls', 'userst'] },
-  { group: '服务器运维', keys: ['servers', 'status'] },
+  { group: '服务器运维', keys: ['servers'] },
   { group: '节点运维', keys: ['normal', 'mtproto', 'masque'] },
   { group: '系统', keys: ['logs', 'attachments', 'sys', 'backup', 'sec'] },
 ];

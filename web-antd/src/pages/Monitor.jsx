@@ -78,7 +78,7 @@ function mapXY(lat, lon) {
   };
 }
 
-export default function Monitor() {
+export default function Monitor({ embedded = false }) {
   const [auto, setAuto] = useState(true);
   const [detailId, setDetailId] = useState(null);
   const [unlockFor, setUnlockFor] = useState(null);
@@ -355,6 +355,7 @@ export default function Monitor() {
         </div>
       </Modal>
 
+      {embedded ? null : (
       <div style={{ marginTop: 16 }}>
         <PageCard
           title={<span className="pp-section-title">各节点资源占用</span>}
@@ -390,6 +391,7 @@ export default function Monitor() {
           )}
         </PageCard>
       </div>
+      )}
 
 
       <div style={{ marginTop: 16 }}>

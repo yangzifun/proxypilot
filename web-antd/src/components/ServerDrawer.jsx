@@ -242,7 +242,7 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
 
           <div style={{ margin: '20px 0 8px', display: 'flex', alignItems: 'center', gap: 8 }}>
             <b style={{ fontSize: 14 }}>服务状态</b>
-            <span className="pp-muted" style={{ fontSize: 12 }}>只监控 sing-box / mtg / cloudflared（版本由 Agent 上报）；点「重启」会排队一条 restart 任务；cloudflared 更新请在「服务器管理」操作</span>
+            <span className="pp-muted" style={{ fontSize: 12 }}>只监控 sing-box / mtg / cloudflared（版本由 Agent 上报）；点「重启」会排队一条 restart 任务；cloudflared 更新请在「服务器 → 表格视图」操作</span>
             <span style={{ marginLeft: 'auto' }}>
               {sshState ? (
                 <Tag color={sshState.color} style={{ marginInlineEnd: 0 }}>

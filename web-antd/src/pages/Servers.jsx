@@ -55,7 +55,7 @@ function sshUi(s) {
 }
 import { chartPalette } from '../theme';
 
-export default function Servers() {
+export default function Servers({ embedded = false }) {
   const { message } = AntdApp.useApp();
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('');

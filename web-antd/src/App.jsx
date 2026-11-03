@@ -10,6 +10,7 @@ import Dashboard from './pages/Dashboard';
 import Groups from './pages/Groups';
 import Templates from './pages/Templates';
 import Servers from './pages/Servers';
+import ServersUnified from './pages/ServersUnified';
 import Nodes from './pages/Nodes';
 import UserTraffic from './pages/UserTraffic';
 import MtprotoPage from './pages/MtprotoPage';
@@ -26,12 +27,12 @@ const PAGES = {
   uuids: Groups,
   tpls: Templates,
   userst: UserTraffic,
-  servers: Servers,
+  servers: ServersUnified,
   normal: Nodes,
   mtproto: MtprotoPage,
   masque: MasquePage,
   singbox: Nodes,
-  status: Monitor,
+  status: ServersUnified,
   logs: Logs,
   sys: System,
   attachments: Attachments,
@@ -53,7 +54,7 @@ export default function App() {
   if (!token) return <Login />;
 
   const legacySettings = route === 'settings';
-  const normalized = route === 'singbox' ? 'normal' : legacySettings ? 'sys' : route;
+  const normalized = route === 'singbox' ? 'normal' : route === 'status' ? 'servers' : legacySettings ? 'sys' : route;
   const key = PAGE_META[normalized] ? normalized : 'dash';
   const meta = PAGE_META[key];
   const PageComp = PAGES[key] || Dashboard;
