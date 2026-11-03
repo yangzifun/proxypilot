@@ -5,7 +5,9 @@ import {
   Col,
   Empty,
   Input,
+  DatePicker,
   Modal,
+  Segmented,
   Row,
   Select,
   Space,
@@ -48,6 +50,8 @@ export default function UserTraffic() {
   const [sortBy, setSortBy] = useState('today');
   const [onlyOnline, setOnlyOnline] = useState(false);
   const [detail, setDetail] = useState(null);
+  const [detailRange, setDetailRange] = useState('7d');
+  const [detailCustom, setDetailCustom] = useState(null);
 
   const users = useAsync(() => api(`stats/traffic/users?range=${range}`), [range]);
 
@@ -135,15 +139,28 @@ export default function UserTraffic() {
     });
   };
 
-  const openDetail = async (row) => {
-    setDetail({ uuid: row.uuid, loading: true, data: null });
+  const loadDetail = async (uuid, r, custom) => {
+    setDetail({ uuid, loading: true, data: null });
     try {
-      const res = await api(`stats/traffic/users/${row.uuid}?range=${range}`);
-      setDetail({ uuid: row.uuid, loading: false, data: res });
+      const qs = new URLSearchParams();
+      if (r === 'custom' && custom && custom[0] && custom[1]) {
+        qs.set('from', String(custom[0].valueOf()));
+        qs.set('to', String(custom[1].valueOf()));
+      } else {
+        qs.set('range', r || '7d');
+      }
+      const res = await api(`stats/traffic/users/${uuid}?${qs.toString()}`);
+      setDetail({ uuid, loading: false, data: res });
     } catch (e) {
       message.error(e.message || '读取详情失败');
       setDetail(null);
     }
+  };
+
+  const openDetail = (row) => {
+    const useCustom = detailRange === 'custom' && detailCustom;
+    if (detailRange === 'custom' && !useCustom) setDetailRange('7d');
+    loadDetail(row.uuid, useCustom ? 'custom' : (detailRange === 'custom' ? '7d' : detailRange), detailCustom);
   };
 
   const columns = [
@@ -206,8 +223,12 @@ export default function UserTraffic() {
 
   const detailSeries = useMemo(() => {
     const series = (detail && detail.data && detail.data.series) || [];
+    const span = series.length
+      ? Number(series[series.length - 1].hour_ts) - Number(series[0].hour_ts)
+      : 0;
+    const dayMode = span > 3 * 86400000;
     return series.map((p) => ({
-      label: fmtTime(p.hour_ts).slice(5, 16),
+      label: dayMode ? fmtTime(p.hour_ts).slice(5, 10) : fmtTime(p.hour_ts).slice(5, 16),
       fullLabel: fmtTime(p.hour_ts),
       up: Number(p.up) || 0,
       down: Number(p.down) || 0,
@@ -364,6 +385,34 @@ export default function UserTraffic() {
         }
         width={860}
       >
+        <Space wrap style={{ marginBottom: 12 }}>
+          <Segmented
+            value={detailRange}
+            onChange={(v) => {
+              setDetailRange(v);
+              if (v !== 'custom' && detail && detail.uuid) loadDetail(detail.uuid, v);
+            }}
+            options={[
+              { label: '24 小时', value: '24h' },
+              { label: '7 天', value: '7d' },
+              { label: '30 天', value: '30d' },
+              { label: '自定义', value: 'custom' },
+            ]}
+          />
+          {detailRange === 'custom' ? (
+            <>
+              <DatePicker.RangePicker showTime onChange={(v) => setDetailCustom(v)} />
+              <Button
+                size="small"
+                type="primary"
+                disabled={!detailCustom}
+                onClick={() => detail && detail.uuid && loadDetail(detail.uuid, 'custom', detailCustom)}
+              >
+                应用
+              </Button>
+            </>
+          ) : null}
+        </Space>
         {detail && detail.loading ? (
           <div style={{ padding: 40, textAlign: 'center' }} className="pp-muted">读取中…</div>
         ) : detail && detail.data ? (

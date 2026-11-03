@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -330,13 +331,28 @@ func (h *handlers) statsTrafficUserDetail(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusBadRequest, "UUID 格式无效")
 		return
 	}
-	start := statsRangeStart(r.URL.Query().Get("range"))
+	q := r.URL.Query()
+	start := statsRangeStart(q.Get("range"))
+	end := int64(0)
+	if v, err := strconv.ParseInt(strings.TrimSpace(q.Get("from")), 10, 64); err == nil && v > 0 {
+		start = v
+	}
+	if v, err := strconv.ParseInt(strings.TrimSpace(q.Get("to")), 10, 64); err == nil && v > 0 {
+		end = v
+	}
+	if end > 0 && start >= end {
+		start = end - 7*24*3_600_000
+	}
 	query := `SELECT hour_ts, COALESCE(SUM(up),0), COALESCE(SUM(down),0)
 	    FROM user_traffic_hourly WHERE uuid = ?`
 	args := []any{uuid}
 	if start > 0 {
 		query += ` AND hour_ts >= ?`
 		args = append(args, start)
+	}
+	if end > 0 {
+		query += ` AND hour_ts <= ?`
+		args = append(args, end)
 	}
 	query += ` GROUP BY hour_ts ORDER BY hour_ts ASC LIMIT 2000`
 	rows, err := h.db.QueryContext(ctx, query, args...)
@@ -372,6 +388,10 @@ func (h *handlers) statsTrafficUserDetail(w http.ResponseWriter, r *http.Request
 		nodeQuery += ` AND h.hour_ts >= ?`
 		nodeArgs = append(nodeArgs, start)
 	}
+	if end > 0 {
+		nodeQuery += ` AND h.hour_ts <= ?`
+		nodeArgs = append(nodeArgs, end)
+	}
 	nodeQuery += ` GROUP BY h.node_id, n.name ORDER BY SUM(h.down) DESC`
 	nodes := []map[string]any{}
 	if nrows, err := h.db.QueryContext(ctx, nodeQuery, nodeArgs...); err == nil {
@@ -392,7 +412,7 @@ func (h *handlers) statsTrafficUserDetail(w http.ResponseWriter, r *http.Request
 		"success": true, "uuid": uuid, "owner": owner, "email": email,
 		"up": sumUp, "down": sumDown, "last_active_at": lastActive,
 		"active": lastActive > 0 && nowMillis()-lastActive <= statsActiveWindowMs,
-		"series": series, "nodes": nodes,
+		"series": series, "nodes": nodes, "start": start, "end": end,
 	})
 }
 
