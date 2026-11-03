@@ -257,22 +257,30 @@ func (h *handlers) uuidConfigsDelete(w http.ResponseWriter, r *http.Request) {
 		if len(ids) > 1000 {
 			ids = ids[:1000]
 		}
+		targets := configTargetsByIDs(r.Context(), h.db, ids)
 		n, err := deleteConfigsByIDs(r.Context(), h.db, ids)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "删除失败")
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"success": true, "deleted": n})
+		revoked, deployed := h.revokeEmptyConfigTargets(r.Context(), targets)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"success": true, "deleted": n, "nodes_revoked": revoked, "nodes_deployed": deployed,
+		})
 		return
 	}
 	if body.ID != nil && *body.ID > 0 {
+		targets := configTargetsByIDs(r.Context(), h.db, []int64{*body.ID})
 		res, err := h.db.ExecContext(r.Context(), `DELETE FROM configs WHERE id = ?`, *body.ID)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "删除失败")
 			return
 		}
 		n, _ := res.RowsAffected()
-		writeJSON(w, http.StatusOK, map[string]any{"success": true, "deleted": n})
+		revoked, deployed := h.revokeEmptyConfigTargets(r.Context(), targets)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"success": true, "deleted": n, "nodes_revoked": revoked, "nodes_deployed": deployed,
+		})
 		return
 	}
 	target := strings.TrimSpace(body.UUID)
@@ -349,6 +357,104 @@ func (h *handlers) revokeUUIDFromNodes(ctx context.Context, uuid string) (int, i
 		}
 	}
 	return len(affected), deployed
+}
+
+// configTarget 一条订阅配置所属的 (uuid, 节点)。
+type configTarget struct {
+	UUID   string
+	NodeID int64
+}
+
+// configTargetsByIDs 删除前先记录这些配置属于哪个 UUID / 节点，便于删除后解除授权。
+func configTargetsByIDs(ctx context.Context, db *sql.DB, ids []int64) []configTarget {
+	if len(ids) == 0 {
+		return nil
+	}
+	ph := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	rows, err := db.QueryContext(ctx,
+		`SELECT COALESCE(uuid,''), COALESCE(singbox_node_id,0) FROM configs WHERE id IN (`+ph+`)`, args...)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	out := []configTarget{}
+	for rows.Next() {
+		var t configTarget
+		if rows.Scan(&t.UUID, &t.NodeID) == nil && t.UUID != "" {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// revokeEmptyConfigTargets 某个 UUID 在某节点上已无任何配置时，解除该节点授权并重渲染下发。
+func (h *handlers) revokeEmptyConfigTargets(ctx context.Context, targets []configTarget) (int, int) {
+	seen := map[string]bool{}
+	revoked, deployed := 0, 0
+	for _, t := range targets {
+		if t.NodeID <= 0 || strings.TrimSpace(t.UUID) == "" {
+			continue
+		}
+		key := itoa64(t.NodeID) + "|" + strings.ToLower(strings.TrimSpace(t.UUID))
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		var left int64
+		_ = h.db.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM configs WHERE uuid = ? AND singbox_node_id = ?`, t.UUID, t.NodeID).Scan(&left)
+		if left > 0 {
+			continue
+		}
+		ok, applied := h.revokeUUIDFromNode(ctx, t.NodeID, t.UUID)
+		if ok {
+			revoked++
+			if applied {
+				deployed++
+			}
+		}
+	}
+	return revoked, deployed
+}
+
+// revokeUUIDFromNode 从指定节点的 uuid_list 移除 UUID，并重渲染/下发 + 回收该 UUID 的订阅配置。
+func (h *handlers) revokeUUIDFromNode(ctx context.Context, nodeID int64, uuid string) (bool, bool) {
+	var raw string
+	if err := h.db.QueryRowContext(ctx,
+		`SELECT COALESCE(uuid_list,'[]') FROM singbox_nodes WHERE id = ? LIMIT 1`, nodeID).Scan(&raw); err != nil {
+		return false, false
+	}
+	cur := parseUUIDList(raw)
+	if !containsUUIDFold(cur, uuid) {
+		return false, false
+	}
+	next := make([]string, 0, len(cur))
+	for _, u := range cur {
+		if !strings.EqualFold(strings.TrimSpace(u), strings.TrimSpace(uuid)) {
+			next = append(next, u)
+		}
+	}
+	payload, err := json.Marshal(next)
+	if err != nil {
+		return false, false
+	}
+	if _, err := h.db.ExecContext(ctx,
+		`UPDATE singbox_nodes SET uuid_list = ?, updated_at = ? WHERE id = ?`, payload, nowMillis(), nodeID); err != nil {
+		return false, false
+	}
+	applied := false
+	if _, _, _, _, msg := h.applySingboxNode(ctx, nodeID, nil, false); msg == "" {
+		applied = true
+	}
+	if tpl, node, _, _, m := h.loadSingboxNodeFull(ctx, nodeID); m == "" {
+		users := singboxUsersFromUUIDs(tpl, next)
+		_, _, _ = h.syncSingboxConfigsForUsers(ctx, nodeID, node.Name, tpl, node, users)
+	}
+	return true, applied
 }
 
 func deleteConfigsByIDs(ctx context.Context, db *sql.DB, ids []int64) (int64, error) {

@@ -192,8 +192,8 @@ func (h *handlers) uuidNodes(w http.ResponseWriter, r *http.Request) {
 	for _, id := range affected {
 		if _, _, _, _, msg := h.applySingboxNode(r.Context(), id, nil, false); msg != "" {
 			applyErr[id] = msg
-			continue
 		}
+		// 即使下发失败，也先按最新授权回收/重建订阅配置，避免用户侧留下失效配置
 		if tpl, node, _, _, msg := h.loadSingboxNodeFull(r.Context(), id); msg == "" {
 			users := singboxUsersFromUUIDs(tpl, nextByNode[id])
 			_, _, _ = h.syncSingboxConfigsForUsers(r.Context(), id, node.Name, tpl, node, users)

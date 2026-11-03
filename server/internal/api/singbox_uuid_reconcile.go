@@ -8,12 +8,14 @@ import (
 )
 
 type uuidReconcileResult struct {
-	Checked     int    `json:"checked"`
-	Probed      int    `json:"probed"`
-	ProbeFailed int    `json:"probe_failed"`
-	Drifted     int    `json:"drifted"`
-	Fixed       int    `json:"fixed"`
-	Error       string `json:"error,omitempty"`
+	Checked      int    `json:"checked"`
+	Probed       int    `json:"probed"`
+	ProbeFailed  int    `json:"probe_failed"`
+	ExtraConfigs int    `json:"extra_configs"`
+	Orphan       int    `json:"orphan_configs"`
+	Drifted      int    `json:"drifted"`
+	Fixed        int    `json:"fixed"`
+	Error        string `json:"error,omitempty"`
 }
 
 var uuidTextRe = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
@@ -34,6 +36,20 @@ func (h *handlers) reconcileSingboxUUIDState(ctx context.Context, actor string, 
 	}
 	// 先按数据库授权去读每台节点机器上的真实配置文件（Agent 只读 inspect），再逐节点比对。
 	probes := h.probeNodeConfigs(ctx, rows)
+	// 全局：指向已删除节点的孤儿订阅配置
+	_ = h.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM configs WHERE singbox_node_id > 0 AND singbox_node_id NOT IN (SELECT id FROM singbox_nodes)`).Scan(&out.Orphan)
+	if out.Orphan > 0 {
+		out.Drifted++
+		if autoFix {
+			if _, err := h.db.ExecContext(ctx,
+				`DELETE FROM configs WHERE singbox_node_id > 0 AND singbox_node_id NOT IN (SELECT id FROM singbox_nodes)`); err == nil {
+				out.Fixed++
+			}
+			h.recordNodeLog(ctx, 0, 0, "uuid-reconcile", "success", 0,
+				"清理孤儿订阅配置 "+itoa64(int64(out.Orphan))+" 条（节点已删除）", "", actor)
+		}
+	}
 	for _, row := range rows {
 		nodeID := mapInt(row, "id", 0)
 		nodeName := mapStr(row, "name", "")
@@ -103,7 +119,20 @@ func (h *handlers) reconcileSingboxUUIDState(ctx context.Context, actor string, 
 				extraOnNode++
 			}
 		}
-		if missingOnNode == 0 && extraOnNode == 0 && missingConfigs == 0 {
+		// 该节点上「不该再授权」的 UUID 仍留有订阅配置（多余配置）
+		extraConfigs := 0
+		if crow, err := h.db.QueryContext(ctx,
+			`SELECT DISTINCT uuid FROM configs WHERE singbox_node_id = ?`, nodeID); err == nil {
+			for crow.Next() {
+				var u string
+				if crow.Scan(&u) == nil && !expectedLower[strings.ToLower(strings.TrimSpace(u))] {
+					extraConfigs++
+				}
+			}
+			_ = crow.Close()
+		}
+		out.ExtraConfigs += extraConfigs
+		if missingOnNode == 0 && extraOnNode == 0 && missingConfigs == 0 && extraConfigs == 0 {
 			continue
 		}
 		out.Drifted++
@@ -112,7 +141,8 @@ func (h *handlers) reconcileSingboxUUIDState(ctx context.Context, actor string, 
 			source = "节点机器实际配置"
 		}
 		h.recordNodeLog(ctx, serverID, 0, "uuid-drift", "warning", 0,
-			"UUID 不一致（比对"+source+"）：缺少 "+itoa64(int64(missingOnNode))+"、多余 "+itoa64(int64(extraOnNode))+"、订阅配置缺 "+itoa64(int64(missingConfigs)),
+			"UUID 不一致（比对"+source+"）：缺少 "+itoa64(int64(missingOnNode))+"、多余 "+itoa64(int64(extraOnNode))+
+				"、订阅配置缺 "+itoa64(int64(missingConfigs))+"、订阅配置多 "+itoa64(int64(extraConfigs)),
 			"", actor)
 		if !autoFix {
 			continue
@@ -137,6 +167,7 @@ func (h *handlers) reconcileSingboxUUIDState(ctx context.Context, actor string, 
 	}
 	result, _ := json.Marshal(map[string]any{
 		"checked": out.Checked, "probed": out.Probed, "probe_failed": out.ProbeFailed,
+		"extra_configs": out.ExtraConfigs, "orphan_configs": out.Orphan,
 		"drifted": out.Drifted, "fixed": out.Fixed,
 	})
 	_ = h.putSetting(ctx, "uuid_reconcile_last_at", itoa64(nowMillis()))

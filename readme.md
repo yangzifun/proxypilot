@@ -1,6 +1,6 @@
 # ProxyPilot
 
-![Go](https://img.shields.io/badge/Go-1.23-00ADD8?logo=go&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white) ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black) ![Ant Design](https://img.shields.io/badge/Ant%20Design-6-1677FF?logo=antdesign&logoColor=white) ![Agent](https://img.shields.io/badge/Agent-Go-00ADD8?logo=go&logoColor=white) ![Version](https://img.shields.io/badge/Version-V15.9-blue.svg) ![License](https://img.shields.io/badge/License-MIT-green.svg)
+![Go](https://img.shields.io/badge/Go-1.23-00ADD8?logo=go&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white) ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black) ![Ant Design](https://img.shields.io/badge/Ant%20Design-6-1677FF?logo=antdesign&logoColor=white) ![Agent](https://img.shields.io/badge/Agent-Go-00ADD8?logo=go&logoColor=white) ![Version](https://img.shields.io/badge/Version-V15.10-blue.svg) ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
 ---
 
@@ -477,6 +477,13 @@ npm run check      # build + render-check + e2e
 
 ## 更新日志
 
+### V15.10（2026-11-03）
+
+- **删除节点配置联动解除授权**：单条/批量删除节点配置时，若该 UUID 在该节点已无任何剩余配置，自动从节点 `uuid_list` 移除、重渲染下发，并回收该 UUID 的订阅配置。
+- **取消单个授权节点联动清理**：授权节点取消勾选后立即回收该节点的订阅配置；即使下发失败也先清理，避免用户侧留下失效配置。
+- **删除节点绑定联动清理**：删除节点绑定时同步删除 `configs` 中该节点生成的全部用户配置与 `node_configs` 记录，返回 `deleted_configs`。
+- **前端提示**：删除配置后提示实际解除授权的节点数量。
+- **巡检三向一致**：同时核对「节点机器实际配置的用户」「数据库 `uuid_list` 授权」「`configs` 订阅配置」：缺配置、多配置、指向已删除节点的孤儿配置都会计入漂移并修复（孤儿配置直接清理）。
 ### V15.9（2026-11-03）
 
 - **附件管理增强**：新增「上一级」返回、可点击面包屑、新建文件夹、重命名/移动、复制副本、图片预览、递归删除目录。

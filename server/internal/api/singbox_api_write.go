@@ -439,9 +439,25 @@ func (h *handlers) singboxNodeDelete(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "节点不存在")
 		return
 	}
+	var name string
+	_ = h.db.QueryRowContext(r.Context(), `SELECT COALESCE(name,'') FROM singbox_nodes WHERE id = ? LIMIT 1`, id).Scan(&name)
+	// 删除节点绑定时，同步删除该节点在用户订阅里生成的配置，避免留下指向已删除节点的失效配置
+	res, err := h.db.ExecContext(r.Context(), `DELETE FROM configs WHERE singbox_node_id = ?`, id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "删除用户配置失败")
+		return
+	}
+	removedConfigs, _ := res.RowsAffected()
+	if name != "" {
+		_, _ = h.db.ExecContext(r.Context(), `DELETE FROM node_configs WHERE name = ?`, "sbx:"+name+":sb")
+	}
 	if _, err := h.db.ExecContext(r.Context(), `DELETE FROM singbox_nodes WHERE id = ?`, id); err != nil {
 		writeError(w, http.StatusInternalServerError, "删除失败")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"success": true})
+	h.recordNodeLog(r.Context(), 0, 0, "singbox-node-delete", "success", 0,
+		"删除节点绑定 "+name+"（同时清理 "+itoa64(removedConfigs)+" 条用户配置）", "", "admin")
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success": true, "deleted_configs": removedConfigs, "node": name,
+	})
 }

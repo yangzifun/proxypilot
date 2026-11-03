@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ApiOutlined,
   ApartmentOutlined,
@@ -225,8 +225,8 @@ function Configs({ uuid, onChanged }) {
 
   const removeOne = async (row) => {
     try {
-      await api('uuid-configs', { method: 'DELETE', body: { id: row.id } });
-      message.success('已删除');
+      const res = await api('uuid-configs', { method: 'DELETE', body: { id: row.id } });
+      message.success(`已删除${res.nodes_revoked ? `，并解除 ${res.nodes_revoked} 个节点授权` : ''}`);
       load();
       if (onChanged) onChanged();
     } catch (e) {
@@ -238,7 +238,7 @@ function Configs({ uuid, onChanged }) {
     if (!selected.length) return;
     try {
       const res = await api('uuid-configs', { method: 'DELETE', body: { ids: selected } });
-      message.success(`已删除 ${res.deleted || selected.length} 条`);
+      message.success(`已删除 ${res.deleted || selected.length} 条${res.nodes_revoked ? `，解除 ${res.nodes_revoked} 个节点授权` : ''}`);
       load();
       if (onChanged) onChanged();
     } catch (e) {
