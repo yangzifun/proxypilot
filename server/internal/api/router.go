@@ -58,6 +58,7 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("POST /api/portal/send-code", h.portalSendCode)
 	mux.HandleFunc("POST /api/portal/login", h.portalLogin)
 	mux.HandleFunc("GET /api/portal/uuids", h.portalUuids)
+	mux.HandleFunc("GET /api/portal/traffic", h.portalTraffic)
 	mux.HandleFunc("GET /api/portal/masque", h.masqueWarpPortal)
 	mux.HandleFunc("GET /api/portal/masque/config", h.masqueWarpPortalConfig)
 	mux.HandleFunc("GET /api/portal/mtproto", h.portalMtproto)
@@ -240,6 +241,7 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /api/stats/traffic/users", h.authed(authOpts{}, h.statsTrafficUsers))
 	mux.HandleFunc("GET /api/stats/traffic/users/{uuid}", h.authed(authOpts{}, h.statsTrafficUserDetail))
 	mux.HandleFunc("GET /api/stats/traffic/nodes", h.authed(authOpts{}, h.statsTrafficNodes))
+	mux.HandleFunc("POST /api/stats/traffic/clear", h.authed(authOpts{superOnly: true}, h.statsTrafficClear))
 	mux.HandleFunc("GET /api/nodes/{id}/connections", h.authed(authOpts{}, h.nodeConnections))
 
 	// 批量任务

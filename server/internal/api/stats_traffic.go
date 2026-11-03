@@ -416,8 +416,8 @@ func (h *handlers) statsTrafficNodes(w http.ResponseWriter, r *http.Request) {
 	for _, row := range rows {
 		data = append(data, map[string]any{
 			"node_id": mapInt(row, "node_id", 0), "node_name": mapStr(row, "node_name", ""),
-			"server_id":   mapInt(row, "server_id", 0),
-			"server_name": mapStr(row, "server_name", ""),
+			"server_id":     mapInt(row, "server_id", 0),
+			"server_name":   mapStr(row, "server_name", ""),
 			"stats_enabled": mapInt(row, "stats_enabled", 1) != 0,
 			"sampled_at":    mapInt(row, "sampled_at", 0),
 			"conn_count":    mapInt(row, "conn_count", 0),
@@ -478,4 +478,39 @@ func (h *handlers) pruneUserTraffic(ctx context.Context, keepDays int64) {
 		nowMillis()-24*3_600_000); err != nil {
 		h.log.Warn("清理连接快照失败", "err", err)
 	}
+}
+
+// POST /api/stats/traffic/clear  {uuid?}
+// 清理流量统计记录：带 uuid 只清该用户；不带则清空全部用户流量与连接记录。
+func (h *handlers) statsTrafficClear(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		UUID string `json:"uuid"`
+	}
+	_ = decodeJSON(w, r, &body)
+	uuid := strings.ToLower(strings.TrimSpace(body.UUID))
+	ctx := r.Context()
+	counts := map[string]int64{}
+	del := func(table, where string, args ...any) {
+		res, err := h.db.ExecContext(ctx, `DELETE FROM `+table+` WHERE `+where, args...)
+		if err == nil {
+			n, _ := res.RowsAffected()
+			counts[table] = n
+		}
+	}
+	if uuid != "" {
+		if !uuidRe.MatchString(uuid) {
+			writeError(w, http.StatusBadRequest, "UUID格式无效")
+			return
+		}
+		del("user_traffic", "uuid = ?", uuid)
+		del("user_traffic_hourly", "uuid = ?", uuid)
+	} else {
+		del("user_traffic", "1 = 1")
+		del("user_traffic_hourly", "1 = 1")
+		del("node_connections", "1 = 1")
+	}
+	h.recordNodeLog(ctx, 0, 0, "traffic-clear", "success", 0,
+		"清理流量记录（"+firstNonEmpty(uuid, "全部")+"）：用户流量 "+itoa64(counts["user_traffic"])+
+			" 条、小时聚合 "+itoa64(counts["user_traffic_hourly"])+" 条、连接 "+itoa64(counts["node_connections"])+" 条", "", "admin")
+	writeJSON(w, http.StatusOK, map[string]any{"success": true, "uuid": uuid, "cleared": counts})
 }

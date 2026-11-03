@@ -16,6 +16,7 @@ import {
 import {
   ArrowDownOutlined,
   ArrowUpOutlined,
+  DeleteOutlined,
   ReloadOutlined,
   SearchOutlined,
   TeamOutlined,
@@ -41,7 +42,7 @@ const ONLINE_WINDOW_MS = 3 * 60 * 1000;
  * 数据来自 /api/stats/traffic/users（sg 节点统计聚合）。
  */
 export default function UserTraffic() {
-  const { message } = AntdApp.useApp();
+  const { message, modal } = AntdApp.useApp();
   const [range, setRange] = useState('7d');
   const [q, setQ] = useState('');
   const [sortBy, setSortBy] = useState('today');
@@ -92,6 +93,47 @@ export default function UserTraffic() {
     });
     return { online, today, rangeSum, all, total: rows.length };
   }, [rows]);
+
+  const clearRecords = () => {
+    modal.confirm({
+      title: '清理流量统计记录？',
+      content: '将清空全部用户的流量与连接记录（不影响授权与节点配置）。',
+      okText: '清理',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          const res = await api('stats/traffic/clear', { method: 'POST', body: {} });
+          const c = res.cleared || {};
+          message.success(
+            `已清理：用户 ${c.user_traffic || 0} 条、小时聚合 ${c.user_traffic_hourly || 0} 条、连接 ${c.node_connections || 0} 条`
+          );
+          users.reload();
+        } catch (e) {
+          message.error(e.message || '清理失败');
+        }
+      },
+    });
+  };
+
+  const clearUser = (uuid) => {
+    modal.confirm({
+      title: '清理该用户的流量记录？',
+      content: uuid,
+      okText: '清理',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          const res = await api('stats/traffic/clear', { method: 'POST', body: { uuid } });
+          const c = res.cleared || {};
+          message.success(`已清理：用户 ${c.user_traffic || 0} 条、小时聚合 ${c.user_traffic_hourly || 0} 条`);
+          setDetail(null);
+          users.reload();
+        } catch (e) {
+          message.error(e.message || '清理失败');
+        }
+      },
+    });
+  };
 
   const openDetail = async (row) => {
     setDetail({ uuid: row.uuid, loading: true, data: null });
@@ -251,6 +293,9 @@ export default function UserTraffic() {
             >
               刷新
             </Button>
+            <Button danger icon={<DeleteOutlined />} onClick={clearRecords}>
+              清理记录
+            </Button>
           </Space>
         }
         bodyStyle={{ paddingTop: 8 }}
@@ -309,7 +354,14 @@ export default function UserTraffic() {
         open={!!detail}
         title={detail ? `用户用量 · ${detail.uuid}` : ''}
         onCancel={() => setDetail(null)}
-        footer={<Button onClick={() => setDetail(null)}>关闭</Button>}
+        footer={
+          <Space>
+            <Button danger onClick={() => (detail && detail.uuid ? clearUser(detail.uuid) : null)}>
+              清理该用户记录
+            </Button>
+            <Button onClick={() => setDetail(null)}>关闭</Button>
+          </Space>
+        }
         width={860}
       >
         {detail && detail.loading ? (

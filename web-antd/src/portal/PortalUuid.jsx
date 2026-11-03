@@ -22,6 +22,7 @@ import EmailChange from './EmailChange';
 import MtprotoCard from './MtprotoCard';
 import MasqueCard from './MasqueCard';
 import PortalNav from './PortalNav';
+import TrafficStrip from './TrafficStrip';
 import useIsPc from './useIsPc';
 import { fmtNum, fmtTime, shortUuid } from '../format';
 
@@ -774,6 +775,9 @@ export default function PortalUuid({ uuid, onBack, onUnauthorized, embedded = fa
             <CopyText value={uuid} display={<Button size="small" icon={<LinkOutlined />}>复制 UUID</Button>} />
           </header>
         )}
+
+
+        <TrafficStrip uuid={uuid} />
 
         <div className="pp-sub-card" style={{ padding: 0 }}>
           {onlySections ? (

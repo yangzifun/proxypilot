@@ -1,6 +1,6 @@
 # ProxyPilot
 
-![Go](https://img.shields.io/badge/Go-1.23-00ADD8?logo=go&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white) ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black) ![Ant Design](https://img.shields.io/badge/Ant%20Design-6-1677FF?logo=antdesign&logoColor=white) ![Agent](https://img.shields.io/badge/Agent-Go-00ADD8?logo=go&logoColor=white) ![Version](https://img.shields.io/badge/Version-V15.16-blue.svg) ![License](https://img.shields.io/badge/License-MIT-green.svg)
+![Go](https://img.shields.io/badge/Go-1.23-00ADD8?logo=go&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white) ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black) ![Ant Design](https://img.shields.io/badge/Ant%20Design-6-1677FF?logo=antdesign&logoColor=white) ![Agent](https://img.shields.io/badge/Agent-Go-00ADD8?logo=go&logoColor=white) ![Version](https://img.shields.io/badge/Version-V15.17-blue.svg) ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
 ---
 
@@ -477,6 +477,10 @@ npm run check      # build + render-check + e2e
 
 ## 更新日志
 
+### V15.17（2026-11-03）
+
+- **用户中心显示本人流量**：UUID 详情页新增「我的流量」条（今日 / 近 7 天 / 累计 + 在线状态），数据来自新增的 `GET /api/portal/traffic?uuid=`，仅允许查看登录邮箱名下 UUID（越权返回 403）。
+- **管理后台清理记录**：用户流量页新增「清理记录」按钮（清空全部用户流量、小时聚合与连接记录）与详情弹窗里的「清理该用户记录」；对应 `POST /api/stats/traffic/clear`（支持 `uuid` 定向清理）。
 ### V15.16（2026-11-03）
 
 - **版本发布**：本批次改动汇总——统一「授权服务」（sing-box + MTProto）、新增节点继承服务器已授权 UUID、授权动作后自动三向复核、离线节点最终一致、附件管理增强（新建/重命名/复制/预览/递归删除/更多可编辑类型）、MTProto `bootstrap_secret` 修复、删除配置/节点联动清理订阅。
