@@ -42,7 +42,8 @@ import { useAsync, usePolling, readForm } from '../hooks';
 import { CopyText, ErrorBlock, JsonView, PageCard, StatCard, StatusPill } from '../components';
 import { watchBatch } from '../components/JobCenter';
 import ServerDrawer from '../components/ServerDrawer';
-import { fmtAgo, fmtBytes, fmtNum, fmtTime, levelColor, splitIps } from '../format';
+import { ServerCard as FullServerCard } from './Monitor';
+import { fmtAgo, fmtBytes, fmtNum, fmtTime, fmtUptime, levelColor, splitIps } from '../format';
 import { chartPalette } from '../theme';
 
 const VIEW_KEY = 'pp.servers.view';
@@ -331,8 +332,10 @@ export default function ServersUnified() {
 
   /* 管理字段（名称 / 地区 / Agent / 心跳 …） */
   const list = useAsync(() => api('servers', { query: { q, status } }), [q, status]);
-  /* 实时监控字段（CPU / 内存 / 磁盘 / 网络 / 连接 / 进程 / 负载 / SSH） */
+  /* 实时监控字段（CPU / 内存 / 磁盘 / 网络 / 磁盘 IO / 连接 / 进程 / 负载 / SSH） */
   const live = useAsync(() => api('servers/status'), []);
+  /* 完整监控字段（机型 / 系统 / 运行时长 / 累计网络 / 磁盘 IO / 节点统计） */
+  const monitor = useAsync(() => api('servers/monitor'), []);
   /* 节点连接数（按 server_id 聚合） */
   const nodes = useAsync(() => api('stats/traffic/nodes'), []);
 
@@ -346,6 +349,7 @@ export default function ServersUnified() {
   );
 
   usePolling(() => refreshLive(), auto ? 5000 : 0);
+  usePolling(() => monitor.reload().catch(() => {}), auto ? 5000 : 0);
   usePolling(() => nodes.reload().catch(() => {}), auto ? 15000 : 0);
 
   const liveById = useMemo(() => {
@@ -354,13 +358,23 @@ export default function ServersUnified() {
     return map;
   }, [live.data]);
 
+  const monitorById = useMemo(() => {
+    const map = new Map();
+    ((monitor.data && monitor.data.servers) || []).forEach((x) => map.set(Number(x.id), x));
+    return map;
+  }, [monitor.data]);
+
   const nodeById = useMemo(() => {
     const map = new Map();
     ((nodes.data && nodes.data.data) || []).forEach((n) => {
       const sid = Number(n.server_id) || 0;
       if (!sid) return;
-      const cur = map.get(sid) || { conn: 0, error: false };
-      cur.conn += Number(n.conn_count) || 0;
+      const cur = map.get(sid) || { conn_count: 0, down_rate: 0, up_rate: 0, down_total: 0, up_total: 0, error: false };
+      cur.conn_count += Number(n.conn_count) || 0;
+      cur.down_rate += Number(n.down_rate) || 0;
+      cur.up_rate += Number(n.up_rate) || 0;
+      cur.down_total += Number(n.down_total) || 0;
+      cur.up_total += Number(n.up_total) || 0;
       if (n.error) cur.error = true;
       map.set(sid, cur);
     });
@@ -371,6 +385,7 @@ export default function ServersUnified() {
     const listRows = (list.data && list.data.data) || [];
     return listRows
       .map((s) => mergeServer(s, liveById.get(Number(s.id))))
+      .map((r) => ({ ...r, ...(monitorById.get(Number(r.id)) || {}) }))
       .filter((r) => !status || r.status === status);
   }, [list.data, liveById, status]);
 
@@ -592,6 +607,32 @@ export default function ServersUnified() {
       render: (_, row) => <span className="pp-mono pp-nowrap" style={{ fontSize: 12 }}>{netText(row)}</span>,
     },
     {
+      title: '累计网络 ↓ / ↑',
+      width: 170,
+      render: (_, row) => {
+        const net = row.net || {};
+        const rx = net.rxBytes ?? net.rx_bytes;
+        const tx = net.txBytes ?? net.tx_bytes;
+        return <span className="pp-mono pp-nowrap" style={{ fontSize: 12 }}>↓ {fmtBytes(rx)} ↑ {fmtBytes(tx)}</span>;
+      },
+    },
+    {
+      title: '磁盘实时 读 / 写',
+      width: 160,
+      render: (_, row) => {
+        const io = row.disk_io || {};
+        return <span className="pp-mono pp-nowrap" style={{ fontSize: 12 }}>{fmtBytes(io.readRate)}/s / {fmtBytes(io.writeRate)}/s</span>;
+      },
+    },
+    {
+      title: '磁盘累计 读 / 写',
+      width: 170,
+      render: (_, row) => {
+        const io = row.disk_io || {};
+        return <span className="pp-mono pp-nowrap" style={{ fontSize: 12 }}>{fmtBytes(io.readBytes ?? io.read_bytes)} / {fmtBytes(io.writeBytes ?? io.write_bytes)}</span>;
+      },
+    },
+    {
       title: '连接数',
       width: 86,
       align: 'center',
@@ -604,10 +645,19 @@ export default function ServersUnified() {
       render: (_, row) => <span className="pp-nowrap">{procText(row)}</span>,
     },
     {
-      title: '负载 1',
-      width: 84,
+      title: '负载 1 / 5 / 15',
+      width: 132,
       align: 'center',
-      render: (_, row) => <span style={{ fontVariantNumeric: 'tabular-nums' }}>{loadText(row)}</span>,
+      render: (_, row) => (
+        <span className="pp-nowrap" style={{ fontVariantNumeric: 'tabular-nums', fontSize: 12 }}>
+          {Number(row.load1 || 0).toFixed(2)} / {Number(row.load5 || 0).toFixed(2)} / {Number(row.load15 || 0).toFixed(2)}
+        </span>
+      ),
+    },
+    {
+      title: '运行时长',
+      width: 110,
+      render: (_, row) => <span className="pp-muted pp-nowrap">{fmtUptime(Number(row.uptime_sec || 0))}</span>,
     },
     {
       title: 'Agent 版本',
@@ -624,6 +674,22 @@ export default function ServersUnified() {
       width: 118,
       align: 'center',
       render: (_, row) => <NodeConn node={nodeById.get(Number(row.id))} />,
+    },
+    {
+      title: '节点实时 ↓ / ↑',
+      width: 150,
+      render: (_, row) => {
+        const n = nodeById.get(Number(row.id));
+        return <span className="pp-mono pp-nowrap" style={{ fontSize: 12 }}>{fmtBytes(n && n.down_rate)}/s / {fmtBytes(n && n.up_rate)}/s</span>;
+      },
+    },
+    {
+      title: '节点累计 ↓ / ↑',
+      width: 160,
+      render: (_, row) => {
+        const n = nodeById.get(Number(row.id));
+        return <span className="pp-mono pp-nowrap" style={{ fontSize: 12 }}>{fmtBytes(n && n.down_total)} / {fmtBytes(n && n.up_total)}</span>;
+      },
     },
     {
       title: '详情',
@@ -798,13 +864,24 @@ export default function ServersUnified() {
                 <Row gutter={[12, 12]}>
                   {rows.map((row) => (
                     <Col key={row.id} xs={24} sm={12} xl={8} xxl={6}>
-                      <ServerCard
-                        row={row}
-                        node={nodeById.get(Number(row.id))}
-                        checked={selected.some((id) => Number(id) === Number(row.id))}
-                        onCheck={toggleOne}
-                        onOpen={(r) => setDetailId(r.id)}
-                      />
+                      <div style={{ position: 'relative' }}>
+                        <div
+                          style={{ position: 'absolute', top: 12, right: 12, zIndex: 3 }}
+                          onClick={(e) => e.stopPropagation()}
+                          onKeyDown={(e) => e.stopPropagation()}
+                        >
+                          <Checkbox
+                            checked={selected.some((id) => Number(id) === Number(row.id))}
+                            onChange={(e) => toggleOne(row.id, e.target.checked)}
+                            aria-label={`选择 ${row.name || '#' + row.id}`}
+                          />
+                        </div>
+                        <FullServerCard
+                          s={row}
+                          node={nodeById.get(Number(row.id))}
+                          onPick={(r) => setDetailId(r.id)}
+                        />
+                      </div>
                     </Col>
                   ))}
                 </Row>

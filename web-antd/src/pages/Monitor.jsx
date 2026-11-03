@@ -500,7 +500,7 @@ function osBadge(osName) {
   };
 }
 
-function ServerCard({ s, node, onPick, onUnlock }) {
+export function ServerCard({ s, node, onPick, onUnlock }) {
   const net = s.net || {};
   const io = s.disk_io || {};
   const conn = s.conn || {};
