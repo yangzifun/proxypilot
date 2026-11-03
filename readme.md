@@ -1,6 +1,6 @@
 # ProxyPilot
 
-![Go](https://img.shields.io/badge/Go-1.23-00ADD8?logo=go&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white) ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black) ![Ant Design](https://img.shields.io/badge/Ant%20Design-6-1677FF?logo=antdesign&logoColor=white) ![Agent](https://img.shields.io/badge/Agent-Go-00ADD8?logo=go&logoColor=white) ![Version](https://img.shields.io/badge/Version-V15.20-blue.svg) ![License](https://img.shields.io/badge/License-MIT-green.svg)
+![Go](https://img.shields.io/badge/Go-1.23-00ADD8?logo=go&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white) ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black) ![Ant Design](https://img.shields.io/badge/Ant%20Design-6-1677FF?logo=antdesign&logoColor=white) ![Agent](https://img.shields.io/badge/Agent-Go-00ADD8?logo=go&logoColor=white) ![Version](https://img.shields.io/badge/Version-V15.21-blue.svg) ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
 ---
 
@@ -477,6 +477,9 @@ npm run check      # build + render-check + e2e
 
 ## 更新日志
 
+### V15.21（2026-11-03）
+
+- **「节点配置」包含 MTProto**：用户详情的节点配置页在 sing-box 配置表下方新增「MTProto 配置」表（节点、主机:端口、密钥掩码、状态、创建时间、复制 tg 链接），`GET /api/uuids/{uuid}/configs` 响应新增 `mtproto` 数组（含已撤销客户端）。
 ### V15.20（2026-11-03）
 
 - **移动端用户卡全局可见**：名称 / 节点数 / UUID / 状态卡（`ppm-hero`）抽成 `renderHero()`，在「我的订阅」「代理」「配置管理」「访问统计」「我的」全部页签展示，不再只在订阅页出现；多 UUID 切换 chip 一并保留。

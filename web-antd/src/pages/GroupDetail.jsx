@@ -168,7 +168,7 @@ function Configs({ uuid, onChanged }) {
   const { message, modal } = AntdApp.useApp();
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(10);
-  const [state, setState] = useState({ data: [], total: 0, loading: false, error: null });
+  const [state, setState] = useState({ data: [], total: 0, loading: false, error: null, mtp: [] });
   const [selected, setSelected] = useState([]);
   const [edit, setEdit] = useState(null); // { mode:'create'|'edit', row }
   const [preview, setPreview] = useState(null);
@@ -180,16 +180,25 @@ function Configs({ uuid, onChanged }) {
     setState((s) => ({ ...s, loading: true, error: null }));
     try {
       const res = await api('uuid-configs', { query: { uuid, page, size } });
-      setState({ data: (res && res.data) || [], total: (res && res.total) || 0, loading: false, error: null });
+      setState({ data: (res && res.data) || [], total: (res && res.total) || 0, loading: false, error: null, mtp: (res && res.mtproto) || [] });
       setSelected([]);
     } catch (e) {
-      setState({ data: [], total: 0, loading: false, error: e });
+      setState({ data: [], total: 0, loading: false, error: e, mtp: [] });
     }
   }, [uuid, page, size]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  const copyMtp = async (text) => {
+    try {
+      await navigator.clipboard.writeText(text || '');
+      message.success('已复制 MTProto 链接');
+    } catch (e) {
+      message.info(text || '');
+    }
+  };
 
   const openCreate = () => {
     setEdit({ mode: 'create', row: null });
@@ -349,6 +358,47 @@ function Configs({ uuid, onChanged }) {
         }}
         locale={{ emptyText: <EmptyBlock text="该用户还没有节点配置" /> }}
       />
+
+      {state.mtp && state.mtp.length ? (
+        <div style={{ marginTop: 18 }}>
+          <div className="pp-muted" style={{ fontSize: 12, marginBottom: 8 }}>
+            MTProto 配置（{state.mtp.length}）· 与该用户的 sing-box 节点一起计入节点配置
+          </div>
+          <Table
+            className="pp-table"
+            size="small"
+            dataSource={state.mtp}
+            pagination={false}
+            columns={[
+              { title: '节点', dataIndex: 'node_name', width: 150, render: (v) => <b>{v}</b> },
+              {
+                title: '主机',
+                dataIndex: 'host',
+                width: 200,
+                render: (v, r) => <span className="pp-mono">{v || '—'}:{r.port || 0}</span>,
+              },
+              { title: '密钥', dataIndex: 'secret_hint', width: 170, render: (v) => <span className="pp-mono">{v}</span> },
+              {
+                title: '状态',
+                dataIndex: 'status',
+                width: 90,
+                render: (v) => (v === 'active' ? <Tag color="success">启用</Tag> : <Tag>已撤销</Tag>),
+              },
+              { title: '创建时间', dataIndex: 'created_at', width: 110, render: (v) => <span className="pp-muted">{v ? fmtAgo(v) : '—'}</span> },
+              {
+                title: '操作',
+                width: 110,
+                render: (_, r) => (
+                  <Button type="link" size="small" onClick={() => copyMtp(r.tg)}>
+                    复制链接
+                  </Button>
+                ),
+              },
+            ]}
+            rowKey={(r) => `mtp-${r.id}`}
+          />
+        </div>
+      ) : null}
 
       <Modal
         open={!!edit}

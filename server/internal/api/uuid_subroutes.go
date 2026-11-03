@@ -265,8 +265,9 @@ func (h *handlers) uuidConfigsRest(w http.ResponseWriter, r *http.Request) {
 		if all {
 			total = int64(len(rows))
 		}
+		mtpConfigs := h.mtprotoConfigsForUUID(r.Context(), uuid)
 		writeJSON(w, http.StatusOK, map[string]any{
-			"success": true, "uuid": uuid, "total": total,
+			"success": true, "uuid": uuid, "total": total, "mtproto": mtpConfigs,
 			"page": page, "size": func() int {
 				if all {
 					return len(rows)
