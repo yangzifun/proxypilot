@@ -279,10 +279,43 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
         </span>
       }
       extra={
-        <Space>
-          <Button size="small" icon={<ReloadOutlined />} onClick={load} loading={state.loading}>
-            刷新
-          </Button>
+        <Space size={4}>
+          <Popconfirm title={`重启服务器「${d ? d.name : ''}」？`} okText="重启" okButtonProps={{ danger: true }} disabled={!d} onConfirm={rebootServer}>
+            <Tooltip title="重启服务器">
+              <Button size="small" danger icon={<PoweroffOutlined />} loading={busy === 'reboot'} disabled={!d} aria-label="重启服务器" />
+            </Tooltip>
+          </Popconfirm>
+          <Popconfirm title="安装 Agent 并轮换接入密钥？" okText="安装并轮换" disabled={!d || local} onConfirm={rotateKey}>
+            <Tooltip title="安装 / 轮换 Agent 密钥">
+              <Button size="small" icon={<KeyOutlined />} loading={busy === 'key'} disabled={!d || local} aria-label="安装或轮换密钥" />
+            </Tooltip>
+          </Popconfirm>
+          <Tooltip title="命令执行">
+            <Button
+              size="small"
+              icon={<CodeOutlined />}
+              disabled={!d}
+              onClick={() => {
+                if (!d.allow_exec) message.warning('该服务器未开启「允许远程命令」');
+                else setExecOpen(true);
+              }}
+              aria-label="命令执行"
+            />
+          </Tooltip>
+          <Tooltip title="任务队列">
+            <Button size="small" icon={<UnorderedListOutlined />} onClick={() => setTasksOpen(true)} disabled={!d} aria-label="任务队列" />
+          </Tooltip>
+          <Tooltip title="编辑">
+            <Button size="small" icon={<EditOutlined />} onClick={() => setEditOpen(true)} disabled={!d} aria-label="编辑" />
+          </Tooltip>
+          <Popconfirm title="删除该服务器？" description="删除后 Agent 与节点配置都会解除绑定。" okText="删除" okButtonProps={{ danger: true }} disabled={!d} onConfirm={removeServer}>
+            <Tooltip title="删除服务器">
+              <Button size="small" danger icon={<DeleteOutlined />} loading={busy === 'delete'} disabled={!d} aria-label="删除" />
+            </Tooltip>
+          </Popconfirm>
+          <Tooltip title="刷新">
+            <Button size="small" icon={<ReloadOutlined />} onClick={load} loading={state.loading} aria-label="刷新" />
+          </Tooltip>
         </Space>
       }
     >
@@ -344,7 +377,25 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
                 })(),
               },
               { key: 'geo', label: '地区', children: d.ip_country ? `${d.ip_country} ${d.ip_region || ''}` : '—' },
-              { key: 'agent', label: 'Agent', children: d.agent_version ? <Tag color="blue">{d.agent_version}</Tag> : '—' },
+              {
+                key: 'agent',
+                label: 'Agent',
+                children: (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    {d.agent_version ? <Tag color="blue" style={{ marginInlineEnd: 0 }}>{d.agent_version}</Tag> : '—'}
+                    {!local ? (
+                      <Popconfirm
+                        title={`向「${d.name}」推送 Agent 更新？`}
+                        description={d.agent_update && d.agent_latest ? `当前 ${d.agent_version || '未知'} → ${d.agent_latest}` : '会创建后台更新任务，进度见右上角「任务」。'}
+                        okText="推送"
+                        onConfirm={pushAgent}
+                      >
+                        <Button size="small" type="link" style={{ padding: 0 }} loading={busy === 'agent'}>更新</Button>
+                      </Popconfirm>
+                    ) : null}
+                  </span>
+                ),
+              },
               { key: 'seen', label: '最后心跳', children: d.agent_last_seen ? `${fmtAgo(d.agent_last_seen)}（${fmtTime(d.agent_last_seen)}）` : '—' },
               { key: 'poll', label: '轮询间隔', children: `${d.agent_next_poll_sec || '—'} 秒` },
               { key: 'host', label: '主机名', children: m.hostname || '—' },
@@ -381,87 +432,6 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
           ) : (
             <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有采样数据" style={{ padding: '26px 0' }} />
           )}
-
-          {/* 快捷操作：单台服务器的全部动作都收在这里 */}
-          <div style={{ margin: '20px 0 8px', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <b style={{ fontSize: 14 }}>快捷操作</b>
-            <span className="pp-muted" style={{ fontSize: 12 }}>单台操作都在这里；批量动作请回列表勾选后在工具条操作</span>
-            {d.agent_update ? <Tag color="gold" style={{ marginInlineEnd: 0 }}>Agent 可更新{d.agent_latest ? ` → ${d.agent_latest}` : ''}</Tag> : null}
-          </div>
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: 8,
-              padding: '10px 12px',
-              border: '1px solid #eef2f7',
-              borderRadius: 12,
-              background: '#fbfcfe',
-            }}
-          >
-            <Popconfirm
-              title={`重启服务器「${d.name}」？`}
-              description={local ? '本机重启会中断控制面板，需通过云厂商控制台确认恢复。' : '重启期间服务器会离线，Agent 与代理连接会短暂中断。'}
-              okText="重启"
-              okButtonProps={{ danger: true }}
-              onConfirm={rebootServer}
-            >
-              <Button size="small" danger icon={<PoweroffOutlined />} loading={busy === 'reboot'}>
-                重启服务器
-              </Button>
-            </Popconfirm>
-            <Popconfirm
-              title={`向「${d.name}」推送 Agent 更新？`}
-              description={local ? '本地直控服务器不需要 Agent 更新。' : '会创建后台更新任务，进度见右上角「任务」。'}
-              okText="推送"
-              disabled={local}
-              onConfirm={pushAgent}
-            >
-              <Button size="small" icon={<CloudUploadOutlined />} loading={busy === 'agent'} disabled={local}>
-                更新 Agent
-              </Button>
-            </Popconfirm>
-
-
-            <Popconfirm
-              title="安装 Agent 并轮换接入密钥？"
-              description="旧密钥会立即失效，已安装的 Agent 需要重新执行安装命令。"
-              okText="安装并轮换"
-              disabled={local}
-              onConfirm={rotateKey}
-            >
-              <Button size="small" icon={<KeyOutlined />} loading={busy === 'key'} disabled={local}>
-                安装 / 轮换密钥
-              </Button>
-            </Popconfirm>
-            <Button
-              size="small"
-              icon={<CodeOutlined />}
-              onClick={() => {
-                if (!d.allow_exec) message.warning('该服务器未开启「允许远程命令」');
-                else setExecOpen(true);
-              }}
-            >
-              命令执行
-            </Button>
-            <Button size="small" icon={<UnorderedListOutlined />} onClick={() => setTasksOpen(true)}>
-              任务队列
-            </Button>
-            <Button size="small" icon={<EditOutlined />} onClick={() => setEditOpen(true)}>
-              编辑
-            </Button>
-            <Popconfirm
-              title="删除该服务器？"
-              description="删除后 Agent 与节点配置都会解除绑定。"
-              okText="删除"
-              okButtonProps={{ danger: true }}
-              onConfirm={removeServer}
-            >
-              <Button size="small" danger icon={<DeleteOutlined />} loading={busy === 'delete'}>
-                删除
-              </Button>
-            </Popconfirm>
-          </div>
 
           <div style={{ margin: '20px 0 8px', display: 'flex', alignItems: 'center', gap: 8 }}>
             <b style={{ fontSize: 14 }}>服务状态</b>
