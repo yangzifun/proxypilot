@@ -97,6 +97,48 @@ export default function PortalMobileApp({ email, onLogout }) {
       ? 'is-warn'
       : 'is-off'
     : 'is-off';
+  const renderHero = () =>
+    !uuid ? null : (
+      <div className="ppm-hero">
+        <div className="ppm-hero-row">
+          <div className="ppm-hero-main">
+            <div className="ppm-hero-name">
+              {selected ? selected.remark || selected.owner || shortUuid(selected.uuid) : '我的订阅'}
+            </div>
+            <div className="ppm-hero-sub">
+              <AppstoreOutlined /> {Number((selected && selected.configs) || 0)} 个节点
+            </div>
+          </div>
+          {selected ? <span className={`ppm-status ${statusCls}`}>{statusText}</span> : null}
+        </div>
+
+        <div className="ppm-hero-meta">
+          <span className="ppm-hero-uuid">{shortUuid(uuid)}</span>
+          <button type="button" className="ppm-hero-copy" onClick={copyUuid}>
+            <CopyOutlined /> UUID
+          </button>
+        </div>
+
+        {uuids.length > 1 ? (
+          <div className="ppm-hero-chips">
+            {uuids.map((it) => (
+              <button
+                type="button"
+                key={it.uuid}
+                className={`ppm-chip${it.uuid === uuid ? ' is-active' : ''}${
+                  it.status !== 'active' ? ' is-warn' : ''
+                }`}
+                onClick={() => setUuid(it.uuid)}
+              >
+                <i className="ppm-chip-dot" />
+                {it.remark || it.owner || shortUuid(it.uuid)}
+                <span className="ppm-chip-count">{Number(it.configs || 0)}</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    );
 
   return (
     <div className="ppm">
@@ -126,16 +168,21 @@ export default function PortalMobileApp({ email, onLogout }) {
       ) : (
         <div className="ppm-body">
           {tab === 'tg' ? (
-            <div style={{ padding: 12 }}>
-              <MtprotoCard mobile />
-              <div style={{ marginTop: 18 }}>
-                <MasqueCard mobile />
+            <>
+              {renderHero()}
+              <div style={{ padding: 12 }}>
+                <MtprotoCard mobile />
+                <div style={{ marginTop: 18 }}>
+                  <MasqueCard mobile />
+                </div>
               </div>
-            </div>
+            </>
           ) : tab === 'me' ? (
             /* 「我的」页：不依赖 UUID，未绑定也能看账号与退出 */
             <div className="ppm-me">
+              {renderHero()}
               <MobileAccount
+
                 email={email}
                 uuid={uuid}
                 onLogout={onLogout}
@@ -151,46 +198,7 @@ export default function PortalMobileApp({ email, onLogout }) {
             <div className="ppm-tip">{phase === 'error' ? '加载失败，请重新进入' : '这个邮箱还没有绑定 UUID'}</div>
           ) : (
             <>
-              {/* 顶部订阅卡：名称 / 状态 / 节点数 / UUID；多个 UUID 用 chip 切换 */}
-              <div className="ppm-hero">
-                <div className="ppm-hero-row">
-                  <div className="ppm-hero-main">
-                    <div className="ppm-hero-name">
-                      {selected ? selected.remark || selected.owner || shortUuid(selected.uuid) : '我的订阅'}
-                    </div>
-                    <div className="ppm-hero-sub">
-                      <AppstoreOutlined /> {Number((selected && selected.configs) || 0)} 个节点
-                    </div>
-                  </div>
-                  {selected ? <span className={`ppm-status ${statusCls}`}>{statusText}</span> : null}
-                </div>
-
-                <div className="ppm-hero-meta">
-                  <span className="ppm-hero-uuid">{shortUuid(uuid)}</span>
-                  <button type="button" className="ppm-hero-copy" onClick={copyUuid}>
-                    <CopyOutlined /> UUID
-                  </button>
-                </div>
-
-                {uuids.length > 1 ? (
-                  <div className="ppm-hero-chips">
-                    {uuids.map((it) => (
-                      <button
-                        type="button"
-                        key={it.uuid}
-                        className={`ppm-chip${it.uuid === uuid ? ' is-active' : ''}${
-                          it.status !== 'active' ? ' is-warn' : ''
-                        }`}
-                        onClick={() => setUuid(it.uuid)}
-                      >
-                        <i className="ppm-chip-dot" />
-                        {it.remark || it.owner || shortUuid(it.uuid)}
-                        <span className="ppm-chip-count">{Number(it.configs || 0)}</span>
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
+              {renderHero()}
 
               {tab === 'sub' ? (
                 <MobileSubscribe key={`sub-${uuid}`} uuid={uuid} />
