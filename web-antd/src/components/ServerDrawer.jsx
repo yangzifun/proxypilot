@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  CloudDownloadOutlined,
   CloudServerOutlined,
   CloudUploadOutlined,
   DatabaseOutlined,
@@ -110,17 +109,7 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
 
   const latencies = useMemo(() => (state.metrics || []).map((x) => Number(x.latency_ms) || 0), [state.metrics]);
 
-  const updateCloudflared = async () => {
-    setBusy('cf-update');
-    try {
-      const res = await apiPost(`servers/${serverId}/update-cloudflared`, {});
-      message.success(res.message || 'cloudflared 更新任务已下发');
-    } catch (e) {
-      message.error(e.message || '更新 cloudflared 失败');
-    } finally {
-      setBusy('');
-    }
-  };
+
 
   const restartService = async (svc) => {
     setBusy('svc-' + svc.name);
@@ -253,7 +242,7 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
 
           <div style={{ margin: '20px 0 8px', display: 'flex', alignItems: 'center', gap: 8 }}>
             <b style={{ fontSize: 14 }}>服务状态</b>
-            <span className="pp-muted" style={{ fontSize: 12 }}>只监控 sing-box / mtg / cloudflared（版本由 Agent 上报）；点「重启」会排队一条 restart 任务</span>
+            <span className="pp-muted" style={{ fontSize: 12 }}>只监控 sing-box / mtg / cloudflared（版本由 Agent 上报）；点「重启」会排队一条 restart 任务；cloudflared 更新请在「服务器管理」操作</span>
             <span style={{ marginLeft: 'auto' }}>
               {sshState ? (
                 <Tag color={sshState.color} style={{ marginInlineEnd: 0 }}>
@@ -298,19 +287,7 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
                     >
                       重启
                     </Button>
-                    {svc.name === 'cloudflared' ? (
-                      <Tooltip title="下载最新 cloudflared，替换后自动重启服务">
-                        <Button
-                          size="small"
-                          type="link"
-                          icon={<CloudDownloadOutlined />}
-                          loading={busy === 'cf-update'}
-                          onClick={updateCloudflared}
-                        >
-                          更新
-                        </Button>
-                      </Tooltip>
-                    ) : null}
+
                   </div>
                 );
               })}

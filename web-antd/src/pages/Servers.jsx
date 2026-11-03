@@ -189,6 +189,19 @@ export default function Servers() {
     }
   };
 
+  /* 更新 cloudflared（后台任务，任务中心可见进度） */
+  const updateCloudflared = async (row) => {
+    try {
+      const r = await apiPost(`servers/${row.id}/update-cloudflared`, {});
+      if (r && r.job_id) {
+        message.success(`已创建后台任务 #${r.job_id}（更新 cloudflared），进度见右上角「任务」`);
+      } else {
+        message.success((r && r.message) || 'cloudflared 更新任务已下发');
+      }
+    } catch (e) {
+      message.error(e.message || '更新 cloudflared 失败');
+    }
+  };
   /* 远程终端（「命令」按钮）—— 交互式输入输出，见 RemoteShell */
   const openExec = (row) => setExecFor(row);
 
@@ -423,6 +436,16 @@ export default function Servers() {
               onClick={() => pushOne(row)}
             />
           ) : null}
+          <Popconfirm
+            title="更新 cloudflared？"
+            description="下载最新版本，替换 systemd 实际使用的二进制并自动重启；会创建后台任务。"
+            okText="更新"
+            onConfirm={() => updateCloudflared(row)}
+          >
+            <Tooltip title="更新 cloudflared">
+              <Button type="text" size="small" icon={<CloudDownloadOutlined />} aria-label="更新 cloudflared" />
+            </Tooltip>
+          </Popconfirm>
           <IconAction
             title={row.allow_exec ? '命令' : '命令（该服务器未开启远程命令）'}
             icon={<CodeOutlined />}
