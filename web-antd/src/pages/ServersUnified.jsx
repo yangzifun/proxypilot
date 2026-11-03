@@ -715,40 +715,51 @@ export default function ServersUnified() {
 
   return (
     <div>
-      <Row gutter={[16, 16]}>
-        <Col xs={12} md={6}>
-          <StatCard icon={<CloudServerOutlined />} label="服务器总数" value={fmtNum(rows.length)} accent={chartPalette[0]} />
-        </Col>
-        <Col xs={12} md={6}>
-          <StatCard
-            icon={<CheckCircleOutlined />}
-            label="在线"
-            value={fmtNum(counts.online)}
-            accent={chartPalette[3]}
-            hint={rows.length ? `在线率 ${((counts.online / rows.length) * 100).toFixed(0)}%` : '—'}
-          />
-        </Col>
-        <Col xs={12} md={6}>
-          <StatCard icon={<DisconnectOutlined />} label="离线" value={fmtNum(counts.offline)} accent={chartPalette[4]} />
-        </Col>
-        <Col xs={12} md={6}>
-          <StatCard
-            icon={<QuestionCircleOutlined />}
-            label="未接入"
-            value={fmtNum(counts.unknown)}
-            accent={chartPalette[5]}
-            hint="Agent 尚未上报心跳"
-          />
-        </Col>
-      </Row>
+      <PageCard
+        title={<span className="pp-section-title">集群概览</span>}
+        extra={<span className="pp-muted" style={{ fontSize: 12 }}>更新 {fmtTime(updatedAt, '').slice(11, 19) || '—'}</span>}
+        bodyStyle={{ padding: '4px 8px' }}
+      >
+        <div style={{ display: 'flex', flexWrap: 'wrap' }}>
+          {[
+            { label: '服务器总数', value: fmtNum(rows.length) },
+            { label: '在线', value: fmtNum(counts.online), hint: rows.length ? `在线率 ${((counts.online / rows.length) * 100).toFixed(0)}%` : '—' },
+            { label: '离线', value: fmtNum(counts.offline) },
+            { label: '未接入', value: fmtNum(counts.unknown), hint: 'Agent 尚未上报心跳' },
+            { label: '实时下行', value: fmtBytes(summary.rx_rate || 0), unit: '/s', hint: `${counts.online} 台在线 · 5 秒刷新` },
+            { label: '实时上行', value: fmtBytes(summary.tx_rate || 0), unit: '/s', hint: `${counts.online} 台在线 · 5 秒刷新` },
+            {
+              label: '集群总流量',
+              value: fmtBytes((summary.rx_rate || 0) + (summary.tx_rate || 0)),
+              unit: '/s',
+              hint: `下行 + 上行 · ${rows.length} 台服务器`,
+            },
+          ].map((it, i) => (
+            <div
+              key={it.label}
+              style={{ flex: '1 1 180px', minWidth: 160, padding: '10px 18px', borderLeft: i ? '1px solid #f1f5f9' : 'none' }}
+            >
+              <div className="pp-muted" style={{ fontSize: 12 }}>{it.label}</div>
+              <div style={{ fontSize: 24, fontWeight: 700, lineHeight: 1.25, fontVariantNumeric: 'tabular-nums' }}>
+                {it.value}
+                {it.unit ? <span style={{ fontSize: 12, fontWeight: 500, color: '#94a3b8', marginLeft: 4 }}>{it.unit}</span> : null}
+              </div>
+              {it.hint ? <div className="pp-muted" style={{ fontSize: 11, marginTop: 2 }}>{it.hint}</div> : null}
+            </div>
+          ))}
+        </div>
+      </PageCard>
 
-      <MonitorTop
-        servers={rows}
-        summary={summary}
-        avg={avg}
-        loading={false}
-        onPick={(r) => setDetailId(r.id)}
-      />
+      <div style={{ marginTop: 16 }}>
+        <MonitorTop
+          servers={rows}
+          summary={summary}
+          avg={avg}
+          loading={false}
+          stats={false}
+          onPick={(r) => setDetailId(r.id)}
+        />
+      </div>
 
       <div style={{ marginTop: 16 }}>
         <PageCard

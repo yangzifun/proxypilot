@@ -469,13 +469,14 @@ function ServerCards({ servers, nodeByServer, onPick, onUnlock }) {
 
 
 /** 监控概览：实时流量 + 集群在线率 + 资源均值 + 全球分布（供「服务器」页复用） */
-export function MonitorTop({ servers = [], summary = {}, avg = { cpu: 0, mem: 0, disk: 0 }, loading = false, onPick, onUnlock }) {
+export function MonitorTop({ servers = [], summary = {}, avg = { cpu: 0, mem: 0, disk: 0 }, loading = false, stats = true, onPick, onUnlock }) {
   const [mapOpen, setMapOpen] = useState(false);
   const online = servers.filter((s) => s.status === 'online').length;
   const offline = servers.filter((s) => s.status === 'offline').length;
   const unknown = servers.length - online - offline;
   return (
     <>
+      {stats ? (
       <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
         <Col xs={12} md={8}>
           <StatCard
@@ -508,6 +509,7 @@ export function MonitorTop({ servers = [], summary = {}, avg = { cpu: 0, mem: 0,
           />
         </Col>
       </Row>
+      ) : null}
 
       <div className="pp-mon-top-grid">
         <PageCard
