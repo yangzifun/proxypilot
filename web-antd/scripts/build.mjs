@@ -72,7 +72,12 @@ function syncGoAssets() {
       fs.copyFileSync(xtermPath, path.join(goAssetsDir, 'xterm-app.js'));
       writeCompressed('xterm-app.js', xtermBuf);
     }
-    const rawVersion = String(pkg.version || '15.0.0').replace(/^v/i, '');
+    // 版本号优先取服务端 main.go（唯一版本源），避免前端 meta.json 落后于后端
+    const goMain = path.join(here, '../../server/cmd/proxypilot/main.go');
+    const goVersion = fs.existsSync(goMain)
+      ? (fs.readFileSync(goMain, 'utf8').match(/var version\s*=\s*\"([^\"]+)\"/) || [])[1]
+      : '';
+    const rawVersion = (goVersion || String(pkg.version || '15.0.0')).replace(/^v/i, '');
     const version = 'V' + rawVersion.split('.').slice(0, 2).join('.');
     fs.writeFileSync(
       path.join(goAssetsDir, 'meta.json'),
