@@ -99,7 +99,7 @@ func singboxRenderBundle(tpl *singboxTemplate, node singboxRenderNode, srv serve
 			"path":         sbPath,
 			"service_name": firstNonEmpty(node.ServiceSBName, "sing-box"),
 			"check_cmd":    "sing-box check -c " + sbPath,
-			"content":      mustJSON(singboxRenderSb(tpl, users, ports, node.StatsSecret, userStats)),
+			"content":      mustJSON(singboxRenderSb(tpl, users, ports, node.StatsSecret, userStats, node.CDNDomain)),
 		})
 	}
 	if tpl.EnableMasque != 0 {

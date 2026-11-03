@@ -40,7 +40,7 @@ func TestSingboxRenderGolden(t *testing.T) {
 			}
 
 			users := singboxParseUsers(fx.Users)
-			got := singboxRenderSb(&fx.Template, users, ports, "", false)
+			got := singboxRenderSb(&fx.Template, users, ports, "", false, "")
 			gotJSON := canonicalJSON(got)
 			wantJSON := canonicalJSON(fx.SB)
 			if gotJSON != wantJSON {

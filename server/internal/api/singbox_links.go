@@ -114,7 +114,7 @@ func singboxClientLinks(tpl *singboxTemplate, node singboxNode, users []sbUser) 
 					"#" + enc(tag("vlws")+"-cdn")
 				item := map[string]any{
 					"id": len(out) + 1, "protocol": "vless-ws", "port": 443, "user": u.Name,
-					"link": cdnLink, "note": "CDN 加速：客户端连 " + cdnDomain + ":443，CDN 回源 " + strconv.Itoa(ports["vlws"]),
+					"link": cdnLink, "note": "CDN/Tunnel 加速：客户端连 " + cdnDomain + ":443，隧道回源 http://127.0.0.1:" + strconv.Itoa(cdnPortOf(tpl, ports)) + "（vless-ws-cdn，明文 WS）",
 					"cdn": true,
 				}
 				out = append(out, item)

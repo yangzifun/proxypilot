@@ -31,7 +31,7 @@ func TestSingboxRenderStatsExperimental(t *testing.T) {
 	users := singboxParseUsers(currentTemplateUsers(tpl))
 	ports := singboxPorts(tpl)
 
-	cfg := singboxRenderSb(tpl, users, ports, "secret-abc", true)
+	cfg := singboxRenderSb(tpl, users, ports, "secret-abc", true, "")
 	raw, err := json.Marshal(cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -82,7 +82,7 @@ func TestSingboxRenderStatsExperimental(t *testing.T) {
 	}
 
 	// 不传 secret → 不写 experimental（黄金用例口径）
-	plain, _ := json.Marshal(singboxRenderSb(tpl, users, ports, "", false))
+	plain, _ := json.Marshal(singboxRenderSb(tpl, users, ports, "", false, ""))
 	if strings.Contains(string(plain), `"experimental"`) {
 		t.Fatal("未启用统计时不应写入 experimental")
 	}

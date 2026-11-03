@@ -1,6 +1,6 @@
 # ProxyPilot
 
-![Go](https://img.shields.io/badge/Go-1.23-00ADD8?logo=go&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white) ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black) ![Ant Design](https://img.shields.io/badge/Ant%20Design-6-1677FF?logo=antdesign&logoColor=white) ![Agent](https://img.shields.io/badge/Agent-Go-00ADD8?logo=go&logoColor=white) ![Version](https://img.shields.io/badge/Version-V15.21-blue.svg) ![License](https://img.shields.io/badge/License-MIT-green.svg)
+![Go](https://img.shields.io/badge/Go-1.23-00ADD8?logo=go&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white) ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black) ![Ant Design](https://img.shields.io/badge/Ant%20Design-6-1677FF?logo=antdesign&logoColor=white) ![Agent](https://img.shields.io/badge/Agent-Go-00ADD8?logo=go&logoColor=white) ![Version](https://img.shields.io/badge/Version-V15.25-blue.svg) ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
 ---
 
@@ -477,6 +477,18 @@ npm run check      # build + render-check + e2e
 
 ## 更新日志
 
+### V15.24（2026-11-03）
+
+- **CDN 专用入站固定到 13707**：`vless-ws-cdn` 改为监听 `127.0.0.1:13707`（明文 WS，仅回环，供 Cloudflare Tunnel 回源）；13706 保持原样（直连用 TLS），不再混用。MASQUE 占用时自动退到 13716，也可用模板 `vlws.cdn_port` 覆盖。
+- Cloudflare Tunnel 的 Public Hostname Service 指向 `http://127.0.0.1:13707` 即可。
+### V15.23（2026-11-03）
+
+- **修正 CDN 回源方式为 Cloudflare Tunnel 友好**：隧道在源站以**明文 HTTP** 访问本地服务，因此 `cdn_domain` 非空时改为生成 `vless-ws-cdn` 入站：`127.0.0.1:13716`（无 TLS，仅回环；可用模板 `vlws.cdn_port` 覆盖），而不是 443 的 TLS 入站。V15.22 的 443 方案仅适用于 Cloudflare 代理 + Origin Rule 回源。
+- CDN 链接说明更新为「隧道回源 http://127.0.0.1:13716」；隧道 Public Hostname 的 Service 需指向该地址。
+### V15.22（2026-11-03）
+
+- **修复 CDN 回源**：CDN 域名只会回源 443，而此前只有 13706 的 vless-ws 监听，导致 CDN 链接不可用。现在节点配置了 `cdn_domain` 时，会额外生成 `vless-ws-cdn` 入站监听 **443**（同一 TLS/WS 路径，模板可用 `vlws.cdn_port` 覆盖），CDN 链接回源到该端口。
+- CDN 链接说明改为「CDN 回源 443（vless-ws-cdn）」；Cloudflare 侧 SSL 模式需为 **Full**（源站自签证书）。
 ### V15.21（2026-11-03）
 
 - **「节点配置」包含 MTProto**：用户详情的节点配置页在 sing-box 配置表下方新增「MTProto 配置」表（节点、主机:端口、密钥掩码、状态、创建时间、复制 tg 链接），`GET /api/uuids/{uuid}/configs` 响应新增 `mtproto` 数组（含已撤销客户端）。

@@ -197,7 +197,7 @@ func singboxStatsPorts(ports map[string]int) (clash, v2ray int) {
 // singboxRenderSb 渲染 sb.json（map 形式，调用方负责序列化）。
 // statsSecret 非空时注入 experimental.clash_api；userStats 为真时再加 v2ray_api
 // （仅自建 sing-box 支持），并把入站用户名切成 UUID（稳定唯一），避免列表重排导致流量串号。
-func singboxRenderSb(tpl *singboxTemplate, users []sbUser, ports map[string]int, statsSecret string, userStats bool) map[string]any {
+func singboxRenderSb(tpl *singboxTemplate, users []sbUser, ports map[string]int, statsSecret string, userStats bool, cdnDomain string) map[string]any {
 	inbounds := []any{}
 	tlsPair := func() map[string]any {
 		return map[string]any{
@@ -319,18 +319,36 @@ func singboxRenderSb(tpl *singboxTemplate, users []sbUser, ports map[string]int,
 		for _, x := range users {
 			u = append(u, map[string]any{"name": userName(x), "uuid": x.UUID, "flow": ""})
 		}
-		inbounds = append(inbounds, map[string]any{
-			"type": "vless", "tag": "vless-ws-in", "listen": "::", "listen_port": ports["vlws"],
-			"tls": map[string]any{
+		wsPath := singboxWsPath(firstNonEmpty(strings.TrimSpace(jsonStr(optMap(opts, "vlws")["path"])), "/vlws"))
+		tlsBlock := func() map[string]any {
+			return map[string]any{
 				"enabled": true, "alpn": []string{"h2", "http/1.1"},
 				"certificate_path": tlsPair()["certificate_path"], "key_path": tlsPair()["key_path"],
-			},
-			"transport": map[string]any{
-				"type": "ws",
-				"path": singboxWsPath(firstNonEmpty(strings.TrimSpace(jsonStr(optMap(opts, "vlws")["path"])), "/vlws")),
-			},
-			"users": u,
+			}
+		}
+		inbounds = append(inbounds, map[string]any{
+			"type": "vless", "tag": "vless-ws-in", "listen": "::", "listen_port": ports["vlws"],
+			"tls":       tlsBlock(),
+			"transport": map[string]any{"type": "ws", "path": wsPath},
+			"users":     u,
 		})
+		// CDN / Cloudflare Tunnel 回源：隧道在本机以明文 HTTP 转发，
+		// 所以这里额外开一个「仅回环、无 TLS」的 WS 入站（默认 13716，可被模板 vlws.cdn_port 覆盖）。
+		if strings.TrimSpace(cdnDomain) != "" {
+			cdnPort := int(jsonInt(optMap(opts, "vlws")["cdn_port"]))
+			if cdnPort <= 0 {
+				// 默认 13707（base+7，仅 CDN 明文 WS）；MASQUE 占用该端口时退到 base+16
+				cdnPort = ports["vlws"] + 1
+				if tpl.EnableMasque != 0 {
+					cdnPort = ports["vlws"] + 10
+				}
+			}
+			inbounds = append(inbounds, map[string]any{
+				"type": "vless", "tag": "vless-ws-cdn", "listen": "127.0.0.1", "listen_port": cdnPort,
+				"transport": map[string]any{"type": "ws", "path": wsPath},
+				"users":     u,
+			})
+		}
 	}
 
 	endpoints := []any{}
@@ -417,4 +435,15 @@ func singboxInstallVersions(tpl *singboxTemplate) string {
 	}
 	b, _ := json.Marshal(m)
 	return string(b)
+}
+
+// cdnPortOf CDN 明文 WS 回源端口：默认 base+7（13707）；MASQUE 占用时用 base+16。
+func cdnPortOf(tpl *singboxTemplate, ports map[string]int) int {
+	if v := int(jsonInt(optMap(tpl.protoOptions(), "vlws")["cdn_port"])); v > 0 {
+		return v
+	}
+	if tpl.EnableMasque != 0 {
+		return ports["vlws"] + 10
+	}
+	return ports["vlws"] + 1
 }
