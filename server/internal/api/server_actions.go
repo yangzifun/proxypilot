@@ -178,12 +178,26 @@ arch=$(uname -m)
 case "$arch" in x86_64|amd64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) echo "unsupported arch: $arch"; exit 1 ;; esac
 tmp=$(mktemp)
 trap 'rm -f "$tmp"' EXIT
-curl -L --fail --max-time 120 -o "$tmp" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$arch"
-install -m 755 "$tmp" /usr/local/bin/cloudflared
-systemctl restart cloudflared 2>/dev/null || true
-cloudflared --version`
+curl -L --fail --max-time 180 -o "$tmp" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$arch"
+chmod 755 "$tmp"
+# 以 systemd 单元实际使用的二进制为准（apt 安装通常在 /usr/bin，而 /usr/local 只是 PATH 覆盖）
+unit_bin=$(systemctl show -p ExecStart --value cloudflared 2>/dev/null | sed -n 's/.*path=\([^ ;]*\).*/\1/p' | head -1)
+[ -n "$unit_bin" ] || unit_bin=$(command -v cloudflared || echo /usr/local/bin/cloudflared)
+old=$("$unit_bin" --version 2>&1 | head -1 || true)
+[ -f "$unit_bin" ] && cp -a "$unit_bin" "$unit_bin.bak.$(date +%s)" 2>/dev/null || true
+install -m 755 "$tmp" "$unit_bin"
+[ "$unit_bin" = "/usr/local/bin/cloudflared" ] || install -m 755 "$tmp" /usr/local/bin/cloudflared 2>/dev/null || true
+systemctl restart cloudflared 2>/dev/null || systemctl start cloudflared 2>/dev/null || true
+sleep 2
+now=$("$unit_bin" --version 2>&1 | head -1 || true)
+echo "BIN=$unit_bin"
+echo "OLD=$old"
+echo "NEW=$now"
+echo "ACTIVE=$(systemctl is-active cloudflared 2>/dev/null || true)"
+if [ "$old" = "$now" ]; then echo "更新未生效：版本未变化"; exit 1; fi
+`
 		taskID, dup, msg := h.agentQueueTask(r.Context(), agent, "exec", 0,
-			map[string]any{"command": cmd, "timeout": 180}, "admin")
+			map[string]any{"command": cmd, "timeout": 240, "system_action": "cloudflared_update"}, "admin")
 		if msg != "" {
 			writeError(w, http.StatusBadRequest, msg)
 			return

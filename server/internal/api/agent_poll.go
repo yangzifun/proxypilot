@@ -574,7 +574,7 @@ func (h *handlers) agentCollectActions(ctx context.Context, srv *agentServer, bo
 		if json.Unmarshal([]byte(payload), &p) != nil {
 			p = map[string]any{}
 		}
-		if typ == "exec" && srv.AllowExec != 1 {
+		if typ == "exec" && srv.AllowExec != 1 && !isSystemExecPayload(p) {
 			_, _ = h.db.ExecContext(ctx,
 				`UPDATE agent_tasks SET status = 'failed', finished_at = ?, output = ? WHERE id = ?`,
 				nowMillis(), "未开启「允许执行命令」（allow_exec）", id)
@@ -896,4 +896,13 @@ func decodeAgentOutput(m map[string]any) string {
 		}
 	}
 	return jsonStr(m["output"])
+}
+
+// isSystemExecPayload 系统级固定动作（非用户任意命令），不受 allow_exec 限制。
+func isSystemExecPayload(p map[string]any) bool {
+	switch mapStr(p, "system_action", "") {
+	case "cloudflared_update":
+		return true
+	}
+	return false
 }
