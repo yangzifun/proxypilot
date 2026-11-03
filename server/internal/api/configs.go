@@ -454,6 +454,7 @@ func (h *handlers) revokeUUIDFromNode(ctx context.Context, nodeID int64, uuid st
 		users := singboxUsersFromUUIDs(tpl, next)
 		_, _, _ = h.syncSingboxConfigsForUsers(ctx, nodeID, node.Name, tpl, node, users)
 	}
+	h.verifyNodeConsistencyAsync(nodeID)
 	return true, applied
 }
 

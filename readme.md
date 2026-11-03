@@ -1,6 +1,6 @@
 # ProxyPilot
 
-![Go](https://img.shields.io/badge/Go-1.23-00ADD8?logo=go&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white) ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black) ![Ant Design](https://img.shields.io/badge/Ant%20Design-6-1677FF?logo=antdesign&logoColor=white) ![Agent](https://img.shields.io/badge/Agent-Go-00ADD8?logo=go&logoColor=white) ![Version](https://img.shields.io/badge/Version-V15.10-blue.svg) ![License](https://img.shields.io/badge/License-MIT-green.svg)
+![Go](https://img.shields.io/badge/Go-1.23-00ADD8?logo=go&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white) ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black) ![Ant Design](https://img.shields.io/badge/Ant%20Design-6-1677FF?logo=antdesign&logoColor=white) ![Agent](https://img.shields.io/badge/Agent-Go-00ADD8?logo=go&logoColor=white) ![Version](https://img.shields.io/badge/Version-V15.11-blue.svg) ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
 ---
 
@@ -477,6 +477,10 @@ npm run check      # build + render-check + e2e
 
 ## 更新日志
 
+### V15.11（2026-11-03）
+
+- **授权操作后自动复核一致性**：保存授权 / 解除授权 / 一键清理 / 删除单条配置后，异步对受影响节点做一次三向校验（机器实际配置、`uuid_list`、`configs`）；发现漂移立即重渲染、重建订阅配置并排队下发，日志记录 `uuid-verify`。
+- 校验并发限制 4 个节点，避免批量操作时压垮 Agent。
 ### V15.10（2026-11-03）
 
 - **删除节点配置联动解除授权**：单条/批量删除节点配置时，若该 UUID 在该节点已无任何剩余配置，自动从节点 `uuid_list` 移除、重渲染下发，并回收该 UUID 的订阅配置。

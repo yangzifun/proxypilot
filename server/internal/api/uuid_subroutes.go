@@ -199,6 +199,10 @@ func (h *handlers) uuidNodes(w http.ResponseWriter, r *http.Request) {
 			_, _, _ = h.syncSingboxConfigsForUsers(r.Context(), id, node.Name, tpl, node, users)
 		}
 	}
+	// 授权动作完成后异步复核机器侧配置，确保「授权 / 订阅配置 / 节点运行配置」一致
+	for _, id := range affected {
+		h.verifyNodeConsistencyAsync(id)
+	}
 	if len(applyErr) > 0 {
 		for _, item := range results {
 			if id, ok := item["node_id"].(int64); ok {
