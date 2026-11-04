@@ -298,20 +298,36 @@ export default function Mihomo({ templatesOnly }) {
   const openEditTpl = async (row) => {
     try {
       const res = await apiGet(`/api/mihomo/templates/${row.id}`);
-      setTplEditing(res.data);
+      const data = res.data || row;
+      setTplEditing(data);
       tplForm.setFieldsValue({
-        name: res.data.name,
-        remark: res.data.remark,
-        content: res.data.content,
-        enabled: !!res.data.enabled,
-        protocols: res.data.protocols || [],
+        name: data.name,
+        remark: data.remark,
+        content: data.content,
+        enabled: !!data.enabled,
       });
-      setQuick(parseQuick(res.data.content));
-      setTplMode(res.data.mode || 'subscription');
+      let cfg = {};
       try {
-        setServerCfg({ ...DEFAULT_SERVER_CFG, ...(JSON.parse(res.data.server_json || '{}') || {}) });
+        cfg = JSON.parse(data.server_json || data.server_cfg ? JSON.stringify(data.server_cfg || {}) : '{}');
       } catch (e) {
-        setServerCfg(DEFAULT_SERVER_CFG);
+        cfg = {};
+      }
+      if (!cfg || !Object.keys(cfg).length) {
+        try {
+          cfg = JSON.parse(data.server_json || '{}');
+        } catch (e) {
+          cfg = {};
+        }
+      }
+      const payload = cfg.listeners && cfg.listeners.length ? { listeners: cfg.listeners } : cfg;
+      setTplJson(JSON.stringify(payload, null, 2));
+      setTplParsed(null);
+      setTplPreview({ yaml: '', loading: false });
+      try {
+        const vres = await apiGet(`/api/mihomo/templates/${row.id}/versions`);
+        setTplVersions(vres.data || []);
+      } catch (e) {
+        setTplVersions([]);
       }
       setTplOpen(true);
     } catch (e) {
