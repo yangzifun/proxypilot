@@ -155,6 +155,7 @@ func (h *handlers) mihomoTemplateParse(w http.ResponseWriter, r *http.Request) {
 		if len(serverProtocols) > 0 {
 			serverCfg["protocols"] = serverProtocols
 		}
+		serverCfg["listeners"] = rawList
 		if s := strings.TrimSpace(fmt.Sprint(doc["secret"])); s != "<nil>" && s != "" {
 			serverCfg["secret"] = s
 		}

@@ -13,18 +13,19 @@ import (
 // ---------------- mihomo 服务端模式（listeners） ----------------
 
 type mihomoServerConfig struct {
-	Protocols   []string `json:"protocols"`
-	PortBase    int      `json:"port_base"`
-	Listen      string   `json:"listen"`
-	WSPath      string   `json:"ws_path"`
-	SSMethod    string   `json:"ss_method"`
-	CertPath    string   `json:"cert_path"`
-	KeyPath     string   `json:"key_path"`
-	RealityDest string   `json:"reality_dest"`
-	RealityPriv string   `json:"reality_private_key"`
-	RealitySID  string   `json:"reality_short_id"`
-	RealitySNI  []string `json:"reality_server_names"`
-	Secret      string   `json:"secret"`
+	Protocols   []string         `json:"protocols"`
+	PortBase    int              `json:"port_base"`
+	Listen      string           `json:"listen"`
+	Listeners   []map[string]any `json:"listeners"`
+	WSPath      string           `json:"ws_path"`
+	SSMethod    string           `json:"ss_method"`
+	CertPath    string           `json:"cert_path"`
+	KeyPath     string           `json:"key_path"`
+	RealityDest string           `json:"reality_dest"`
+	RealityPriv string           `json:"reality_private_key"`
+	RealitySID  string           `json:"reality_short_id"`
+	RealitySNI  []string         `json:"reality_server_names"`
+	Secret      string           `json:"secret"`
 }
 
 func defaultMihomoServerConfig() mihomoServerConfig {

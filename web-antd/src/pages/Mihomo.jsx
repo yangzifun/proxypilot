@@ -144,6 +144,19 @@ const PROTOCOLS = [
   { value: 'tuic', label: 'TUIC' },
 ];
 
+const MIHOMO_TEMPLATE_EXAMPLE = JSON.stringify({
+  listeners: [
+    { name: 'hy2', type: 'hysteria2', port: 13801, listen: '::', up: '100 Mbps', down: '500 Mbps', certificate: '/etc/mihomo/cert.crt', 'private-key': '/etc/mihomo/private.key' },
+    { name: 'ss', type: 'shadowsocks', port: 13802, listen: '::', cipher: '2022-blake3-aes-256-gcm', password: 'CHANGE_ME_BASE64_KEY=' },
+    { name: 'anytls', type: 'anytls', port: 13803, listen: '::', certificate: '/etc/mihomo/cert.crt', 'private-key': '/etc/mihomo/private.key' },
+    { name: 'tuic', type: 'tuic', port: 13804, listen: '::', 'congestion-controller': 'bbr', certificate: '/etc/mihomo/cert.crt', 'private-key': '/etc/mihomo/private.key' },
+    { name: 'vless-reality', type: 'vless', port: 13805, listen: '::', 'reality-config': { dest: 'www.microsoft.com:443', 'private-key': 'CHANGE_ME', 'short-id': ['0123456789abcdef'], 'server-names': ['www.microsoft.com'] } },
+    { name: 'vless-ws', type: 'vless', port: 13806, listen: '::', 'ws-path': '/vlws', certificate: '/etc/mihomo/cert.crt', 'private-key': '/etc/mihomo/private.key' },
+    { name: 'vmess', type: 'vmess', port: 13807, listen: '::' },
+    { name: 'trojan', type: 'trojan', port: 13808, listen: '::', certificate: '/etc/mihomo/cert.crt', 'private-key': '/etc/mihomo/private.key' },
+  ],
+}, null, 2);
+
 export default function Mihomo({ templatesOnly }) {
   const { message } = AntdApp.useApp();
   const [tab, setTab] = useState('templates');
@@ -185,6 +198,9 @@ export default function Mihomo({ templatesOnly }) {
   const [tplMode, setTplMode] = useState('subscription');
   const [serverCfg, setServerCfg] = useState(DEFAULT_SERVER_CFG);
   const [tplPreview, setTplPreview] = useState({ yaml: '', loading: false });
+  const [tplJson, setTplJson] = useState('');
+  const [tplParsed, setTplParsed] = useState(null);
+  const [tplVersions, setTplVersions] = useState([]);
   const [preview, setPreview] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
@@ -268,6 +284,9 @@ export default function Mihomo({ templatesOnly }) {
   };
 
   const openCreateTpl = () => {
+    setTplJson(MIHOMO_TEMPLATE_EXAMPLE);
+    setTplParsed(null);
+    setTplVersions([]);
     setTplEditing(null);
     tplForm.setFieldsValue({ name: '', remark: '', content: DEFAULT_MIHOMO_TEMPLATE, enabled: true, protocols: [] });
     setQuick(parseQuick(DEFAULT_MIHOMO_TEMPLATE));
@@ -300,7 +319,14 @@ export default function Mihomo({ templatesOnly }) {
   };
   const saveTpl = async () => {
     const v = await tplForm.validateFields();
-    const body = { name: v.name, remark: v.remark, enabled: v.enabled, mode: 'server', server_json: JSON.stringify(serverCfg || {}) };
+    let parsedJson = null;
+    try {
+      parsedJson = JSON.parse(tplJson || '{}');
+    } catch (e) {
+      message.error('模板 JSON 格式错误：' + e.message);
+      return;
+    }
+    const body = { name: v.name, remark: v.remark, enabled: v.enabled, mode: 'server', server_json: JSON.stringify(parsedJson) };
     try {
       if (tplEditing) await apiPut(`/api/mihomo/templates/${tplEditing.id}`, body);
       else await apiPost('/api/mihomo/templates', body);
@@ -609,7 +635,7 @@ export default function Mihomo({ templatesOnly }) {
           return [];
         };
         const cfg = row.server_cfg && typeof row.server_cfg === 'object' ? row.server_cfg : {};
-        const list = asArr(cfg.protocols);
+        const list = asArr(cfg.protocols).length ? asArr(cfg.protocols) : asArr(cfg.listeners).map((l) => l.type || 'listener');
         if (!list.length) return <span className="pp-muted">—</span>;
         return (
           <span>
@@ -827,97 +853,103 @@ export default function Mihomo({ templatesOnly }) {
               </Form.Item>
             </span>
           </Space>
-          <>
-              <Form.Item label="协议（服务端 listener）">
-                <Select
-                  mode="multiple"
-                  allowClear
-                  options={SERVER_PROTOCOLS}
-                  value={serverCfg.protocols}
-                  onChange={(v) => setServerCfg((c) => ({ ...c, protocols: v }))}
-                  placeholder="选择协议"
-                />
-              </Form.Item>
-              <Space size={12} wrap>
-                <div>
-                  <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>端口基址</div>
-                  <InputNumber min={1024} max={65000} value={serverCfg.port_base} onChange={(v) => setServerCfg((c) => ({ ...c, port_base: v || 13900 }))} />
-                </div>
-                <div>
-                  <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>WS path</div>
-                  <Input value={serverCfg.ws_path} onChange={(e) => setServerCfg((c) => ({ ...c, ws_path: e.target.value }))} style={{ width: 160 }} />
-                </div>
-                <div>
-                  <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>SS method</div>
-                  <Input value={serverCfg.ss_method} onChange={(e) => setServerCfg((c) => ({ ...c, ss_method: e.target.value }))} style={{ width: 240 }} />
-                </div>
-                <div>
-                  <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>external-controller 密钥</div>
-                  <Input value={serverCfg.secret} onChange={(e) => setServerCfg((c) => ({ ...c, secret: e.target.value }))} style={{ width: 200 }} />
-                </div>
-              </Space>
-              <Space size={12} wrap style={{ marginTop: 10 }}>
-                <div>
-                  <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>证书路径</div>
-                  <Input value={serverCfg.cert_path} onChange={(e) => setServerCfg((c) => ({ ...c, cert_path: e.target.value }))} style={{ width: 240 }} />
-                </div>
-                <div>
-                  <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>私钥路径</div>
-                  <Input value={serverCfg.key_path} onChange={(e) => setServerCfg((c) => ({ ...c, key_path: e.target.value }))} style={{ width: 240 }} />
-                </div>
-              </Space>
-              <Space size={12} wrap style={{ marginTop: 10 }}>
-                <div>
-                  <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>REALITY dest</div>
-                  <Input value={serverCfg.reality_dest} onChange={(e) => setServerCfg((c) => ({ ...c, reality_dest: e.target.value }))} style={{ width: 220 }} />
-                </div>
-                <div>
-                  <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>REALITY 私钥</div>
-                  <Input value={serverCfg.reality_private_key} onChange={(e) => setServerCfg((c) => ({ ...c, reality_private_key: e.target.value }))} style={{ width: 260 }} />
-                </div>
-                <div>
-                  <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>short-id</div>
-                  <Input value={serverCfg.reality_short_id} onChange={(e) => setServerCfg((c) => ({ ...c, reality_short_id: e.target.value }))} style={{ width: 180 }} />
-                </div>
-                <div>
-                  <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>server-names</div>
-                  <Select
-                    mode="tags"
-                    value={serverCfg.reality_server_names}
-                    onChange={(v) => setServerCfg((c) => ({ ...c, reality_server_names: v }))}
-                    style={{ minWidth: 220 }}
-                    placeholder="www.microsoft.com"
-                  />
-                </div>
-              </Space>
-          </>
-          <div style={{ marginBottom: 12 }}>
-              <Space align="center" style={{ marginBottom: 6 }}>
-                <Button size="small" loading={tplPreview.loading} onClick={previewServerCfg}>
-                  生成配置预览
-                </Button>
-                <span className="pp-muted" style={{ fontSize: 12 }}>
-                  按当前参数生成示例 listeners 配置（示例 UUID）
-                </span>
-              </Space>
-              <pre
-                style={{
-                  margin: 0,
-                  maxHeight: 260,
-                  overflow: 'auto',
-                  background: '#0f172a',
-                  color: '#e2e8f0',
-                  borderRadius: 10,
-                  padding: 12,
-                  fontSize: 12,
-                  lineHeight: 1.5,
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-all',
-                }}
-              >
-                {tplPreview.loading ? '生成中…' : tplPreview.yaml || '点击「生成配置预览」查看生成的模板配置'}
-              </pre>
-          </div>
+              <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>模板 JSON（listeners 自带端口，按模板下发）</div>
+          <Input.TextArea
+            value={tplJson}
+            onChange={(e) => setTplJson(e.target.value)}
+            autoSize={{ minRows: 14, maxRows: 26 }}
+            style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 12 }}
+            placeholder='{"listeners":[{"name":"hy2","type":"hysteria2","port":13801}]}'
+          />
+          <Space size={8} wrap style={{ marginTop: 8, marginBottom: 10 }}>
+            <Button size="small" onClick={() => setTplJson(MIHOMO_TEMPLATE_EXAMPLE)}>
+              填入示例
+            </Button>
+            <Select
+              size="small"
+              style={{ minWidth: 200 }}
+              placeholder={tplVersions.length ? '选择历史版本' : '暂无历史版本'}
+              disabled={!tplVersions.length}
+              onChange={async (vid) => {
+                try {
+                  const res = await apiGet(`/api/mihomo/templates/${tplEditing.id}/versions/${vid}`);
+                  const row = res.data || {};
+                  const raw = row.content || row.server_json || '{}';
+                  setTplJson(typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2));
+                  message.success('已载入版本，保存后生效');
+                } catch (e) {
+                  message.error(e.message || '载入版本失败');
+                }
+              }}
+              options={tplVersions.map((v) => ({ value: v.id, label: '#' + v.id + ' · ' + (v.created_at ? new Date(v.created_at).toLocaleString() : '') }))}
+            />
+            <Button
+              size="small"
+              onClick={() => {
+                try {
+                  const parsed = JSON.parse(tplJson || '{}');
+                  const list = parsed.listeners || [];
+                  if (!Array.isArray(list) || !list.length) throw new Error('缺少 listeners 数组');
+                  setTplParsed(list.map((l) => ({ name: l.name || '-', type: l.type || '-', port: l.port || 0 })));
+                  message.success(`解析成功：${list.length} 个 listener`);
+                } catch (e) {
+                  setTplParsed(null);
+                  message.error('解析失败：' + e.message);
+                }
+              }}
+            >
+              解析配置
+            </Button>
+            <Button
+              size="small"
+              loading={tplPreview.loading}
+              onClick={async () => {
+                setTplPreview((p) => ({ ...p, loading: true }));
+                try {
+                  const res = await apiPost('/api/mihomo/templates/preview-server', { server_json: tplJson });
+                  setTplPreview({ yaml: (res.data && res.data.yaml) || '', loading: false });
+                } catch (e) {
+                  setTplPreview({ yaml: '', loading: false });
+                  message.error(e.message || '生成预览失败');
+                }
+              }}
+            >
+              生成配置预览
+            </Button>
+          </Space>
+          {tplParsed ? (
+            <Table
+              size="small"
+              rowKey="name"
+              pagination={false}
+              style={{ marginBottom: 10 }}
+              dataSource={tplParsed}
+              columns={[
+                { title: '名称', dataIndex: 'name' },
+                { title: '类型', dataIndex: 'type' },
+                { title: '端口', dataIndex: 'port', width: 100 },
+              ]}
+            />
+          ) : null}
+          {tplPreview.yaml ? (
+            <pre
+              style={{
+                margin: '0 0 12px',
+                maxHeight: 220,
+                overflow: 'auto',
+                background: '#0f172a',
+                color: '#e2e8f0',
+                borderRadius: 10,
+                padding: 12,
+                fontSize: 12,
+                lineHeight: 1.5,
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-all',
+              }}
+            >
+              {tplPreview.yaml}
+            </pre>
+          ) : null}
           <Form.Item name="remark" label="备注">
             <Input placeholder="可选，例如：含广告拦截规则" maxLength={200} />
           </Form.Item>
