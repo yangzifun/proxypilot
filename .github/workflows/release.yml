@@ -1,0 +1,54 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'V*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要发布的标签（例如 V17.17）'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Build server binaries
+        run: |
+          mkdir -p dist
+          cd server
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o ../dist/proxypilot-linux-amd64 ./cmd/proxypilot
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags "-s -w" -o ../dist/proxypilot-linux-arm64 ./cmd/proxypilot
+          cd ..
+          ls -l dist
+
+      - name: Package checksums
+        run: |
+          cd dist
+          sha256sum proxypilot-linux-amd64 proxypilot-linux-arm64 > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: ${{ github.event.inputs.tag || github.ref_name }}
+          generate_release_notes: true
+          files: |
+            dist/proxypilot-linux-amd64
+            dist/proxypilot-linux-arm64
+            dist/SHA256SUMS.txt
