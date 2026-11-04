@@ -13,6 +13,7 @@ import {
   Button,
   Form,
   Input,
+  InputNumber,
   Modal,
   Popconfirm,
   Select,
@@ -71,6 +72,27 @@ rules:
   - GEOIP,CN,DIRECT
   - MATCH,Proxy
 `;
+const yamlScalar = (text, key) => {
+  const re = new RegExp('^' + key + ':\\s*(.*)$', 'm');
+  const m = String(text || '').match(re);
+  return m ? m[1].trim().replace(/^["']|["']$/g, '') : '';
+};
+const yamlSet = (text, key, value) => {
+  const src = String(text || '');
+  const re = new RegExp('^' + key + ':\\s*.*$', 'm');
+  const line = key + ': ' + value;
+  if (re.test(src)) return src.replace(re, line);
+  return line + '\n' + src;
+};
+const parseQuick = (text) => ({
+  port: Number(yamlScalar(text, 'mixed-port')) || 7890,
+  mode: yamlScalar(text, 'mode') || 'rule',
+  log: yamlScalar(text, 'log-level') || 'info',
+  ctrl: yamlScalar(text, 'external-controller') || '127.0.0.1:9090',
+  lan: yamlScalar(text, 'allow-lan') === 'true',
+  ipv6: yamlScalar(text, 'ipv6') === 'true',
+});
+
 const downloadText = (name, text) => {
   const blob = new Blob([text], { type: 'text/yaml;charset=utf-8' });
   const url = URL.createObjectURL(blob);
@@ -103,6 +125,19 @@ export default function Mihomo() {
   const [tplOpen, setTplOpen] = useState(false);
   const [tplEditing, setTplEditing] = useState(null);
   const [tplForm] = Form.useForm();
+  const [quick, setQuick] = useState(parseQuick(DEFAULT_MIHOMO_TEMPLATE));
+  const applyQuick = (patch) => {
+    const next = { ...quick, ...patch };
+    setQuick(next);
+    let c = tplForm.getFieldValue('content') || '';
+    if ('port' in patch) c = yamlSet(c, 'mixed-port', next.port);
+    if ('mode' in patch) c = yamlSet(c, 'mode', next.mode);
+    if ('log' in patch) c = yamlSet(c, 'log-level', next.log);
+    if ('ctrl' in patch) c = yamlSet(c, 'external-controller', next.ctrl || '127.0.0.1:9090');
+    if ('lan' in patch) c = yamlSet(c, 'allow-lan', next.lan ? 'true' : 'false');
+    if ('ipv6' in patch) c = yamlSet(c, 'ipv6', next.ipv6 ? 'true' : 'false');
+    tplForm.setFieldsValue({ content: c });
+  };
 
   const [bindOpen, setBindOpen] = useState(false);
   const [bindEditing, setBindEditing] = useState(null);
@@ -194,6 +229,7 @@ export default function Mihomo() {
   const openCreateTpl = () => {
     setTplEditing(null);
     tplForm.setFieldsValue({ name: '', remark: '', content: DEFAULT_MIHOMO_TEMPLATE });
+    setQuick(parseQuick(DEFAULT_MIHOMO_TEMPLATE));
     setTplOpen(true);
   };
   const openEditTpl = async (row) => {
@@ -201,6 +237,7 @@ export default function Mihomo() {
       const res = await apiGet(`/api/mihomo/templates/${row.id}`);
       setTplEditing(res.data);
       tplForm.setFieldsValue({ name: res.data.name, remark: res.data.remark, content: res.data.content });
+      setQuick(parseQuick(res.data.content));
       setTplOpen(true);
     } catch (e) {
       message.error(e.message || '读取模板失败');
@@ -228,7 +265,20 @@ export default function Mihomo() {
     }
   };
 
-  const openCreateBind = () => {
+  const openCreateBind = (prefill) => {
+    setBindEditing(null);
+    bindForm.setFieldsValue({
+      name: prefill?.name || '',
+      server_id: undefined,
+      template_id: prefill?.template_id,
+      uuid_list: prefill?.uuid_list || [],
+      protocols: prefill?.protocols || [],
+      enabled: true,
+      remark: prefill?.remark || '',
+    });
+    setBindOpen(true);
+  };
+  const openCreateBindBlank = () => {
     setBindEditing(null);
     bindForm.setFieldsValue({ name: '', server_id: undefined, template_id: undefined, uuid_list: [], protocols: [], enabled: true, remark: '' });
     setBindOpen(true);
@@ -349,6 +399,21 @@ export default function Mihomo() {
           <Button size="small" type="link" icon={<EditOutlined />} onClick={() => openEditBind(row)}>
             编辑
           </Button>
+          <Button
+            size="small"
+            type="link"
+            onClick={() =>
+              openCreateBind({
+                name: (row.name || '绑定') + ' 副本',
+                template_id: row.template_id,
+                uuid_list: row.uuid_list || [],
+                protocols: row.protocols || [],
+                remark: row.remark || '',
+              })
+            }
+          >
+            复制
+          </Button>
           <Popconfirm title="删除该绑定？" onConfirm={() => removeBind(row)}>
             <Button size="small" type="link" danger icon={<DeleteOutlined />}>
               删除
@@ -373,7 +438,7 @@ export default function Mihomo() {
               新建模板
             </Button>
           ) : (
-            <Button type="primary" icon={<PlusOutlined />} onClick={openCreateBind}>
+            <Button type="primary" icon={<PlusOutlined />} onClick={openCreateBindBlank}>
               新建绑定
             </Button>
           )}
@@ -433,8 +498,42 @@ export default function Mihomo() {
           <Form.Item name="remark" label="备注">
             <Input placeholder="可选，例如：含广告拦截规则" maxLength={200} />
           </Form.Item>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 10 }}>
+            <div>
+              <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>mixed-port</div>
+              <InputNumber min={1} max={65535} value={quick.port} onChange={(v) => applyQuick({ port: v || 7890 })} style={{ width: 120 }} />
+            </div>
+            <div>
+              <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>mode</div>
+              <Select
+                value={quick.mode}
+                onChange={(v) => applyQuick({ mode: v })}
+                style={{ width: 120 }}
+                options={[{ value: 'rule', label: 'rule' }, { value: 'global', label: 'global' }, { value: 'direct', label: 'direct' }]}
+              />
+            </div>
+            <div>
+              <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>log-level</div>
+              <Select
+                value={quick.log}
+                onChange={(v) => applyQuick({ log: v })}
+                style={{ width: 130 }}
+                options={['silent', 'error', 'warning', 'info', 'debug'].map((v) => ({ value: v, label: v }))}
+              />
+            </div>
+            <div>
+              <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>external-controller</div>
+              <Input value={quick.ctrl} onChange={(e) => applyQuick({ ctrl: e.target.value })} style={{ width: 200 }} />
+            </div>
+            <Space size={6} style={{ paddingBottom: 4 }}>
+              <span className="pp-muted" style={{ fontSize: 12 }}>allow-lan</span>
+              <Switch size="small" checked={quick.lan} onChange={(v) => applyQuick({ lan: v })} />
+              <span className="pp-muted" style={{ fontSize: 12, marginLeft: 8 }}>ipv6</span>
+              <Switch size="small" checked={quick.ipv6} onChange={(v) => applyQuick({ ipv6: v })} />
+            </Space>
+          </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
-            <Button size="small" onClick={() => tplForm.setFieldsValue({ content: DEFAULT_MIHOMO_TEMPLATE })}>
+            <Button size="small" onClick={() => { tplForm.setFieldsValue({ content: DEFAULT_MIHOMO_TEMPLATE }); setQuick(parseQuick(DEFAULT_MIHOMO_TEMPLATE)); }}>
               填入默认配置
             </Button>
           </div>
