@@ -765,8 +765,10 @@ export default function ServersUnified() {
               <span>仅在线节点</span>
             </div>
             <div className="pp-ov-avg">
-              <div className="pp-ov-gauge"><GaugeChart value={avg.cpu} label="CPU" size={96} /></div>
-              <div className="pp-ov-gauge"><GaugeChart value={avg.mem} label="内存" size={96} /></div>
+              <div className="pp-ov-gauges">
+                <div className="pp-ov-gauge"><GaugeChart value={avg.cpu} label="CPU" size={104} /></div>
+                <div className="pp-ov-gauge"><GaugeChart value={avg.mem} label="内存" size={104} /></div>
+              </div>
               <div className="pp-ov-disk">
                 <div className="pp-ov-disk-head">
                   <span>磁盘均值</span>

@@ -758,9 +758,10 @@ body {
 .pp-ov-sec-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .pp-ov-sec-head > b { font-size: 13px; color: #0f172a; }
 .pp-ov-sec-head > span { font-size: 12px; color: #94a3b8; }
-.pp-ov-avg { display: flex; align-items: center; gap: 6px; }
-.pp-ov-gauge { flex: 0 0 104px; text-align: center; }
-.pp-ov-disk { flex: 1 1 auto; min-width: 0; }
+.pp-ov-avg { display: flex; flex-direction: column; gap: 10px; }
+.pp-ov-gauges { display: flex; align-items: center; justify-content: space-around; gap: 8px; }
+.pp-ov-gauge { flex: 0 0 112px; text-align: center; }
+.pp-ov-disk { width: 100%; min-width: 0; }
 .pp-ov-disk-head { display: flex; justify-content: space-between; font-size: 12px; color: #64748b; }
 .pp-ov-map { min-width: 0; display: flex; flex-direction: column; }
 .pp-ov-map-extra { margin-left: auto; display: inline-flex; align-items: center; gap: 12px; }
@@ -823,9 +824,10 @@ body {
 .pp-ov-sec-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .pp-ov-sec-head > b { font-size: 13px; color: #0f172a; }
 .pp-ov-sec-head > span { font-size: 12px; color: #94a3b8; }
-.pp-ov-avg { display: flex; align-items: center; gap: 6px; }
-.pp-ov-gauge { flex: 0 0 104px; text-align: center; }
-.pp-ov-disk { flex: 1 1 auto; min-width: 0; }
+.pp-ov-avg { display: flex; flex-direction: column; gap: 10px; }
+.pp-ov-gauges { display: flex; align-items: center; justify-content: space-around; gap: 8px; }
+.pp-ov-gauge { flex: 0 0 112px; text-align: center; }
+.pp-ov-disk { width: 100%; min-width: 0; }
 .pp-ov-disk-head { display: flex; justify-content: space-between; font-size: 12px; color: #64748b; }
 .pp-ov-map { min-width: 0; display: flex; flex-direction: column; }
 .pp-ov-map-extra { margin-left: auto; display: inline-flex; align-items: center; gap: 12px; }
@@ -852,9 +854,10 @@ body {
 .pp-ov-sec-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .pp-ov-sec-head > b { font-size: 13px; color: #0f172a; }
 .pp-ov-sec-head > span { font-size: 12px; color: #94a3b8; }
-.pp-ov-avg { display: flex; align-items: center; gap: 6px; }
-.pp-ov-gauge { flex: 0 0 104px; text-align: center; }
-.pp-ov-disk { flex: 1 1 auto; min-width: 0; }
+.pp-ov-avg { display: flex; flex-direction: column; gap: 10px; }
+.pp-ov-gauges { display: flex; align-items: center; justify-content: space-around; gap: 8px; }
+.pp-ov-gauge { flex: 0 0 112px; text-align: center; }
+.pp-ov-disk { width: 100%; min-width: 0; }
 .pp-ov-disk-head { display: flex; justify-content: space-between; font-size: 12px; color: #64748b; }
 .pp-ov-map { min-width: 0; display: flex; flex-direction: column; }
 .pp-ov-map-extra { margin-left: auto; display: inline-flex; align-items: center; gap: 12px; }
