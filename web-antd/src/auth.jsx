@@ -57,8 +57,8 @@ export function AuthProvider({ children }) {
   const superAdmin = String(boot.superAdmin || 'admin');
   const isSuper = !!user && user === superAdmin;
 
-  const applySession = useCallback((nextToken) => {
-    setToken(nextToken, DAY_MS);
+  const applySession = useCallback((nextToken, ttlMs) => {
+    setToken(nextToken, ttlMs || DAY_MS);
     setTokenState(nextToken || '');
   }, []);
 
@@ -74,7 +74,7 @@ export function AuthProvider({ children }) {
         return { needMfa: true, mode: 'totp', mfaToken: res.mfa_token || '' };
       }
       if (res && res.token) {
-        applySession(res.token);
+        applySession(res.token, res.token_ttl_ms);
         return { ok: true };
       }
       throw new Error('登录响应异常');
@@ -93,7 +93,7 @@ export function AuthProvider({ children }) {
     async ({ email, code }) => {
       const res = await publicApi('login/email-code/verify', { method: 'POST', body: { email, code } });
       if (res && res.token) {
-        applySession(res.token);
+        applySession(res.token, res.token_ttl_ms);
         return { ok: true };
       }
       if (res && res.requires_mfa) {
@@ -110,7 +110,7 @@ export function AuthProvider({ children }) {
         body: { email_login_token: ticket, totp_code: totpCode || '', backup_code: backupCode || '' },
       });
       if (res && res.token) {
-        applySession(res.token);
+        applySession(res.token, res.token_ttl_ms);
         return { ok: true };
       }
       throw new Error('登录响应异常');
@@ -126,7 +126,7 @@ export function AuthProvider({ children }) {
         body: { mfa_token: mfaToken || '', backup_code: backupCode },
       });
       if (res && res.token) {
-        applySession(res.token);
+        applySession(res.token, res.token_ttl_ms);
         return { ok: true };
       }
       throw new Error('登录响应异常');

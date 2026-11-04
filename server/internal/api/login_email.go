@@ -127,12 +127,12 @@ func (h *handlers) loginEmailCodeVerify(w http.ResponseWriter, r *http.Request) 
 		})
 		return
 	}
-	token, err := auth.IssueAdminToken(username, h.cfg.JWTSecret, false)
+	token, err := auth.IssueAdminTokenTTL(username, h.cfg.JWTSecret, false, h.cfg.AdminTokenTTL)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "登录失败")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"token": token, "requires_mfa": false})
+	writeJSON(w, http.StatusOK, map[string]any{"token": token, "requires_mfa": false, "token_ttl_ms": h.cfg.AdminTokenTTL.Milliseconds()})
 }
 
 // POST /api/login/email-code/mfa
@@ -186,7 +186,7 @@ func (h *handlers) loginEmailCodeMfa(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "登录失败")
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"token": token, "message": "登录成功"})
+		writeJSON(w, http.StatusOK, map[string]any{"token": token, "message": "登录成功", "token_ttl_ms": h.cfg.AdminTokenTTL.Milliseconds()})
 		return
 	}
 
@@ -207,10 +207,10 @@ func (h *handlers) loginEmailCodeMfa(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, _ = h.db.ExecContext(r.Context(), `UPDATE admin_users SET last_mfa_login = ? WHERE username = ?`, nowMillis(), ticket.Sub)
-	token, err := auth.IssueAdminToken(ticket.Sub, h.cfg.JWTSecret, true)
+	token, err := auth.IssueAdminTokenTTL(ticket.Sub, h.cfg.JWTSecret, true, h.cfg.AdminTokenTTL)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "登录失败")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"token": token, "requires_mfa": true, "message": "MFA验证成功"})
+	writeJSON(w, http.StatusOK, map[string]any{"token": token, "requires_mfa": true, "message": "MFA验证成功", "token_ttl_ms": h.cfg.AdminTokenTTL.Milliseconds()})
 }

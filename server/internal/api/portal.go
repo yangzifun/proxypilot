@@ -106,15 +106,16 @@ func (h *handlers) portalLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, status, msg)
 		return
 	}
-	token, err := auth.IssuePortalToken(email, h.cfg.JWTSecret)
+	token, err := auth.IssuePortalTokenTTL(email, h.cfg.JWTSecret, h.cfg.PortalTokenTTL)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "签发 token 失败")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"token":      token,
-		"email":      email,
-		"expires_in": 7 * 24 * 3600,
+		"token":        token,
+		"token_ttl_ms": h.cfg.PortalTokenTTL.Milliseconds(),
+		"email":        email,
+		"expires_in":   7 * 24 * 3600,
 	})
 }
 
@@ -325,16 +326,17 @@ func (h *handlers) portalEmailVerify(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "更新邮箱失败")
 		return
 	}
-	token, err := auth.IssuePortalToken(target, h.cfg.JWTSecret)
+	token, err := auth.IssuePortalTokenTTL(target, h.cfg.JWTSecret, h.cfg.PortalTokenTTL)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "签发 token 失败")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"success":    true,
-		"email":      target,
-		"token":      token,
-		"expires_in": 7 * 24 * 3600,
+		"success":      true,
+		"email":        target,
+		"token":        token,
+		"token_ttl_ms": h.cfg.PortalTokenTTL.Milliseconds(),
+		"expires_in":   7 * 24 * 3600,
 	})
 }
 

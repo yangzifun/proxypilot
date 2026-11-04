@@ -335,7 +335,7 @@ func (h *handlers) oidcCallback(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login?oidc_error="+url.QueryEscape(reason), http.StatusFound)
 		return
 	}
-	token, err := auth.IssueAdminToken(username, h.cfg.JWTSecret, true)
+	token, err := auth.IssueAdminTokenTTL(username, h.cfg.JWTSecret, true, h.cfg.AdminTokenTTL)
 	if err != nil {
 		http.Redirect(w, r, "/login?oidc_error=token_sign_failed", http.StatusFound)
 		return

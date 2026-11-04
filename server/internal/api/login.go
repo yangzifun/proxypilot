@@ -121,12 +121,12 @@ func (h *handlers) login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	loginLimiter.Reset(key)
-	token, err := auth.IssueAdminToken(username, h.cfg.JWTSecret, false)
+	token, err := auth.IssueAdminTokenTTL(username, h.cfg.JWTSecret, false, h.cfg.AdminTokenTTL)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "签发 token 失败")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"token": token, "requires_mfa": false})
+	writeJSON(w, http.StatusOK, map[string]any{"token": token, "requires_mfa": false, "token_ttl_ms": h.cfg.AdminTokenTTL.Milliseconds()})
 }
 
 // loginVerifyMFA 只接受 password+Turnstile 通过后签发的 mfa_token。
@@ -163,10 +163,10 @@ func (h *handlers) loginVerifyMFA(w http.ResponseWriter, r *http.Request, req lo
 		`UPDATE admin_users SET last_mfa_login = ? WHERE id = ?`, now, id); err != nil {
 		h.log.Warn("记录 MFA 登录失败", "user", claims.Sub, "err", err)
 	}
-	token, err := auth.IssueAdminToken(claims.Sub, h.cfg.JWTSecret, true)
+	token, err := auth.IssueAdminTokenTTL(claims.Sub, h.cfg.JWTSecret, true, h.cfg.AdminTokenTTL)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "签发 token 失败")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"token": token, "requires_mfa": true, "message": "MFA验证成功"})
+	writeJSON(w, http.StatusOK, map[string]any{"token": token, "requires_mfa": true, "message": "MFA验证成功", "token_ttl_ms": h.cfg.AdminTokenTTL.Milliseconds()})
 }

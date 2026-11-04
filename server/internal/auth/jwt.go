@@ -79,9 +79,17 @@ func Parse(token, secret string) (Claims, error) {
 
 // IssueAdminToken 为后台账号签发 24 小时 token。
 func IssueAdminToken(username, secret string, mfaVerified bool) (string, error) {
+	return IssueAdminTokenTTL(username, secret, mfaVerified, 24*time.Hour)
+}
+
+// IssueAdminTokenTTL 按指定有效期签发管理端 token。
+func IssueAdminTokenTTL(username, secret string, mfaVerified bool, ttl time.Duration) (string, error) {
+	if ttl <= 0 {
+		ttl = 24 * time.Hour
+	}
 	return Sign(Claims{
 		Sub:         username,
-		Exp:         time.Now().Add(24 * time.Hour).UnixMilli(),
+		Exp:         time.Now().Add(ttl).UnixMilli(),
 		RequiresMFA: mfaVerified,
 		MFAVerified: mfaVerified,
 	}, secret)
@@ -100,9 +108,17 @@ func IssueMFAToken(username, secret string) (string, error) {
 
 // IssuePortalToken 为用户中心签发 7 天 token（role=user）。
 func IssuePortalToken(email, secret string) (string, error) {
+	return IssuePortalTokenTTL(email, secret, 7*24*time.Hour)
+}
+
+// IssuePortalTokenTTL 按指定有效期签发用户中心 token。
+func IssuePortalTokenTTL(email, secret string, ttl time.Duration) (string, error) {
+	if ttl <= 0 {
+		ttl = 7 * 24 * time.Hour
+	}
 	return Sign(Claims{
 		Sub:  email,
-		Exp:  time.Now().Add(7 * 24 * time.Hour).UnixMilli(),
+		Exp:  time.Now().Add(ttl).UnixMilli(),
 		Role: "user",
 	}, secret)
 }

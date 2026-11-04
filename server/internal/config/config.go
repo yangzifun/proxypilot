@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // DefaultJWTSecret 是 Worker 端的历史兜底密钥。Go 服务**拒绝**使用它启动，
@@ -23,6 +24,10 @@ type Config struct {
 	JWTSecret string
 	// SuperAdmin 超级管理员用户名。
 	SuperAdmin string
+
+	// AdminTokenTTL 管理端登录有效期；PortalTokenTTL 用户中心登录有效期。
+	AdminTokenTTL  time.Duration
+	PortalTokenTTL time.Duration
 	// AdminPassword 首次启动时若 admin 仍是默认口令，用它重置（生产必配）。
 	AdminPassword string
 	// AutoMigrate 启动时自动执行 migrations/ 下未应用的 SQL。
@@ -87,6 +92,8 @@ func Load() (Config, error) {
 		MySQLDSN:            strings.TrimSpace(os.Getenv("PP_MYSQL_DSN")),
 		JWTSecret:           os.Getenv("PP_JWT_SECRET"),
 		SuperAdmin:          env("PP_SUPER_ADMIN", "admin"),
+		AdminTokenTTL:       envHours("PP_ADMIN_TOKEN_TTL_HOURS", 168),
+		PortalTokenTTL:      envHours("PP_PORTAL_TOKEN_TTL_HOURS", 720),
 		AdminPassword:       strings.TrimSpace(os.Getenv("PP_ADMIN_PASSWORD")),
 		AutoMigrate:         envBool("PP_AUTO_MIGRATE", true),
 		TurnstileSecret:     os.Getenv("PP_TURNSTILE_SECRET"),
@@ -172,4 +179,17 @@ func envBool(key string, fallback bool) bool {
 		return fallback
 	}
 	return b
+}
+
+// envHours 读取小时数环境变量并转为 Duration（<=0 时使用默认值）。
+func envHours(key string, defHours int) time.Duration {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return time.Duration(defHours) * time.Hour
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		return time.Duration(defHours) * time.Hour
+	}
+	return time.Duration(n) * time.Hour
 }
