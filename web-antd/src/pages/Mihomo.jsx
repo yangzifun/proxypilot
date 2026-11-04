@@ -580,19 +580,26 @@ export default function Mihomo() {
   };
 
   const tplColumns = [
-    { title: '模板名称', dataIndex: 'name', ellipsis: true },
-    { title: '备注', dataIndex: 'remark', ellipsis: true, render: (v) => v || '—' },
+    { title: '模板名称', dataIndex: 'name', width: 180, ellipsis: true },
+    { title: '备注', dataIndex: 'remark', width: 200, ellipsis: true, render: (v) => v || '—' },
     {
       title: '协议 / 端口',
       width: 220,
       render: (_, row) => {
-        let cfg = {};
-        try {
-          cfg = row.mode === 'server' ? JSON.parse(row.server_json || '{}') : {};
-        } catch (e) {
-          cfg = {};
-        }
-        const list = row.mode === 'server' ? cfg.protocols || [] : row.protocols || [];
+        const asArr = (v) => {
+          if (Array.isArray(v)) return v;
+          if (typeof v === 'string') {
+            try {
+              const parsed = JSON.parse(v);
+              return Array.isArray(parsed) ? parsed : [];
+            } catch (e) {
+              return [];
+            }
+          }
+          return [];
+        };
+        const cfg = (row.server_cfg && typeof row.server_cfg === 'object') ? row.server_cfg : {};
+        const list = row.mode === 'server' ? asArr(cfg.protocols) : asArr(row.protocols);
         if (!list.length) return <span className="pp-muted">全部</span>;
         return (
           <span>
@@ -770,6 +777,7 @@ export default function Mihomo() {
                 size="middle"
                 loading={loading}
                 dataSource={templates}
+                scroll={{ x: 1100 }}
                 columns={tplColumns}
                 pagination={{ pageSize: 10, hideOnSinglePage: true }}
               />

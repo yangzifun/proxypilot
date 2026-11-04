@@ -5,6 +5,7 @@ import {
   DeleteOutlined,
   EditOutlined,
   EyeOutlined,
+  LinkOutlined,
   PlusOutlined,
   ReloadOutlined,
   SearchOutlined,

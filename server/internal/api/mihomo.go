@@ -141,6 +141,16 @@ func (h *handlers) mihomoTemplatesList(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "查询 mihomo 模板失败")
 		return
 	}
+	for _, row := range rows {
+		row["protocols"] = mihomoParseProtocols(mapStr(row, "protocols", "[]"))
+		if raw := strings.TrimSpace(mapStr(row, "server_json", "")); raw != "" {
+			var cfg map[string]any
+			if json.Unmarshal([]byte(raw), &cfg) == nil {
+				row["server_cfg"] = cfg
+			}
+		}
+		delete(row, "server_json")
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"success": true, "data": rows})
 }
 
