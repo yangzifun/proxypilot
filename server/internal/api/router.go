@@ -194,6 +194,9 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	// 服务器管理
 	mux.HandleFunc("GET /api/servers", h.authed(authOpts{}, h.serversList))
 	mux.HandleFunc("GET /api/nodes/bindings", h.authed(authOpts{}, h.nodeBindingsList))
+	mux.HandleFunc("POST /api/nodes/{id}/apply", h.authed(authOpts{}, h.nodesApplyServer))
+	mux.HandleFunc("GET /api/nodes/check", h.authed(authOpts{}, h.nodesCheck))
+	mux.HandleFunc("POST /api/nodes/check/fix", h.authed(authOpts{}, h.nodesCheckFix))
 	mux.HandleFunc("GET /api/servers/status", h.authed(authOpts{}, h.serversStatus))
 	mux.HandleFunc("POST /api/servers", h.authed(authOpts{}, h.serverCreate))
 	mux.HandleFunc("GET /api/servers/{id}", h.authed(authOpts{}, h.serverGet))

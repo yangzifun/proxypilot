@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -194,4 +195,61 @@ systemctl is-active ` + service + ` pp-mihomo-stats
 "$BIN" -v | head -1
 echo "done"
 `
+}
+
+// queueMihomoApply 生成并排队下发任务（供统一节点绑定页复用）。
+func (h *handlers) queueMihomoApply(ctx context.Context, r *http.Request, id int64) (int64, string) {
+	var (
+		serverID   int64
+		uuidRaw    string
+		mode       string
+		serverRaw  string
+		portBase   int64
+		configPath string
+		service    string
+		reportTok  string
+	)
+	err := h.db.QueryRowContext(ctx,
+		`SELECT n.server_id, COALESCE(n.uuid_list,'[]'), COALESCE(n.port_base,0),
+		        COALESCE(n.config_path,'/etc/mihomo/config.yaml'), COALESCE(n.service,'mihomo'),
+		        COALESCE(t.mode,'subscription'), COALESCE(t.server_json,'{}'), COALESCE(n.report_token,'')
+		   FROM mihomo_nodes n LEFT JOIN mihomo_templates t ON t.id = n.template_id
+		  WHERE n.id = ? LIMIT 1`, id).Scan(&serverID, &uuidRaw, &portBase, &configPath, &service, &mode, &serverRaw, &reportTok)
+	if err != nil {
+		return 0, "绑定不存在"
+	}
+	if mode != "server" {
+		return 0, "该模板不是服务端模板"
+	}
+	cfg := parseMihomoServerConfig(serverRaw)
+	if portBase > 0 {
+		cfg.PortBase = int(portBase)
+	}
+	if strings.TrimSpace(cfg.Secret) == "" {
+		cfg.Secret = mihomoNewReportToken()
+	}
+	if strings.TrimSpace(reportTok) == "" {
+		reportTok = mihomoNewReportToken()
+		_, _ = h.db.ExecContext(ctx, "UPDATE mihomo_nodes SET report_token = ? WHERE id = ?", reportTok, id)
+	}
+	yamlText, _, msg := renderMihomoServer(cfg, mihomoParseUUIDs(uuidRaw))
+	if msg != "" {
+		return 0, msg
+	}
+	srv, err := h.fetchAgentServer(ctx, serverID)
+	if err != nil {
+		return 0, "服务器不存在"
+	}
+	base := strings.TrimRight(strings.TrimSpace(h.cfg.PublicBaseURL), "/")
+	if base == "" {
+		base = strings.TrimRight(requestOrigin(r), "/")
+	}
+	script := buildMihomoApplyScript(base, configPath, service, yamlText, id, reportTok, cfg.Secret)
+	taskID, _, qmsg := h.agentQueueTask(ctx, srv, "exec", 0, map[string]any{"command": script, "timeout": 300}, "admin")
+	if qmsg != "" {
+		return 0, qmsg
+	}
+	_, _ = h.db.ExecContext(ctx, "UPDATE mihomo_nodes SET last_apply_at = ? WHERE id = ?", nowMillis(), id)
+	h.mihomoAudit(r, "mihomo-apply", serverID, fmt.Sprintf("下发 mihomo 绑定 #%d（task %d）", id, taskID))
+	return taskID, ""
 }

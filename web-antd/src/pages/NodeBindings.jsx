@@ -12,6 +12,7 @@ export default function NodeBindings() {
   const [tpl, setTpl] = useState({ sb: [], mh: [], mp: [] });
   const [open, setOpen] = useState(false);
   const [editRow, setEditRow] = useState(null);
+  const [check, setCheck] = useState({ open: false, loading: false, data: [], fixing: false });
   const [form] = Form.useForm();
 
   const load = async () => {
@@ -48,6 +49,40 @@ export default function NodeBindings() {
 
   const options = rows.map((r) => ({ value: r.server_id, label: `${r.server_name}${r.host ? ` · ${r.host}` : ''}` }));
 
+  const applyNode = async (row) => {
+    try {
+      const res = await apiPost(`/api/nodes/${row.server_id}/apply`, {});
+      const results = res.results || [];
+      const failed = results.filter((x) => x.ok === false);
+      if (failed.length) message.warning(`下发完成，${failed.length} 个服务失败：${failed.map((f) => f.kind).join('、')}`);
+      else message.success('已下发：' + results.map((x) => x.kind).join('、'));
+      load();
+    } catch (e) {
+      message.error(e.message || '下发失败');
+    }
+  };
+  const runCheck = async () => {
+    setCheck((c) => ({ ...c, open: true, loading: true }));
+    try {
+      const res = await apiGet('/api/nodes/check');
+      setCheck({ open: true, loading: false, data: res.data || [], fixing: false });
+    } catch (e) {
+      setCheck({ open: true, loading: false, data: [], fixing: false });
+      message.error(e.message || '检查失败');
+    }
+  };
+  const fixCheck = async () => {
+    setCheck((c) => ({ ...c, fixing: true }));
+    try {
+      const res = await apiPost('/api/nodes/check/fix', {});
+      message.success(`已修复 ${res.fixed || 0} 项（并集补齐 sing-box / mihomo 授权）`);
+      await runCheck();
+      load();
+    } catch (e) {
+      message.error(e.message || '修复失败');
+      setCheck((c) => ({ ...c, fixing: false }));
+    }
+  };
   const submit = async () => {
     const v = await form.validateFields();
     const tasks = [];
@@ -141,17 +176,21 @@ export default function NodeBindings() {
       title: '操作',
       width: 110,
       render: (_, r) => (
-        <Button
-          size="small"
-          type="link"
-          onClick={() => {
-            setEditRow(r);
-            form.setFieldsValue({ server_id: r.server_id, name: r.node_name, domain: r.domain || '', sb_domain: r.domain || '', mh_domain: r.domain || '', mp_domain: r.domain || '', sb_tpl: r.sb_tpl || undefined, mh_tpl: r.mh_tpl || undefined, mp_tpl: r.mp_tpl || undefined });
-            setOpen(true);
-          }}
-        >
-          绑定服务
-        </Button>
+        <Space size={0}>
+          <Button size="small" type="link" onClick={() => applyNode(r)}>下发</Button>
+          <Button
+            size="small"
+            type="link"
+            onClick={() => {
+              const row = r;
+              setEditRow(row);
+              form.setFieldsValue({ server_id: row.server_id, name: row.node_name, domain: row.domain || '', sb_domain: row.domain || '', mh_domain: row.domain || '', mp_domain: row.domain || '', sb_tpl: row.sb_tpl || undefined, mh_tpl: row.mh_tpl || undefined, mp_tpl: row.mp_tpl || undefined });
+              setOpen(true);
+            }}
+          >
+            编辑
+          </Button>
+        </Space>
       ),
     },
   ];
@@ -161,12 +200,46 @@ export default function NodeBindings() {
       title="节点绑定"
       extra={
         <Space>
+          <Button onClick={runCheck}>UUID 一致性检查</Button>
           <Button icon={<ReloadOutlined />} onClick={load} loading={loading}>刷新</Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={() => { setEditRow(null); form.resetFields(); setOpen(true); }}>新建绑定</Button>
         </Space>
       }
     >
       <Table rowKey="server_id" size="middle" loading={loading} dataSource={rows} columns={columns} scroll={{ x: 1550 }} pagination={{ pageSize: 10, hideOnSinglePage: true }} />
+
+      <Modal
+        title="UUID 一致性检查"
+        open={check.open}
+        onCancel={() => setCheck((c) => ({ ...c, open: false }))}
+        footer={
+          <Space>
+            <Button type="primary" loading={check.fixing} onClick={fixCheck} disabled={!check.data.length}>
+              自动修复
+            </Button>
+            <Button onClick={() => setCheck((c) => ({ ...c, open: false }))}>关闭</Button>
+          </Space>
+        }
+        width={780}
+      >
+        <Table
+          rowKey="server_id"
+          size="small"
+          loading={check.loading}
+          dataSource={check.data}
+          pagination={false}
+          locale={{ emptyText: '未发现不一致' }}
+          columns={[
+            { title: '服务器', dataIndex: 'server_name', width: 160 },
+            { title: 'sing-box 缺', dataIndex: 'missing_sb', render: (v) => (v || []).length },
+            { title: 'mihomo 缺', dataIndex: 'missing_mh', render: (v) => (v || []).length },
+            { title: 'MTProto 缺', dataIndex: 'missing_mp', render: (v) => (v || []).length },
+          ]}
+        />
+        <div className="pp-muted" style={{ fontSize: 12, marginTop: 8 }}>
+          MTProto 缺失不会自动创建客户端，请在「用户管理 → 授权节点」中重新勾选该节点。
+        </div>
+      </Modal>
 
       <Modal title={editRow ? '编辑节点服务' : '绑定节点服务'} open={open} onCancel={() => setOpen(false)} onOk={submit} width={560} destroyOnClose>
         <Form form={form} layout="vertical">
