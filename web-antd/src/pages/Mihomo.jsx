@@ -10,6 +10,7 @@ import {
   PlusOutlined,
   ReloadOutlined,
 } from '@ant-design/icons';
+import { ReadOutlined, FileAddOutlined } from '@ant-design/icons';
 import {
   App as AntdApp,
   Button,
@@ -746,27 +747,7 @@ export default function Mihomo({ templatesOnly }) {
 
   return (
     <div>
-    <PageCard
-      title="协议模板（mihomo）"
-      subtitle="mihomo（Clash.Meta）服务端模板管理，按服务器生成 listeners 配置"
-      extra={
-        <Space>
-          <Button onClick={() => setHelpOpen(true)}>协议说明</Button>
-          <Button icon={<ReloadOutlined />} onClick={loadAll} loading={loading}>
-            刷新
-          </Button>
-          {tab === 'templates' ? (
-            <Button type="primary" icon={<PlusOutlined />} onClick={openCreateTpl}>
-              新建模板
-            </Button>
-          ) : (
-            <Button type="primary" icon={<PlusOutlined />} onClick={openCreateBindBlank}>
-              新建绑定
-            </Button>
-          )}
-        </Space>
-      }
-    >
+    <div>
       <Tabs
         activeKey={tab}
           tabBarStyle={templatesOnly ? { display: 'none' } : undefined}
@@ -776,15 +757,34 @@ export default function Mihomo({ templatesOnly }) {
             key: 'templates',
             label: `协议模板（${templates.length}）`,
             children: (
-              <Table
-                rowKey="id"
-                size="middle"
-                loading={loading}
-                dataSource={templates}
-                scroll={{ x: 1200 }}
-                columns={tplColumns}
-                pagination={{ pageSize: 10, hideOnSinglePage: true }}
-              />
+              <PageCard
+                title={<span className="pp-section-title">协议模板（mihomo）</span>}
+                extra={
+                  <Space>
+                    <Button icon={<ReadOutlined />} onClick={() => setHelpOpen(true)}>
+                      协议说明
+                    </Button>
+                    <Button icon={<ReloadOutlined />} onClick={loadAll} loading={loading}>
+                      刷新
+                    </Button>
+                    <Button type="primary" icon={<FileAddOutlined />} onClick={openCreateTpl}>
+                      新建模板
+                    </Button>
+                  </Space>
+                }
+                bodyStyle={{ padding: 0 }}
+              >
+                <Table
+                  className="pp-table"
+                  rowKey="id"
+                  size="medium"
+                  loading={loading}
+                  dataSource={templates}
+                  columns={tplColumns}
+                  scroll={{ x: 1180 }}
+                  pagination={{ pageSize: 10, showTotal: (n) => `共 ${n} 个模板` }}
+                />
+              </PageCard>
             ),
           },
           {
@@ -1150,7 +1150,7 @@ export default function Mihomo({ templatesOnly }) {
           {previewLoading ? '生成中…' : preview?.yaml || ''}
         </pre>
       </Modal>
-    </PageCard>
+    </div>
       <Modal
         title="从配置导入"
         open={importOpen}
