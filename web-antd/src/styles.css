@@ -1352,6 +1352,10 @@ body {
   }
   .pp-auth-points,
   .pp-auth-brandfoot { display: none; }
+  /* 移动端精简：隐藏欢迎语与 1-2-3 步骤，直接进入表单 */
+  .pp-auth-title,
+  .pp-auth-desc { display: none; }
+  .pp-auth-steps { display: none !important; }
 
   /* 白色内容面板：盖住 Hero 底部一点，形成 App 的 sheet 感 */
   .pp-auth-form {
