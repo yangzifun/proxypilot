@@ -334,6 +334,19 @@ export default function Mihomo({ templatesOnly }) {
       message.error(e.message || '读取模板失败');
     }
   };
+  const updateListener = (index, field, value) => {
+    try {
+      const parsed = JSON.parse(tplJson || '{}');
+      const list = parsed.listeners || [];
+      if (!list[index]) return;
+      list[index][field] = value;
+      parsed.listeners = list;
+      setTplJson(JSON.stringify(parsed, null, 2));
+      setTplParsed(list.map((l, i) => ({ key: i, name: l.name, type: l.type, port: l.port, listen: l.listen, note: '' })));
+    } catch (e) {
+      /* ignore */
+    }
+  };
   const saveTpl = async () => {
     const v = await tplForm.validateFields();
     let parsedJson = null;
@@ -936,7 +949,7 @@ export default function Mihomo({ templatesOnly }) {
                   const parsed = JSON.parse(tplJson || '{}');
                   const list = parsed.listeners || [];
                   if (!Array.isArray(list) || !list.length) throw new Error('缺少 listeners 数组');
-                  setTplParsed(list.map((l) => ({
+                  setTplParsed(list.map((l, i) => ({ key: i,
                     name: l.name || '-',
                     type: l.type || '-',
                     port: l.port || 0,
@@ -961,16 +974,47 @@ export default function Mihomo({ templatesOnly }) {
           {tplParsed ? (
             <Table
               size="small"
-              rowKey="name"
+              rowKey="key"
               pagination={false}
               style={{ marginBottom: 10 }}
               dataSource={tplParsed}
               columns={[
-                { title: '名称', dataIndex: 'name', width: 150 },
-                { title: '类型', dataIndex: 'type', width: 120 },
-                { title: '端口', dataIndex: 'port', width: 90 },
-                { title: '监听', dataIndex: 'listen', width: 100 },
+                { title: '名称', width: 160, render: (_, row) => <Input size="small" value={row.name} onChange={(e) => updateListener(row.key, 'name', e.target.value)} /> },
+                { title: '类型', width: 140, render: (_, row) => (
+                  <Select
+                    size="small"
+                    value={row.type}
+                    style={{ width: '100%' }}
+                    options={['vless','vmess','trojan','anytls','hysteria2','tuic','shadowsocks','socks','http'].map((v) => ({ value: v, label: v }))}
+                    onChange={(v) => updateListener(row.key, 'type', v)}
+                  />
+                ) },
+                { title: '端口', width: 100, render: (_, row) => <InputNumber size="small" min={1} max={65535} value={row.port} style={{ width: '100%' }} onChange={(v) => updateListener(row.key, 'port', Number(v) || 0)} /> },
+                { title: '监听', width: 110, render: (_, row) => <Input size="small" value={row.listen} onChange={(e) => updateListener(row.key, 'listen', e.target.value)} /> },
                 { title: '说明', dataIndex: 'note' },
+                {
+                  title: '操作',
+                  width: 80,
+                  render: (_, row) => (
+                    <Button
+                      size="small"
+                      type="link"
+                      danger
+                      onClick={() => {
+                        try {
+                          const parsed = JSON.parse(tplJson || '{}');
+                          parsed.listeners = (parsed.listeners || []).filter((_, i) => i !== row.key);
+                          setTplJson(JSON.stringify(parsed, null, 2));
+                          setTplParsed(parsed.listeners.map((l, i) => ({ key: i, name: l.name, type: l.type, port: l.port, listen: l.listen, note: '' })));
+                        } catch (e) {
+                          message.error('删除失败');
+                        }
+                      }}
+                    >
+                      删除
+                    </Button>
+                  ),
+                },
               ]}
             />
           ) : null}
