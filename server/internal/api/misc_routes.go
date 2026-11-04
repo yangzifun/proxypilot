@@ -10,7 +10,7 @@ import (
 // GET /api/servers/monitor 与 /api/servers/services（别名）
 // 返回结构与 Worker 对齐：{ success, servers, services, watch, matrix, summary }
 func (h *handlers) serversMonitor(w http.ResponseWriter, r *http.Request) {
-	h.fillServerGeoAsync(context.Background())
+	h.geoRefreshAllThrottled(context.Background())
 
 	rows, err := queryRowsAsMaps(r.Context(), h.db, `SELECT * FROM servers ORDER BY id ASC`)
 	if err != nil {

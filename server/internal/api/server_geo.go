@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -74,7 +75,7 @@ func (h *handlers) fillServerGeoAsync(ctx context.Context) {
 		geoLastRun = time.Now()
 
 		rows, err := queryRowsAsMaps(ctx, h.db,
-			`SELECT id, COALESCE(NULLIF(last_ip4,''), NULLIF(last_ip,'')) AS ip
+			`SELECT id, COALESCE(NULLIF(last_ip4,''), NULLIF(last_ip,''), NULLIF(host,'')) AS ip
 			   FROM servers
 			  WHERE (ip_lat IS NULL OR COALESCE(ip_country,'') NOT REGEXP '^[A-Za-z]{2}$')
 			    AND COALESCE(NULLIF(last_ip4,''), NULLIF(last_ip,'')) <> ''
@@ -97,4 +98,78 @@ func (h *handlers) fillServerGeoAsync(ctx context.Context) {
 				country, country, region, g.Lat, g.Lon, mapInt(row, "id", 0))
 		}
 	}()
+}
+
+var geoAllLast time.Time
+
+// geoRefreshAllThrottled 定时刷新全部服务器归属地（默认 10 分钟一次）。
+func (h *handlers) geoRefreshAllThrottled(ctx context.Context) {
+	if time.Since(geoAllLast) < 2*time.Minute {
+		return
+	}
+	geoAllLast = time.Now()
+	h.geoRefreshAll(ctx)
+}
+
+// geoRefreshAll 按当前公网 IP 重新查询并更新归属地；IP 变化时国旗/坐标随之更新。
+func (h *handlers) geoRefreshAll(ctx context.Context) {
+	rows, err := queryRowsAsMaps(ctx, h.db,
+		`SELECT id, COALESCE(NULLIF(last_ip4,''), NULLIF(last_ip,''), NULLIF(host,'')) AS ip,
+		        COALESCE(ip_country,'') AS ip_country, COALESCE(ip_region,'') AS ip_region,
+		        ip_lat, ip_lon
+		   FROM servers
+		  WHERE COALESCE(NULLIF(last_ip4,''), NULLIF(last_ip,''), NULLIF(host,'')) <> ''`)
+	if err != nil {
+		return
+	}
+	changed := 0
+	for _, row := range rows {
+		if h.applyGeoRow(ctx, row) {
+			changed++
+		}
+	}
+	if changed > 0 {
+		h.log.Info("server geo refreshed", "total", len(rows), "changed", changed)
+	}
+	_ = changed
+}
+
+// geoRefreshServer 只刷新一台服务器（新增服务器后调用）。
+func (h *handlers) geoRefreshServer(ctx context.Context, id int64) {
+	rows, err := queryRowsAsMaps(ctx, h.db,
+		`SELECT id, COALESCE(NULLIF(last_ip4,''), NULLIF(last_ip,''), NULLIF(host,'')) AS ip,
+		        COALESCE(ip_country,'') AS ip_country, COALESCE(ip_region,'') AS ip_region,
+		        ip_lat, ip_lon
+		   FROM servers WHERE id = ? LIMIT 1`, id)
+	if err != nil || len(rows) == 0 {
+		return
+	}
+	h.applyGeoRow(ctx, rows[0])
+}
+
+func (h *handlers) applyGeoRow(ctx context.Context, row map[string]any) bool {
+	ip := mapStr(row, "ip", "")
+	if ip == "" {
+		return false
+	}
+	g, ok := h.geoLookupIP(ctx, ip)
+	if !ok {
+		return false
+	}
+	country := strings.ToUpper(strings.TrimSpace(g.CountryCode))
+	if len(country) != 2 {
+		country = firstNonEmpty(g.Country, "")
+	}
+	region := strings.TrimSpace(strings.Join([]string{g.Region, g.City}, " "))
+	oldCountry := mapStr(row, "ip_country", "")
+	oldRegion := mapStr(row, "ip_region", "")
+	oldLat := jsonNum(row["ip_lat"])
+	oldLon := jsonNum(row["ip_lon"])
+	if oldCountry == country && oldRegion == region && math.Abs(oldLat-g.Lat) < 0.0001 && math.Abs(oldLon-g.Lon) < 0.0001 {
+		return false
+	}
+	_, _ = h.db.ExecContext(ctx,
+		`UPDATE servers SET ip_country = IF(? <> '', ?, ip_country), ip_region = ?, ip_lat = ?, ip_lon = ? WHERE id = ?`,
+		country, country, region, g.Lat, g.Lon, mapInt(row, "id", 0))
+	return true
 }

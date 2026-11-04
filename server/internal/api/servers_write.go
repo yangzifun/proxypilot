@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"net/http"
@@ -143,6 +144,9 @@ func (h *handlers) serverCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, _ := res.LastInsertId()
+	if id > 0 {
+		go h.geoRefreshServer(context.Background(), id)
+	}
 	row, err := h.fetchServerRow(r.Context(), id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "读取服务器失败")

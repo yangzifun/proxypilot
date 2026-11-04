@@ -50,6 +50,7 @@ func StartCron(ctx context.Context, db *sql.DB, log *slog.Logger) {
 
 func (h *handlers) runCronOnce(ctx context.Context) {
 	now := time.Now().UnixMilli()
+	h.geoRefreshAllThrottled(ctx)
 	h.cronOffline(ctx, now)
 	h.cronTaskMaintenance(ctx, now)
 	h.cronResumeJobs(ctx, now)
