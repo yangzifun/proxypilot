@@ -160,6 +160,7 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("POST /api/mihomo/nodes/bulk", h.authed(authOpts{}, h.mihomoNodesBulk))
 	mux.HandleFunc("GET /api/mihomo/export", h.authed(authOpts{}, h.mihomoExport))
 	mux.HandleFunc("GET /api/mihomo/check", h.authed(authOpts{}, h.mihomoCheck))
+	mux.HandleFunc("POST /api/mihomo/check/fix", h.authed(authOpts{}, h.mihomoCheckFix))
 	mux.HandleFunc("GET /api/mihomo/stats", h.authed(authOpts{}, h.mihomoStats))
 	mux.HandleFunc("POST /api/mihomo/nodes", h.authed(authOpts{}, h.mihomoNodeCreate))
 	mux.HandleFunc("PUT /api/mihomo/nodes/{id}", h.authed(authOpts{}, h.mihomoNodeUpdate))

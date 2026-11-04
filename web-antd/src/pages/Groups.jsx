@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ApartmentOutlined,
   CloudUploadOutlined,
@@ -187,11 +187,20 @@ export default function Groups() {
     },
     {
       title: '操作',
-      width: 118,
+      width: 150,
       fixed: 'right',
       render: (_, row) => (
         <Space size={0}>
           <IconAction title="详情" icon={<EyeOutlined />} onClick={() => setDetail(row.uuid)} />
+          <IconAction
+            title="复制 Mihomo 订阅"
+            icon={<LinkOutlined />}
+            onClick={() => {
+              const url = `${window.location.origin}/sub/mihomo/${row.uuid}`;
+              navigator.clipboard?.writeText(url);
+              message.success('已复制 Mihomo 订阅链接');
+            }}
+          />
           <IconAction title="编辑" icon={<EditOutlined />} onClick={() => openEdit(row)} />
           <IconAction title="删除" icon={<DeleteOutlined />} danger onClick={() => remove(row)} />
         </Space>

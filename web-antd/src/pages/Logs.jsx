@@ -210,8 +210,18 @@ function LogSummary() {
 }
 
 /* ---------------- 下发 / 执行日志 ---------------- */
+const LOG_MODULES = [
+  { value: 'all', label: '全部动作' },
+  { value: 'mihomo', label: 'mihomo' },
+  { value: 'singbox', label: 'singbox' },
+  { value: 'uuid-verify', label: 'UUID 巡检' },
+  { value: 'cloudflared', label: 'cloudflared' },
+  { value: 'agent', label: 'agent' },
+];
+
 function PushLogs() {
   const [limit, setLimit] = useState(50);
+  const [mod, setMod] = useState('all');
   const [state, setState] = useState({ data: [], loading: false, error: null });
   const [detail, setDetail] = useState(null);
 
@@ -288,6 +298,7 @@ function PushLogs() {
       title={<span className="pp-section-title">节点下发 / 命令执行日志</span>}
       extra={
         <Space>
+          <Select value={mod} onChange={setMod} options={LOG_MODULES} style={{ width: 140 }} />
           <Segmented
             size="small"
             value={limit}
@@ -315,7 +326,7 @@ function PushLogs() {
         rowKey="id"
         size="medium"
         loading={state.loading}
-        dataSource={state.data}
+        dataSource={state.data.filter((x) => mod === 'all' || String(x.action || '').startsWith(mod))}
         columns={columns}
         scroll={{ x: 1240 }}
         pagination={{ pageSize: 20, showTotal: (t) => `共 ${t} 条` }}

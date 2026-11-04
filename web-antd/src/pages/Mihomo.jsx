@@ -348,6 +348,17 @@ export default function Mihomo() {
       message.error(e.message || '导出失败');
     }
   };
+  const autoFix = async () => {
+    try {
+      const res = await apiPost('/api/mihomo/check/fix', {});
+      const fixed = (res.data && res.data.fixed) || 0;
+      message.success(fixed ? `已修复 ${fixed} 个绑定` : '没有需要修复的项');
+      runCheck();
+      loadBindings();
+    } catch (e) {
+      message.error(e.message || '自动修复失败');
+    }
+  };
   const runCheck = async () => {
     setCheckState({ open: true, loading: true, data: null });
     try {
@@ -965,7 +976,14 @@ export default function Mihomo() {
         title="一致性检查"
         open={checkState.open}
         onCancel={() => setCheckState({ open: false, loading: false, data: null })}
-        footer={<Button onClick={() => setCheckState({ open: false, loading: false, data: null })}>关闭</Button>}
+        footer={
+          <Space>
+            <Button type="primary" onClick={autoFix}>
+              自动修复越权 UUID
+            </Button>
+            <Button onClick={() => setCheckState({ open: false, loading: false, data: null })}>关闭</Button>
+          </Space>
+        }
         width={760}
       >
         {checkState.data ? (
