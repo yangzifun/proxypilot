@@ -44,6 +44,10 @@ type Config struct {
 	SMTPUser string
 	SMTPPass string
 	MailFrom string
+
+	// LoginAlertWebhook / LoginAlertEmail 登录锁定告警出口（可选）。
+	LoginAlertWebhook string
+	LoginAlertEmail   string
 	// MailProvider 发信通道：auto / smtp / cloudflare（默认 auto）。
 	MailProvider string
 	// Cloudflare Email Sending（REST API，不依赖 Workers 绑定）。
@@ -104,6 +108,8 @@ func Load() (Config, error) {
 		SMTPUser:            os.Getenv("PP_SMTP_USER"),
 		SMTPPass:            os.Getenv("PP_SMTP_PASS"),
 		MailFrom:            strings.TrimSpace(os.Getenv("PP_MAIL_FROM")),
+		LoginAlertWebhook:   strings.TrimSpace(os.Getenv("PP_LOGIN_ALERT_WEBHOOK")),
+		LoginAlertEmail:     strings.TrimSpace(os.Getenv("PP_LOGIN_ALERT_EMAIL")),
 		MailProvider:        firstNonEmpty(os.Getenv("PP_MAIL_PROVIDER"), "auto"),
 		CloudflareAPIToken:  firstNonEmpty(os.Getenv("PP_CLOUDFLARE_API_TOKEN"), os.Getenv("CLOUDFLARE_API_TOKEN")),
 		CloudflareAccountID: firstNonEmpty(os.Getenv("PP_CLOUDFLARE_ACCOUNT_ID"), os.Getenv("CLOUDFLARE_ACCOUNT_ID")),

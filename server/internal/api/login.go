@@ -43,6 +43,9 @@ func (h *handlers) login(w http.ResponseWriter, r *http.Request) {
 
 	key := loginRateKey(r, req.Username)
 	if wait, blocked := loginLimiter.Blocked(key); blocked {
+		if wait == loginBlockFor { // 本轮刚触发锁定，推送一次告警
+			h.alertLoginLockout(key)
+		}
 		w.Header().Set("Retry-After", retryAfterSeconds(wait))
 		writeError(w, http.StatusTooManyRequests, "登录尝试过于频繁，请稍后再试")
 		return
