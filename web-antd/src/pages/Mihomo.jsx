@@ -152,8 +152,6 @@ export default function Mihomo() {
   const [selectedIds, setSelectedIds] = useState([]);
   const [checkState, setCheckState] = useState({ open: false, loading: false, data: null });
   const [helpOpen, setHelpOpen] = useState(false);
-  const [reports, setReports] = useState([]);
-  const [reportsLoading, setReportsLoading] = useState(false);
   const [preview, setPreview] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
@@ -164,17 +162,6 @@ export default function Mihomo() {
   const loadBindings = async () => {
     const res = await apiGet('/api/mihomo/nodes');
     setBindings(res.data || []);
-  };
-  const loadReports = async () => {
-    setReportsLoading(true);
-    try {
-      const res = await apiGet('/api/mihomo/reports');
-      setReports(res.data || []);
-    } catch (e) {
-      setReports([]);
-    } finally {
-      setReportsLoading(false);
-    }
   };
   const loadStats = async () => {
     try {
@@ -187,7 +174,7 @@ export default function Mihomo() {
   const loadAll = async () => {
     setLoading(true);
     try {
-      await Promise.all([loadTemplates(), loadBindings(), loadStats(), loadReports()]);
+      await Promise.all([loadTemplates(), loadBindings(), loadStats()]);
     } catch (e) {
       message.error(e.message || '加载失败');
     } finally {
@@ -466,7 +453,6 @@ export default function Mihomo() {
   const tplColumns = [
     { title: '模板名称', dataIndex: 'name', ellipsis: true },
     { title: '备注', dataIndex: 'remark', ellipsis: true, render: (v) => v || '—' },
-    { title: '内容长度', dataIndex: 'content_len', width: 100, render: (v) => `${v || 0} 字符` },
     {
       title: '引用',
       dataIndex: 'bind_count',
@@ -476,8 +462,13 @@ export default function Mihomo() {
     {
       title: '状态',
       dataIndex: 'enabled',
-      width: 80,
-      render: (v, row) => <Switch size="small" checked={!!v} onChange={(c) => toggleTemplate(row, c)} />,
+      width: 130,
+      render: (v, row) => (
+        <Space size={4}>
+          <Switch size="small" checked={!!v} onChange={(c) => toggleTemplate(row, c)} />
+          {!v ? <Tag color="red">订阅跳过</Tag> : null}
+        </Space>
+      ),
     },
     { title: '更新时间', dataIndex: 'updated_at', width: 170, render: (v) => fmtTime(v) },
     {
@@ -586,17 +577,14 @@ export default function Mihomo() {
   return (
     <div>
       <Row gutter={[14, 14]} style={{ marginBottom: 14 }}>
-        <Col xs={12} md={6}>
-          <StatCard label="模板总数" value={stats.templates || 0} hint={`启用 ${stats.templates_enabled || 0}`} accent="#10b981" />
+        <Col xs={12} md={8}>
+          <StatCard label="模板总数" value={stats.templates || 0} hint={`启用 ${stats.templates_enabled || 0} · 默认配置${templates.some((x) => x.name === '默认配置') ? '已就绪' : '缺失'}`} accent="#10b981" />
         </Col>
-        <Col xs={12} md={6}>
+        <Col xs={12} md={8}>
           <StatCard label="节点绑定" value={stats.bindings || 0} hint={`启用 ${stats.bindings_enabled || 0}`} accent="#6366f1" />
         </Col>
-        <Col xs={12} md={6}>
+        <Col xs={12} md={8}>
           <StatCard label="覆盖服务器" value={stats.servers || 0} hint="已绑定 mihomo 的服务器" accent="#0ea5e9" />
-        </Col>
-        <Col xs={12} md={6}>
-          <StatCard label="默认配置" value={templates.some((x) => x.name === '默认配置') ? '已就绪' : '缺失'} hint="开箱即用模板" accent="#f59e0b" />
         </Col>
       </Row>
     <PageCard
@@ -637,38 +625,6 @@ export default function Mihomo() {
                 columns={tplColumns}
                 pagination={{ pageSize: 10, hideOnSinglePage: true }}
               />
-            ),
-          },
-          {
-            key: 'reports',
-            label: `客户端上报（${reports.length}）`,
-            children: (
-              <>
-                <Space wrap style={{ marginBottom: 12 }}>
-                  <Button size="small" icon={<ReloadOutlined />} loading={reportsLoading} onClick={loadReports}>
-                    刷新上报
-                  </Button>
-                  <span className="pp-muted" style={{ fontSize: 12 }}>
-                    客户端把 external-controller 的累计流量 POST 到 /api/mihomo/report?token=UUID（详见「配置说明」）
-                  </span>
-                </Space>
-                <Table
-                  rowKey="uuid"
-                  size="middle"
-                  loading={reportsLoading}
-                  dataSource={reports}
-                  pagination={{ pageSize: 10, hideOnSinglePage: true }}
-                  columns={[
-                    { title: 'UUID', dataIndex: 'uuid', width: 150, render: (v) => <span className="pp-mono">{String(v).slice(0, 8)}…</span> },
-                    { title: '归属', dataIndex: 'remark', ellipsis: true, render: (v, r) => v || r.owner || '—' },
-                    { title: '上传', dataIndex: 'up_total', width: 120, render: (v) => fmtBytes(v || 0) },
-                    { title: '下载', dataIndex: 'down_total', width: 120, render: (v) => fmtBytes(v || 0) },
-                    { title: '连接数', dataIndex: 'connections', width: 100 },
-                    { title: '来源 IP', dataIndex: 'ip', width: 140, ellipsis: true },
-                    { title: '最近上报', dataIndex: 'updated_at', width: 160, render: (v) => fmtTime(v) },
-                  ]}
-                />
-              </>
             ),
           },
           {
@@ -1001,12 +957,6 @@ export default function Mihomo() {
           <ul style={{ paddingLeft: 18 }}>
             <li>SS2022 / AnyTLS / Hysteria2 / VLESS-REALITY / VLESS-WS / VLESS-WS-CDN / TUIC</li>
             <li>订阅地址：<code>/sub/mihomo/&lt;uuid&gt;</code>，可直接导入 Clash Verge、Mihomo Party、Stash</li>
-          </ul>
-          <p><b>客户端流量上报（可选）</b></p>
-          <ul style={{ paddingLeft: 18 }}>
-            <li>在本机脚本里读取 mihomo 的 <code>/traffic</code> 与 <code>/connections</code>，定期 POST 累计值</li>
-            <li><code>{`curl -X POST 'https://你的面板/api/mihomo/report?token=UUID' -H 'Content-Type: application/json' -d '{"up_total":123,"down_total":456,"connections":3}'`}</code></li>
-            <li>上报后可在「客户端上报」页签查看上传/下载/连接数</li>
           </ul>
         </div>
       </Modal>

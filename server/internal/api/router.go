@@ -72,7 +72,6 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /batch-configs/{uuid}", h.batchSubscription)
 	mux.HandleFunc("GET /clash-config", h.clashConfig)
 	mux.HandleFunc("GET /sub/mihomo/{uuid}", h.mihomoSubscribe)
-	mux.HandleFunc("POST /api/mihomo/report", h.mihomoReport)
 
 	// 订阅分组（UUID 元信息）
 	mux.HandleFunc("GET /api/uuids", h.authed(authOpts{}, h.uuidsList))
@@ -162,7 +161,6 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /api/mihomo/export", h.authed(authOpts{}, h.mihomoExport))
 	mux.HandleFunc("GET /api/mihomo/check", h.authed(authOpts{}, h.mihomoCheck))
 	mux.HandleFunc("GET /api/mihomo/stats", h.authed(authOpts{}, h.mihomoStats))
-	mux.HandleFunc("GET /api/mihomo/reports", h.authed(authOpts{}, h.mihomoReportsList))
 	mux.HandleFunc("POST /api/mihomo/nodes", h.authed(authOpts{}, h.mihomoNodeCreate))
 	mux.HandleFunc("PUT /api/mihomo/nodes/{id}", h.authed(authOpts{}, h.mihomoNodeUpdate))
 	mux.HandleFunc("DELETE /api/mihomo/nodes/{id}", h.authed(authOpts{}, h.mihomoNodeDelete))
