@@ -207,7 +207,7 @@ export default function NodeBindings() {
             onClick={() => {
               const row = r;
               setEditRow(row);
-              form.setFieldsValue({ server_id: row.server_id, name: row.node_name, domain: row.domain || '', sb_domain: row.domain || '', mh_domain: row.domain || '', mp_domain: row.domain || '', sb_tpl: row.sb_tpl || undefined, mh_tpl: row.mh_tpl || undefined, mp_tpl: row.mp_tpl || undefined });
+              form.setFieldsValue({ server_id: row.server_id, name: row.node_name, domain: row.domain || '', sb_domain: row.domain || '', sb_cdn: row.sb_cdn || '', mh_domain: row.domain || '', mp_domain: row.domain || '', sb_tpl: row.sb_tpl || undefined, mh_tpl: row.mh_tpl || undefined, mp_tpl: row.mp_tpl || undefined });
               setOpen(true);
             }}
           >

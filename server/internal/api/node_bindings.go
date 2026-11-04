@@ -12,7 +12,7 @@ func (h *handlers) nodeBindingsList(w http.ResponseWriter, r *http.Request) {
 		        COALESCE(s.last_status,'') AS last_status,
 		        sb.id AS sb_id, sb.name AS sb_name, sb.template_id AS sb_tpl, COALESCE(st.name,'') AS sb_tpl_name,
 		        COALESCE(sb.uuid_list,'[]') AS sb_uuid_list, sb.enabled AS sb_enabled,
-		        COALESCE(sb.domain,'') AS sb_domain, COALESCE(sb.last_apply_at,0) AS sb_last_apply,
+		        COALESCE(sb.domain,'') AS sb_domain, COALESCE(sb.cdn_domain,'') AS sb_cdn, COALESCE(sb.last_apply_at,0) AS sb_last_apply,
 		        mh.id AS mh_id, mh.name AS mh_name, mh.template_id AS mh_tpl, COALESCE(mt.name,'') AS mh_tpl_name,
 		        COALESCE(mt.mode,'subscription') AS mh_mode, COALESCE(mh.uuid_list,'[]') AS mh_uuid_list, mh.enabled AS mh_enabled,
 		        COALESCE(mh.domain,'') AS mh_domain, COALESCE(mh.last_apply_at,0) AS mh_last_apply,
