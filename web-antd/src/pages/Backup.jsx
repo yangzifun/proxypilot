@@ -36,7 +36,10 @@ export default function Backup() {
   const exportBackup = async () => {
     setExporting(true);
     try {
-      const qs = `bucket=${includeBucket ? '1' : '0'}&agent=${includeAgent ? '1' : '0'}&logs=${includeLogs ? '1' : '0'}`;
+      const pw = window.prompt('备份密码（留空 = 不加密；加密后导入时必须输入同一密码）', '');
+      if (pw === null) return;
+      let qs = `bucket=${includeBucket ? '1' : '0'}&agent=${includeAgent ? '1' : '0'}&logs=${includeLogs ? '1' : '0'}`;
+      if (pw.trim()) qs += '&password=' + encodeURIComponent(pw.trim());
       const res = await fetch(`/api/backup/export?${qs}`, {
         headers: { Authorization: 'Bearer ' + getToken() },
       });
@@ -78,8 +81,11 @@ export default function Backup() {
     setImporting(true);
     setResult(null);
     try {
+      const pw = window.prompt('若为加密备份，请输入备份密码（未加密留空）', '');
+      if (pw === null) return;
       const fd = new FormData();
       fd.append('file', file);
+      if (pw.trim()) fd.append('password', pw.trim());
       const res = await fetch('/api/backup/import', {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + getToken() },

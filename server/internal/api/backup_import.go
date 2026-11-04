@@ -45,7 +45,45 @@ func (h *handlers) backupImport(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "读取备份文件失败")
 		return
 	}
-	zr, err := zip.OpenReader(tmpName)
+	zipName := tmpName
+	if head := make([]byte, len(backupMagic)); func() bool {
+		f, ferr := os.Open(tmpName)
+		if ferr != nil {
+			return false
+		}
+		defer f.Close()
+		if _, rerr := io.ReadFull(f, head); rerr != nil {
+			return false
+		}
+		return string(head) == backupMagic
+	}() {
+		pw := strings.TrimSpace(r.FormValue("password"))
+		if pw == "" {
+			writeError(w, http.StatusBadRequest, "备份已加密，请输入备份口令")
+			return
+		}
+		dec, derr := os.CreateTemp("", "proxypilot-import-dec-*.zip")
+		if derr != nil {
+			writeError(w, http.StatusInternalServerError, "创建临时文件失败")
+			return
+		}
+		decName := dec.Name()
+		defer func() { dec.Close(); os.Remove(decName) }()
+		srcF, oerr := os.Open(tmpName)
+		if oerr != nil {
+			writeError(w, http.StatusInternalServerError, "读取备份失败")
+			return
+		}
+		derr = backupDecryptStream(srcF, dec, pw)
+		srcF.Close()
+		dec.Close()
+		if derr != nil {
+			writeError(w, http.StatusBadRequest, derr.Error())
+			return
+		}
+		zipName = decName
+	}
+	zr, err := zip.OpenReader(zipName)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "不是有效的 ZIP 备份")
 		return

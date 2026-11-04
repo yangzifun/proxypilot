@@ -27,13 +27,30 @@ func (h *handlers) backupExport(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now().UTC()
 	filename := "proxypilot-backup-" + strings.TrimPrefix(Version, "V") + "-" + now.Format("20060102-150405") + ".zip"
-	w.Header().Set("Content-Type", "application/zip")
+	password := strings.TrimSpace(r.URL.Query().Get("password"))
+	encrypted := password != ""
+	contentType := "application/zip"
+	if encrypted {
+		contentType = "application/octet-stream"
+		filename = strings.TrimSuffix(filename, ".zip") + ".ppbak"
+	}
+	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Accel-Buffering", "no")
 
-	zw := zip.NewWriter(w)
-	defer zw.Close()
+	var sink io.Writer = w
+	var enc *backupEncryptWriter
+	if encrypted {
+		var eerr error
+		enc, eerr = newBackupEncryptWriter(w, password)
+		if eerr != nil {
+			writeError(w, http.StatusInternalServerError, "初始化加密失败")
+			return
+		}
+		sink = enc
+	}
+	zw := zip.NewWriter(sink)
 
 	tables, err := h.backupTableNames(r)
 	if err != nil {
@@ -91,6 +108,16 @@ func (h *handlers) backupExport(w http.ResponseWriter, r *http.Request) {
 		enc := json.NewEncoder(mw)
 		enc.SetIndent("", "  ")
 		_ = enc.Encode(manifest)
+	}
+	if err := zw.Close(); err != nil {
+		h.log.Warn("备份：关闭 zip 失败", "err", err)
+		return
+	}
+	if enc != nil {
+		if err := enc.Close(); err != nil {
+			h.log.Warn("备份：加密收尾失败", "err", err)
+			return
+		}
 	}
 	h.recordNodeLog(r.Context(), 0, 0, "backup-export", "success", 0,
 		"导出备份 "+filename+"（表 "+itoa64(int64(len(counts)))+" 个，文件 "+itoa64(int64(files))+" 个）", "", "admin")
