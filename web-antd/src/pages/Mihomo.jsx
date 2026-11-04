@@ -463,6 +463,15 @@ export default function Mihomo() {
       message.error(e.message || '生成失败');
     }
   };
+  const applyServerBinding = async (row) => {
+    try {
+      const res = await apiPost(`/api/mihomo/nodes/${row.id}/apply`, {});
+      message.success(res.message || '已排入下发任务');
+      loadBindings();
+    } catch (e) {
+      message.error(e.message || '下发失败');
+    }
+  };
   const openCreateBind = (prefill) => {
     setBindEditing(null);
     bindForm.setFieldsValue({
@@ -653,6 +662,9 @@ export default function Mihomo() {
           </Button>
           <Button size="small" type="link" onClick={() => renderServerConfig(row)}>
             生成配置
+          </Button>
+          <Button size="small" type="link" onClick={() => applyServerBinding(row)}>
+            下发
           </Button>
           <Button size="small" type="link" icon={<EditOutlined />} onClick={() => openEditBind(row)}>
             编辑

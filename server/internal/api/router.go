@@ -168,6 +168,8 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("DELETE /api/mihomo/nodes/{id}", h.authed(authOpts{}, h.mihomoNodeDelete))
 	mux.HandleFunc("GET /api/mihomo/nodes/{id}/preview", h.authed(authOpts{}, h.mihomoNodePreview))
 	mux.HandleFunc("POST /api/mihomo/nodes/{id}/render", h.authed(authOpts{}, h.mihomoNodeRender))
+	mux.HandleFunc("POST /api/mihomo/nodes/{id}/apply", h.authed(authOpts{}, h.mihomoNodeApplyServer))
+	mux.HandleFunc("GET /api/mihomo/bin/{arch}", h.mihomoBin)
 
 	// Agent 接入（keycheck 用接入令牌鉴权；latest 走后台 JWT）
 	mux.HandleFunc("POST /api/agent/poll", h.agentPoll)
