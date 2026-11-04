@@ -144,7 +144,7 @@ const PROTOCOLS = [
   { value: 'tuic', label: 'TUIC' },
 ];
 
-export default function Mihomo() {
+export default function Mihomo({ templatesOnly }) {
   const { message } = AntdApp.useApp();
   const [tab, setTab] = useState('templates');
   const [loading, setLoading] = useState(false);
@@ -767,7 +767,7 @@ export default function Mihomo() {
       <Tabs
         activeKey={tab}
         onChange={setTab}
-        items={[
+        items={([
           {
             key: 'templates',
             label: `协议模板（${templates.length}）`,
@@ -823,7 +823,7 @@ export default function Mihomo() {
               </>
             ),
           },
-        ]}
+        ]).filter((it) => !templatesOnly || it.key === 'templates')}
       />
 
       <Modal

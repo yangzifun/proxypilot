@@ -492,9 +492,23 @@ func (h *handlers) mihomoNodeDelete(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "绑定不存在")
 		return
 	}
+	var serverID int64
+	var service string
+	_ = h.db.QueryRowContext(r.Context(),
+		"SELECT server_id, COALESCE(service,'mihomo') FROM mihomo_nodes WHERE id = ?", id).Scan(&serverID, &service)
 	if _, err := h.db.ExecContext(r.Context(), `DELETE FROM mihomo_nodes WHERE id = ?`, id); err != nil {
 		writeError(w, http.StatusInternalServerError, "删除绑定失败")
 		return
+	}
+	if serverID > 0 {
+		if srv, err := h.fetchAgentServer(r.Context(), serverID); err == nil {
+			cmd := "systemctl disable --now " + service + " pp-mihomo-stats 2>/dev/null || true; " +
+				"rm -f /etc/systemd/system/" + service + ".service /etc/systemd/system/pp-mihomo-stats.service /usr/local/bin/pp-mihomo-stats.sh; " +
+				"systemctl daemon-reload; echo cleaned"
+			if _, _, msg := h.agentQueueTask(r.Context(), srv, "exec", 0, map[string]any{"command": cmd, "timeout": 60}, "admin"); msg == "" {
+				h.mihomoAudit(r, "mihomo-unbind-cleanup", serverID, fmt.Sprintf("清理远端 mihomo 服务（%s）", service))
+			}
+		}
 	}
 	h.mihomoAudit(r, "mihomo-bind-delete", 0, fmt.Sprintf("删除绑定 %d", id))
 	writeJSON(w, http.StatusOK, map[string]any{"success": true})

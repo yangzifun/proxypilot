@@ -108,7 +108,7 @@ const SWITCHES = [
 /** 后端 singboxBool 的接受范围 */
 const b = (v) => (v ? true : false);
 
-export default function Nodes() {
+export default function Nodes({ initialTab, templatesOnly }) {
   const { message, modal } = AntdApp.useApp();
 
   const templates = useAsync(() => api('singbox/templates'), []);
@@ -401,7 +401,7 @@ export default function Nodes() {
       <div>
         <Tabs
           defaultActiveKey="tpl"
-          items={[
+          items={([
             {
               key: 'tpl',
               label: `协议模板（${tplRows.length}）`,
@@ -490,7 +490,7 @@ export default function Nodes() {
                 </PageCard>
               ),
             },
-          ]}
+          ]).filter((it) => !templatesOnly || it.key === 'tpl')}
         />
       </div>
 

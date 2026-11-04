@@ -11,8 +11,8 @@ export default function TemplateHub() {
       activeKey={tab}
       onChange={setTab}
       items={[
-        { key: 'singbox', label: 'singbox', children: <Nodes initialTab="tpl" /> },
-        { key: 'mihomo', label: 'mihomo', children: <Mihomo /> },
+        { key: 'singbox', label: 'singbox', children: <Nodes initialTab="tpl" templatesOnly /> },
+        { key: 'mihomo', label: 'mihomo', children: <Mihomo templatesOnly /> },
         { key: 'mtproto', label: 'MTProto', children: <MtprotoPage /> },
       ]}
     />

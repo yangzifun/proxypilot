@@ -3,6 +3,7 @@ import { App as AntdApp, Button, Form, Input, Modal, Select, Space, Table, Tag }
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import { api, apiGet, apiPost } from '../api';
 import { PageCard } from '../components';
+import { fmtTime } from '../format';
 
 export default function NodeBindings() {
   const { message } = AntdApp.useApp();
@@ -10,6 +11,7 @@ export default function NodeBindings() {
   const [loading, setLoading] = useState(false);
   const [tpl, setTpl] = useState({ sb: [], mh: [], mp: [] });
   const [open, setOpen] = useState(false);
+  const [editRow, setEditRow] = useState(null);
   const [form] = Form.useForm();
 
   const load = async () => {
@@ -57,10 +59,15 @@ export default function NodeBindings() {
       return;
     }
     const results = [];
+    const idByKind = editRow
+      ? { 'singbox': editRow.sb_id, 'mihomo': editRow.mh_id, MTProto: editRow.mp_id }
+      : {};
     for (const [label, url, body] of tasks) {
+      const existingId = idByKind[label];
       try {
-        await apiPost(url, body);
-        results.push(`${label} 绑定成功`);
+        if (existingId) await api(`${url.replace('/api/', '')}/${existingId}`, { method: 'PUT', body });
+        else await apiPost(url, body);
+        results.push(`${label} ${existingId ? '更新' : '绑定'}成功`);
       } catch (e) {
         results.push(`${label} 失败：${e.message || '未知错误'}`);
       }
@@ -72,51 +79,65 @@ export default function NodeBindings() {
   };
 
   const columns = [
-    { title: '服务器', dataIndex: 'server_name', width: 180, render: (v, r) => (
-      <div>
-        <b>{v}</b>
-        <div className="pp-muted pp-mono" style={{ fontSize: 12 }}>{r.host || ''}</div>
-      </div>
-    ) },
+    { title: 'ID', dataIndex: 'server_id', width: 70 },
+    { title: '节点', dataIndex: 'node_name', width: 150, ellipsis: true },
     {
-      title: 'sing-box',
-      width: 240,
-      render: (_, r) => (r.sb_id ? (
+      title: '服务器',
+      width: 180,
+      render: (_, r) => (
         <div>
-          <Tag color="geekblue">{r.sb_tpl_name || '内置默认'}</Tag>
-          <div className="pp-muted" style={{ fontSize: 12 }}>{r.sb_name} · 授权 {r.sb_uuids || 0}</div>
+          <div>{r.server_name}</div>
+          <div className="pp-muted pp-mono" style={{ fontSize: 12 }}>{r.host || ''}</div>
         </div>
-      ) : <span className="pp-muted">未绑定</span>),
+      ),
     },
     {
-      title: 'mihomo',
-      width: 240,
-      render: (_, r) => (r.mh_id ? (
-        <div>
-          <Tag color="purple">{r.mh_tpl_name || '—'}</Tag>
-          <div className="pp-muted" style={{ fontSize: 12 }}>{r.mh_name} · 授权 {r.mh_uuids || 0}</div>
-        </div>
-      ) : <span className="pp-muted">未绑定</span>),
+      title: 'singbox 模板',
+      width: 150,
+      render: (_, r) => (r.sb_id ? <Tag color="geekblue">{r.sb_tpl_name || '内置默认'}</Tag> : <span className="pp-muted">未绑定</span>),
     },
     {
-      title: 'MTProto',
-      width: 220,
-      render: (_, r) => (r.mp_id ? (
-        <div>
-          <Tag color="volcano">{r.mp_tpl_name || '—'}</Tag>
-          <div className="pp-muted" style={{ fontSize: 12 }}>{r.mp_name}</div>
-        </div>
-      ) : <span className="pp-muted">未绑定</span>),
+      title: 'mihomo 模板',
+      width: 150,
+      render: (_, r) => (r.mh_id ? <Tag color="purple">{r.mh_tpl_name || '—'}</Tag> : <span className="pp-muted">未绑定</span>),
     },
+    {
+      title: 'MTProto 模板',
+      width: 150,
+      render: (_, r) => (r.mp_id ? <Tag color="volcano">{r.mp_tpl_name || '—'}</Tag> : <span className="pp-muted">未绑定</span>),
+    },
+    { title: '域名', dataIndex: 'domain', width: 170, ellipsis: true, render: (v) => v || <span className="pp-muted">—</span> },
+    {
+      title: '授权 UUID',
+      width: 160,
+      render: (_, r) => (
+        <span className="pp-muted" style={{ fontSize: 12 }}>
+          sb {r.sb_uuids || 0} / mh {r.mh_uuids || 0} / mp {r.mp_uuids || 0}
+        </span>
+      ),
+    },
+    {
+      title: '状态',
+      width: 150,
+      render: (_, r) => {
+        const total = (r.sb_id ? 1 : 0) + (r.mh_id ? 1 : 0) + (r.mp_id ? 1 : 0);
+        const on = (r.sb_id && r.sb_enabled ? 1 : 0) + (r.mh_id && r.mh_enabled ? 1 : 0) + (r.mp_id && r.mp_enabled ? 1 : 0);
+        if (!total) return <Tag>未绑定</Tag>;
+        if (on === total) return <Tag color="success">{total} 服务 · 启用</Tag>;
+        return <Tag color="orange">{total} 服务 · 启用 {on}</Tag>;
+      },
+    },
+    { title: '最新下发', dataIndex: 'last_apply_at', width: 160, render: (v) => (v ? fmtTime(v) : <span className="pp-muted">未下发</span>) },
     {
       title: '操作',
-      width: 120,
+      width: 110,
       render: (_, r) => (
         <Button
           size="small"
           type="link"
           onClick={() => {
-            form.setFieldsValue({ server_id: r.server_id, name: r.server_name, domain: '', sb_tpl: r.sb_tpl || undefined, mh_tpl: r.mh_tpl || undefined, mp_tpl: r.mp_tpl || undefined });
+            setEditRow(r);
+            form.setFieldsValue({ server_id: r.server_id, name: r.node_name, domain: r.domain || '', sb_tpl: r.sb_tpl || undefined, mh_tpl: r.mh_tpl || undefined, mp_tpl: r.mp_tpl || undefined });
             setOpen(true);
           }}
         >
@@ -132,13 +153,13 @@ export default function NodeBindings() {
       extra={
         <Space>
           <Button icon={<ReloadOutlined />} onClick={load} loading={loading}>刷新</Button>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setOpen(true); }}>新建绑定</Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => { setEditRow(null); form.resetFields(); setOpen(true); }}>新建绑定</Button>
         </Space>
       }
     >
-      <Table rowKey="server_id" size="middle" loading={loading} dataSource={rows} columns={columns} pagination={{ pageSize: 10, hideOnSinglePage: true }} />
+      <Table rowKey="server_id" size="middle" loading={loading} dataSource={rows} columns={columns} scroll={{ x: 1550 }} pagination={{ pageSize: 10, hideOnSinglePage: true }} />
 
-      <Modal title="绑定节点服务" open={open} onCancel={() => setOpen(false)} onOk={submit} width={560} destroyOnClose>
+      <Modal title={editRow ? '编辑节点服务' : '绑定节点服务'} open={open} onCancel={() => setOpen(false)} onOk={submit} width={560} destroyOnClose>
         <Form form={form} layout="vertical">
           <Form.Item name="server_id" label="服务器" rules={[{ required: true, message: '请选择服务器' }]}>
             <Select showSearch optionFilterProp="label" options={options} placeholder="选择服务器" />
