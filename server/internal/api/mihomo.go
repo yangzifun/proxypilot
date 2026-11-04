@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 // ---------------- mihomo 模板管理 / 节点绑定 ----------------
@@ -100,6 +102,10 @@ func (h *handlers) mihomoTemplateCreate(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, "请填写 mihomo YAML 模板内容")
 		return
 	}
+	if msg := validateMihomoYAML(in.Content); msg != "" {
+		writeError(w, http.StatusBadRequest, msg)
+		return
+	}
 	now := nowMillis()
 	res, err := h.db.ExecContext(r.Context(),
 		`INSERT INTO mihomo_templates (name, remark, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
@@ -113,6 +119,8 @@ func (h *handlers) mihomoTemplateCreate(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	id, _ := res.LastInsertId()
+	h.mihomoSaveVersion(r, id, name, in.Remark, in.Content)
+	h.mihomoAudit(r, "mihomo-template-create", 0, "新建模板："+name)
 	writeJSON(w, http.StatusOK, map[string]any{"success": true, "id": id})
 }
 
@@ -137,6 +145,10 @@ func (h *handlers) mihomoTemplateUpdate(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, "请填写 mihomo YAML 模板内容")
 		return
 	}
+	if msg := validateMihomoYAML(in.Content); msg != "" {
+		writeError(w, http.StatusBadRequest, msg)
+		return
+	}
 	_, err := h.db.ExecContext(r.Context(),
 		`UPDATE mihomo_templates SET name = ?, remark = ?, content = ?, updated_at = ? WHERE id = ?`,
 		name, in.Remark, in.Content, nowMillis(), id)
@@ -148,6 +160,8 @@ func (h *handlers) mihomoTemplateUpdate(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusInternalServerError, "保存模板失败")
 		return
 	}
+	h.mihomoSaveVersion(r, id, name, in.Remark, in.Content)
+	h.mihomoAudit(r, "mihomo-template-update", 0, "保存模板："+name)
 	writeJSON(w, http.StatusOK, map[string]any{"success": true})
 }
 
@@ -168,6 +182,7 @@ func (h *handlers) mihomoTemplateDelete(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusInternalServerError, "删除模板失败")
 		return
 	}
+	h.mihomoAudit(r, "mihomo-template-delete", 0, fmt.Sprintf("删除模板 %d", id))
 	writeJSON(w, http.StatusOK, map[string]any{"success": true})
 }
 
@@ -268,6 +283,7 @@ func (h *handlers) mihomoNodeCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, _ := res.LastInsertId()
+	h.mihomoAudit(r, "mihomo-bind-create", in.ServerID, "新建绑定："+strings.TrimSpace(in.Name))
 	writeJSON(w, http.StatusOK, map[string]any{"success": true, "id": id})
 }
 
@@ -304,6 +320,7 @@ func (h *handlers) mihomoNodeUpdate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "保存绑定失败")
 		return
 	}
+	h.mihomoAudit(r, "mihomo-bind-update", in.ServerID, "保存绑定："+strings.TrimSpace(in.Name))
 	writeJSON(w, http.StatusOK, map[string]any{"success": true})
 }
 
@@ -318,6 +335,7 @@ func (h *handlers) mihomoNodeDelete(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "删除绑定失败")
 		return
 	}
+	h.mihomoAudit(r, "mihomo-bind-delete", 0, fmt.Sprintf("删除绑定 %d", id))
 	writeJSON(w, http.StatusOK, map[string]any{"success": true})
 }
 
@@ -338,7 +356,46 @@ func (h *handlers) validateMihomoNode(ctx context.Context, in *mihomoNodeInput, 
 	if err := h.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM mihomo_templates WHERE id = ?`, in.TemplateID).Scan(&n); err != nil || n == 0 {
 		return "模板不存在"
 	}
+	if len(in.UUIDList) > 0 {
+		ph := strings.TrimSuffix(strings.Repeat("?,", len(in.UUIDList)), ",")
+		args := make([]any, 0, len(in.UUIDList))
+		for _, u := range in.UUIDList {
+			args = append(args, strings.ToLower(strings.TrimSpace(u)))
+		}
+		var known int
+		_ = h.db.QueryRowContext(ctx,
+			`SELECT COUNT(DISTINCT uuid) FROM (SELECT uuid FROM uuid_info UNION SELECT uuid FROM configs) t WHERE uuid IN (`+ph+`)`,
+			args...).Scan(&known)
+		if known != len(in.UUIDList) {
+			return "存在未授权/不存在的 UUID，请从已授权列表中选择"
+		}
+		var nodeUUIDRaw string
+		if h.db.QueryRowContext(ctx,
+			`SELECT COALESCE(uuid_list,'[]') FROM singbox_nodes WHERE server_id = ? LIMIT 1`, in.ServerID).
+			Scan(&nodeUUIDRaw) == nil {
+			allowed := mihomoParseUUIDs(nodeUUIDRaw)
+			if len(allowed) > 0 {
+				allowedSet := map[string]bool{}
+				for _, u := range allowed {
+					allowedSet[strings.ToLower(u)] = true
+				}
+				for _, u := range in.UUIDList {
+					if !allowedSet[strings.ToLower(strings.TrimSpace(u))] {
+						return "UUID " + shortUUID(u) + " 未授权该服务器"
+					}
+				}
+			}
+		}
+	}
 	return ""
+}
+
+func shortUUID(u string) string {
+	u = strings.TrimSpace(u)
+	if len(u) <= 12 {
+		return u
+	}
+	return u[:8] + "…" + u[len(u)-4:]
 }
 
 // GET /api/mihomo/nodes/{id}/preview
@@ -508,4 +565,114 @@ func (h *handlers) ensureMihomoDefaultTemplate(ctx context.Context) {
 	_, _ = h.db.ExecContext(ctx,
 		`INSERT INTO mihomo_templates (name, remark, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
 		"默认配置", "开箱即用：fake-ip DNS、自动测速分组、国内直连", mihomoDefaultTemplate, now, now)
+}
+
+// validateMihomoYAML 校验模板 YAML 语法与必备结构。
+func validateMihomoYAML(content string) string {
+	var doc map[string]any
+	if err := yaml.Unmarshal([]byte(content), &doc); err != nil {
+		return "YAML 语法错误：" + err.Error()
+	}
+	if doc == nil {
+		return "模板内容为空或不是 YAML 对象"
+	}
+	if _, ok := doc["proxies"]; !ok {
+		return "模板缺少 proxies: 节点注入位置"
+	}
+	if _, ok := doc["proxy-groups"]; !ok {
+		if _, ok2 := doc["rules"]; !ok2 {
+			return "模板至少需要 proxy-groups 或 rules"
+		}
+	}
+	return ""
+}
+
+func (h *handlers) mihomoAudit(r *http.Request, action string, serverID int64, msg string) {
+	actor := ""
+	if c, ok := claimsFrom(r); ok {
+		actor = c.Sub
+	}
+	_, _ = h.db.ExecContext(r.Context(),
+		`INSERT INTO node_push_logs (config_id, server_id, action, status, exit_code, message, output, duration_ms, actor, created_at)
+		 VALUES (0, ?, ?, 'success', 0, ?, '', 0, ?, ?)`,
+		serverID, action, truncateRunes(msg, 2000), actor, nowMillis())
+}
+
+func (h *handlers) mihomoSaveVersion(r *http.Request, templateID int64, name, remark, content string) {
+	actor := ""
+	if c, ok := claimsFrom(r); ok {
+		actor = c.Sub
+	}
+	_, _ = h.db.ExecContext(r.Context(),
+		`INSERT INTO mihomo_template_versions (template_id, name, remark, content, actor, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		templateID, name, remark, content, actor, nowMillis())
+}
+
+// GET /api/mihomo/templates/{id}/versions
+func (h *handlers) mihomoTemplateVersions(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeError(w, http.StatusNotFound, "模板不存在")
+		return
+	}
+	rows, err := queryRowsAsMaps(r.Context(), h.db,
+		`SELECT id, name, CHAR_LENGTH(COALESCE(content,'')) AS content_len, COALESCE(actor,'') AS actor, created_at
+		   FROM mihomo_template_versions WHERE template_id = ? ORDER BY id DESC LIMIT 100`, id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "查询版本失败")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"success": true, "data": rows})
+}
+
+// GET /api/mihomo/templates/{id}/versions/{vid}
+func (h *handlers) mihomoTemplateVersionGet(w http.ResponseWriter, r *http.Request) {
+	id, _ := pathID(r)
+	vid, err := strconv.ParseInt(pathParam(r, "vid"), 10, 64)
+	if err != nil || vid <= 0 {
+		writeError(w, http.StatusNotFound, "版本不存在")
+		return
+	}
+	var name, remark, content string
+	var createdAt int64
+	if err := h.db.QueryRowContext(r.Context(),
+		`SELECT name, COALESCE(remark,''), COALESCE(content,''), created_at FROM mihomo_template_versions
+		  WHERE id = ? AND template_id = ? LIMIT 1`, vid, id).Scan(&name, &remark, &content, &createdAt); err != nil {
+		writeError(w, http.StatusNotFound, "版本不存在")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"success": true, "data": map[string]any{
+		"id": vid, "template_id": id, "name": name, "remark": remark, "content": content, "created_at": createdAt,
+	}})
+}
+
+// POST /api/mihomo/templates/{id}/versions/{vid}/restore
+func (h *handlers) mihomoTemplateVersionRestore(w http.ResponseWriter, r *http.Request) {
+	id, _ := pathID(r)
+	vid, err := strconv.ParseInt(pathParam(r, "vid"), 10, 64)
+	if err != nil || vid <= 0 {
+		writeError(w, http.StatusNotFound, "版本不存在")
+		return
+	}
+	var name, remark, content string
+	if err := h.db.QueryRowContext(r.Context(),
+		`SELECT name, COALESCE(remark,''), COALESCE(content,'') FROM mihomo_template_versions
+		  WHERE id = ? AND template_id = ? LIMIT 1`, vid, id).Scan(&name, &remark, &content); err != nil {
+		writeError(w, http.StatusNotFound, "版本不存在")
+		return
+	}
+	if msg := validateMihomoYAML(content); msg != "" {
+		writeError(w, http.StatusBadRequest, msg)
+		return
+	}
+	if _, err := h.db.ExecContext(r.Context(),
+		`UPDATE mihomo_templates SET name = ?, remark = ?, content = ?, updated_at = ? WHERE id = ?`,
+		name, remark, content, nowMillis(), id); err != nil {
+		writeError(w, http.StatusInternalServerError, "回滚失败")
+		return
+	}
+	h.mihomoSaveVersion(r, id, name, remark, content)
+	h.mihomoAudit(r, "mihomo-template-restore", 0, fmt.Sprintf("回滚模板 %d 到版本 %d", id, vid))
+	writeJSON(w, http.StatusOK, map[string]any{"success": true})
 }

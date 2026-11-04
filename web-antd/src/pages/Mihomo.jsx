@@ -98,6 +98,7 @@ export default function Mihomo() {
   const [bindEditing, setBindEditing] = useState(null);
   const [bindForm] = Form.useForm();
 
+  const [versions, setVersions] = useState({ open: false, template: null, list: [], loading: false, content: '' });
   const [preview, setPreview] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
@@ -146,6 +147,39 @@ export default function Mihomo() {
       })),
     [uuids]
   );
+
+  const loadVersions = async (row) => {
+    setVersions({ open: true, template: row, list: [], loading: true, content: '' });
+    try {
+      const res = await apiGet(`/api/mihomo/templates/${row.id}/versions`);
+      setVersions((v) => ({ ...v, list: res.data || [], loading: false }));
+    } catch (e) {
+      message.error(e.message || '读取版本失败');
+      setVersions((v) => ({ ...v, loading: false }));
+    }
+  };
+  const viewVersion = async (vid) => {
+    const tpl = versions.template;
+    if (!tpl) return;
+    try {
+      const res = await apiGet(`/api/mihomo/templates/${tpl.id}/versions/${vid}`);
+      setPreview({ title: `${tpl.name} · 版本 #${vid}`, yaml: res.data.content, templateOnly: true });
+    } catch (e) {
+      message.error(e.message || '读取版本失败');
+    }
+  };
+  const restoreVersion = async (vid) => {
+    const tpl = versions.template;
+    if (!tpl) return;
+    try {
+      await apiPost(`/api/mihomo/templates/${tpl.id}/versions/${vid}/restore`, {});
+      message.success('已回滚到该版本');
+      loadTemplates();
+      loadVersions(tpl);
+    } catch (e) {
+      message.error(e.message || '回滚失败');
+    }
+  };
 
   const openCreateTpl = () => {
     setTplEditing(null);
@@ -245,7 +279,7 @@ export default function Mihomo() {
     { title: '更新时间', dataIndex: 'updated_at', width: 170, render: (v) => fmtTime(v) },
     {
       title: '操作',
-      width: 220,
+      width: 280,
       render: (_, row) => (
         <Space size={4}>
           <Button size="small" type="link" icon={<EditOutlined />} onClick={() => openEditTpl(row)}>
@@ -258,6 +292,9 @@ export default function Mihomo() {
             onClick={() => setPreview({ title: row.name, yaml: '', loading: true }) || openTplPreview(row)}
           >
             预览
+          </Button>
+          <Button size="small" type="link" onClick={() => loadVersions(row)}>
+            版本
           </Button>
           <Popconfirm title="删除该模板？" onConfirm={() => removeTpl(row)}>
             <Button size="small" type="link" danger icon={<DeleteOutlined />}>
@@ -437,6 +474,45 @@ export default function Mihomo() {
             <Input placeholder="可选" maxLength={200} />
           </Form.Item>
         </Form>
+      </Modal>
+
+      <Modal
+        title={`版本历史 · ${versions.template?.name || ''}`}
+        open={versions.open}
+        onCancel={() => setVersions({ open: false, template: null, list: [], loading: false, content: '' })}
+        footer={null}
+        width={760}
+      >
+        <Table
+          rowKey="id"
+          size="small"
+          loading={versions.loading}
+          dataSource={versions.list}
+          pagination={{ pageSize: 8, hideOnSinglePage: true }}
+          columns={[
+            { title: '版本', dataIndex: 'id', width: 90, render: (v) => '#' + v },
+            { title: '名称', dataIndex: 'name', ellipsis: true },
+            { title: '内容长度', dataIndex: 'content_len', width: 110, render: (v) => (v || 0) + ' 字符' },
+            { title: '操作人', dataIndex: 'actor', width: 150, ellipsis: true, render: (v) => v || '—' },
+            { title: '时间', dataIndex: 'created_at', width: 170, render: (v) => fmtTime(v) },
+            {
+              title: '操作',
+              width: 160,
+              render: (_, row) => (
+                <Space size={4}>
+                  <Button size="small" type="link" onClick={() => viewVersion(row.id)}>
+                    查看
+                  </Button>
+                  <Popconfirm title="回滚到该版本？" onConfirm={() => restoreVersion(row.id)}>
+                    <Button size="small" type="link">
+                      回滚
+                    </Button>
+                  </Popconfirm>
+                </Space>
+              ),
+            },
+          ]}
+        />
       </Modal>
 
       <Modal
