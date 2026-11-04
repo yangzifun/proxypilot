@@ -3053,3 +3053,15 @@ body {
 .mtraffic-grid b { font-size: 16px; color: #0f172a; }
 .mtraffic-grid span { font-size: 11px; color: #94a3b8; }
 .mtraffic-foot { margin-top: 8px; font-size: 11px; color: #94a3b8; }
+/* 移动端登录页：压缩品牌区高度，保证常规手机一屏内完成登录 */
+@media (max-width: 899px) {
+  .pp-auth-brand { padding: calc(12px + env(safe-area-inset-top, 0px)) 18px 10px !important; gap: 0 !important; }
+  .pp-auth-brandhead .pp-auth-logo { width: 34px !important; height: 34px !important; border-radius: 10px !important; }
+  .pp-auth-name { font-size: 15px !important; }
+  .pp-auth-sub { display: none !important; }
+  .pp-anim { max-width: 190px !important; margin: 2px auto 0 !important; }
+  .pp-anim-svg { max-height: 110px; }
+  .pp-auth-form { margin-top: -10px !important; padding: 14px 18px calc(12px + env(safe-area-inset-bottom, 0px)) !important; }
+  .pp-auth-fill { display: none !important; }
+  .pp-auth-ts { margin: 12px 0 2px !important; }
+}
