@@ -471,7 +471,14 @@ body {
 
 @media (max-width: 860px) {
   .pp-login-wrap { grid-template-columns: 1fr; max-width: 460px; }
-  .pp-login-hero { display: none; }
+  .pp-login-hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 22px 18px 16px;
+    border-radius: 20px 20px 0 0;
+  }
+  .pp-login-hero .pp-anim { margin: 4px 0 0; max-width: 320px; }
   .pp-login-form { padding: 30px 22px; }
   .pp-content { padding: 14px; }
   .pp-header { padding: 0 14px; }
@@ -744,7 +751,7 @@ body {
 
 
 /* ---------------- 登录页动态插画 ---------------- */
-.pp-anim { position: relative; margin: 26px 0 6px; max-width: 560px; }
+.pp-anim { position: relative; margin: 26px 0 6px; width: 100%; max-width: 560px; align-self: stretch; }
 .pp-anim-glow { position: absolute; inset: -18% -10%; background: radial-gradient(closest-side, rgba(99,102,241,.22), transparent 70%); filter: blur(6px); pointer-events: none; }
 .pp-anim-svg { position: relative; width: 100%; height: auto; display: block; overflow: visible; }
 .pp-anim-halo { animation: ppAnimBreath 6s ease-in-out infinite; transform-origin: 280px 176px; }
