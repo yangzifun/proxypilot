@@ -63,7 +63,7 @@ function toBase64(str) {
 function importApps(url, kind) {
   const enc = encodeURIComponent(url);
   // 只有非 Clash 的两个 scheme 需要 base64，别为 Clash 也去编码（中文模板名会抛 InvalidCharacterError）
-  const b64 = kind === 'clash' ? '' : toBase64(url);
+  const b64 = kind === 'clash' || kind === 'mihomo' ? '' : toBase64(url);
   const clashLike = [
     { name: 'Clash Verge', href: `clash://install-config?url=${enc}`, tip: '桌面 / 手机通用' },
     { name: 'ClashX', href: `clash://install-config?url=${enc}`, tip: 'macOS' },
@@ -75,7 +75,7 @@ function importApps(url, kind) {
     { name: 'v2rayNG', href: `v2rayng://install-sub?url=${b64}`, tip: 'Android' },
     { name: 'Clash Verge', href: `clash://install-config?url=${enc}`, tip: '桌面 / 手机通用' },
   ];
-  return kind === 'clash' ? clashLike : general;
+  return kind === 'clash' || kind === 'mihomo' ? clashLike : general;
 }
 
 export default function PortalUuid({ uuid, onBack, onUnauthorized, embedded = false, sections = null }) {
@@ -102,6 +102,7 @@ export default function PortalUuid({ uuid, onBack, onUnauthorized, embedded = fa
     { key: 'raw', title: '原始订阅', hint: '通用链接，v2rayN / Shadowrocket 等客户端直接导入', ext: '.txt' },
     { key: 'clash', title: 'Clash 订阅', hint: 'Clash / Mihomo 专用，可套用订阅模板', ext: '.yaml' },
     { key: 'batch', title: '批量配置', hint: '一次性导出全部节点，一行一个', ext: '.txt' },
+  { key: 'mihomo', title: 'Mihomo 订阅', hint: 'mihomo 专用 YAML（按节点绑定生成）', ext: '.yaml' },
   ];
   const [templates, setTemplates] = useState([]);
   const [qr, setQr] = useState(null);
@@ -127,6 +128,7 @@ export default function PortalUuid({ uuid, onBack, onUnauthorized, embedded = fa
       raw: `${baseUrl}/sub/${encodeURIComponent(uuid)}`,
       clash: `${baseUrl}/clash-config?uuid=${encodeURIComponent(uuid)}${sub.template ? `&template=${sub.template}` : ''}`,
       batch: `${baseUrl}/batch-configs/${encodeURIComponent(uuid)}`,
+      mihomo: `${baseUrl}/sub/mihomo/${encodeURIComponent(uuid)}`,
     };
   }, [baseUrl, uuid, sub.template]);
 

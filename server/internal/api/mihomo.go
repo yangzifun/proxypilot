@@ -12,6 +12,23 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// mihomoLinkAllowed 按协议集合过滤链接；CDN 链接用 vless-ws-cdn 单独开关。
+func mihomoLinkAllowed(item map[string]any, protoSet map[string]bool) bool {
+	if len(protoSet) == 0 {
+		return true
+	}
+	proto := mapStr(item, "protocol", "")
+	isCDN := item["cdn"] == true
+	switch {
+	case proto == "vless-ws" && isCDN:
+		return protoSet["vless-ws-cdn"]
+	case proto == "vless-ws":
+		return protoSet["vless-ws"]
+	default:
+		return protoSet[proto]
+	}
+}
+
 // ---------------- mihomo 模板管理 / 节点绑定 ----------------
 
 type mihomoTemplateInput struct {
@@ -25,6 +42,7 @@ type mihomoNodeInput struct {
 	ServerID   int64    `json:"server_id"`
 	TemplateID int64    `json:"template_id"`
 	UUIDList   []string `json:"uuid_list"`
+	Protocols  []string `json:"protocols"`
 	Enabled    *bool    `json:"enabled"`
 	Remark     string   `json:"remark"`
 }
@@ -211,6 +229,7 @@ func (h *handlers) mihomoNodesList(w http.ResponseWriter, r *http.Request) {
 		list := mihomoParseUUIDs(mapStr(row, "uuid_list", "[]"))
 		row["uuid_list"] = list
 		row["uuid_count"] = len(list)
+		row["protocols"] = mihomoParseProtocols(mapStr(row, "protocols", "[]"))
 		var today, week, total int64
 		var online int
 		if len(list) > 0 {
@@ -269,11 +288,12 @@ func (h *handlers) mihomoNodeCreate(w http.ResponseWriter, r *http.Request) {
 		enabled = 0
 	}
 	raw, _ := json.Marshal(in.UUIDList)
+	protoRaw, _ := json.Marshal(in.Protocols)
 	now := nowMillis()
 	res, err := h.db.ExecContext(r.Context(),
-		`INSERT INTO mihomo_nodes (name, server_id, template_id, uuid_list, enabled, remark, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		strings.TrimSpace(in.Name), in.ServerID, in.TemplateID, string(raw), enabled, in.Remark, now, now)
+		`INSERT INTO mihomo_nodes (name, server_id, template_id, uuid_list, protocols, enabled, remark, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		strings.TrimSpace(in.Name), in.ServerID, in.TemplateID, string(raw), string(protoRaw), enabled, in.Remark, now, now)
 	if err != nil {
 		if strings.Contains(err.Error(), "1062") {
 			writeError(w, http.StatusBadRequest, "名称或该服务器的绑定已存在")
@@ -308,10 +328,11 @@ func (h *handlers) mihomoNodeUpdate(w http.ResponseWriter, r *http.Request) {
 		enabled = 0
 	}
 	raw, _ := json.Marshal(in.UUIDList)
+	protoRaw, _ := json.Marshal(in.Protocols)
 	_, err := h.db.ExecContext(r.Context(),
-		`UPDATE mihomo_nodes SET name = ?, server_id = ?, template_id = ?, uuid_list = ?, enabled = ?, remark = ?, updated_at = ?
+		`UPDATE mihomo_nodes SET name = ?, server_id = ?, template_id = ?, uuid_list = ?, protocols = ?, enabled = ?, remark = ?, updated_at = ?
 		  WHERE id = ?`,
-		strings.TrimSpace(in.Name), in.ServerID, in.TemplateID, string(raw), enabled, in.Remark, nowMillis(), id)
+		strings.TrimSpace(in.Name), in.ServerID, in.TemplateID, string(raw), string(protoRaw), enabled, in.Remark, nowMillis(), id)
 	if err != nil {
 		if strings.Contains(err.Error(), "1062") {
 			writeError(w, http.StatusBadRequest, "名称或该服务器的绑定已存在")
@@ -410,18 +431,19 @@ func (h *handlers) mihomoNodePreview(w http.ResponseWriter, r *http.Request) {
 		serverID   int64
 		templateID int64
 		uuidRaw    string
+		protoRaw   string
 		tplName    string
 		tplContent string
 		serverName string
 	)
 	err := h.db.QueryRowContext(r.Context(),
-		`SELECT n.name, n.server_id, n.template_id, COALESCE(n.uuid_list,'[]'),
+		`SELECT n.name, n.server_id, n.template_id, COALESCE(n.uuid_list,'[]'), COALESCE(n.protocols,'[]'),
 		        COALESCE(t.name,''), COALESCE(t.content,''), COALESCE(s.name,'')
 		   FROM mihomo_nodes n
 		   LEFT JOIN mihomo_templates t ON t.id = n.template_id
 		   LEFT JOIN servers s ON s.id = n.server_id
 		  WHERE n.id = ? LIMIT 1`, id).
-		Scan(&name, &serverID, &templateID, &uuidRaw, &tplName, &tplContent, &serverName)
+		Scan(&name, &serverID, &templateID, &uuidRaw, &protoRaw, &tplName, &tplContent, &serverName)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "绑定不存在")
 		return
@@ -462,8 +484,15 @@ func (h *handlers) mihomoNodePreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rawLinks := singboxClientLinks(tpl, singboxNode{Name: node.Name, Domain: node.Domain, CDNDomain: node.CDNDomain}, users)
+	protoSet := map[string]bool{}
+	for _, p := range mihomoParseProtocols(protoRaw) {
+		protoSet[p] = true
+	}
 	links := make([]string, 0, len(rawLinks))
 	for _, item := range rawLinks {
+		if !mihomoLinkAllowed(item, protoSet) {
+			continue
+		}
 		if s := mapStr(item, "link", ""); s != "" {
 			links = append(links, s)
 		}

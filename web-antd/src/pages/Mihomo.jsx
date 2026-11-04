@@ -81,6 +81,16 @@ const downloadText = (name, text) => {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 
+const PROTOCOLS = [
+  { value: 'shadowsocks', label: 'SS2022' },
+  { value: 'anytls', label: 'AnyTLS' },
+  { value: 'hysteria2', label: 'Hysteria2' },
+  { value: 'vless-reality', label: 'VLESS-REALITY' },
+  { value: 'vless-ws', label: 'VLESS-WS' },
+  { value: 'vless-ws-cdn', label: 'VLESS-WS-CDN' },
+  { value: 'tuic', label: 'TUIC' },
+];
+
 export default function Mihomo() {
   const { message } = AntdApp.useApp();
   const [tab, setTab] = useState('templates');
@@ -220,7 +230,7 @@ export default function Mihomo() {
 
   const openCreateBind = () => {
     setBindEditing(null);
-    bindForm.setFieldsValue({ name: '', server_id: undefined, template_id: undefined, uuid_list: [], enabled: true, remark: '' });
+    bindForm.setFieldsValue({ name: '', server_id: undefined, template_id: undefined, uuid_list: [], protocols: [], enabled: true, remark: '' });
     setBindOpen(true);
   };
   const openEditBind = (row) => {
@@ -230,6 +240,7 @@ export default function Mihomo() {
       server_id: row.server_id,
       template_id: row.template_id,
       uuid_list: row.uuid_list || [],
+      protocols: row.protocols || [],
       enabled: !!row.enabled,
       remark: row.remark || '',
     });
@@ -237,7 +248,7 @@ export default function Mihomo() {
   };
   const saveBind = async () => {
     const v = await bindForm.validateFields();
-    const body = { ...v, uuid_list: v.uuid_list || [] };
+    const body = { ...v, uuid_list: v.uuid_list || [], protocols: v.protocols || [] };
     try {
       if (bindEditing) await apiPut(`/api/mihomo/nodes/${bindEditing.id}`, body);
       else await apiPost('/api/mihomo/nodes', body);
@@ -455,6 +466,15 @@ export default function Mihomo() {
           </Form.Item>
           <Form.Item name="template_id" label="mihomo 模板" rules={[{ required: true, message: '请选择模板' }]}>
             <Select showSearch optionFilterProp="label" options={templateOptions} placeholder="选择模板" />
+          </Form.Item>
+          <Form.Item name="protocols" label="生成协议（不选则全部协议）">
+            <Select
+              mode="multiple"
+              allowClear
+              options={PROTOCOLS}
+              placeholder="全部协议"
+              maxTagCount="responsive"
+            />
           </Form.Item>
           <Form.Item name="uuid_list" label="UUID（不选则使用模板中的全部用户）">
             <Select

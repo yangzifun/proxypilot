@@ -71,6 +71,7 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /sub/{uuid}", h.rawSubscription)
 	mux.HandleFunc("GET /batch-configs/{uuid}", h.batchSubscription)
 	mux.HandleFunc("GET /clash-config", h.clashConfig)
+	mux.HandleFunc("GET /sub/mihomo/{uuid}", h.mihomoSubscribe)
 
 	// 订阅分组（UUID 元信息）
 	mux.HandleFunc("GET /api/uuids", h.authed(authOpts{}, h.uuidsList))

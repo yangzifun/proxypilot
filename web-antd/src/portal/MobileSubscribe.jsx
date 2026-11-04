@@ -12,6 +12,7 @@ const FORMATS = [
   { key: 'raw', label: '原始', hint: 'v2rayN / Shadowrocket 等通用客户端' },
   { key: 'clash', label: 'Clash', hint: 'Clash / Mihomo 专用，可套用订阅模板' },
   { key: 'batch', label: '批量', hint: '一次性导出全部节点' },
+  { key: 'mihomo', label: 'Mihomo', hint: 'mihomo 专用 YAML，按绑定生成' },
 ];
 
 /* 模板名是中文，订阅链接是 UTF-8：btoa 只吃 Latin-1，先转义再编码 */
@@ -26,8 +27,8 @@ function toBase64(str) {
 
 function importApps(url, kind) {
   const enc = encodeURIComponent(url);
-  const b64 = kind === 'clash' ? '' : toBase64(url);
-  return kind === 'clash'
+  const b64 = kind === 'clash' || kind === 'mihomo' ? '' : toBase64(url);
+  return kind === 'clash' || kind === 'mihomo'
     ? [
         { name: 'Clash Verge', href: `clash://install-config?url=${enc}` },
         { name: 'ClashX', href: `clash://install-config?url=${enc}` },
@@ -70,6 +71,7 @@ export default function MobileSubscribe({ uuid }) {
     if (fmt === 'clash') {
       return `${base}/clash-config?uuid=${encodeURIComponent(uuid)}${template ? `&template=${encodeURIComponent(template)}` : ''}`;
     }
+    if (fmt === 'mihomo') return `${base}/sub/mihomo/${encodeURIComponent(uuid)}`;
     if (fmt === 'batch') return `${base}/batch-configs/${encodeURIComponent(uuid)}`;
     return `${base}/sub/${encodeURIComponent(uuid)}`;
   }, [fmt, template, uuid]);
@@ -103,7 +105,7 @@ export default function MobileSubscribe({ uuid }) {
       const blob = new Blob([result.text], { type: 'text/plain;charset=utf-8' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = `subscription-${String(uuid).slice(0, 8)}.${result.kind === 'clash' ? 'yaml' : 'txt'}`;
+      a.download = `subscription-${String(uuid).slice(0, 8)}.${result.kind === 'clash' || result.kind === 'mihomo' ? 'yaml' : 'txt'}`;
       document.body.appendChild(a);
       a.click();
       setTimeout(() => {
