@@ -170,7 +170,7 @@ export default function PortalMobileApp({ email, onLogout }) {
         <div className="ppm-body">
           {/* 用户卡只在「我的订阅」页展示 */}
           {tab === 'sub' ? renderHero() : null}
-          {uuid ? <MobileTraffic uuid={uuid} /> : null}
+          {tab === 'stats' && uuid ? <MobileTraffic uuid={uuid} /> : null}
           {tab === 'tg' ? (
             <>
               <div style={{ padding: 12 }}>
