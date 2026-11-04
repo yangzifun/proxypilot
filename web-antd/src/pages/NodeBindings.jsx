@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { App as AntdApp, Button, Form, Input, Modal, Select, Space, Table, Tag } from 'antd';
-import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
+import { CloudUploadOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import { api, apiGet, apiPost } from '../api';
 import { PageCard } from '../components';
 import { fmtTime } from '../format';
