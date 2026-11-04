@@ -3,7 +3,7 @@
  *  桌面：左侧深色品牌面板 + 右侧表单；移动端：品牌收成顶部条，表单通栏
  * ================================================================= */
 import React, { useEffect, useState } from 'react';
-import { App as AntdApp, Button, Input } from 'antd';
+import { App as AntdApp, Button, Input, Modal } from 'antd';
 import { ArrowRightOutlined, LockOutlined, MailOutlined, SafetyOutlined } from '@ant-design/icons';
 import { portalApi, portalSetToken } from './portalApi';
 import { useTurnstile } from '../hooks';
@@ -21,6 +21,7 @@ export default function PortalLogin({ onLoggedIn }) {
   const [busy, setBusy] = useState('');
   const [err, setErr] = useState('');
   const [countdown, setCountdown] = useState(0);
+  const [tsOpen, setTsOpen] = useState(false);
 
   useEffect(() => {
     if (countdown <= 0) return undefined;
@@ -30,7 +31,7 @@ export default function PortalLogin({ onLoggedIn }) {
 
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim());
 
-  const sendCode = async () => {
+  const doSend = async () => {
     if (!emailOk) {
       setErr('请填写正确的邮箱地址');
       return;
@@ -55,6 +56,27 @@ export default function PortalLogin({ onLoggedIn }) {
       setBusy('');
     }
   };
+
+  const sendCode = async () => {
+    if (!emailOk) {
+      setErr('请填写正确的邮箱地址');
+      return;
+    }
+    if (SITE_KEY && !turnstile.getToken()) {
+      setTsOpen(true);
+      return;
+    }
+    await doSend();
+  };
+
+  useEffect(() => {
+    if (!tsOpen) return;
+    if (turnstile.token) {
+      setTsOpen(false);
+      doSend();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tsOpen, turnstile.token]);
 
   const login = async () => {
     if (!emailOk) {
@@ -103,6 +125,11 @@ export default function PortalLogin({ onLoggedIn }) {
         </aside>
 
         <main className="pp-auth-form">
+          <div className="pp-auth-mobilehead">
+            <img src={LOGO_URL} alt="ProxyPilot" className="pp-auth-mobilelogo" />
+            <div className="pp-auth-mobilename">ProxyPilot</div>
+            <div className="pp-auth-mobilesub">用户中心 · 订阅查询</div>
+          </div>
           <h1 className="pp-auth-title">欢迎回来</h1>
           <p className="pp-auth-desc">用邮箱验证码登录，查看你的订阅</p>
 
@@ -168,16 +195,6 @@ export default function PortalLogin({ onLoggedIn }) {
             />
           </div>
 
-          {SITE_KEY ? (
-            <div className="pp-turnstile pp-auth-ts">
-              <div className="pp-turnstile" ref={turnstile.slotRef} />
-              {turnstile.status === 'error' ? (
-                <div style={{ fontSize: 12, color: '#f43f5e', marginTop: 4, textAlign: 'center' }}>
-                  人机验证加载失败，<a onClick={() => turnstile.reload()}>点此重试</a>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
 
           <div className="pp-auth-fill" aria-hidden="true" />
 
@@ -197,6 +214,31 @@ export default function PortalLogin({ onLoggedIn }) {
           <div className="pp-auth-foot">UUID 由管理员绑定到邮箱，登录后即可查看你的订阅</div>
         </main>
       </div>
+
+      <Modal
+        open={tsOpen}
+        onCancel={() => {
+          setTsOpen(false);
+          turnstile.reset();
+        }}
+        footer={null}
+        title="人机验证"
+        width={360}
+        centered
+        destroyOnHidden
+      >
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 4px' }}>
+          <div className="pp-turnstile" ref={turnstile.slotRef} />
+        </div>
+        {turnstile.status === 'error' ? (
+          <div style={{ fontSize: 12, color: '#f43f5e', textAlign: 'center', marginTop: 8 }}>
+            验证组件加载失败，<a onClick={() => turnstile.reload()}>点此重试</a>
+          </div>
+        ) : null}
+        <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', marginTop: 10 }}>
+          完成验证后将自动发送验证码
+        </div>
+      </Modal>
     </div>
   );
 }
