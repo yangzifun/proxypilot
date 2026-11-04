@@ -33,7 +33,10 @@ func (h *handlers) mihomoSubscribe(w http.ResponseWriter, r *http.Request) {
 	rows, err := queryRowsAsMaps(r.Context(), h.db,
 		`SELECT n.id, n.name, n.server_id, n.template_id, COALESCE(n.uuid_list,'[]') AS uuid_list,
 		        COALESCE(n.protocols,'[]') AS protocols
-		   FROM mihomo_nodes n WHERE n.enabled = 1 ORDER BY n.id ASC`)
+		   FROM mihomo_nodes n
+		   LEFT JOIN mihomo_templates t ON t.id = n.template_id
+		  WHERE n.enabled = 1 AND COALESCE(t.enabled,1) = 1
+		  ORDER BY n.id ASC`)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "查询 mihomo 绑定失败")
 		return

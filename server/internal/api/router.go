@@ -152,6 +152,7 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("POST /api/mihomo/templates", h.authed(authOpts{}, h.mihomoTemplateCreate))
 	mux.HandleFunc("PUT /api/mihomo/templates/{id}", h.authed(authOpts{}, h.mihomoTemplateUpdate))
 	mux.HandleFunc("DELETE /api/mihomo/templates/{id}", h.authed(authOpts{}, h.mihomoTemplateDelete))
+	mux.HandleFunc("POST /api/mihomo/templates/{id}/enabled", h.authed(authOpts{}, h.mihomoTemplateToggle))
 	mux.HandleFunc("GET /api/mihomo/templates/{id}/versions", h.authed(authOpts{}, h.mihomoTemplateVersions))
 	mux.HandleFunc("GET /api/mihomo/templates/{id}/versions/{vid}", h.authed(authOpts{}, h.mihomoTemplateVersionGet))
 	mux.HandleFunc("POST /api/mihomo/templates/{id}/versions/{vid}/restore", h.authed(authOpts{}, h.mihomoTemplateVersionRestore))

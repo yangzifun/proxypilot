@@ -35,6 +35,7 @@ type mihomoTemplateInput struct {
 	Name    string `json:"name"`
 	Remark  string `json:"remark"`
 	Content string `json:"content"`
+	Enabled *bool  `json:"enabled"`
 }
 
 type mihomoNodeInput struct {
@@ -73,6 +74,8 @@ func mihomoParseUUIDs(raw string) []string {
 func (h *handlers) mihomoTemplatesList(w http.ResponseWriter, r *http.Request) {
 	rows, err := queryRowsAsMaps(r.Context(), h.db,
 		`SELECT id, name, COALESCE(remark,'') AS remark, CHAR_LENGTH(COALESCE(content,'')) AS content_len,
+		        COALESCE(enabled,1) AS enabled,
+		        (SELECT COUNT(*) FROM mihomo_nodes n WHERE n.template_id = mihomo_templates.id) AS bind_count,
 		        created_at, updated_at
 		   FROM mihomo_templates ORDER BY id DESC`)
 	if err != nil {
@@ -90,16 +93,17 @@ func (h *handlers) mihomoTemplateGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var name, remark, content string
+	var enabled int
 	var createdAt, updatedAt int64
 	err := h.db.QueryRowContext(r.Context(),
-		`SELECT name, COALESCE(remark,''), COALESCE(content,''), created_at, updated_at FROM mihomo_templates WHERE id = ? LIMIT 1`,
-		id).Scan(&name, &remark, &content, &createdAt, &updatedAt)
+		`SELECT name, COALESCE(remark,''), COALESCE(content,''), COALESCE(enabled,1), created_at, updated_at FROM mihomo_templates WHERE id = ? LIMIT 1`,
+		id).Scan(&name, &remark, &content, &enabled, &createdAt, &updatedAt)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "模板不存在")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"success": true, "data": map[string]any{
-		"id": id, "name": name, "remark": remark, "content": content,
+		"id": id, "name": name, "remark": remark, "content": content, "enabled": enabled,
 		"created_at": createdAt, "updated_at": updatedAt,
 	}})
 }
@@ -125,9 +129,13 @@ func (h *handlers) mihomoTemplateCreate(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	now := nowMillis()
+	enabled := 1
+	if in.Enabled != nil && !*in.Enabled {
+		enabled = 0
+	}
 	res, err := h.db.ExecContext(r.Context(),
-		`INSERT INTO mihomo_templates (name, remark, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
-		name, in.Remark, in.Content, now, now)
+		`INSERT INTO mihomo_templates (name, remark, content, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		name, in.Remark, in.Content, enabled, now, now)
 	if err != nil {
 		if strings.Contains(err.Error(), "1062") {
 			writeError(w, http.StatusBadRequest, "模板名称已存在")
@@ -167,9 +175,13 @@ func (h *handlers) mihomoTemplateUpdate(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, msg)
 		return
 	}
+	enabled := 1
+	if in.Enabled != nil && !*in.Enabled {
+		enabled = 0
+	}
 	_, err := h.db.ExecContext(r.Context(),
-		`UPDATE mihomo_templates SET name = ?, remark = ?, content = ?, updated_at = ? WHERE id = ?`,
-		name, in.Remark, in.Content, nowMillis(), id)
+		`UPDATE mihomo_templates SET name = ?, remark = ?, content = ?, enabled = ?, updated_at = ? WHERE id = ?`,
+		name, in.Remark, in.Content, enabled, nowMillis(), id)
 	if err != nil {
 		if strings.Contains(err.Error(), "1062") {
 			writeError(w, http.StatusBadRequest, "模板名称已存在")
@@ -208,6 +220,7 @@ func (h *handlers) mihomoTemplateDelete(w http.ResponseWriter, r *http.Request) 
 func (h *handlers) mihomoNodesList(w http.ResponseWriter, r *http.Request) {
 	rows, err := queryRowsAsMaps(r.Context(), h.db,
 		`SELECT n.id, n.name, n.server_id, n.template_id, COALESCE(n.uuid_list,'[]') AS uuid_list,
+		        COALESCE(n.protocols,'[]') AS protocols, COALESCE(n.last_preview_at,0) AS last_preview_at,
 		        n.enabled, COALESCE(n.remark,'') AS remark, n.created_at, n.updated_at,
 		        COALESCE(s.name,'') AS server_name, COALESCE(s.host,'') AS server_host,
 		        COALESCE(s.ip_country,'') AS server_country,
@@ -432,24 +445,29 @@ func (h *handlers) mihomoNodePreview(w http.ResponseWriter, r *http.Request) {
 		templateID int64
 		uuidRaw    string
 		protoRaw   string
+		tplEnabled int
 		tplName    string
 		tplContent string
 		serverName string
 	)
 	err := h.db.QueryRowContext(r.Context(),
 		`SELECT n.name, n.server_id, n.template_id, COALESCE(n.uuid_list,'[]'), COALESCE(n.protocols,'[]'),
-		        COALESCE(t.name,''), COALESCE(t.content,''), COALESCE(s.name,'')
+		        COALESCE(t.name,''), COALESCE(t.content,''), COALESCE(s.name,''), COALESCE(t.enabled,1)
 		   FROM mihomo_nodes n
 		   LEFT JOIN mihomo_templates t ON t.id = n.template_id
 		   LEFT JOIN servers s ON s.id = n.server_id
 		  WHERE n.id = ? LIMIT 1`, id).
-		Scan(&name, &serverID, &templateID, &uuidRaw, &protoRaw, &tplName, &tplContent, &serverName)
+		Scan(&name, &serverID, &templateID, &uuidRaw, &protoRaw, &tplName, &tplContent, &serverName, &tplEnabled)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "绑定不存在")
 		return
 	}
 	if strings.TrimSpace(tplContent) == "" {
 		writeError(w, http.StatusBadRequest, "模板内容为空，请先完善模板")
+		return
+	}
+	if tplEnabled == 0 {
+		writeError(w, http.StatusBadRequest, "模板已停用，请先启用后再生成")
 		return
 	}
 	var sbNodeID int64
@@ -529,6 +547,7 @@ func (h *handlers) mihomoNodePreview(w http.ResponseWriter, r *http.Request) {
 	for proto, count := range skippedBy {
 		details = append(details, map[string]any{"protocol": proto, "count": count, "reason": reasons[proto]})
 	}
+	_, _ = h.db.ExecContext(r.Context(), `UPDATE mihomo_nodes SET last_preview_at = ? WHERE id = ?`, nowMillis(), id)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"data": map[string]any{
@@ -704,4 +723,31 @@ func (h *handlers) mihomoTemplateVersionRestore(w http.ResponseWriter, r *http.R
 	h.mihomoSaveVersion(r, id, name, remark, content)
 	h.mihomoAudit(r, "mihomo-template-restore", 0, fmt.Sprintf("回滚模板 %d 到版本 %d", id, vid))
 	writeJSON(w, http.StatusOK, map[string]any{"success": true})
+}
+
+// POST /api/mihomo/templates/{id}/enabled
+func (h *handlers) mihomoTemplateToggle(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeError(w, http.StatusNotFound, "模板不存在")
+		return
+	}
+	var body struct {
+		Enabled *bool `json:"enabled"`
+	}
+	if err := decodeJSON(w, r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "请求体无效")
+		return
+	}
+	enabled := 1
+	if body.Enabled != nil && !*body.Enabled {
+		enabled = 0
+	}
+	if _, err := h.db.ExecContext(r.Context(),
+		`UPDATE mihomo_templates SET enabled = ?, updated_at = ? WHERE id = ?`, enabled, nowMillis(), id); err != nil {
+		writeError(w, http.StatusInternalServerError, "保存失败")
+		return
+	}
+	h.mihomoAudit(r, "mihomo-template-toggle", 0, fmt.Sprintf("模板 %d 启用=%d", id, enabled))
+	writeJSON(w, http.StatusOK, map[string]any{"success": true, "enabled": enabled})
 }

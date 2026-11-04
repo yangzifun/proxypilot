@@ -228,7 +228,7 @@ export default function Mihomo() {
 
   const openCreateTpl = () => {
     setTplEditing(null);
-    tplForm.setFieldsValue({ name: '', remark: '', content: DEFAULT_MIHOMO_TEMPLATE });
+    tplForm.setFieldsValue({ name: '', remark: '', content: DEFAULT_MIHOMO_TEMPLATE, enabled: true });
     setQuick(parseQuick(DEFAULT_MIHOMO_TEMPLATE));
     setTplOpen(true);
   };
@@ -236,7 +236,12 @@ export default function Mihomo() {
     try {
       const res = await apiGet(`/api/mihomo/templates/${row.id}`);
       setTplEditing(res.data);
-      tplForm.setFieldsValue({ name: res.data.name, remark: res.data.remark, content: res.data.content });
+      tplForm.setFieldsValue({
+        name: res.data.name,
+        remark: res.data.remark,
+        content: res.data.content,
+        enabled: !!res.data.enabled,
+      });
       setQuick(parseQuick(res.data.content));
       setTplOpen(true);
     } catch (e) {
@@ -254,6 +259,42 @@ export default function Mihomo() {
     } catch (e) {
       message.error(e.message || '保存失败');
     }
+  };
+  const copyTemplate = async (row) => {
+    try {
+      const res = await apiGet(`/api/mihomo/templates/${row.id}`);
+      setTplEditing(null);
+      tplForm.setFieldsValue({
+        name: res.data.name + ' 副本',
+        remark: res.data.remark || '',
+        content: res.data.content,
+        enabled: !!res.data.enabled,
+      });
+      setQuick(parseQuick(res.data.content));
+      setTplOpen(true);
+    } catch (e) {
+      message.error(e.message || '复制失败');
+    }
+  };
+  const toggleTemplate = async (row, enabled) => {
+    try {
+      await apiPost(`/api/mihomo/templates/${row.id}/enabled`, { enabled });
+      message.success(enabled ? '模板已启用' : '模板已停用');
+      loadTemplates();
+    } catch (e) {
+      message.error(e.message || '操作失败');
+    }
+  };
+  const importYamlFile = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = String(reader.result || '');
+      tplForm.setFieldsValue({ content: text });
+      setQuick(parseQuick(text));
+      message.success('已导入 ' + file.name);
+    };
+    reader.readAsText(file, 'utf-8');
   };
   const removeTpl = async (row) => {
     try {
@@ -336,11 +377,23 @@ export default function Mihomo() {
   const tplColumns = [
     { title: '模板名称', dataIndex: 'name', ellipsis: true },
     { title: '备注', dataIndex: 'remark', ellipsis: true, render: (v) => v || '—' },
-    { title: '内容长度', dataIndex: 'content_len', width: 110, render: (v) => `${v || 0} 字符` },
+    { title: '内容长度', dataIndex: 'content_len', width: 100, render: (v) => `${v || 0} 字符` },
+    {
+      title: '引用',
+      dataIndex: 'bind_count',
+      width: 70,
+      render: (v) => <Tag color={v ? 'geekblue' : 'default'}>{v || 0}</Tag>,
+    },
+    {
+      title: '状态',
+      dataIndex: 'enabled',
+      width: 80,
+      render: (v, row) => <Switch size="small" checked={!!v} onChange={(c) => toggleTemplate(row, c)} />,
+    },
     { title: '更新时间', dataIndex: 'updated_at', width: 170, render: (v) => fmtTime(v) },
     {
       title: '操作',
-      width: 280,
+      width: 340,
       render: (_, row) => (
         <Space size={4}>
           <Button size="small" type="link" icon={<EditOutlined />} onClick={() => openEditTpl(row)}>
@@ -356,6 +409,9 @@ export default function Mihomo() {
           </Button>
           <Button size="small" type="link" onClick={() => loadVersions(row)}>
             版本
+          </Button>
+          <Button size="small" type="link" onClick={() => copyTemplate(row)}>
+            复制
           </Button>
           <Popconfirm title="删除该模板？" onConfirm={() => removeTpl(row)}>
             <Button size="small" type="link" danger icon={<DeleteOutlined />}>
@@ -380,7 +436,17 @@ export default function Mihomo() {
     { title: '绑定名称', dataIndex: 'name', ellipsis: true },
     { title: '服务器', dataIndex: 'server_name', ellipsis: true, render: (v, r) => v || `#${r.server_id}` },
     { title: '模板', dataIndex: 'template_name', ellipsis: true, render: (v) => v || '—' },
-    { title: 'UUID 数', dataIndex: 'uuid_count', width: 100, render: (v) => v || 0 },
+    {
+      title: '授权 UUID',
+      dataIndex: 'uuid_count',
+      width: 110,
+      render: (v, r) => (
+        <Tooltip title={(r.uuid_list || []).length ? r.uuid_list.map((u) => String(u).slice(0, 8)).join('\n') : '未指定（使用模板全部用户）'}>
+          <Tag color={v ? 'geekblue' : 'default'}>{v || 0}</Tag>
+        </Tooltip>
+      ),
+    },
+    { title: '最近生成', dataIndex: 'last_preview_at', width: 130, render: (v) => (v ? fmtTime(v) : '未生成') },
     {
       title: '状态',
       dataIndex: 'enabled',
@@ -495,6 +561,14 @@ export default function Mihomo() {
               <Input placeholder="例如：默认 mihomo 模板" maxLength={100} />
             </Form.Item>
           </Space>
+          <Space size={24} align="center" style={{ marginBottom: 10 }}>
+            <span>
+              <span className="pp-muted" style={{ fontSize: 12, marginRight: 8 }}>启用</span>
+              <Form.Item name="enabled" valuePropName="checked" noStyle>
+                <Switch size="small" defaultChecked />
+              </Form.Item>
+            </span>
+          </Space>
           <Form.Item name="remark" label="备注">
             <Input placeholder="可选，例如：含广告拦截规则" maxLength={200} />
           </Form.Item>
@@ -532,7 +606,20 @@ export default function Mihomo() {
               <Switch size="small" checked={quick.ipv6} onChange={(v) => applyQuick({ ipv6: v })} />
             </Space>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 6 }}>
+            <input
+              id="mihomo-yaml-file"
+              type="file"
+              accept=".yaml,.yml,.txt"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                importYamlFile(e.target.files && e.target.files[0]);
+                e.target.value = '';
+              }}
+            />
+            <Button size="small" onClick={() => document.getElementById('mihomo-yaml-file').click()}>
+              导入 YAML
+            </Button>
             <Button size="small" onClick={() => { tplForm.setFieldsValue({ content: DEFAULT_MIHOMO_TEMPLATE }); setQuick(parseQuick(DEFAULT_MIHOMO_TEMPLATE)); }}>
               填入默认配置
             </Button>
