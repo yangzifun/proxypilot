@@ -35,6 +35,7 @@ func (h *handlers) uuidServices(w http.ResponseWriter, r *http.Request) {
 		} `json:"services"`
 		Singbox []int64 `json:"singbox"`
 		Mtproto []int64 `json:"mtproto"`
+		Mihomo  []int64 `json:"mihomo"`
 	}
 	if err := decodeJSON(w, r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, "请求体无效")
@@ -42,6 +43,7 @@ func (h *handlers) uuidServices(w http.ResponseWriter, r *http.Request) {
 	}
 	wantSingbox := map[int64]bool{}
 	wantMtproto := map[int64]bool{}
+	wantMihomo := map[int64]bool{}
 	for _, id := range body.Singbox {
 		if id > 0 {
 			wantSingbox[id] = true
@@ -50,6 +52,11 @@ func (h *handlers) uuidServices(w http.ResponseWriter, r *http.Request) {
 	for _, id := range body.Mtproto {
 		if id > 0 {
 			wantMtproto[id] = true
+		}
+	}
+	for _, id := range body.Mihomo {
+		if id > 0 {
+			wantMihomo[id] = true
 		}
 	}
 	for _, s := range body.Services {
@@ -61,6 +68,8 @@ func (h *handlers) uuidServices(w http.ResponseWriter, r *http.Request) {
 			wantSingbox[s.ID] = true
 		case "mtproto", "mtg":
 			wantMtproto[s.ID] = true
+		case "mihomo", "mihomo-node", "mh":
+			wantMihomo[s.ID] = true
 		}
 	}
 	sbChanged, sbResults, msg := h.applySingboxServiceAuth(r.Context(), uuid, wantSingbox)
@@ -73,7 +82,12 @@ func (h *handlers) uuidServices(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, msg)
 		return
 	}
-	results := append(sbResults, mtResults...)
+	mhChanged, mhResults, msg := h.applyMihomoServiceAuth(r.Context(), uuid, wantMihomo)
+	if msg != "" {
+		writeError(w, http.StatusInternalServerError, msg)
+		return
+	}
+	results := append(append(sbResults, mtResults...), mhResults...)
 	failed := 0
 	for _, item := range results {
 		if ok, _ := item["ok"].(bool); !ok {
@@ -81,7 +95,7 @@ func (h *handlers) uuidServices(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"success": true, "uuid": uuid, "changed": sbChanged + mtChanged,
+		"success": true, "uuid": uuid, "changed": sbChanged + mtChanged + mhChanged,
 		"results": results, "failed": failed,
 	})
 }
@@ -122,7 +136,66 @@ func (h *handlers) uuidServiceRows(ctx context.Context, uuid string) ([]map[stri
 			"authorized": mapInt(row, "mine", 0) > 0,
 		})
 	}
+	mhRows, err := queryRowsAsMaps(ctx, h.db, "SELECT n.id, n.name, COALESCE(n.uuid_list,'[]') AS uuid_list, "+
+		"COALESCE(s.name,'') AS server_name, COALESCE(s.id,0) AS server_id, COALESCE(t.name,'') AS template_name, "+
+		"COALESCE(n.port_base,0) AS port_base "+
+		"FROM mihomo_nodes n JOIN mihomo_templates t ON t.id = n.template_id AND COALESCE(t.mode,'subscription') = 'server' "+
+		"LEFT JOIN servers s ON s.id = n.server_id ORDER BY n.id ASC")
+	if err != nil {
+		return nil, "查询 mihomo 节点失败"
+	}
+	for _, row := range mhRows {
+		list := parseUUIDList(mapStr(row, "uuid_list", "[]"))
+		out = append(out, map[string]any{
+			"kind": "mihomo", "id": mapInt(row, "id", 0), "name": mapStr(row, "name", ""),
+			"server_id": mapInt(row, "server_id", 0), "server_name": mapStr(row, "server_name", ""),
+			"template_name": mapStr(row, "template_name", ""), "users": len(list),
+			"authorized": containsUUIDFold(list, uuid),
+		})
+	}
 	return out, ""
+}
+
+// applyMihomoServiceAuth 按目标集合增删 mihomo 节点授权（uuid_list）。
+func (h *handlers) applyMihomoServiceAuth(ctx context.Context, uuid string, want map[int64]bool) (int, []map[string]any, string) {
+	rows, err := queryRowsAsMaps(ctx, h.db,
+		"SELECT n.id, COALESCE(n.uuid_list,'[]') AS uuid_list FROM mihomo_nodes n "+
+			"JOIN mihomo_templates t ON t.id = n.template_id AND COALESCE(t.mode,'subscription') = 'server' ORDER BY n.id ASC")
+	if err != nil {
+		return 0, nil, "查询 mihomo 节点失败"
+	}
+	results := []map[string]any{}
+	changed := 0
+	for _, row := range rows {
+		id := mapInt(row, "id", 0)
+		cur := parseUUIDList(mapStr(row, "uuid_list", "[]"))
+		has := containsUUIDFold(cur, uuid)
+		should := want[id]
+		if has == should {
+			continue
+		}
+		next := make([]string, 0, len(cur)+1)
+		for _, u := range cur {
+			if !strings.EqualFold(strings.TrimSpace(u), uuid) {
+				next = append(next, u)
+			}
+		}
+		if should {
+			next = append(next, uuid)
+		}
+		raw, err := json.Marshal(next)
+		if err != nil {
+			continue
+		}
+		if _, err := h.db.ExecContext(ctx,
+			"UPDATE mihomo_nodes SET uuid_list = ?, updated_at = ? WHERE id = ?", string(raw), nowMillis(), id); err != nil {
+			results = append(results, map[string]any{"kind": "mihomo", "id": id, "ok": false, "error": "写入授权失败"})
+			continue
+		}
+		changed++
+		results = append(results, map[string]any{"kind": "mihomo", "id": id, "authorized": should, "ok": true})
+	}
+	return changed, results, ""
 }
 
 // applySingboxServiceAuth 按目标集合增删 sing-box 授权。

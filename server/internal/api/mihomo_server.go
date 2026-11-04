@@ -280,3 +280,29 @@ func (h *handlers) mihomoNodeRender(w http.ResponseWriter, r *http.Request) {
 		},
 	})
 }
+
+// POST /api/mihomo/templates/preview-server  按模板参数生成示例服务端配置（用于模板编辑预览）
+func (h *handlers) mihomoTemplatePreviewServer(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		ServerJSON string   `json:"server_json"`
+		UUIDs      []string `json:"uuids"`
+	}
+	if err := decodeJSON(w, r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "请求体无效")
+		return
+	}
+	cfg := parseMihomoServerConfig(body.ServerJSON)
+	uuids := body.UUIDs
+	if len(uuids) == 0 {
+		uuids = []string{"11111111-1111-4111-8111-111111111111"}
+	}
+	yamlText, stats, msg := renderMihomoServer(cfg, uuids)
+	if msg != "" {
+		writeError(w, http.StatusBadRequest, msg)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"data":    map[string]any{"yaml": yamlText, "ports": stats["ports"], "users": stats["users"]},
+	})
+}

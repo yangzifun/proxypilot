@@ -133,7 +133,7 @@ func mihomoParseUUIDs(raw string) []string {
 func (h *handlers) mihomoTemplatesList(w http.ResponseWriter, r *http.Request) {
 	rows, err := queryRowsAsMaps(r.Context(), h.db,
 		`SELECT id, name, COALESCE(remark,'') AS remark, CHAR_LENGTH(COALESCE(content,'')) AS content_len,
-		        COALESCE(enabled,1) AS enabled, COALESCE(protocols,'[]') AS protocols, COALESCE(mode,'subscription') AS mode,
+		        COALESCE(enabled,1) AS enabled, COALESCE(protocols,'[]') AS protocols, COALESCE(mode,'subscription') AS mode, COALESCE(server_json,'') AS server_json,
 		        (SELECT COUNT(*) FROM mihomo_nodes n WHERE n.template_id = mihomo_templates.id) AS bind_count,
 		        created_at, updated_at
 		   FROM mihomo_templates ORDER BY id DESC`)

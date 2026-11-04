@@ -173,14 +173,18 @@ export default function Mihomo() {
   const [bindOpen, setBindOpen] = useState(false);
   const [bindEditing, setBindEditing] = useState(null);
   const [bindForm] = Form.useForm();
+  const bindTplId = Form.useWatch('template_id', bindForm);
+  const bindTplMode = (templates.find((x) => x.id === bindTplId) || {}).mode || 'subscription';
 
   const [versions, setVersions] = useState({ open: false, template: null, list: [], loading: false, content: '' });
-  const [stats, setStats] = useState({ templates: 0, templates_enabled: 0, bindings: 0, bindings_enabled: 0, servers: 0 });
   const [selectedIds, setSelectedIds] = useState([]);
   const [checkState, setCheckState] = useState({ open: false, loading: false, data: null });
   const [helpOpen, setHelpOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importText, setImportText] = useState('');
   const [tplMode, setTplMode] = useState('subscription');
   const [serverCfg, setServerCfg] = useState(DEFAULT_SERVER_CFG);
+  const [tplPreview, setTplPreview] = useState({ yaml: '', loading: false });
   const [preview, setPreview] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
@@ -192,18 +196,10 @@ export default function Mihomo() {
     const res = await apiGet('/api/mihomo/nodes');
     setBindings(res.data || []);
   };
-  const loadStats = async () => {
-    try {
-      const res = await apiGet('/api/mihomo/stats');
-      setStats(res.data || {});
-    } catch (e) {
-      /* ignore */
-    }
-  };
   const loadAll = async () => {
     setLoading(true);
     try {
-      await Promise.all([loadTemplates(), loadBindings(), loadStats()]);
+      await Promise.all([loadTemplates(), loadBindings()]);
     } catch (e) {
       message.error(e.message || '加载失败');
     } finally {
@@ -347,21 +343,40 @@ export default function Mihomo() {
       message.error(e.message || '操作失败');
     }
   };
+  const previewServerCfg = async () => {
+    setTplPreview((p) => ({ ...p, loading: true }));
+    try {
+      const res = await apiPost('/api/mihomo/templates/preview-server', {
+        server_json: JSON.stringify(serverCfg || {}),
+      });
+      setTplPreview({ yaml: (res.data && res.data.yaml) || '', loading: false });
+    } catch (e) {
+      setTplPreview({ yaml: '', loading: false });
+      message.error(e.message || '生成预览失败');
+    }
+  };
+  const applyParseResult = (d) => {
+    const f = d.fields || {};
+    setQuick({
+      port: Number(f['mixed-port']) || quick.port,
+      mode: f.mode || quick.mode,
+      log: f['log-level'] || quick.log,
+      ctrl: f['external-controller'] || quick.ctrl,
+      lan: !!f['allow-lan'],
+      ipv6: !!f.ipv6,
+    });
+    if (d.mode === 'server' && d.server_cfg) {
+      setTplMode('server');
+      setServerCfg({ ...DEFAULT_SERVER_CFG, ...d.server_cfg });
+    }
+  };
   const parseContent = async () => {
     const content = tplForm.getFieldValue('content') || '';
     try {
       const res = await apiPost('/api/mihomo/templates/parse', { content });
       const d = res.data || {};
-      const f = d.fields || {};
-      setQuick({
-        port: Number(f['mixed-port']) || quick.port,
-        mode: f.mode || quick.mode,
-        log: f['log-level'] || quick.log,
-        ctrl: f['external-controller'] || quick.ctrl,
-        lan: !!f['allow-lan'],
-        ipv6: !!f.ipv6,
-      });
-      const msg = `节点 ${d.proxy_count || 0} · 分组 ${d.group_count || 0} · 规则 ${d.rule_count || 0}`;
+      applyParseResult(d);
+      const msg = `节点 ${d.proxy_count || 0} · 分组 ${d.group_count || 0} · 规则 ${d.rule_count || 0}` + (d.listeners ? ` · listeners ${d.listeners}` : '');
       if ((d.warnings || []).length) message.warning(msg + '；' + d.warnings.join('；'));
       else message.success(msg);
     } catch (e) {
@@ -568,6 +583,31 @@ export default function Mihomo() {
     { title: '模板名称', dataIndex: 'name', ellipsis: true },
     { title: '备注', dataIndex: 'remark', ellipsis: true, render: (v) => v || '—' },
     {
+      title: '协议 / 端口',
+      width: 220,
+      render: (_, row) => {
+        let cfg = {};
+        try {
+          cfg = row.mode === 'server' ? JSON.parse(row.server_json || '{}') : {};
+        } catch (e) {
+          cfg = {};
+        }
+        const list = row.mode === 'server' ? cfg.protocols || [] : row.protocols || [];
+        if (!list.length) return <span className="pp-muted">全部</span>;
+        return (
+          <span>
+            {list.slice(0, 3).map((x) => (
+              <Tag key={x} style={{ marginInlineEnd: 4 }}>{x}</Tag>
+            ))}
+            {list.length > 3 ? <Tag>+{list.length - 3}</Tag> : null}
+            {row.mode === 'server' && cfg.port_base ? (
+              <span className="pp-muted" style={{ fontSize: 11.5, marginLeft: 4 }}>:{cfg.port_base}</span>
+            ) : null}
+          </span>
+        );
+      },
+    },
+    {
       title: '引用',
       dataIndex: 'bind_count',
       width: 70,
@@ -696,17 +736,6 @@ export default function Mihomo() {
 
   return (
     <div>
-      <Row gutter={[14, 14]} style={{ marginBottom: 14 }}>
-        <Col xs={12} md={8}>
-          <StatCard label="模板总数" value={stats.templates || 0} hint={`启用 ${stats.templates_enabled || 0} · 默认配置${templates.some((x) => x.name === '默认配置') ? '已就绪' : '缺失'}`} accent="#10b981" />
-        </Col>
-        <Col xs={12} md={8}>
-          <StatCard label="节点绑定" value={stats.bindings || 0} hint={`启用 ${stats.bindings_enabled || 0}`} accent="#6366f1" />
-        </Col>
-        <Col xs={12} md={8}>
-          <StatCard label="覆盖服务器" value={stats.servers || 0} hint="已绑定 mihomo 的服务器" accent="#0ea5e9" />
-        </Col>
-      </Row>
     <PageCard
       title="mihomo"
       subtitle="mihomo（Clash.Meta）模板管理与节点绑定，按服务器 + UUID 生成完整 YAML 配置"
@@ -715,8 +744,7 @@ export default function Mihomo() {
           <Button icon={<ReloadOutlined />} onClick={loadAll} loading={loading}>
             刷新
           </Button>
-          <Button onClick={() => setHelpOpen(true)}>配置说明</Button>
-          <Button onClick={() => { window.location.hash = '#/logs'; }}>操作记录</Button>
+          <Button onClick={() => setHelpOpen(true)}>协议说明</Button>
           {tab === 'templates' ? (
             <Button type="primary" icon={<PlusOutlined />} onClick={openCreateTpl}>
               新建模板
@@ -735,7 +763,7 @@ export default function Mihomo() {
         items={[
           {
             key: 'templates',
-            label: `模板管理（${templates.length}）`,
+            label: `协议模板（${templates.length}）`,
             children: (
               <Table
                 rowKey="id"
@@ -892,6 +920,35 @@ export default function Mihomo() {
               </Space>
             </>
           ) : null}
+          {tplMode === 'server' ? (
+            <div style={{ marginBottom: 12 }}>
+              <Space align="center" style={{ marginBottom: 6 }}>
+                <Button size="small" loading={tplPreview.loading} onClick={previewServerCfg}>
+                  生成配置预览
+                </Button>
+                <span className="pp-muted" style={{ fontSize: 12 }}>
+                  按当前参数生成示例 listeners 配置（示例 UUID）
+                </span>
+              </Space>
+              <pre
+                style={{
+                  margin: 0,
+                  maxHeight: 260,
+                  overflow: 'auto',
+                  background: '#0f172a',
+                  color: '#e2e8f0',
+                  borderRadius: 10,
+                  padding: 12,
+                  fontSize: 12,
+                  lineHeight: 1.5,
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-all',
+                }}
+              >
+                {tplPreview.loading ? '生成中…' : tplPreview.yaml || '点击「生成配置预览」查看生成的模板配置'}
+              </pre>
+            </div>
+          ) : null}
           <Form.Item name="protocols" label="默认协议（绑定未指定时生效，留空=全部）">
             <Select mode="multiple" allowClear options={PROTOCOLS} placeholder="全部协议" maxTagCount="responsive" />
           </Form.Item>
@@ -933,6 +990,9 @@ export default function Mihomo() {
             </Space>
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 6 }}>
+            <Button size="small" onClick={() => { setImportText(''); setImportOpen(true); }}>
+              从配置导入
+            </Button>
             <input
               id="mihomo-yaml-file"
               type="file"
@@ -982,15 +1042,6 @@ export default function Mihomo() {
           <Form.Item name="template_id" label="mihomo 模板" rules={[{ required: true, message: '请选择模板' }]}>
             <Select showSearch optionFilterProp="label" options={templateOptions} placeholder="选择模板" />
           </Form.Item>
-          <Form.Item name="protocols" label="生成协议（留空跟随模板默认，模板为空则全部协议）">
-            <Select
-              mode="multiple"
-              allowClear
-              options={PROTOCOLS}
-              placeholder="全部协议"
-              maxTagCount="responsive"
-            />
-          </Form.Item>
           <Form.Item name="protocols" label="生成协议（不选则全部协议）">
             <Select
               mode="multiple"
@@ -1018,6 +1069,13 @@ export default function Mihomo() {
           <Form.Item name={['advanced', 'extra_rules']} label="额外规则（每行一条，插入到 MATCH 之前）">
             <TextArea rows={3} placeholder="DOMAIN-SUFFIX,example.com,Proxy" />
           </Form.Item>
+          {bindTplMode === 'server' ? (
+            <div className="pp-muted" style={{ fontSize: 12, margin: '4px 0 12px' }}>
+              用户授权请在「用户管理 → 详情 → 服务」中勾选该节点；此处只绑定模板与节点信息。
+            </div>
+          ) : null}
+          {bindTplMode !== 'server' ? (
+          <>
           <Form.Item name="port_base" label="端口基址（0 = 使用模板默认，服务端模板生效）">
             <InputNumber min={0} max={65000} style={{ width: 200 }} />
           </Form.Item>
@@ -1041,6 +1099,8 @@ export default function Mihomo() {
               maxTagCount="responsive"
             />
           </Form.Item>
+          </>
+          ) : null}
           <Form.Item name="enabled" label="启用" valuePropName="checked">
             <Switch />
           </Form.Item>
@@ -1143,6 +1203,37 @@ export default function Mihomo() {
         </pre>
       </Modal>
     </PageCard>
+      <Modal
+        title="从配置导入"
+        open={importOpen}
+        onCancel={() => setImportOpen(false)}
+        width={760}
+        onOk={async () => {
+          if (!importText.trim()) return;
+          try {
+            const res = await apiPost('/api/mihomo/templates/parse', { content: importText });
+            const d = res.data || {};
+            tplForm.setFieldsValue({ content: importText });
+            applyParseResult(d);
+            const msg = '节点 ' + (d.proxy_count || 0) + ' · 分组 ' + (d.group_count || 0) + ' · 规则 ' + (d.rule_count || 0) + (d.listeners ? ' · listeners ' + d.listeners : '');
+            if ((d.warnings || []).length) message.warning(msg + '；' + d.warnings.join('；'));
+            else message.success(msg);
+            setImportOpen(false);
+          } catch (e) {
+            message.error(e.message || '解析失败');
+          }
+        }}
+        okText="解析并填入"
+      >
+        <TextArea
+          rows={14}
+          value={importText}
+          onChange={(e) => setImportText(e.target.value)}
+          placeholder="粘贴 mihomo / Clash YAML 配置"
+          style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12.5 }}
+        />
+      </Modal>
+
       <Modal
         title="mihomo 配置说明"
         open={helpOpen}

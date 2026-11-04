@@ -489,7 +489,14 @@ function AuthorizeNodes({ uuid, onChanged }) {
       title: '类型',
       dataIndex: 'kind',
       width: 110,
-      render: (v) => (v === 'mtproto' ? <Tag color="volcano">MTProto</Tag> : <Tag color="geekblue">sing-box</Tag>),
+      render: (v) =>
+        v === 'mtproto' ? (
+          <Tag color="volcano">MTProto</Tag>
+        ) : v === 'mihomo' ? (
+          <Tag color="purple">mihomo</Tag>
+        ) : (
+          <Tag color="geekblue">sing-box</Tag>
+        ),
     },
     { title: '服务', dataIndex: 'name', width: 170, render: (v) => <b>{v}</b> },
     { title: '服务器', dataIndex: 'server_name', width: 150 },
@@ -515,7 +522,7 @@ function AuthorizeNodes({ uuid, onChanged }) {
         showIcon
         style={{ borderRadius: 10, marginBottom: 12 }}
         message="勾选即授权，取消勾选即撤销"
-        description="授权覆盖该服务器上的 sing-box 与 MTProto 两种服务：sing-box 立即重渲染下发，MTProto 启用/撤销客户端并重渲染下发；变更同时刷新该 UUID 的订阅配置。"
+        description="授权覆盖该服务器上的 sing-box / mihomo / MTProto 三种服务：勾选后自动把 UUID 写入对应节点并重渲染下发（mihomo 下次下发生效）；变更同时刷新该 UUID 的订阅配置。"
       />
       <Toolbar
         left={
@@ -557,7 +564,7 @@ function AuthorizeNodes({ uuid, onChanged }) {
             setDirty(true);
           },
         }}
-        locale={{ emptyText: '暂无 sing-box / MTProto 服务' }}
+        locale={{ emptyText: '暂无 sing-box / mihomo / MTProto 服务' }}
       />
     </div>
   );
