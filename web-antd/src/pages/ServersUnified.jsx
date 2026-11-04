@@ -41,7 +41,7 @@ import { api, apiPost } from '../api';
 import { useAsync, usePolling, readForm } from '../hooks';
 import { CopyText, ErrorBlock, JsonView, PageCard, StatCard, StatusPill } from '../components';
 import { watchBatch } from '../components/JobCenter';
-import L7WorldMap from '../components/L7WorldMap';
+import { WorldMap } from './Monitor';
 import ServerDrawer from '../components/ServerDrawer';
 import ServerUnlockModal from '../components/ServerUnlockModal';
 import { ServerCard as FullServerCard } from './Monitor';
@@ -826,7 +826,7 @@ export default function ServersUnified() {
               </span>
             </div>
             <div className="pp-ov-map-box">
-              <L7WorldMap servers={rows} onPick={(r) => setDetailId(r.id)} fill />
+              <WorldMap large zoomable servers={rows} onPick={(r) => setDetailId(r.id)} />
             </div>
           </div>
         </div>      </PageCard>

@@ -17,7 +17,6 @@
   "dependencies": {
     "@ant-design/icons": "^6.3.4",
     "@ant-design/plots": "^2.6.8",
-    "@antv/l7": "^2.29.1",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
     "antd": "^6.6.8",
