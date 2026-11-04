@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"log/slog"
+	"os"
 	"strings"
 
 	"github.com/yzfn/proxypilot/server/internal/auth"
@@ -46,6 +47,10 @@ func EnsureAdminPassword(ctx context.Context, db *sql.DB, cfg config.Config, log
 		log.Info("已使用 PP_ADMIN_PASSWORD 初始化管理员口令", "user", cfg.SuperAdmin)
 		return
 	}
-	log.Warn("管理员仍在使用默认口令 password：请立即登录后台修改，或设置 PP_ADMIN_PASSWORD 后重启",
-		"user", cfg.SuperAdmin)
+	if strings.TrimSpace(os.Getenv("PP_ALLOW_DEFAULT_ADMIN_PASSWORD")) == "1" {
+		log.Warn("管理员仍在使用默认口令（已通过 PP_ALLOW_DEFAULT_ADMIN_PASSWORD 放行）：请尽快修改", "user", cfg.SuperAdmin)
+		return
+	}
+	log.Error("管理员仍在使用默认口令 password，拒绝启动；请设置 PP_ADMIN_PASSWORD 后重启（开发环境可设 PP_ALLOW_DEFAULT_ADMIN_PASSWORD=1）", "user", cfg.SuperAdmin)
+	os.Exit(1)
 }
