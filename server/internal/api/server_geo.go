@@ -15,12 +15,13 @@ import (
 // 结果写回 servers.ip_country / ip_region / ip_lat / ip_lon，供地图定位。
 
 type ipGeo struct {
-	Country string  `json:"country"`
-	Region  string  `json:"regionName"`
-	City    string  `json:"city"`
-	Lat     float64 `json:"lat"`
-	Lon     float64 `json:"lon"`
-	Status  string  `json:"status"`
+	Country     string  `json:"country"`
+	CountryCode string  `json:"countryCode"`
+	Region      string  `json:"regionName"`
+	City        string  `json:"city"`
+	Lat         float64 `json:"lat"`
+	Lon         float64 `json:"lon"`
+	Status      string  `json:"status"`
 }
 
 var (
@@ -39,7 +40,7 @@ func (h *handlers) geoLookupIP(ctx context.Context, ip string) (ipGeo, bool) {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 6*time.Second)
 	defer cancel()
-	u := "http://ip-api.com/json/" + url.PathEscape(ip) + "?fields=status,country,regionName,city,lat,lon&lang=zh-CN"
+	u := "http://ip-api.com/json/" + url.PathEscape(ip) + "?fields=status,country,countryCode,regionName,city,lat,lon&lang=zh-CN"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return ipGeo{}, false
@@ -75,7 +76,7 @@ func (h *handlers) fillServerGeoAsync(ctx context.Context) {
 		rows, err := queryRowsAsMaps(ctx, h.db,
 			`SELECT id, COALESCE(NULLIF(last_ip4,''), NULLIF(last_ip,'')) AS ip
 			   FROM servers
-			  WHERE ip_lat IS NULL
+			  WHERE (ip_lat IS NULL OR COALESCE(ip_country,'') NOT REGEXP '^[A-Za-z]{2}$')
 			    AND COALESCE(NULLIF(last_ip4,''), NULLIF(last_ip,'')) <> ''
 			  ORDER BY id ASC LIMIT 20`)
 		if err != nil {
@@ -86,11 +87,14 @@ func (h *handlers) fillServerGeoAsync(ctx context.Context) {
 			if !ok {
 				continue
 			}
-			country := firstNonEmpty(g.Country, "")
+			country := strings.ToUpper(strings.TrimSpace(g.CountryCode))
+			if len(country) != 2 {
+				country = firstNonEmpty(g.Country, "")
+			}
 			region := strings.TrimSpace(strings.Join([]string{g.Region, g.City}, " "))
 			_, _ = h.db.ExecContext(ctx,
-				`UPDATE servers SET ip_country = ?, ip_region = ?, ip_lat = ?, ip_lon = ? WHERE id = ?`,
-				country, region, g.Lat, g.Lon, mapInt(row, "id", 0))
+				`UPDATE servers SET ip_country = IF(? <> '', ?, ip_country), ip_region = ?, ip_lat = ?, ip_lon = ? WHERE id = ?`,
+				country, country, region, g.Lat, g.Lon, mapInt(row, "id", 0))
 		}
 	}()
 }

@@ -320,6 +320,7 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /xterm-app.js", h.xtermAppJS)
 	mux.HandleFunc("GET /admin-app.css", h.adminAppCSS)
 	mux.HandleFunc("GET /assets/world.svg", h.worldSVG)
+	mux.HandleFunc("GET /api/flag/{cc}", h.flagImage)
 	mux.HandleFunc("GET /favicon.svg", h.favicon)
 	mux.HandleFunc("GET /favicon.ico", h.favicon)
 	mux.HandleFunc("GET /assets/", h.pageAssets)

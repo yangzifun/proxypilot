@@ -191,6 +191,10 @@ function NodeConn({ node }) {
 function countryCodeOf(v) {
   const s = String(v || '').trim();
   if (!s) return '';
+  const CN2ISO = { 中国: 'CN', 美国: 'US', 香港: 'HK', 台湾: 'TW', 日本: 'JP', 韩国: 'KR', 新加坡: 'SG', 马来西亚: 'MY', 印度尼西亚: 'ID', 印度: 'IN', 德国: 'DE', 法国: 'FR', 英国: 'GB', 荷兰: 'NL', 加拿大: 'CA', 澳大利亚: 'AU', 俄罗斯: 'RU', 泰国: 'TH', 越南: 'VN', 菲律宾: 'PH', 土耳其: 'TR', 巴西: 'BR', 阿联酋: 'AE' };
+  if (CN2ISO[s]) return CN2ISO[s];
+  const cnHit = Object.keys(CN2ISO).find((k) => s.includes(k));
+  if (cnHit) return CN2ISO[cnHit];
   if (/^[A-Za-z]{2}$/.test(s)) return s.toUpperCase();
   const cps = Array.from(s);
   const isRi = (cp) => cp >= 0x1f1e6 && cp <= 0x1f1ff;
@@ -210,7 +214,7 @@ function CountryFlag({ code }) {
   return (
     <img
       className="pp-flag"
-      src={`https://flagcdn.com/w40/${cc.toLowerCase()}.png`}
+      src={`/api/flag/${cc.toLowerCase()}`}
       alt={cc}
       title={cc}
       loading="lazy"
