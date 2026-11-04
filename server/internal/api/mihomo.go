@@ -136,7 +136,7 @@ func (h *handlers) mihomoTemplatesList(w http.ResponseWriter, r *http.Request) {
 		        COALESCE(enabled,1) AS enabled, COALESCE(protocols,'[]') AS protocols, COALESCE(mode,'subscription') AS mode, COALESCE(server_json,'') AS server_json,
 		        (SELECT COUNT(*) FROM mihomo_nodes n WHERE n.template_id = mihomo_templates.id) AS bind_count,
 		        created_at, updated_at
-		   FROM mihomo_templates ORDER BY id DESC`)
+		   FROM mihomo_templates WHERE COALESCE(mode,'subscription') = 'server' ORDER BY id DESC`)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "查询 mihomo 模板失败")
 		return
@@ -212,10 +212,7 @@ func (h *handlers) mihomoTemplateCreate(w http.ResponseWriter, r *http.Request) 
 		enabled = 0
 	}
 	protoRaw, _ := json.Marshal(in.Protocols)
-	mode := strings.TrimSpace(in.Mode)
-	if mode == "" {
-		mode = "subscription"
-	}
+	mode := "server"
 	res, err := h.db.ExecContext(r.Context(),
 		`INSERT INTO mihomo_templates (name, remark, content, enabled, protocols, mode, server_json, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -267,10 +264,7 @@ func (h *handlers) mihomoTemplateUpdate(w http.ResponseWriter, r *http.Request) 
 		enabled = 0
 	}
 	protoRaw, _ := json.Marshal(in.Protocols)
-	mode := strings.TrimSpace(in.Mode)
-	if mode == "" {
-		mode = "subscription"
-	}
+	mode := "server"
 	_, err := h.db.ExecContext(r.Context(),
 		`UPDATE mihomo_templates SET name = ?, remark = ?, content = ?, enabled = ?, protocols = ?, mode = ?, server_json = ?, updated_at = ? WHERE id = ?`,
 		name, in.Remark, in.Content, enabled, string(protoRaw), mode, in.ServerJSON, nowMillis(), id)

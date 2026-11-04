@@ -300,7 +300,7 @@ export default function Mihomo({ templatesOnly }) {
   };
   const saveTpl = async () => {
     const v = await tplForm.validateFields();
-    const body = { ...v, mode: tplMode, server_json: JSON.stringify(serverCfg || {}) };
+    const body = { name: v.name, remark: v.remark, enabled: v.enabled, mode: 'server', server_json: JSON.stringify(serverCfg || {}) };
     try {
       if (tplEditing) await apiPut(`/api/mihomo/templates/${tplEditing.id}`, body);
       else await apiPost('/api/mihomo/templates', body);
@@ -838,21 +838,7 @@ export default function Mihomo({ templatesOnly }) {
               </Form.Item>
             </span>
           </Space>
-          <Form.Item label="模板类型">
-            <Select
-              value={tplMode}
-              onChange={(v) => {
-                setTplMode(v);
-                if (v === 'server') setServerCfg((c) => ({ ...DEFAULT_SERVER_CFG, ...c }));
-              }}
-              options={[
-                { value: 'subscription', label: '订阅模板（客户端订阅注入节点）' },
-                { value: 'server', label: '服务端模板（生成 mihomo listeners 下发）' },
-              ]}
-            />
-          </Form.Item>
-          {tplMode === 'server' ? (
-            <>
+          <>
               <Form.Item label="协议（服务端 listener）">
                 <Select
                   mode="multiple"
@@ -915,10 +901,8 @@ export default function Mihomo({ templatesOnly }) {
                   />
                 </div>
               </Space>
-            </>
-          ) : null}
-          {tplMode === 'server' ? (
-            <div style={{ marginBottom: 12 }}>
+          </>
+          <div style={{ marginBottom: 12 }}>
               <Space align="center" style={{ marginBottom: 6 }}>
                 <Button size="small" loading={tplPreview.loading} onClick={previewServerCfg}>
                   生成配置预览
@@ -944,79 +928,18 @@ export default function Mihomo({ templatesOnly }) {
               >
                 {tplPreview.loading ? '生成中…' : tplPreview.yaml || '点击「生成配置预览」查看生成的模板配置'}
               </pre>
-            </div>
-          ) : null}
-          <Form.Item name="protocols" label="默认协议（绑定未指定时生效，留空=全部）">
-            <Select mode="multiple" allowClear options={PROTOCOLS} placeholder="全部协议" maxTagCount="responsive" />
-          </Form.Item>
+          </div>
           <Form.Item name="remark" label="备注">
             <Input placeholder="可选，例如：含广告拦截规则" maxLength={200} />
           </Form.Item>
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 10 }}>
-            <div>
-              <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>mixed-port</div>
-              <InputNumber min={1} max={65535} value={quick.port} onChange={(v) => applyQuick({ port: v || 7890 })} style={{ width: 120 }} />
-            </div>
-            <div>
-              <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>mode</div>
-              <Select
-                value={quick.mode}
-                onChange={(v) => applyQuick({ mode: v })}
-                style={{ width: 120 }}
-                options={[{ value: 'rule', label: 'rule' }, { value: 'global', label: 'global' }, { value: 'direct', label: 'direct' }]}
-              />
-            </div>
-            <div>
-              <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>log-level</div>
-              <Select
-                value={quick.log}
-                onChange={(v) => applyQuick({ log: v })}
-                style={{ width: 130 }}
-                options={['silent', 'error', 'warning', 'info', 'debug'].map((v) => ({ value: v, label: v }))}
-              />
-            </div>
-            <div>
-              <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>external-controller</div>
-              <Input value={quick.ctrl} onChange={(e) => applyQuick({ ctrl: e.target.value })} style={{ width: 200 }} />
-            </div>
-            <Space size={6} style={{ paddingBottom: 4 }}>
-              <span className="pp-muted" style={{ fontSize: 12 }}>allow-lan</span>
-              <Switch size="small" checked={quick.lan} onChange={(v) => applyQuick({ lan: v })} />
-              <span className="pp-muted" style={{ fontSize: 12, marginLeft: 8 }}>ipv6</span>
-              <Switch size="small" checked={quick.ipv6} onChange={(v) => applyQuick({ ipv6: v })} />
-            </Space>
-          </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 6 }}>
             <Button size="small" onClick={() => { setImportText(''); setImportOpen(true); }}>
               从配置导入
             </Button>
-            <input
-              id="mihomo-yaml-file"
-              type="file"
-              accept=".yaml,.yml,.txt"
-              style={{ display: 'none' }}
-              onChange={(e) => {
-                importYamlFile(e.target.files && e.target.files[0]);
-                e.target.value = '';
-              }}
-            />
-            <Button size="small" onClick={() => document.getElementById('mihomo-yaml-file').click()}>
-              导入 YAML
-            </Button>
             <Button size="small" onClick={parseContent}>
               解析配置
             </Button>
-            <Button size="small" onClick={() => { tplForm.setFieldsValue({ content: DEFAULT_MIHOMO_TEMPLATE }); setQuick(parseQuick(DEFAULT_MIHOMO_TEMPLATE)); }}>
-              填入默认配置
-            </Button>
           </div>
-          <Form.Item
-            name="content"
-            label="YAML 模板（proxies: 下方留空行；分组里可用 {{PROXY_NAMES}} 占位）"
-            rules={tplMode === 'server' ? [] : [{ required: true, message: '请填写模板内容' }]}
-          >
-            <TextArea autoSize={{ minRows: 16, maxRows: 26 }} style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12.5 }} />
-          </Form.Item>
         </Form>
       </Modal>
 
@@ -1038,15 +961,6 @@ export default function Mihomo({ templatesOnly }) {
           </Form.Item>
           <Form.Item name="template_id" label="mihomo 模板" rules={[{ required: true, message: '请选择模板' }]}>
             <Select showSearch optionFilterProp="label" options={templateOptions} placeholder="选择模板" />
-          </Form.Item>
-          <Form.Item name="protocols" label="生成协议（不选则全部协议）">
-            <Select
-              mode="multiple"
-              allowClear
-              options={PROTOCOLS}
-              placeholder="全部协议"
-              maxTagCount="responsive"
-            />
           </Form.Item>
           <Space size={12} style={{ width: '100%' }} align="start">
             <Form.Item name={['advanced', 'group_type']} label="自动分组类型" style={{ width: 200 }}>
