@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -37,7 +38,7 @@ func (h *handlers) mihomoBin(w http.ResponseWriter, r *http.Request) {
 	http.ServeContent(w, r, st.Name(), st.ModTime(), f)
 }
 
-// POST /api/mihomo/nodes/{id}/apply  生成配置并下发到服务器（安装 mihomo + 写配置 + 重启）
+// POST /api/mihomo/nodes/{id}/apply  生成配置并下发（安装内核 + 配置 + 统计上报服务 + 重启）
 func (h *handlers) mihomoNodeApplyServer(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(r)
 	if !ok {
@@ -53,14 +54,15 @@ func (h *handlers) mihomoNodeApplyServer(w http.ResponseWriter, r *http.Request)
 		portBase   int64
 		configPath string
 		service    string
+		reportTok  string
 	)
 	err := h.db.QueryRowContext(r.Context(),
 		`SELECT n.name, n.server_id, COALESCE(n.uuid_list,'[]'), COALESCE(n.port_base,0),
 		        COALESCE(n.config_path,'/etc/mihomo/config.yaml'), COALESCE(n.service,'mihomo'),
-		        COALESCE(t.mode,'subscription'), COALESCE(t.server_json,'{}')
+		        COALESCE(t.mode,'subscription'), COALESCE(t.server_json,'{}'), COALESCE(n.report_token,'')
 		   FROM mihomo_nodes n LEFT JOIN mihomo_templates t ON t.id = n.template_id
 		  WHERE n.id = ? LIMIT 1`, id).
-		Scan(&name, &serverID, &uuidRaw, &portBase, &configPath, &service, &mode, &serverRaw)
+		Scan(&name, &serverID, &uuidRaw, &portBase, &configPath, &service, &mode, &serverRaw, &reportTok)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "绑定不存在")
 		return
@@ -79,6 +81,13 @@ func (h *handlers) mihomoNodeApplyServer(w http.ResponseWriter, r *http.Request)
 	if portBase > 0 {
 		cfg.PortBase = int(portBase)
 	}
+	if strings.TrimSpace(cfg.Secret) == "" {
+		cfg.Secret = mihomoNewReportToken()
+	}
+	if strings.TrimSpace(reportTok) == "" {
+		reportTok = mihomoNewReportToken()
+		_, _ = h.db.ExecContext(r.Context(), `UPDATE mihomo_nodes SET report_token = ? WHERE id = ?`, reportTok, id)
+	}
 	yamlText, _, msg := renderMihomoServer(cfg, mihomoParseUUIDs(uuidRaw))
 	if msg != "" {
 		writeError(w, http.StatusBadRequest, msg)
@@ -93,7 +102,7 @@ func (h *handlers) mihomoNodeApplyServer(w http.ResponseWriter, r *http.Request)
 	if base == "" {
 		base = strings.TrimRight(requestOrigin(r), "/")
 	}
-	script := buildMihomoApplyScript(base, configPath, service, yamlText)
+	script := buildMihomoApplyScript(base, configPath, service, yamlText, id, reportTok, cfg.Secret)
 	payload := map[string]any{"command": script, "timeout": 300}
 	taskID, dup, qmsg := h.agentQueueTask(r.Context(), srv, "exec", 0, payload, "admin")
 	if qmsg != "" {
@@ -108,8 +117,10 @@ func (h *handlers) mihomoNodeApplyServer(w http.ResponseWriter, r *http.Request)
 	})
 }
 
-func buildMihomoApplyScript(base, configPath, service, yamlText string) string {
+func buildMihomoApplyScript(base, configPath, service, yamlText string, nodeID int64, reportToken, apiSecret string) string {
 	unitPath := "/etc/systemd/system/" + service + ".service"
+	statsUnit := "/etc/systemd/system/pp-mihomo-stats.service"
+	reportURL := base + "/api/mihomo/report?node=" + strconv.FormatInt(nodeID, 10) + "&token=" + reportToken
 	return `set -e
 ARCH=$(uname -m)
 case "$ARCH" in
@@ -144,13 +155,42 @@ LimitNOFILE=1048576
 [Install]
 WantedBy=multi-user.target
 PP_UNIT_EOF
+cat > /usr/local/bin/pp-mihomo-stats.sh <<'PP_STATS_EOF'
+#!/bin/sh
+API="` + reportURL + `"
+SECRET="` + apiSecret + `"
+while true; do
+  if curl -fsS -m 5 -H "Authorization: Bearer $SECRET" http://127.0.0.1:9090/connections -o /tmp/pp-mh-conn.json 2>/dev/null; then
+    curl -fsS -m 10 -X POST "$API" -H 'Content-Type: application/json' --data-binary @/tmp/pp-mh-conn.json >/dev/null 2>&1 || true
+  fi
+  sleep 10
+done
+PP_STATS_EOF
+chmod 0755 /usr/local/bin/pp-mihomo-stats.sh
+cat > ` + statsUnit + ` <<'PP_STATS_UNIT_EOF'
+[Unit]
+Description=ProxyPilot mihomo stats reporter
+After=network-online.target ` + service + `.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/pp-mihomo-stats.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+PP_STATS_UNIT_EOF
 systemctl daemon-reload
 systemctl enable ` + service + ` >/dev/null 2>&1 || true
 echo "checking config"
 "$BIN" -d /etc/mihomo -t
 systemctl restart ` + service + `
+systemctl enable pp-mihomo-stats >/dev/null 2>&1 || true
+systemctl restart pp-mihomo-stats
 sleep 2
-systemctl is-active ` + service + `
+systemctl is-active ` + service + ` pp-mihomo-stats
 "$BIN" -v | head -1
 echo "done"
 `
