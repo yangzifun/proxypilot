@@ -34,7 +34,7 @@ func EnsureLocalServer(ctx context.Context, db *sql.DB, log interface{ Info(stri
 	var id int64
 	err := db.QueryRowContext(ctx, `SELECT id FROM servers WHERE link_mode='local' ORDER BY id LIMIT 1`).Scan(&id)
 	if err == nil {
-		_, _ = db.ExecContext(ctx, `UPDATE servers SET enabled=1, allow_exec=1, agent_next_poll_sec=5, metrics_every=1, updated_at=? WHERE id=?`, nowMillis(), id)
+		_, _ = db.ExecContext(ctx, `UPDATE servers SET enabled=1, allow_exec=0, agent_next_poll_sec=5, metrics_every=1, updated_at=? WHERE id=?`, nowMillis(), id)
 		return id
 	}
 	res, err := db.ExecContext(ctx, `INSERT INTO servers

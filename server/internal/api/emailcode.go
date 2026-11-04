@@ -105,7 +105,7 @@ func (h *handlers) consumeEmailCode(ctx context.Context, email, code, purpose st
 		return false, 400, errCodeExpired.Error()
 	}
 	if attempts >= emailCodeAttempts {
-		_, _ = h.db.ExecContext(ctx, `UPDATE admin_email_codes SET used = 1 WHERE id = ?`, id)
+		_, _ = h.db.ExecContext(ctx, `UPDATE admin_email_codes SET used = 1 WHERE id = ? AND used = 0`, id)
 		return false, 429, errCodeTooMany.Error()
 	}
 	if hashEmailCode(email, code, purpose) != hash {

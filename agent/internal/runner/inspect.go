@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"os"
 	"sort"
 	"strings"
 )
@@ -21,9 +20,9 @@ func (r *Runner) inspectConfig(path string) string {
 	if strings.TrimSpace(path) == "" {
 		return fail("路径为空")
 	}
-	data, err := os.ReadFile(path)
+	data, err := safeReadConfigFile(path, 8<<20)
 	if err != nil {
-		return fail(err.Error())
+		return fail("配置路径不允许或读取失败")
 	}
 	sum := sha256.Sum256(data)
 	res["sha256"] = hex.EncodeToString(sum[:])

@@ -141,10 +141,16 @@ func (c Config) validate() error {
 	if c.MySQLDSN == "" {
 		return errors.New("PP_MYSQL_DSN 未设置")
 	}
-	if c.JWTSecret == "" || c.JWTSecret == DefaultJWTSecret {
+	weak := map[string]bool{
+		"":                                  true,
+		DefaultJWTSecret:                    true,
+		"change-me-to-a-long-random-string": true,
+		"change-me":                         true,
+	}
+	if weak[c.JWTSecret] {
 		return fmt.Errorf("PP_JWT_SECRET 未设置或仍是默认值 %q；请执行 openssl rand -base64 48 生成", DefaultJWTSecret)
 	}
-	if len(c.JWTSecret) < 16 && !c.AllowDevSecret {
+	if len(c.JWTSecret) < 32 && !c.AllowDevSecret {
 		return errors.New("PP_JWT_SECRET 太短（至少 16 字节）")
 	}
 	if strings.TrimSpace(c.SuperAdmin) == "" {

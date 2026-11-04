@@ -193,6 +193,11 @@ func (r *Runner) deploy(ctx context.Context, a client.Action) (int, string) {
 	if r.InstallMissing {
 		r.ensureServiceUnit(a)
 	}
+	if safePath, perr := safeConfigPath(a.Path); perr != nil {
+		return 1, perr.Error()
+	} else {
+		a.Path = safePath
+	}
 	dir := filepath.Dir(a.Path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return 1, "无法创建目录 " + dir + "：" + err.Error()

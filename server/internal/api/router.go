@@ -186,7 +186,7 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("POST /api/agent/keycheck", h.agentKeycheck)
 	mux.HandleFunc("GET /api/agent/latest", h.authed(authOpts{}, h.agentLatest))
 	mux.HandleFunc("GET /api/agent/tasks", h.authed(authOpts{}, h.agentTasksList))
-	mux.HandleFunc("POST /api/agent/tasks", h.authed(authOpts{}, h.agentTaskCreate))
+	mux.HandleFunc("POST /api/agent/tasks", h.authed(authOpts{superOnly: true}, h.agentTaskCreate))
 	mux.HandleFunc("POST /api/agent/push-update", h.authed(authOpts{}, h.agentPushUpdate))
 	mux.HandleFunc("POST /api/agent/tasks/{id}/cancel", h.authed(authOpts{}, h.agentTaskCancel))
 	mux.HandleFunc("DELETE /api/agent/tasks/{id}", h.authed(authOpts{}, h.agentTaskDelete))

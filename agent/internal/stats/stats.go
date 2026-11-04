@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -59,6 +60,12 @@ func Collect(target client.StatsTarget) client.NodeStats {
 	if path == "" {
 		path = DefaultSBPath
 	}
+	if abs, aerr := filepath.Abs(filepath.Clean(path)); aerr != nil || !sbPathAllowed(abs) {
+		out.Error = "sb.json 路径不合法"
+		return out
+	} else {
+		path = abs
+	}
 	exp, err := ReadExperimental(path)
 	if err != nil {
 		out.Error = err.Error()
@@ -107,4 +114,13 @@ func CollectAll(targets []client.StatsTarget) []client.NodeStats {
 		out = append(out, Collect(t))
 	}
 	return out
+}
+
+func sbPathAllowed(abs string) bool {
+	for _, root := range []string{"/etc/sing-box/", "/etc/mihomo/"} {
+		if strings.HasPrefix(abs, root) {
+			return true
+		}
+	}
+	return false
 }

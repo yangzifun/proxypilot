@@ -71,6 +71,14 @@ func (r *Runner) ensureComponent(ctx context.Context, bin string) (int, string) 
 // execReload 非空时写入 ExecReload；已存在的单元若缺这一段，用 drop-in 补上，
 // 避免覆盖用户自己改过的单元文件。
 func (r *Runner) ensureUnit(name, execStart string, execReload ...string) {
+	if !unitNameOK(name) {
+		r.log("非法 systemd 单元名，已拒绝：%s", name)
+		return
+	}
+	if !unitContentOK(execStart) {
+		r.log("单元 ExecStart 含非法控制字符，已拒绝")
+		return
+	}
 	unitPath := "/etc/systemd/system/" + name + ".service"
 	reload := ""
 	if len(execReload) > 0 {

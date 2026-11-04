@@ -181,6 +181,9 @@ func (w *Conn) ReadMessage() (byte, []byte, error) {
 		case opPong:
 			continue
 		case opContinuation:
+			if len(payload)+len(data) > 8<<20 {
+				return 0, nil, errors.New("消息过大")
+			}
 			payload = append(payload, data...)
 		default:
 			opcode = op
