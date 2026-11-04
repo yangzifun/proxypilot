@@ -35,7 +35,7 @@ export default function NodeBindings() {
       ]);
       setTpl({
         sb: (sb.data || []).map((x) => ({ value: x.id, label: x.name })),
-        mh: (mh.data || []).filter((x) => x.mode === 'server').map((x) => ({ value: x.id, label: x.name })),
+        mh: (mh.data || []).map((x) => ({ value: x.id, label: x.name + (x.mode === 'server' ? ' · 服务端' : ' · 订阅') })),
         mp: (mp.data || []).map((x) => ({ value: x.id, label: x.name })),
       });
     } catch (e) {
@@ -299,23 +299,30 @@ export default function NodeBindings() {
           <Form.Item name="mp_tpl" label="MTProto 模板">
             <Select allowClear options={tpl.mp} placeholder="不绑定 MTProto" />
           </Form.Item>
-          <Form.Item noStyle shouldUpdate={(a, b) => a.mp_tpl !== b.mp_tpl}>
-            {({ getFieldValue }) =>
-              getFieldValue('mp_tpl') ? (
-                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                  <Form.Item name="mp_name" label="MTProto 节点名" style={{ width: 200 }}>
-                    <Input placeholder="留空自动生成" />
-                  </Form.Item>
-                  <Form.Item name="mp_domain" label="伪装域名" style={{ width: 240 }} rules={[{ required: true, message: '请填写 MTProto 伪装域名' }]}>
-                    <Input placeholder="www.microsoft.com" />
-                  </Form.Item>
-                  <Form.Item name="mp_port" label="端口" style={{ width: 140 }}>
-                    <Input placeholder="0 = 跟随模板" />
-                  </Form.Item>
-                </div>
-              ) : null
-            }
-          </Form.Item>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <Form.Item name="mp_name" label="MTProto 节点名" style={{ width: 200 }}>
+              <Input placeholder="留空自动生成" />
+            </Form.Item>
+            <Form.Item
+              name="mp_domain"
+              label="MTProto 伪装域名"
+              style={{ width: 260 }}
+              dependencies={['mp_tpl']}
+              rules={[
+                ({ getFieldValue }) => ({
+                  validator(_, value) {
+                    if (!getFieldValue('mp_tpl') || String(value || '').trim()) return Promise.resolve();
+                    return Promise.reject(new Error('请填写 MTProto 伪装域名'));
+                  },
+                }),
+              ]}
+            >
+              <Input placeholder="www.microsoft.com" />
+            </Form.Item>
+            <Form.Item name="mp_port" label="端口" style={{ width: 140 }}>
+              <Input placeholder="0 = 跟随模板" />
+            </Form.Item>
+          </div>
         </Form>
       </Modal>
     </PageCard>
