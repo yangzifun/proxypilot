@@ -23,7 +23,7 @@
 # =================================================================
 
 ORIGIN='https://your-worker.example.com'
-BINARY_BASE='https://s3.proxypilot.yangzifun.org/agent'
+BINARY_BASE=''
 KEY=''
 SHA_OVERRIDE=''
 INTERVAL=60
@@ -98,6 +98,7 @@ case "$ARCH_RAW" in
     aarch64|arm64) ARCH=arm64 ;;
     *) die "暂不支持的架构：$ARCH_RAW（可用：amd64 / arm64）" ;;
 esac
+[ -n "$BINARY_BASE" ] || BINARY_BASE="$ORIGIN/agent-dist"
 log "平台：linux-$ARCH；Worker：$ORIGIN；二进制基址：$BINARY_BASE"
 
 # ---------------- 密钥校验（keycheck：拼错立刻失败，避免 agent 反复重试） ----------------
@@ -149,6 +150,33 @@ if [ "$(printf '%s' "$GOT" | tr 'A-Z' 'a-z')" != "$(printf '%s' "$SHA" | tr 'A-Z
     die "sha256 校验失败（期望 $SHA，实际 $GOT）：已中止安装，请重试或核对发布产物"
 fi
 log 'sha256 校验通过'
+
+# ---------------- 分发包签名校验（Ed25519） ----------------
+if [ -z "$SHA_OVERRIDE" ]; then
+    SIG=$(printf '%s' "$MANIFEST_FLAT" | sed -n 's/.*"signature":"\([^"]*\)".*/\1/p' | head -n 1)
+    if [ -n "$SIG" ]; then
+        command -v openssl >/dev/null 2>&1 || die '缺少 openssl，无法校验分发包签名'
+        SHA_AMD=$(printf '%s' "$MANIFEST_FLAT" | sed -n 's/.*"linux-amd64":[^}]*"sha256":"\([0-9a-fA-F]*\)".*/\1/p' | head -n 1)
+        SHA_ARM=$(printf '%s' "$MANIFEST_FLAT" | sed -n 's/.*"linux-arm64":[^}]*"sha256":"\([0-9a-fA-F]*\)".*/\1/p' | head -n 1)
+        PUBPEM=$(mktemp 2>/dev/null || echo "/tmp/pp-agent-pub.$$")
+        MSGF=$(mktemp 2>/dev/null || echo "/tmp/pp-agent-msg.$$")
+        SIGF=$(mktemp 2>/dev/null || echo "/tmp/pp-agent-sig.$$")
+        trap 'rm -f "$TMP" "$PUBPEM" "$MSGF" "$SIGF"' EXIT INT TERM
+        cat > "$PUBPEM" <<'PP_PUBKEY_EOF'
+-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEAlCkGyMa3XzecmYYKqosw+CeeyFN2ioYXARzn95bGuws=
+-----END PUBLIC KEY-----
+PP_PUBKEY_EOF
+        printf 'v1|%s|%s|%s' "$VERSION" "$SHA_AMD" "$SHA_ARM" > "$MSGF"
+        printf '%s' "$SIG" | base64 -d > "$SIGF" 2>/dev/null || die '签名解码失败'
+        openssl pkeyutl -verify -pubin -inkey "$PUBPEM" -rawin -in "$MSGF" -sigfile "$SIGF" >/dev/null 2>&1 \
+            || die '分发包签名校验失败：manifest 可能被篡改'
+        rm -f "$PUBPEM" "$MSGF" "$SIGF"
+        log '分发包签名校验通过'
+    else
+        log '警告：manifest 未包含签名，仅做 sha256 校验'
+    fi
+fi
 
 # ---------------- 安装二进制 ----------------
 if command -v install >/dev/null 2>&1; then
