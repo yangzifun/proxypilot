@@ -401,6 +401,7 @@ export default function Nodes({ initialTab, templatesOnly }) {
       <div>
         <Tabs
           defaultActiveKey="tpl"
+          tabBarStyle={templatesOnly ? { display: 'none' } : undefined}
           items={([
             {
               key: 'tpl',

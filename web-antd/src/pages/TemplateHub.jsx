@@ -13,7 +13,7 @@ export default function TemplateHub() {
       items={[
         { key: 'singbox', label: 'singbox', children: <Nodes initialTab="tpl" templatesOnly /> },
         { key: 'mihomo', label: 'mihomo', children: <Mihomo templatesOnly /> },
-        { key: 'mtproto', label: 'MTProto', children: <MtprotoPage /> },
+        { key: 'mtproto', label: 'MTProto', children: <MtprotoPage templatesOnly /> },
       ]}
     />
   );

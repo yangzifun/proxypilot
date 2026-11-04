@@ -580,11 +580,11 @@ export default function Mihomo({ templatesOnly }) {
   };
 
   const tplColumns = [
-    { title: '模板名称', dataIndex: 'name', width: 180, ellipsis: true },
-    { title: '备注', dataIndex: 'remark', width: 200, ellipsis: true, render: (v) => v || '—' },
+    { title: 'ID', dataIndex: 'id', width: 70 },
+    { title: '模板名称', dataIndex: 'name', width: 200, ellipsis: true },
     {
-      title: '协议 / 端口',
-      width: 220,
+      title: '协议',
+      width: 260,
       render: (_, row) => {
         const asArr = (v) => {
           if (Array.isArray(v)) return v;
@@ -598,27 +598,20 @@ export default function Mihomo({ templatesOnly }) {
           }
           return [];
         };
-        const cfg = (row.server_cfg && typeof row.server_cfg === 'object') ? row.server_cfg : {};
+        const cfg = row.server_cfg && typeof row.server_cfg === 'object' ? row.server_cfg : {};
         const list = row.mode === 'server' ? asArr(cfg.protocols) : asArr(row.protocols);
-        if (!list.length) return <span className="pp-muted">全部</span>;
+        if (!list.length) return <Tag>全部（订阅模板）</Tag>;
         return (
           <span>
-            {list.slice(0, 3).map((x) => (
-              <Tag key={x} style={{ marginInlineEnd: 4 }}>{x}</Tag>
+            {list.map((x) => (
+              <Tag key={x} style={{ marginBottom: 4 }}>{x}</Tag>
             ))}
-            {list.length > 3 ? <Tag>+{list.length - 3}</Tag> : null}
             {row.mode === 'server' && cfg.port_base ? (
               <span className="pp-muted" style={{ fontSize: 11.5, marginLeft: 4 }}>:{cfg.port_base}</span>
             ) : null}
           </span>
         );
       },
-    },
-    {
-      title: '引用',
-      dataIndex: 'bind_count',
-      width: 70,
-      render: (v) => <Tag color={v ? 'geekblue' : 'default'}>{v || 0}</Tag>,
     },
     {
       title: '状态',
@@ -634,18 +627,13 @@ export default function Mihomo({ templatesOnly }) {
     { title: '更新时间', dataIndex: 'updated_at', width: 170, render: (v) => fmtTime(v) },
     {
       title: '操作',
-      width: 340,
+      width: 360,
       render: (_, row) => (
         <Space size={4}>
           <Button size="small" type="link" icon={<EditOutlined />} onClick={() => openEditTpl(row)}>
             编辑
           </Button>
-          <Button
-            size="small"
-            type="link"
-            icon={<EyeOutlined />}
-            onClick={() => setPreview({ title: row.name, yaml: '', loading: true }) || openTplPreview(row)}
-          >
+          <Button size="small" type="link" icon={<EyeOutlined />} onClick={() => openTplPreview(row)}>
             预览
           </Button>
           <Button size="small" type="link" onClick={() => loadVersions(row)}>
@@ -766,6 +754,7 @@ export default function Mihomo({ templatesOnly }) {
     >
       <Tabs
         activeKey={tab}
+          tabBarStyle={templatesOnly ? { display: 'none' } : undefined}
         onChange={setTab}
         items={([
           {
@@ -777,7 +766,7 @@ export default function Mihomo({ templatesOnly }) {
                 size="middle"
                 loading={loading}
                 dataSource={templates}
-                scroll={{ x: 1100 }}
+                scroll={{ x: 1200 }}
                 columns={tplColumns}
                 pagination={{ pageSize: 10, hideOnSinglePage: true }}
               />

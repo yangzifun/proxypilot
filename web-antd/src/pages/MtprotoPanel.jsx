@@ -71,7 +71,7 @@ function inheritTag(on) {
   return on ? <Tag style={{ marginInlineStart: 6 }}>继承</Tag> : null;
 }
 
-export default function MtprotoPanel() {
+export default function MtprotoPanel({ templatesOnly }) {
   const { message, modal } = AntdApp.useApp();
   const nodes = useAsync(() => api('mtproto/nodes'), []);
   const templates = useAsync(() => api('mtproto/templates'), []);
@@ -551,7 +551,8 @@ export default function MtprotoPanel() {
 
       <Tabs
         defaultActiveKey="templates"
-        items={[
+          tabBarStyle={templatesOnly ? { display: 'none' } : undefined}
+        items={([
           {
             key: 'templates',
             label: `协议模板（${tplRows.length}）`,
@@ -607,7 +608,7 @@ export default function MtprotoPanel() {
               </PageCard>
             ),
           },
-        ]}
+        ]).filter((it) => !templatesOnly || it.key === 'templates')}
       />
 
       {/* 节点表单 */}
