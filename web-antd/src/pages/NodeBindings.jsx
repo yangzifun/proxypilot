@@ -111,11 +111,11 @@ export default function NodeBindings() {
     const tasks = [];
     if (v.sb_tpl) tasks.push(['singbox', '/api/singbox/nodes', {
       name: (v.sb_name || v.name || '').trim(), server_id: v.server_id, template_id: v.sb_tpl,
-      domain: v.sb_domain || v.domain || '', cdn_domain: v.sb_cdn || '', port_base: v.sb_port || 0,
+      domain: v.sb_domain || v.domain || '', cdn_domain: v.sb_cdn || '',
     }]);
     if (v.mh_tpl) tasks.push(['mihomo', '/api/mihomo/nodes', {
       name: (v.mh_name || v.name || '').trim(), server_id: v.server_id, template_id: v.mh_tpl,
-      domain: v.mh_domain || v.domain || '', port_base: v.mh_port || 0,
+      domain: v.mh_domain || v.domain || '',
     }]);
     if (v.mp_tpl) tasks.push(['MTProto', '/api/mtproto/nodes', {
       name: (v.mp_name || v.name || '').trim(), server_id: v.server_id, template_id: v.mp_tpl,
@@ -295,9 +295,6 @@ export default function NodeBindings() {
                   <Form.Item name="sb_cdn" label="CDN 域名" style={{ width: 240 }}>
                     <Input placeholder="cdn.example.com（可选）" />
                   </Form.Item>
-                  <Form.Item name="sb_port" label="端口基址" style={{ width: 140 }}>
-                    <Input placeholder="0 = 跟随模板" />
-                  </Form.Item>
                 </div>
               ) : null
             }
@@ -314,9 +311,6 @@ export default function NodeBindings() {
                   </Form.Item>
                   <Form.Item name="mh_domain" label="域名" style={{ width: 240 }}>
                     <Input placeholder="hk.example.com" />
-                  </Form.Item>
-                  <Form.Item name="mh_port" label="端口基址" style={{ width: 140 }}>
-                    <Input placeholder="0 = 跟随模板" />
                   </Form.Item>
                 </div>
               ) : null
