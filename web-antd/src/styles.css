@@ -742,6 +742,35 @@ body {
    —— 用 grid 而不是 Row/Col：grid 的 align-items:stretch 会把三张卡拉成同一高度 */
 .pp-mon-top-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
+
+/* ---------------- 登录页动态插画 ---------------- */
+.pp-anim { position: relative; margin: 26px 0 6px; max-width: 560px; }
+.pp-anim-glow { position: absolute; inset: -18% -10%; background: radial-gradient(closest-side, rgba(99,102,241,.22), transparent 70%); filter: blur(6px); pointer-events: none; }
+.pp-anim-svg { position: relative; width: 100%; height: auto; display: block; overflow: visible; }
+.pp-anim-halo { animation: ppAnimBreath 6s ease-in-out infinite; transform-origin: 280px 176px; }
+.pp-anim-orbit { fill: none; stroke: rgba(129,140,248,.22); stroke-width: 1; stroke-dasharray: 2 10; transform-origin: 280px 176px; animation: ppAnimSpin 30s linear infinite; }
+.pp-anim-orbit-slow { stroke: rgba(56,189,248,.16); animation-duration: 46s; animation-direction: reverse; }
+.pp-anim-link { fill: none; stroke: url(#ppAnimLink); stroke-width: 1.6; stroke-dasharray: 5 9; animation: ppAnimDash 2.4s linear infinite; }
+.pp-anim-packet { opacity: .9; filter: drop-shadow(0 0 6px currentColor); }
+.pp-anim-node { animation: ppAnimFloat 5.5s ease-in-out infinite; }
+.pp-anim-node-halo { animation: ppAnimPulse 3s ease-in-out infinite; transform-origin: center; transform-box: fill-box; opacity: .18; }
+.pp-anim-node-core { filter: drop-shadow(0 0 6px rgba(255,255,255,.25)); }
+.pp-anim-node-ring { fill: none; stroke-width: 1.2; opacity: .5; animation: ppAnimRing 3s ease-out infinite; transform-origin: center; transform-box: fill-box; }
+.pp-anim-card { filter: drop-shadow(0 18px 30px rgba(2,6,23,.55)); animation: ppAnimFloatCard 7s ease-in-out infinite; }
+.pp-anim-bar { fill: #818cf8; transform-box: fill-box; transform-origin: center bottom; animation: ppAnimBar 1.5s ease-in-out infinite; }
+.pp-anim-led { animation: ppAnimLed 1.6s ease-in-out infinite; }
+@keyframes ppAnimSpin { to { transform: rotate(360deg); } }
+@keyframes ppAnimDash { to { stroke-dashoffset: -28; } }
+@keyframes ppAnimBreath { 0%,100% { opacity: .55; transform: scale(1); } 50% { opacity: .9; transform: scale(1.04); } }
+@keyframes ppAnimPulse { 0%,100% { opacity: .12; transform: scale(.85); } 50% { opacity: .3; transform: scale(1.15); } }
+@keyframes ppAnimRing { 0% { opacity: .55; transform: scale(.8); } 80%,100% { opacity: 0; transform: scale(1.9); } }
+@keyframes ppAnimFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@keyframes ppAnimFloatCard { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+@keyframes ppAnimBar { 0%,100% { transform: scaleY(.35); } 50% { transform: scaleY(1); } }
+@keyframes ppAnimLed { 0%,100% { opacity: .35; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .pp-anim * { animation: none !important; }
+}
 /* ---------------- 服务器概览（指标 + 资源 + 地图） ---------------- */
 .pp-overview-grid { display: grid; grid-template-columns: minmax(300px, 380px) minmax(0, 1fr); gap: 20px; padding: 16px; }
 @media (max-width: 1180px) { .pp-overview-grid { grid-template-columns: minmax(0, 1fr); } }

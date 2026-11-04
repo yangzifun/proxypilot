@@ -7,6 +7,7 @@ import { App as AntdApp, Button, Input } from 'antd';
 import { ArrowRightOutlined, LockOutlined, MailOutlined, SafetyOutlined } from '@ant-design/icons';
 import { portalApi, portalSetToken } from './portalApi';
 import { useTurnstile } from '../hooks';
+import LoginAnimation from '../components/LoginAnimation';
 import { LOGO_URL } from '../theme';
 
 const boot = (typeof window !== 'undefined' && window.__PP_BOOT__) || {};
@@ -94,26 +95,7 @@ export default function PortalLogin({ onLoggedIn }) {
             </div>
           </div>
 
-          <h2 className="pp-auth-slogan">
-            你的订阅
-            <br />
-            一处掌握
-          </h2>
-
-          <ul className="pp-auth-points">
-            <li>
-              <span className="pp-auth-dot" />
-              订阅链接与二维码，随手可取
-            </li>
-            <li>
-              <span className="pp-auth-dot" />
-              节点配置在线增删改
-            </li>
-            <li>
-              <span className="pp-auth-dot" />
-              访问统计与外部订阅源
-            </li>
-          </ul>
+          <LoginAnimation />
 
           <div className="pp-auth-brandfoot">
             <SafetyOutlined /> 邮箱验证码登录 · 无需密码

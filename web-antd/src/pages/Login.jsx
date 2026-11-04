@@ -14,6 +14,7 @@ import {
 } from '@ant-design/icons';
 import { useAuth } from '../auth';
 import { useTurnstile } from '../hooks';
+import LoginAnimation from '../components/LoginAnimation';
 import { LOGO_URL } from '../theme';
 
 const boot = (typeof window !== 'undefined' && window.__PP_BOOT__) || {};
@@ -211,34 +212,7 @@ export default function Login() {
               </div>
             </div>
 
-            <h3 className="pp-login-title" style={{ marginTop: 34 }}>
-              一个 Worker，
-              <br />
-              管好你的全部订阅与节点
-            </h3>
-            <p className="pp-login-desc">
-              订阅生成、协议编排、节点配置下发与服务器监控，统一收在同一个 Cloudflare Worker 里。
-              新界面基于 Ant Design 6 重构，图表与状态一眼看清。
-            </p>
-
-            <div className="pp-login-feats">
-              <div className="pp-login-feat">
-                <ThunderboltOutlined />
-                订阅生成 · Clash / Mihomo / 原始链接
-              </div>
-              <div className="pp-login-feat">
-                <CloudServerOutlined />
-                服务器监控 · CPU / 内存 / 磁盘 / 服务矩阵
-              </div>
-              <div className="pp-login-feat">
-                <SafetyCertificateOutlined />
-                JWT + TOTP + 邮箱验证码 + OIDC 单点
-              </div>
-              <div className="pp-login-feat">
-                <ApiOutlined />
-                API 密钥细粒度权限，Agent 全程出站接入
-              </div>
-            </div>
+            <LoginAnimation />
           </div>
 
           <div style={{ position: 'relative', zIndex: 1, color: '#475569', fontSize: 11.5 }}>
