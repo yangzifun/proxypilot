@@ -278,240 +278,63 @@ function Configs({ uuid, onChanged }) {
     });
   };
 
+  const nodeGroups = (() => {
+    const map = new Map();
+    for (const s of state.data || []) {
+      const key = s.server_id || 0;
+      if (!map.has(key)) {
+        map.set(key, { server_id: key, server_name: s.server_name || '—', items: [] });
+      }
+      map.get(key).items.push(s);
+    }
+    return [...map.values()];
+  })();
+  const authorizedNodes = nodeGroups.filter((g) => g.items.length && g.items.every((i) => i.authorized)).map((g) => g.server_id);
+
   const columns = [
-    { title: 'ID', dataIndex: 'id', width: 66 },
-    { title: '协议', dataIndex: 'protocol', width: 100, render: (v) => <Tag color="blue">{v || 'unknown'}</Tag> },
     {
-      title: '配置',
-      dataIndex: 'config_data',
-      ellipsis: true,
-      render: (v) => <span className="pp-mono" style={{ color: '#475569' }}>{String(v || '').slice(0, 88)}</span>,
-    },
-    { title: '备注', dataIndex: 'remark', width: 110, ellipsis: true, render: (v) => v || <span className="pp-muted">—</span> },
-    { title: '更新时间', dataIndex: 'updated_at', width: 116, render: (v) => <span className="pp-muted">{fmtAgo(v)}</span> },
-    {
-      title: '操作',
-      width: 110,
-      render: (_, r) => (
-        <Space size={0}>
-          <IconAction title="查看" icon={<EyeOutlined />} onClick={() => setPreview(r)} />
-          <IconAction title="编辑" icon={<EditOutlined />} onClick={() => openEdit(r)} />
-          <Popconfirm title="删除这条配置？" okText="删除" okButtonProps={{ danger: true }} onConfirm={() => removeOne(r)}>
-            <Button type="text" size="small" danger icon={<DeleteOutlined />} aria-label="删除" />
-          </Popconfirm>
-        </Space>
+      title: '节点（服务器）',
+      width: 200,
+      render: (_, g) => (
+        <div>
+          <b>{g.server_name}</b>
+          <div className="pp-muted" style={{ fontSize: 12 }}>{g.items.length} 个服务</div>
+        </div>
       ),
     },
-  ];
-
-  return (
-    <div>
-      <Toolbar
-        left={
-          <Space wrap>
-            <Button type="primary" size="small" icon={<PlusOutlined />} onClick={openCreate}>
-              添加配置
-            </Button>
-            <Popconfirm
-              title={`删除选中的 ${selected.length} 条？`}
-              okText="删除"
-              okButtonProps={{ danger: true }}
-              disabled={!selected.length}
-              onConfirm={removeSelected}
+    {
+      title: '已绑定服务',
+      render: (_, g) => (
+        <span>
+          {g.items.map((i) => (
+            <Tag
+              key={i.kind + ':' + i.id}
+              color={i.authorized ? (i.kind === 'mihomo' ? 'purple' : i.kind === 'mtproto' ? 'volcano' : 'geekblue') : undefined}
+              style={{ marginBottom: 4 }}
             >
-              <Button size="small" danger icon={<DeleteOutlined />} disabled={!selected.length}>
-                删除选中{selected.length ? `（${selected.length}）` : ''}
-              </Button>
-            </Popconfirm>
-            <Button size="small" danger type="dashed" onClick={clearAll}>
-              一键清理全部
-            </Button>
-            <Button size="small" icon={<ReloadOutlined />} onClick={load} loading={state.loading}>
-              刷新
-            </Button>
-          </Space>
-        }
-        right={<span className="pp-muted" style={{ fontSize: 12 }}>共 {fmtNum(state.total)} 条</span>}
-      />
-
-      {state.error ? <ErrorBlock error={state.error} onRetry={load} /> : null}
-
-      <Table
-        className="pp-table"
-        rowKey="id"
-        size="small"
-        loading={state.loading}
-        dataSource={state.data}
-        columns={columns}
-        rowSelection={{ selectedRowKeys: selected, onChange: (keys) => setSelected(keys) }}
-        pagination={{
-          current: page,
-          pageSize: size,
-          total: state.total,
-          size: 'small',
-          showSizeChanger: true,
-          pageSizeOptions: [10, 20, 50],
-          onChange: (p, s) => {
-            setPage(p);
-            setSize(s);
-          },
-        }}
-        locale={{ emptyText: <EmptyBlock text="该用户还没有节点配置" /> }}
-      />
-
-      {state.mtp && state.mtp.length ? (
-        <div style={{ marginTop: 18 }}>
-          <div className="pp-muted" style={{ fontSize: 12, marginBottom: 8 }}>
-            MTProto 配置（{state.mtp.length}）· 与该用户的 sing-box 节点一起计入节点配置
-          </div>
-          <Table
-            className="pp-table"
-            size="small"
-            dataSource={state.mtp}
-            pagination={false}
-            columns={[
-              { title: '节点', dataIndex: 'node_name', width: 150, render: (v) => <b>{v}</b> },
-              {
-                title: '主机',
-                dataIndex: 'host',
-                width: 200,
-                render: (v, r) => <span className="pp-mono">{v || '—'}:{r.port || 0}</span>,
-              },
-              { title: '密钥', dataIndex: 'secret_hint', width: 170, render: (v) => <span className="pp-mono">{v}</span> },
-              {
-                title: '状态',
-                dataIndex: 'status',
-                width: 90,
-                render: (v) => (v === 'active' ? <Tag color="success">启用</Tag> : <Tag>已撤销</Tag>),
-              },
-              { title: '创建时间', dataIndex: 'created_at', width: 110, render: (v) => <span className="pp-muted">{v ? fmtAgo(v) : '—'}</span> },
-              {
-                title: '操作',
-                width: 110,
-                render: (_, r) => (
-                  <Button type="link" size="small" onClick={() => copyMtp(r.tg)}>
-                    复制链接
-                  </Button>
-                ),
-              },
-            ]}
-            rowKey={(r) => `mtp-${r.id}`}
-          />
-        </div>
-      ) : null}
-
-      <Modal
-        open={!!edit}
-        title={edit && edit.mode === 'edit' ? `编辑配置 #${edit.row.id}` : '添加节点配置'}
-        onCancel={() => setEdit(null)}
-        onOk={save}
-        confirmLoading={saving}
-        okText="保存"
-        width={680}
-        destroyOnHidden
-      >
-        <Form form={form} layout="vertical" requiredMark={false} style={{ marginTop: 12 }}>
-          <Form.Item
-            name="config_data"
-            label="节点链接"
-            rules={[{ required: true, message: '请粘贴节点链接' }]}
-            extra={
-              edit && edit.mode === 'create'
-                ? '支持一次粘贴多行，每行会单独生成一条配置（自动识别协议）'
-                : undefined
-            }
-          >
-            <Input.TextArea
-              rows={edit && edit.mode === 'create' ? 8 : 6}
-              className="pp-mono"
-              spellCheck={false}
-              placeholder={'vless://uuid@host:443?type=ws&security=tls#hk\nhysteria2://pass@host:443#jp'}
-            />
-          </Form.Item>
-        </Form>
-      </Modal>
-
-      <Modal open={!!preview} onCancel={() => setPreview(null)} footer={null} width={700} title="节点配置原文">
-        {preview ? <JsonView value={String(preview.config_data || '')} maxHeight={460} /> : null}
-      </Modal>
-    </div>
-  );
-}
-
-/* ---------------- 授权服务 ---------------- */
-function AuthorizeNodes({ uuid, onChanged }) {
-  const { message } = AntdApp.useApp();
-  const [state, setState] = useState({ data: [], loading: false, error: null });
-  const [selected, setSelected] = useState([]);
-  const [saving, setSaving] = useState(false);
-  const [dirty, setDirty] = useState(false);
-
-  const load = useCallback(async () => {
-    if (!uuid) return;
-    setState((s) => ({ ...s, loading: true, error: null }));
-    try {
-      const res = await api(`uuids/${uuid}/services`);
-      const data = (res && res.data) || [];
-      setState({ data, loading: false, error: null });
-      setSelected(data.filter((n) => n.authorized).map((n) => `${n.kind}:${n.id}`));
-      setDirty(false);
-    } catch (e) {
-      setState({ data: [], loading: false, error: e });
-    }
-  }, [uuid]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  const save = async () => {
-    setSaving(true);
-    try {
-      const services = selected.map((k) => {
-        const [kind, id] = String(k).split(':');
-        return { kind, id: Number(id) };
-      });
-      const res = await api(`uuids/${uuid}/services`, { method: 'PUT', body: { services } });
-      const failed = (res.results || []).filter((r) => r.ok === false);
-      if (failed.length) message.warning(`已提交 ${res.changed || 0} 个变更，${failed.length} 个服务处理失败`);
-      else message.success(`已保存，${res.changed || 0} 个服务授权发生变化`);
-      load();
-      if (onChanged) onChanged();
-    } catch (e) {
-      message.error(e.message || '保存失败');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const columns = [
-    {
-      title: '类型',
-      dataIndex: 'kind',
-      width: 110,
-      render: (v) =>
-        v === 'mtproto' ? (
-          <Tag color="volcano">MTProto</Tag>
-        ) : v === 'mihomo' ? (
-          <Tag color="purple">mihomo</Tag>
-        ) : (
-          <Tag color="geekblue">sing-box</Tag>
-        ),
+              {i.kind === 'mtproto' ? 'MTProto' : i.kind === 'mihomo' ? 'mihomo' : 'sing-box'}
+              {i.template_name ? ' · ' + i.template_name : ''}
+            </Tag>
+          ))}
+        </span>
+      ),
     },
-    { title: '服务', dataIndex: 'name', width: 170, render: (v) => <b>{v}</b> },
-    { title: '服务器', dataIndex: 'server_name', width: 150 },
     {
-      title: '模板',
-      dataIndex: 'template_name',
-      width: 150,
-      render: (v) => (v ? <Tag color="purple">{v}</Tag> : <span className="pp-muted">内置默认</span>),
+      title: '授权服务数',
+      width: 120,
+      align: 'right',
+      render: (_, g) => g.items.filter((i) => i.authorized).length + ' / ' + g.items.length,
     },
-    { title: '当前授权用户数', dataIndex: 'users', width: 130, align: 'right', render: (v) => fmtNum(v) },
     {
       title: '状态',
-      dataIndex: 'authorized',
-      width: 100,
-      render: (v) => (v ? <Tag color="success">已授权</Tag> : <Tag>未授权</Tag>),
+      width: 110,
+      render: (_, g) => {
+        const on = g.items.filter((i) => i.authorized).length;
+        if (!g.items.length) return <Tag>无服务</Tag>;
+        if (on === g.items.length) return <Tag color="success">已授权</Tag>;
+        if (on === 0) return <Tag>未授权</Tag>;
+        return <Tag color="orange">部分授权</Tag>;
+      },
     },
   ];
 
@@ -521,8 +344,8 @@ function AuthorizeNodes({ uuid, onChanged }) {
         type="info"
         showIcon
         style={{ borderRadius: 10, marginBottom: 12 }}
-        message="勾选即授权，取消勾选即撤销"
-        description="授权覆盖该服务器上的 sing-box / mihomo / MTProto 三种服务：勾选后自动把 UUID 写入对应节点并重渲染下发（mihomo 下次下发生效）；变更同时刷新该 UUID 的订阅配置。"
+        message="按节点授权：勾选一个节点，即同步授权它绑定的全部服务"
+        description="勾选节点后，自动把 UUID 写入该服务器上的 sing-box / mihomo / MTProto 全部服务并重渲染下发（mihomo 下次下发生效）；取消勾选则一并撤销。"
       />
       <Toolbar
         left={
@@ -551,16 +374,22 @@ function AuthorizeNodes({ uuid, onChanged }) {
       {state.error ? <ErrorBlock error={state.error} onRetry={load} /> : null}
       <Table
         className="pp-table"
-        rowKey={(row) => `${row.kind}:${row.id}`}
+        rowKey="server_id"
         size="small"
         loading={state.loading}
-        dataSource={state.data}
+        dataSource={nodeGroups}
         columns={columns}
         pagination={false}
         rowSelection={{
-          selectedRowKeys: selected,
+          selectedRowKeys: authorizedNodes,
           onChange: (keys) => {
-            setSelected(keys);
+            const next = [];
+            for (const g of nodeGroups) {
+              if (keys.includes(g.server_id)) {
+                for (const i of g.items) next.push(i.kind + ':' + i.id);
+              }
+            }
+            setSelected(next);
             setDirty(true);
           },
         }}

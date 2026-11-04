@@ -13,6 +13,7 @@ import {
   FolderOpenOutlined,
   LineChartOutlined,
   NodeIndexOutlined,
+  ReadOutlined,
   PartitionOutlined,
   SendOutlined,
   SafetyCertificateOutlined,
@@ -54,6 +55,20 @@ export const PAGE_META = {
     icon: <CloudServerOutlined />,
     group: '运维',
     accent: '#0ea5e9',
+  },
+  bindings: {
+    title: '节点绑定',
+    subtitle: '一台服务器同时绑定 sing-box / mihomo / MTProto',
+    icon: <ApartmentOutlined />,
+    group: '节点运维',
+    accent: '#0ea5e9',
+  },
+  tplhub: {
+    title: '协议模板',
+    subtitle: 'sing-box / mihomo / MTProto 模板配置',
+    icon: <ReadOutlined />,
+    group: '节点运维',
+    accent: '#8b5cf6',
   },
   normal: {
     title: 'singbox',
@@ -128,7 +143,7 @@ export const NAV_ORDER = ['dash', 'uuids', 'tpls', 'userst', 'servers', 'normal'
 export const NAV_GROUPS = [
   { group: '业务', keys: ['dash', 'uuids', 'tpls', 'userst'] },
   { group: '服务器运维', keys: ['servers'] },
-  { group: '节点运维', keys: ['normal', 'mihomo', 'mtproto', 'masque'] },
+  { group: '节点运维', keys: ['bindings', 'tplhub', 'masque'] },
   { group: '系统', keys: ['logs', 'attachments', 'sys', 'backup', 'sec'] },
 ];
 

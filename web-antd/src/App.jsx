@@ -13,6 +13,8 @@ import ServersUnified from './pages/ServersUnified';
 import Nodes from './pages/Nodes';
 import UserTraffic from './pages/UserTraffic';
 import MihomoPage from './pages/Mihomo';
+import NodeBindings from './pages/NodeBindings';
+import TemplateHub from './pages/TemplateHub';
 import MtprotoPage from './pages/MtprotoPage';
 import MasquePage from './pages/MasquePage';
 import Logs from './pages/Logs';
@@ -29,6 +31,8 @@ const PAGES = {
   servers: ServersUnified,
   normal: Nodes,
   mihomo: MihomoPage,
+  bindings: NodeBindings,
+  tplhub: TemplateHub,
   mtproto: MtprotoPage,
   masque: MasquePage,
   singbox: Nodes,

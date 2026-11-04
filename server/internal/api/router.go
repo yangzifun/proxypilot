@@ -193,6 +193,7 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 
 	// 服务器管理
 	mux.HandleFunc("GET /api/servers", h.authed(authOpts{}, h.serversList))
+	mux.HandleFunc("GET /api/nodes/bindings", h.authed(authOpts{}, h.nodeBindingsList))
 	mux.HandleFunc("GET /api/servers/status", h.authed(authOpts{}, h.serversStatus))
 	mux.HandleFunc("POST /api/servers", h.authed(authOpts{}, h.serverCreate))
 	mux.HandleFunc("GET /api/servers/{id}", h.authed(authOpts{}, h.serverGet))
