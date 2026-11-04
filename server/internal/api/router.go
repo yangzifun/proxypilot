@@ -251,6 +251,7 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 
 	// 流量 / 连接统计（V15.6）
 	mux.HandleFunc("GET /api/stats/traffic/users", h.authed(authOpts{}, h.statsTrafficUsers))
+	mux.HandleFunc("GET /api/traffic/nodes", h.authed(authOpts{}, h.trafficNodes))
 	mux.HandleFunc("GET /api/stats/traffic/users/{uuid}", h.authed(authOpts{}, h.statsTrafficUserDetail))
 	mux.HandleFunc("GET /api/stats/traffic/nodes", h.authed(authOpts{}, h.statsTrafficNodes))
 	mux.HandleFunc("POST /api/stats/traffic/clear", h.authed(authOpts{superOnly: true}, h.statsTrafficClear))

@@ -52,6 +52,18 @@ export default function UserTraffic() {
   const [detail, setDetail] = useState(null);
   const [detailRange, setDetailRange] = useState('7d');
   const [detailCustom, setDetailCustom] = useState(null);
+  const [nodeTraffic, setNodeTraffic] = useState({ singbox: [], mihomo: [] });
+  const [nodeLoading, setNodeLoading] = useState(false);
+  const loadNodeTraffic = () => {
+    setNodeLoading(true);
+    api('traffic/nodes')
+      .then((res) => setNodeTraffic(res.data || { singbox: [], mihomo: [] }))
+      .catch(() => setNodeTraffic({ singbox: [], mihomo: [] }))
+      .finally(() => setNodeLoading(false));
+  };
+  useEffect(() => {
+    loadNodeTraffic();
+  }, [range]);
 
   const users = useAsync(() => api(`stats/traffic/users?range=${range}`), [range]);
 
@@ -345,6 +357,55 @@ export default function UserTraffic() {
                     <Select style={{ width: 140 }} value={sortBy} onChange={setSortBy} options={SORTS} />
                   </Space>
                   <Table {...tableProps} dataSource={filtered} />
+                </>
+              ),
+            },
+            {
+              key: 'nodes',
+              label: '按节点',
+              children: (
+                <>
+                  <Space wrap style={{ marginBottom: 12 }}>
+                    <Button size="small" icon={<ReloadOutlined />} loading={nodeLoading} onClick={loadNodeTraffic}>
+                      刷新节点流量
+                    </Button>
+                    <span className="pp-muted" style={{ fontSize: 12 }}>
+                      统计 sing-box 节点与 mihomo 绑定的今日 / 近 7 天 / 累计流量
+                    </span>
+                  </Space>
+                  <div className="pp-section-title" style={{ margin: '4px 0 8px' }}>sing-box 节点</div>
+                  <Table
+                    rowKey={(r) => 'sb-' + r.id}
+                    size="middle"
+                    loading={nodeLoading}
+                    pagination={{ pageSize: 10, hideOnSinglePage: true }}
+                    dataSource={nodeTraffic.singbox}
+                    columns={[
+                      { title: '节点', dataIndex: 'name', ellipsis: true },
+                      { title: '服务器', dataIndex: 'server_name', ellipsis: true },
+                      { title: '今日', dataIndex: 'today', width: 120, render: (v) => fmtBytes(v || 0) },
+                      { title: '近 7 天', dataIndex: 'week', width: 120, render: (v) => fmtBytes(v || 0) },
+                      { title: '累计', dataIndex: 'total', width: 130, render: (v) => fmtBytes(v || 0) },
+                      { title: '活跃 UUID', dataIndex: 'online', width: 110 },
+                    ]}
+                  />
+                  <div className="pp-section-title" style={{ margin: '18px 0 8px' }}>mihomo 绑定</div>
+                  <Table
+                    rowKey={(r) => 'mh-' + r.id}
+                    size="middle"
+                    loading={nodeLoading}
+                    pagination={{ pageSize: 10, hideOnSinglePage: true }}
+                    dataSource={nodeTraffic.mihomo}
+                    columns={[
+                      { title: '绑定', dataIndex: 'name', ellipsis: true },
+                      { title: '服务器', dataIndex: 'server_name', ellipsis: true },
+                      { title: '模板', dataIndex: 'template_name', ellipsis: true, render: (v) => v || '—' },
+                      { title: '今日', dataIndex: 'traffic_today', width: 120, render: (v) => fmtBytes(v || 0) },
+                      { title: '近 7 天', dataIndex: 'traffic_week', width: 120, render: (v) => fmtBytes(v || 0) },
+                      { title: '累计', dataIndex: 'traffic_total', width: 130, render: (v) => fmtBytes(v || 0) },
+                      { title: '在线 UUID', dataIndex: 'online', width: 110 },
+                    ]}
+                  />
                 </>
               ),
             },

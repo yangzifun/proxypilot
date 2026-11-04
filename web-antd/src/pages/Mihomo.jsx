@@ -25,7 +25,7 @@ import {
 } from 'antd';
 import { api, apiDelete, apiGet, apiPost, apiPut } from '../api';
 import { PageCard } from '../components';
-import { fmtBytes, fmtTime } from '../format';
+import { fmtTime } from '../format';
 
 const { TextArea } = Input;
 
@@ -347,33 +347,6 @@ export default function Mihomo() {
                 dataSource={templates}
                 columns={tplColumns}
                 pagination={{ pageSize: 10, hideOnSinglePage: true }}
-              />
-            ),
-          },
-          {
-            key: 'traffic',
-            label: '流量统计',
-            children: (
-              <Table
-                rowKey="id"
-                size="middle"
-                loading={loading}
-                dataSource={bindings}
-                pagination={{ pageSize: 10, hideOnSinglePage: true }}
-                columns={[
-                  { title: '绑定名称', dataIndex: 'name', ellipsis: true },
-                  { title: '服务器', dataIndex: 'server_name', ellipsis: true, render: (v, r) => v || '#' + r.server_id },
-                  { title: '今日', dataIndex: 'traffic_today', width: 130, render: (v) => fmtBytes(v || 0) },
-                  { title: '近 7 天', dataIndex: 'traffic_week', width: 130, render: (v) => fmtBytes(v || 0) },
-                  { title: '累计', dataIndex: 'traffic_total', width: 140, render: (v) => fmtBytes(v || 0) },
-                  {
-                    title: '在线 UUID',
-                    dataIndex: 'online_count',
-                    width: 110,
-                    render: (v) => (v ? <Tag color="green">{v}</Tag> : <Tag>0</Tag>),
-                  },
-                  { title: 'UUID 总数', dataIndex: 'uuid_count', width: 110 },
-                ]}
               />
             ),
           },
