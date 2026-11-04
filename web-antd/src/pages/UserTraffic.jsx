@@ -53,7 +53,13 @@ export default function UserTraffic() {
   const [detailRange, setDetailRange] = useState('7d');
   const [detailCustom, setDetailCustom] = useState(null);
   const [nodeTraffic, setNodeTraffic] = useState({ singbox: [], mihomo: [] });
+  const [mhUsers, setMhUsers] = useState([]);
   const [nodeLoading, setNodeLoading] = useState(false);
+  const loadMhUsers = () => {
+    api('mihomo/traffic/summary')
+      .then((res) => setMhUsers(res.data || []))
+      .catch(() => setMhUsers([]));
+  };
   const loadNodeTraffic = () => {
     setNodeLoading(true);
     api('traffic/nodes')
@@ -63,6 +69,7 @@ export default function UserTraffic() {
   };
   useEffect(() => {
     loadNodeTraffic();
+    loadMhUsers();
   }, [range]);
 
   const users = useAsync(() => api(`stats/traffic/users?range=${range}`), [range]);
@@ -404,6 +411,22 @@ export default function UserTraffic() {
                       { title: '近 7 天', dataIndex: 'traffic_week', width: 120, render: (v) => fmtBytes(v || 0) },
                       { title: '累计', dataIndex: 'traffic_total', width: 130, render: (v) => fmtBytes(v || 0) },
                       { title: '在线 UUID', dataIndex: 'online', width: 110 },
+                    ]}
+                  />
+                  <div className="pp-section-title" style={{ margin: '18px 0 8px' }}>mihomo 节点 · 按用户</div>
+                  <Table
+                    rowKey="uuid"
+                    size="middle"
+                    pagination={{ pageSize: 10, hideOnSinglePage: true }}
+                    dataSource={mhUsers}
+                    locale={{ emptyText: '暂无 mihomo 用户流量（需先下发并产生连接）' }}
+                    columns={[
+                      { title: '用户', dataIndex: 'remark', ellipsis: true, render: (v, r) => v || r.owner || String(r.uuid).slice(0, 8) },
+                      { title: '今日上行', dataIndex: 'today_up', width: 110, render: (v) => fmtBytes(Number(v) || 0) },
+                      { title: '今日下行', dataIndex: 'today_down', width: 110, render: (v) => fmtBytes(Number(v) || 0) },
+                      { title: '近 7 天', width: 110, render: (_, r) => fmtBytes((Number(r.week_up) || 0) + (Number(r.week_down) || 0)) },
+                      { title: '累计', width: 120, render: (_, r) => fmtBytes((Number(r.up_total) || 0) + (Number(r.down_total) || 0)) },
+                      { title: '在线', dataIndex: 'online', width: 80, render: (v) => (v ? <Tag color="green">在线</Tag> : <Tag>离线</Tag>) },
                     ]}
                   />
                 </>

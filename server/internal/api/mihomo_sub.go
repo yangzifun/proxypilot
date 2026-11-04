@@ -116,6 +116,26 @@ func (h *handlers) mihomoSubscribe(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	/* 合并 mihomo 服务端节点（listeners → 客户端 proxies） */
+	for _, p := range h.buildMihomoServerProxies(r.Context(), uuid) {
+		base := fmt.Sprint(p["name"])
+		name := base
+		k := 1
+		for names[name] {
+			name = fmt.Sprintf("%s-%d", base, k)
+			k++
+		}
+		p["name"] = name
+		names[name] = true
+		proxies = append(proxies, p)
+	}
+	if strings.TrimSpace(baseTemplate) == "" {
+		_ = h.db.QueryRowContext(r.Context(),
+			`SELECT COALESCE(content,'') FROM mihomo_templates WHERE COALESCE(mode,'subscription') <> 'server' ORDER BY id LIMIT 1`).Scan(&baseTemplate)
+	}
+	if strings.TrimSpace(baseTemplate) == "" {
+		baseTemplate = mihomoDefaultClientTemplate
+	}
 	if len(proxies) == 0 || strings.TrimSpace(baseTemplate) == "" {
 		writeError(w, http.StatusNotFound, "该用户暂无可用的 mihomo 节点")
 		return
@@ -175,3 +195,22 @@ func mihomoContains(list []string, v string) bool {
 	}
 	return false
 }
+
+// mihomoDefaultClientTemplate 订阅兜底模板（无任何订阅模板时使用）
+const mihomoDefaultClientTemplate = `mixed-port: 7890
+allow-lan: false
+mode: rule
+log-level: info
+
+proxies:
+
+proxy-groups:
+  - name: Proxy
+    type: select
+    proxies:
+      - DIRECT
+
+rules:
+  - GEOIP,CN,DIRECT
+  - MATCH,Proxy
+`
