@@ -17,17 +17,18 @@ func (h *handlers) renderMihomoBinding(ctx context.Context, id int64) (name, ser
 		uuidRaw    string
 		protoRaw   string
 		advRaw     string
+		tplProto   string
 		tplContent string
 		tplEnabled int
 	)
 	err := h.db.QueryRowContext(ctx,
 		`SELECT n.name, n.server_id, n.template_id, COALESCE(n.uuid_list,'[]'), COALESCE(n.protocols,'[]'), COALESCE(n.advanced_json,'{}'),
-		        COALESCE(t.name,''), COALESCE(t.content,''), COALESCE(s.name,''), COALESCE(t.enabled,1)
+		        COALESCE(t.name,''), COALESCE(t.content,''), COALESCE(s.name,''), COALESCE(t.enabled,1), COALESCE(t.protocols,'[]')
 		   FROM mihomo_nodes n
 		   LEFT JOIN mihomo_templates t ON t.id = n.template_id
 		   LEFT JOIN servers s ON s.id = n.server_id
 		  WHERE n.id = ? LIMIT 1`, id).
-		Scan(&name, &serverID, &templateID, &uuidRaw, &protoRaw, &advRaw, &tplName, &tplContent, &serverName, &tplEnabled)
+		Scan(&name, &serverID, &templateID, &uuidRaw, &protoRaw, &advRaw, &tplName, &tplContent, &serverName, &tplEnabled, &tplProto)
 	if err != nil {
 		return "", "", "", "", "绑定不存在"
 	}
@@ -65,8 +66,12 @@ func (h *handlers) renderMihomoBinding(ctx context.Context, id int64) (name, ser
 		return name, serverName, tplName, "", "没有可用的 UUID"
 	}
 	rawLinks := singboxClientLinks(tpl, singboxNode{Name: node.Name, Domain: node.Domain, CDNDomain: node.CDNDomain}, users)
+	effective := mihomoParseProtocols(protoRaw)
+	if len(effective) == 0 {
+		effective = mihomoParseProtocols(tplProto)
+	}
 	protoSet := map[string]bool{}
-	for _, p := range mihomoParseProtocols(protoRaw) {
+	for _, p := range effective {
 		protoSet[p] = true
 	}
 	links := make([]string, 0, len(rawLinks))

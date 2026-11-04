@@ -244,7 +244,7 @@ export default function Mihomo() {
 
   const openCreateTpl = () => {
     setTplEditing(null);
-    tplForm.setFieldsValue({ name: '', remark: '', content: DEFAULT_MIHOMO_TEMPLATE, enabled: true });
+    tplForm.setFieldsValue({ name: '', remark: '', content: DEFAULT_MIHOMO_TEMPLATE, enabled: true, protocols: [] });
     setQuick(parseQuick(DEFAULT_MIHOMO_TEMPLATE));
     setTplOpen(true);
   };
@@ -257,6 +257,7 @@ export default function Mihomo() {
         remark: res.data.remark,
         content: res.data.content,
         enabled: !!res.data.enabled,
+        protocols: res.data.protocols || [],
       });
       setQuick(parseQuick(res.data.content));
       setTplOpen(true);
@@ -285,6 +286,7 @@ export default function Mihomo() {
         remark: res.data.remark || '',
         content: res.data.content,
         enabled: !!res.data.enabled,
+        protocols: res.data.protocols || [],
       });
       setQuick(parseQuick(res.data.content));
       setTplOpen(true);
@@ -299,6 +301,27 @@ export default function Mihomo() {
       loadTemplates();
     } catch (e) {
       message.error(e.message || '操作失败');
+    }
+  };
+  const parseContent = async () => {
+    const content = tplForm.getFieldValue('content') || '';
+    try {
+      const res = await apiPost('/api/mihomo/templates/parse', { content });
+      const d = res.data || {};
+      const f = d.fields || {};
+      setQuick({
+        port: Number(f['mixed-port']) || quick.port,
+        mode: f.mode || quick.mode,
+        log: f['log-level'] || quick.log,
+        ctrl: f['external-controller'] || quick.ctrl,
+        lan: !!f['allow-lan'],
+        ipv6: !!f.ipv6,
+      });
+      const msg = `节点 ${d.proxy_count || 0} · 分组 ${d.group_count || 0} · 规则 ${d.rule_count || 0}`;
+      if ((d.warnings || []).length) message.warning(msg + '；' + d.warnings.join('；'));
+      else message.success(msg);
+    } catch (e) {
+      message.error(e.message || '解析失败');
     }
   };
   const importYamlFile = (file) => {
@@ -704,6 +727,9 @@ export default function Mihomo() {
               </Form.Item>
             </span>
           </Space>
+          <Form.Item name="protocols" label="默认协议（绑定未指定时生效，留空=全部）">
+            <Select mode="multiple" allowClear options={PROTOCOLS} placeholder="全部协议" maxTagCount="responsive" />
+          </Form.Item>
           <Form.Item name="remark" label="备注">
             <Input placeholder="可选，例如：含广告拦截规则" maxLength={200} />
           </Form.Item>
@@ -755,6 +781,9 @@ export default function Mihomo() {
             <Button size="small" onClick={() => document.getElementById('mihomo-yaml-file').click()}>
               导入 YAML
             </Button>
+            <Button size="small" onClick={parseContent}>
+              解析配置
+            </Button>
             <Button size="small" onClick={() => { tplForm.setFieldsValue({ content: DEFAULT_MIHOMO_TEMPLATE }); setQuick(parseQuick(DEFAULT_MIHOMO_TEMPLATE)); }}>
               填入默认配置
             </Button>
@@ -788,7 +817,7 @@ export default function Mihomo() {
           <Form.Item name="template_id" label="mihomo 模板" rules={[{ required: true, message: '请选择模板' }]}>
             <Select showSearch optionFilterProp="label" options={templateOptions} placeholder="选择模板" />
           </Form.Item>
-          <Form.Item name="protocols" label="生成协议（不选则全部协议）">
+          <Form.Item name="protocols" label="生成协议（留空跟随模板默认，模板为空则全部协议）">
             <Select
               mode="multiple"
               allowClear

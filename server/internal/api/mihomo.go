@@ -83,10 +83,11 @@ func applyMihomoAdvanced(yamlText string, adv mihomoAdvanced) string {
 // ---------------- mihomo 模板管理 / 节点绑定 ----------------
 
 type mihomoTemplateInput struct {
-	Name    string `json:"name"`
-	Remark  string `json:"remark"`
-	Content string `json:"content"`
-	Enabled *bool  `json:"enabled"`
+	Name      string   `json:"name"`
+	Remark    string   `json:"remark"`
+	Content   string   `json:"content"`
+	Enabled   *bool    `json:"enabled"`
+	Protocols []string `json:"protocols"`
 }
 
 type mihomoNodeInput struct {
@@ -126,7 +127,7 @@ func mihomoParseUUIDs(raw string) []string {
 func (h *handlers) mihomoTemplatesList(w http.ResponseWriter, r *http.Request) {
 	rows, err := queryRowsAsMaps(r.Context(), h.db,
 		`SELECT id, name, COALESCE(remark,'') AS remark, CHAR_LENGTH(COALESCE(content,'')) AS content_len,
-		        COALESCE(enabled,1) AS enabled,
+		        COALESCE(enabled,1) AS enabled, COALESCE(protocols,'[]') AS protocols,
 		        (SELECT COUNT(*) FROM mihomo_nodes n WHERE n.template_id = mihomo_templates.id) AS bind_count,
 		        created_at, updated_at
 		   FROM mihomo_templates ORDER BY id DESC`)
@@ -145,17 +146,19 @@ func (h *handlers) mihomoTemplateGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var name, remark, content string
+	var protocolsRaw string
 	var enabled int
 	var createdAt, updatedAt int64
 	err := h.db.QueryRowContext(r.Context(),
-		`SELECT name, COALESCE(remark,''), COALESCE(content,''), COALESCE(enabled,1), created_at, updated_at FROM mihomo_templates WHERE id = ? LIMIT 1`,
-		id).Scan(&name, &remark, &content, &enabled, &createdAt, &updatedAt)
+		`SELECT name, COALESCE(remark,''), COALESCE(content,''), COALESCE(enabled,1), COALESCE(protocols,'[]'), created_at, updated_at FROM mihomo_templates WHERE id = ? LIMIT 1`,
+		id).Scan(&name, &remark, &content, &enabled, &protocolsRaw, &createdAt, &updatedAt)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "模板不存在")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"success": true, "data": map[string]any{
 		"id": id, "name": name, "remark": remark, "content": content, "enabled": enabled,
+		"protocols":  mihomoParseProtocols(protocolsRaw),
 		"created_at": createdAt, "updated_at": updatedAt,
 	}})
 }
@@ -185,9 +188,10 @@ func (h *handlers) mihomoTemplateCreate(w http.ResponseWriter, r *http.Request) 
 	if in.Enabled != nil && !*in.Enabled {
 		enabled = 0
 	}
+	protoRaw, _ := json.Marshal(in.Protocols)
 	res, err := h.db.ExecContext(r.Context(),
-		`INSERT INTO mihomo_templates (name, remark, content, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
-		name, in.Remark, in.Content, enabled, now, now)
+		`INSERT INTO mihomo_templates (name, remark, content, enabled, protocols, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		name, in.Remark, in.Content, enabled, string(protoRaw), now, now)
 	if err != nil {
 		if strings.Contains(err.Error(), "1062") {
 			writeError(w, http.StatusBadRequest, "模板名称已存在")
@@ -231,9 +235,10 @@ func (h *handlers) mihomoTemplateUpdate(w http.ResponseWriter, r *http.Request) 
 	if in.Enabled != nil && !*in.Enabled {
 		enabled = 0
 	}
+	protoRaw, _ := json.Marshal(in.Protocols)
 	_, err := h.db.ExecContext(r.Context(),
-		`UPDATE mihomo_templates SET name = ?, remark = ?, content = ?, enabled = ?, updated_at = ? WHERE id = ?`,
-		name, in.Remark, in.Content, enabled, nowMillis(), id)
+		`UPDATE mihomo_templates SET name = ?, remark = ?, content = ?, enabled = ?, protocols = ?, updated_at = ? WHERE id = ?`,
+		name, in.Remark, in.Content, enabled, string(protoRaw), nowMillis(), id)
 	if err != nil {
 		if strings.Contains(err.Error(), "1062") {
 			writeError(w, http.StatusBadRequest, "模板名称已存在")
@@ -509,6 +514,7 @@ func (h *handlers) mihomoNodePreview(w http.ResponseWriter, r *http.Request) {
 		uuidRaw    string
 		protoRaw   string
 		advRaw     string
+		tplProto   string
 		tplEnabled int
 		tplName    string
 		tplContent string
@@ -516,12 +522,12 @@ func (h *handlers) mihomoNodePreview(w http.ResponseWriter, r *http.Request) {
 	)
 	err := h.db.QueryRowContext(r.Context(),
 		`SELECT n.name, n.server_id, n.template_id, COALESCE(n.uuid_list,'[]'), COALESCE(n.protocols,'[]'), COALESCE(n.advanced_json,'{}'),
-		        COALESCE(t.name,''), COALESCE(t.content,''), COALESCE(s.name,''), COALESCE(t.enabled,1)
+		        COALESCE(t.name,''), COALESCE(t.content,''), COALESCE(s.name,''), COALESCE(t.enabled,1), COALESCE(t.protocols,'[]')
 		   FROM mihomo_nodes n
 		   LEFT JOIN mihomo_templates t ON t.id = n.template_id
 		   LEFT JOIN servers s ON s.id = n.server_id
 		  WHERE n.id = ? LIMIT 1`, id).
-		Scan(&name, &serverID, &templateID, &uuidRaw, &protoRaw, &advRaw, &tplName, &tplContent, &serverName, &tplEnabled)
+		Scan(&name, &serverID, &templateID, &uuidRaw, &protoRaw, &advRaw, &tplName, &tplContent, &serverName, &tplEnabled, &tplProto)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "绑定不存在")
 		return
@@ -566,8 +572,13 @@ func (h *handlers) mihomoNodePreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rawLinks := singboxClientLinks(tpl, singboxNode{Name: node.Name, Domain: node.Domain, CDNDomain: node.CDNDomain}, users)
+	/* 绑定协议为空时继承模板默认协议（与 sing-box 模板级协议开关对齐） */
+	effective := mihomoParseProtocols(protoRaw)
+	if len(effective) == 0 {
+		effective = mihomoParseProtocols(tplProto)
+	}
 	protoSet := map[string]bool{}
-	for _, p := range mihomoParseProtocols(protoRaw) {
+	for _, p := range effective {
 		protoSet[p] = true
 	}
 	links := make([]string, 0, len(rawLinks))

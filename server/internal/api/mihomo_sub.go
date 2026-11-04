@@ -32,7 +32,7 @@ func (h *handlers) mihomoSubscribe(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := queryRowsAsMaps(r.Context(), h.db,
 		`SELECT n.id, n.name, n.server_id, n.template_id, COALESCE(n.uuid_list,'[]') AS uuid_list,
-		        COALESCE(n.protocols,'[]') AS protocols
+		        COALESCE(n.protocols,'[]') AS protocols, COALESCE(t.protocols,'[]') AS tpl_protocols
 		   FROM mihomo_nodes n
 		   LEFT JOIN mihomo_templates t ON t.id = n.template_id
 		  WHERE n.enabled = 1 AND COALESCE(t.enabled,1) = 1
@@ -71,8 +71,12 @@ func (h *handlers) mihomoSubscribe(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		rawLinks := singboxClientLinks(tpl, singboxNode{Name: node.Name, Domain: node.Domain, CDNDomain: node.CDNDomain}, filtered)
+		effective := mihomoParseProtocols(mapStr(row, "protocols", "[]"))
+		if len(effective) == 0 {
+			effective = mihomoParseProtocols(mapStr(row, "tpl_protocols", "[]"))
+		}
 		protoSet := map[string]bool{}
-		for _, p := range mihomoParseProtocols(mapStr(row, "protocols", "[]")) {
+		for _, p := range effective {
 			protoSet[p] = true
 		}
 		links := make([]string, 0, len(rawLinks))
