@@ -47,9 +47,9 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("POST /api/apikeys/{id}/rotate", h.authed(authOpts{superOnly: true}, h.apiKeyRotate))
 
 	// 用户中心（邮箱验证码登录）
-	mux.HandleFunc("POST /api/admin/users/email/code", h.authed(authOpts{superOnly: true}, h.adminEmailCodeSend))
-	mux.HandleFunc("POST /api/admin/users/email/verify", h.authed(authOpts{superOnly: true}, h.adminEmailVerify))
-	mux.HandleFunc("POST /api/admin/users/email/unbind", h.authed(authOpts{superOnly: true}, h.adminEmailUnbind))
+	mux.HandleFunc("POST /api/admin/users/email/code", h.authed(authOpts{}, h.adminEmailCodeSend))
+	mux.HandleFunc("POST /api/admin/users/email/verify", h.authed(authOpts{}, h.adminEmailVerify))
+	mux.HandleFunc("POST /api/admin/users/email/unbind", h.authed(authOpts{}, h.adminEmailUnbind))
 
 	mux.HandleFunc("POST /api/login/email-code", h.loginEmailCodeSend)
 	mux.HandleFunc("POST /api/login/email-code/verify", h.loginEmailCodeVerify)
@@ -105,8 +105,8 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 
 	// 统计与日志
 	mux.HandleFunc("GET /api/stats", h.authed(authOpts{}, h.statsOverview))
-	mux.HandleFunc("GET /api/logs/summary", h.authed(authOpts{superOnly: true}, h.logsSummary))
-	mux.HandleFunc("POST /api/logs/cleanup", h.authed(authOpts{superOnly: true}, h.logsCleanup))
+	mux.HandleFunc("GET /api/logs/summary", h.authed(authOpts{}, h.logsSummary))
+	mux.HandleFunc("POST /api/logs/cleanup", h.authed(authOpts{}, h.logsCleanup))
 
 	// 配置管理（后台 + 用户中心）
 	mux.HandleFunc("/api/uuid-configs", h.authed(authOpts{}, h.uuidConfigsDispatch))
@@ -275,7 +275,7 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /api/traffic/nodes", h.authed(authOpts{}, h.trafficNodes))
 	mux.HandleFunc("GET /api/stats/traffic/users/{uuid}", h.authed(authOpts{}, h.statsTrafficUserDetail))
 	mux.HandleFunc("GET /api/stats/traffic/nodes", h.authed(authOpts{}, h.statsTrafficNodes))
-	mux.HandleFunc("POST /api/stats/traffic/clear", h.authed(authOpts{superOnly: true}, h.statsTrafficClear))
+	mux.HandleFunc("POST /api/stats/traffic/clear", h.authed(authOpts{}, h.statsTrafficClear))
 	mux.HandleFunc("GET /api/nodes/{id}/connections", h.authed(authOpts{}, h.nodeConnections))
 
 	// 批量任务
@@ -286,19 +286,19 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("POST /api/jobs/{id}/retry", h.authed(authOpts{}, h.jobsRetry))
 	mux.HandleFunc("POST /api/jobs/clear", h.authed(authOpts{}, h.jobsClear))
 
-	mux.HandleFunc("GET /api/backup/export", h.authed(authOpts{superOnly: true}, h.backupExport))
-	mux.HandleFunc("POST /api/backup/import", h.authed(authOpts{superOnly: true}, h.backupImport))
+	mux.HandleFunc("GET /api/backup/export", h.authed(authOpts{}, h.backupExport))
+	mux.HandleFunc("POST /api/backup/import", h.authed(authOpts{}, h.backupImport))
 
-	mux.HandleFunc("GET /api/attachments/status", h.authed(authOpts{superOnly: true}, h.attachmentsStatus))
-	mux.HandleFunc("GET /api/attachments", h.authed(authOpts{superOnly: true}, h.attachmentsList))
-	mux.HandleFunc("POST /api/attachments/upload", h.authed(authOpts{superOnly: true}, h.attachmentsUpload))
-	mux.HandleFunc("POST /api/attachments/folder", h.authed(authOpts{superOnly: true}, h.attachmentsMkdir))
-	mux.HandleFunc("POST /api/attachments/move", h.authed(authOpts{superOnly: true}, h.attachmentsMove))
-	mux.HandleFunc("POST /api/attachments/copy", h.authed(authOpts{superOnly: true}, h.attachmentsCopyOp))
-	mux.HandleFunc("GET /api/attachments/download", h.authed(authOpts{superOnly: true}, h.attachmentsDownload))
-	mux.HandleFunc("DELETE /api/attachments", h.authed(authOpts{superOnly: true}, h.attachmentsDelete))
-	mux.HandleFunc("GET /api/attachments/content", h.authed(authOpts{superOnly: true}, h.attachmentsContent))
-	mux.HandleFunc("PUT /api/attachments/content", h.authed(authOpts{superOnly: true}, h.attachmentsContentSave))
+	mux.HandleFunc("GET /api/attachments/status", h.authed(authOpts{}, h.attachmentsStatus))
+	mux.HandleFunc("GET /api/attachments", h.authed(authOpts{}, h.attachmentsList))
+	mux.HandleFunc("POST /api/attachments/upload", h.authed(authOpts{}, h.attachmentsUpload))
+	mux.HandleFunc("POST /api/attachments/folder", h.authed(authOpts{}, h.attachmentsMkdir))
+	mux.HandleFunc("POST /api/attachments/move", h.authed(authOpts{}, h.attachmentsMove))
+	mux.HandleFunc("POST /api/attachments/copy", h.authed(authOpts{}, h.attachmentsCopyOp))
+	mux.HandleFunc("GET /api/attachments/download", h.authed(authOpts{}, h.attachmentsDownload))
+	mux.HandleFunc("DELETE /api/attachments", h.authed(authOpts{}, h.attachmentsDelete))
+	mux.HandleFunc("GET /api/attachments/content", h.authed(authOpts{}, h.attachmentsContent))
+	mux.HandleFunc("PUT /api/attachments/content", h.authed(authOpts{}, h.attachmentsContentSave))
 	mux.HandleFunc("POST /api/cloudflare/check", h.authed(authOpts{superOnly: true}, h.cloudflareCheck))
 
 	mux.HandleFunc("GET /api/settings", h.authed(authOpts{superOnly: true}, h.settingsAPI))

@@ -18,6 +18,18 @@ func adminTargetUsername(body map[string]any) string {
 }
 
 // POST /api/admin/users/email/code —— 发送绑定邮箱验证码
+// adminEmailSelfOrSuper 允许管理员修改自己的邮箱，超级管理员可修改任意账号。
+func (h *handlers) adminEmailSelfOrSuper(r *http.Request, username string) bool {
+	c, ok := claimsFrom(r)
+	if !ok {
+		return false
+	}
+	if c.Sub == h.cfg.SuperAdmin {
+		return true
+	}
+	return c.Sub == username
+}
+
 func (h *handlers) adminEmailCodeSend(w http.ResponseWriter, r *http.Request) {
 	var body map[string]any
 	if err := decodeJSON(w, r, &body); err != nil {
@@ -28,6 +40,10 @@ func (h *handlers) adminEmailCodeSend(w http.ResponseWriter, r *http.Request) {
 	email := normalizeEmail(mapStr(body, "email", ""))
 	if username == "" || email == "" {
 		writeError(w, http.StatusBadRequest, "用户名与邮箱不能为空")
+		return
+	}
+	if !h.adminEmailSelfOrSuper(r, username) {
+		writeError(w, http.StatusForbidden, "仅超级管理员可修改他人邮箱")
 		return
 	}
 	var exists int64
@@ -80,6 +96,10 @@ func (h *handlers) adminEmailVerify(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "参数不完整")
 		return
 	}
+	if !h.adminEmailSelfOrSuper(r, username) {
+		writeError(w, http.StatusForbidden, "仅超级管理员可修改他人邮箱")
+		return
+	}
 	ok, status, msg := h.consumeEmailCode(r.Context(), email, code, bindEmailPurpose)
 	if !ok {
 		writeError(w, status, msg)
@@ -110,6 +130,10 @@ func (h *handlers) adminEmailUnbind(w http.ResponseWriter, r *http.Request) {
 	username := adminTargetUsername(body)
 	if username == "" {
 		writeError(w, http.StatusBadRequest, "用户名不能为空")
+		return
+	}
+	if !h.adminEmailSelfOrSuper(r, username) {
+		writeError(w, http.StatusForbidden, "仅超级管理员可修改他人邮箱")
 		return
 	}
 	res, err := h.db.ExecContext(r.Context(),

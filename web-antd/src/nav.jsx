@@ -119,7 +119,6 @@ export const PAGE_META = {
     icon: <FolderOpenOutlined />,
     group: '系统',
     accent: '#0ea5e9',
-    superOnly: true,
   },
   backup: {
     title: '备份管理',
@@ -127,7 +126,6 @@ export const PAGE_META = {
     icon: <CloudDownloadOutlined />,
     group: '系统',
     accent: '#16a34a',
-    superOnly: true,
   },
   sec: {
     title: '安全中心',
