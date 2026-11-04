@@ -345,6 +345,14 @@ func singboxRenderSb(tpl *singboxTemplate, users []sbUser, ports map[string]int,
 				"transport": map[string]any{"type": "ws", "path": wsPath},
 				"users":     u,
 			})
+			// CDN 转发服务：公网 443 直接终止 TLS 并复用同一 WS 路径，
+			// 供 Cloudflare 代理（橙云）回源；13707 仍保留给 Tunnel 明文回源。
+			inbounds = append(inbounds, map[string]any{
+				"type": "vless", "tag": "vless-ws-cdn-443", "listen": "::", "listen_port": 443,
+				"tls":       tlsBlock(),
+				"transport": map[string]any{"type": "ws", "path": wsPath},
+				"users":     u,
+			})
 		}
 	}
 

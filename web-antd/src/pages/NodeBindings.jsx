@@ -13,6 +13,7 @@ export default function NodeBindings() {
   const [open, setOpen] = useState(false);
   const [editRow, setEditRow] = useState(null);
   const [check, setCheck] = useState({ open: false, loading: false, data: [], fixing: false });
+  const [applyingAll, setApplyingAll] = useState(false);
   const [form] = Form.useForm();
 
   const load = async () => {
@@ -61,6 +62,28 @@ export default function NodeBindings() {
       message.error(e.message || '下发失败');
     }
   };
+  const applyAll = async () => {
+    const targets = rows.filter((r) => r.sb_id || r.mh_id || r.mp_id);
+    if (!targets.length) {
+      message.warning('没有可下发的节点');
+      return;
+    }
+    setApplyingAll(true);
+    let ok = 0;
+    let fail = 0;
+    for (const row of targets) {
+      try {
+        await apiPost(`/api/nodes/${row.server_id}/apply`, {});
+        ok += 1;
+      } catch (e) {
+        fail += 1;
+      }
+    }
+    setApplyingAll(false);
+    if (fail) message.warning(`一键下发完成：成功 ${ok}，失败 ${fail}`);
+    else message.success(`一键下发完成：${ok} 台服务器`);
+    load();
+  };
   const runCheck = async () => {
     setCheck((c) => ({ ...c, open: true, loading: true }));
     try {
@@ -87,15 +110,15 @@ export default function NodeBindings() {
     const v = await form.validateFields();
     const tasks = [];
     if (v.sb_tpl) tasks.push(['singbox', '/api/singbox/nodes', {
-      name: v.sb_name || v.name + '-sb', server_id: v.server_id, template_id: v.sb_tpl,
+      name: (v.sb_name || v.name || '').trim(), server_id: v.server_id, template_id: v.sb_tpl,
       domain: v.sb_domain || v.domain || '', cdn_domain: v.sb_cdn || '', port_base: v.sb_port || 0,
     }]);
     if (v.mh_tpl) tasks.push(['mihomo', '/api/mihomo/nodes', {
-      name: v.mh_name || v.name + '-mh', server_id: v.server_id, template_id: v.mh_tpl,
+      name: (v.mh_name || v.name || '').trim(), server_id: v.server_id, template_id: v.mh_tpl,
       domain: v.mh_domain || v.domain || '', port_base: v.mh_port || 0,
     }]);
     if (v.mp_tpl) tasks.push(['MTProto', '/api/mtproto/nodes', {
-      name: v.mp_name || v.name + '-mp', server_id: v.server_id, template_id: v.mp_tpl,
+      name: (v.mp_name || v.name || '').trim(), server_id: v.server_id, template_id: v.mp_tpl,
       domain: v.mp_domain || v.domain || '', port: v.mp_port || 0,
     }]);
     if (!tasks.length) {
@@ -200,6 +223,9 @@ export default function NodeBindings() {
       title="节点绑定"
       extra={
         <Space>
+          <Button type="primary" icon={<CloudUploadOutlined />} loading={applyingAll} onClick={applyAll}>
+            一键下发
+          </Button>
           <Button onClick={runCheck}>UUID 一致性检查</Button>
           <Button icon={<ReloadOutlined />} onClick={load} loading={loading}>刷新</Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={() => { setEditRow(null); form.resetFields(); setOpen(true); }}>新建绑定</Button>
