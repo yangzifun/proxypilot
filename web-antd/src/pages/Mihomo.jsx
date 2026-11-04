@@ -840,9 +840,12 @@ export default function Mihomo({ templatesOnly }) {
         destroyOnClose
       >
         <Form form={tplForm} layout="vertical">
-          <Space size={16} style={{ width: '100%' }}>
+          <Space size={16} style={{ width: '100%' }} align="start">
             <Form.Item name="name" label="模板名称" rules={[{ required: true, message: '请填写名称' }]} style={{ width: 320 }}>
-              <Input placeholder="例如：默认 mihomo 模板" maxLength={100} />
+              <Input placeholder="例如：内置默认" maxLength={100} />
+            </Form.Item>
+            <Form.Item name="remark" label="备注" style={{ flex: 1, minWidth: 240 }}>
+              <Input placeholder="默认配置" maxLength={200} />
             </Form.Item>
           </Space>
           <Space size={24} align="center" style={{ marginBottom: 10 }}>
@@ -853,7 +856,28 @@ export default function Mihomo({ templatesOnly }) {
               </Form.Item>
             </span>
           </Space>
-              <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>模板 JSON（listeners 自带端口，按模板下发）</div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+            <span className="pp-muted" style={{ fontSize: 12 }}>listeners JSON（端口写在模板里，保存后按模板下发；用户由节点授权注入）</span>
+            <Space size={8}>
+              <Button size="small" onClick={() => setTplJson(MIHOMO_TEMPLATE_EXAMPLE)}>填入示例</Button>
+              <Button
+                size="small"
+                loading={tplPreview.loading}
+                onClick={async () => {
+                  setTplPreview((p) => ({ ...p, loading: true }));
+                  try {
+                    const res = await apiPost('/api/mihomo/templates/preview-server', { server_json: tplJson });
+                    setTplPreview({ yaml: (res.data && res.data.yaml) || '', loading: false });
+                  } catch (e) {
+                    setTplPreview({ yaml: '', loading: false });
+                    message.error(e.message || '生成失败');
+                  }
+                }}
+              >
+                生成当前配置
+              </Button>
+            </Space>
+          </div>
           <Input.TextArea
             value={tplJson}
             onChange={(e) => setTplJson(e.target.value)}
@@ -862,9 +886,6 @@ export default function Mihomo({ templatesOnly }) {
             placeholder='{"listeners":[{"name":"hy2","type":"hysteria2","port":13801}]}'
           />
           <Space size={8} wrap style={{ marginTop: 8, marginBottom: 10 }}>
-            <Button size="small" onClick={() => setTplJson(MIHOMO_TEMPLATE_EXAMPLE)}>
-              填入示例
-            </Button>
             <Select
               size="small"
               style={{ minWidth: 200 }}
@@ -886,11 +907,31 @@ export default function Mihomo({ templatesOnly }) {
             <Button
               size="small"
               onClick={() => {
+                setImportText('');
+                setImportOpen(true);
+              }}
+            >
+              从配置导入
+            </Button>
+            <Button
+              size="small"
+              onClick={() => {
                 try {
                   const parsed = JSON.parse(tplJson || '{}');
                   const list = parsed.listeners || [];
                   if (!Array.isArray(list) || !list.length) throw new Error('缺少 listeners 数组');
-                  setTplParsed(list.map((l) => ({ name: l.name || '-', type: l.type || '-', port: l.port || 0 })));
+                  setTplParsed(list.map((l) => ({
+                    name: l.name || '-',
+                    type: l.type || '-',
+                    port: l.port || 0,
+                    listen: l.listen || '',
+                    note: [
+                      l.certificate ? 'TLS' : '',
+                      l['reality-config'] ? 'REALITY' : '',
+                      l['ws-path'] ? 'WS ' + l['ws-path'] : '',
+                      l.password && l.type === 'shadowsocks' ? 'SS' : '',
+                    ].filter(Boolean).join(' · ') || '—',
+                  })));
                   message.success(`解析成功：${list.length} 个 listener`);
                 } catch (e) {
                   setTplParsed(null);
@@ -899,22 +940,6 @@ export default function Mihomo({ templatesOnly }) {
               }}
             >
               解析配置
-            </Button>
-            <Button
-              size="small"
-              loading={tplPreview.loading}
-              onClick={async () => {
-                setTplPreview((p) => ({ ...p, loading: true }));
-                try {
-                  const res = await apiPost('/api/mihomo/templates/preview-server', { server_json: tplJson });
-                  setTplPreview({ yaml: (res.data && res.data.yaml) || '', loading: false });
-                } catch (e) {
-                  setTplPreview({ yaml: '', loading: false });
-                  message.error(e.message || '生成预览失败');
-                }
-              }}
-            >
-              生成配置预览
             </Button>
           </Space>
           {tplParsed ? (
@@ -925,9 +950,11 @@ export default function Mihomo({ templatesOnly }) {
               style={{ marginBottom: 10 }}
               dataSource={tplParsed}
               columns={[
-                { title: '名称', dataIndex: 'name' },
-                { title: '类型', dataIndex: 'type' },
-                { title: '端口', dataIndex: 'port', width: 100 },
+                { title: '名称', dataIndex: 'name', width: 150 },
+                { title: '类型', dataIndex: 'type', width: 120 },
+                { title: '端口', dataIndex: 'port', width: 90 },
+                { title: '监听', dataIndex: 'listen', width: 100 },
+                { title: '说明', dataIndex: 'note' },
               ]}
             />
           ) : null}
@@ -950,17 +977,6 @@ export default function Mihomo({ templatesOnly }) {
               {tplPreview.yaml}
             </pre>
           ) : null}
-          <Form.Item name="remark" label="备注">
-            <Input placeholder="可选，例如：含广告拦截规则" maxLength={200} />
-          </Form.Item>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 6 }}>
-            <Button size="small" onClick={() => { setImportText(''); setImportOpen(true); }}>
-              从配置导入
-            </Button>
-            <Button size="small" onClick={parseContent}>
-              解析配置
-            </Button>
-          </div>
         </Form>
       </Modal>
 
