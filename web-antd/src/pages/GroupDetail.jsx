@@ -29,6 +29,7 @@ import {
   Tag,
   Tooltip,
 } from 'antd';
+import { safeHttpUrl } from '../safeUrl';
 import { api, apiRaw } from '../api';
 import { readForm } from '../hooks';
 import { CopyText, EmptyBlock, ErrorBlock, IconAction, JsonView, Toolbar } from '../components';
@@ -678,7 +679,7 @@ function SubSources({ uuid }) {
       ellipsis: true,
       render: (v) => (
         <Tooltip title={v}>
-          <a href={v} target="_blank" rel="noreferrer" className="pp-mono">
+          <a href={safeHttpUrl(v) || undefined} target="_blank" rel="noreferrer" className="pp-mono">
             {v}
           </a>
         </Tooltip>

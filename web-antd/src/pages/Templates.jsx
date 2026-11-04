@@ -27,6 +27,7 @@ import {
   Tag,
   Tooltip,
 } from 'antd';
+import { safeHttpUrl } from '../safeUrl';
 import { api } from '../api';
 import { useAsync, readForm } from '../hooks';
 import { ErrorBlock, IconAction, PageCard, StatCard, Toolbar } from '../components';
@@ -141,7 +142,7 @@ function TemplateList() {
       render: (v) =>
         v ? (
           <Tooltip title={v}>
-            <a href={v} target="_blank" rel="noreferrer" className="pp-mono">
+            <a href={safeHttpUrl(v) || undefined} target="_blank" rel="noreferrer" className="pp-mono">
               {v}
             </a>
           </Tooltip>

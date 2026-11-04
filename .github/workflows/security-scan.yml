@@ -1,0 +1,53 @@
+name: Security Scan
+
+on:
+  schedule:
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  govulncheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.3'
+      - name: Scan server
+        working-directory: server
+        run: |
+          go run golang.org/x/vuln/cmd/govulncheck@latest -format text ./... | tee /tmp/server-vuln.txt
+      - name: Scan agent
+        working-directory: agent
+        run: |
+          go run golang.org/x/vuln/cmd/govulncheck@latest -format text ./... | tee /tmp/agent-vuln.txt
+      - name: Summary
+        if: always()
+        run: |
+          echo '### govulncheck' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat /tmp/server-vuln.txt /tmp/agent-vuln.txt 2>/dev/null | tail -40 >> $GITHUB_STEP_SUMMARY || true
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+  npm-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: npm audit
+        working-directory: web-antd
+        continue-on-error: true
+        run: |
+          npm audit --omit=dev --json > /tmp/npm-audit.json || true
+          node -e "const j=require('/tmp/npm-audit.json');console.log('vulnerabilities:',JSON.stringify(j.metadata&&j.metadata.vulnerabilities))" || true
+      - name: Summary
+        if: always()
+        run: |
+          echo '### npm audit' >> $GITHUB_STEP_SUMMARY
+          cat /tmp/npm-audit.json 2>/dev/null | head -c 4000 >> $GITHUB_STEP_SUMMARY || true
