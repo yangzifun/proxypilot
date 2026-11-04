@@ -92,7 +92,15 @@ func (h *handlers) adminEmailVerify(w http.ResponseWriter, r *http.Request) {
 	username := adminTargetUsername(body)
 	email := normalizeEmail(mapStr(body, "email", ""))
 	code := strings.TrimSpace(mapStr(body, "code", ""))
-	if username == "" || email == "" || len(code) != 6 {
+	if username == "" || email == "" {
+		writeError(w, http.StatusBadRequest, "参数不完整")
+		return
+	}
+	direct := false
+	if c, ok := claimsFrom(r); ok && c.Sub == h.cfg.SuperAdmin && c.Sub != username {
+		direct = true
+	}
+	if !direct && len(code) != 6 {
 		writeError(w, http.StatusBadRequest, "参数不完整")
 		return
 	}
@@ -100,10 +108,12 @@ func (h *handlers) adminEmailVerify(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "仅超级管理员可修改他人邮箱")
 		return
 	}
-	ok, status, msg := h.consumeEmailCode(r.Context(), email, code, bindEmailPurpose)
-	if !ok {
-		writeError(w, status, msg)
-		return
+	if !direct {
+		ok, status, msg := h.consumeEmailCode(r.Context(), email, code, bindEmailPurpose)
+		if !ok {
+			writeError(w, status, msg)
+			return
+		}
 	}
 	now := nowMillis()
 	res, err := h.db.ExecContext(r.Context(),

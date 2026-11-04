@@ -11,7 +11,7 @@ import { api } from '../api';
  *     验证通过后会把该邮箱直接写到账号上并置 email_verified=1。
  *   · 解绑只需要 username（本人或超管）。
  */
-export default function EmailBindModal({ open, username, email, verified, canEdit = true, onClose, onChanged }) {
+export default function EmailBindModal({ open, username, email, verified, canEdit = true, directBind = false, onClose, onChanged }) {
   const { message } = AntdApp.useApp();
   const [mail, setMail] = useState(email || '');
   const [code, setCode] = useState('');
@@ -60,7 +60,7 @@ export default function EmailBindModal({ open, username, email, verified, canEdi
   };
 
   const verify = async () => {
-    if (!/^\d{6}$/.test(String(code).trim())) {
+    if (!directBind && !/^\d{6}$/.test(String(code).trim())) {
       setErr('请输入 6 位数字验证码');
       return;
     }
@@ -69,9 +69,9 @@ export default function EmailBindModal({ open, username, email, verified, canEdi
     try {
       await api('admin/users/email/verify', {
         method: 'POST',
-        body: { username, code: String(code).trim(), email: mail.trim() },
+        body: { username, code: directBind ? '' : String(code).trim(), email: mail.trim() },
       });
-      message.success('邮箱验证通过，已绑定');
+      message.success(directBind ? '邮箱已直接绑定' : '邮箱验证通过，已绑定');
       setStep(2);
       onChanged && onChanged();
     } catch (e) {
@@ -123,7 +123,7 @@ export default function EmailBindModal({ open, username, email, verified, canEdi
       <Steps
         size="small"
         current={step}
-        items={[{ title: '填写邮箱' }, { title: '验证码' }, { title: '完成' }]}
+        items={directBind ? [{ title: '填写邮箱' }, { title: '完成' }] : [{ title: '填写邮箱' }, { title: '验证码' }, { title: '完成' }]}
         style={{ marginBottom: 18 }}
       />
 
@@ -147,14 +147,20 @@ export default function EmailBindModal({ open, username, email, verified, canEdi
           disabled={!canEdit || step === 2}
         />
         <Space wrap>
-          <Button
-            type="primary"
-            onClick={sendCode}
-            loading={busy === 'send'}
-            disabled={!canEdit || !mailOk || step === 2}
-          >
-            {countdown > 0 ? `${countdown} 秒后重发` : '发送验证码'}
-          </Button>
+          {directBind ? (
+            <Button type="primary" onClick={verify} loading={busy === 'verify'} disabled={!canEdit || !mailOk}>
+              直接绑定（免验证码）
+            </Button>
+          ) : (
+            <Button
+              type="primary"
+              onClick={sendCode}
+              loading={busy === 'send'}
+              disabled={!canEdit || !mailOk || step === 2}
+            >
+              {countdown > 0 ? `${countdown} 秒后重发` : '发送验证码'}
+            </Button>
+          )}
           {email ? (
             <Button danger icon={<DisconnectOutlined />} onClick={unbind} loading={busy === 'unbind'} disabled={!canEdit}>
               解绑
@@ -162,7 +168,7 @@ export default function EmailBindModal({ open, username, email, verified, canEdi
           ) : null}
         </Space>
 
-        {step >= 1 && step < 2 ? (
+        {!directBind && step >= 1 && step < 2 ? (
           <>
             <Input
               value={code}

@@ -333,6 +333,7 @@ function UsersTab({ rows, state, self, superAdmin }) {
         email={emailFor ? emailFor.email : ''}
         verified={emailFor ? Number(emailFor.email_verified) === 1 : false}
         canEdit={!!emailFor && (emailFor.username === self || self === superAdmin)}
+        directBind={!!emailFor && self === superAdmin && emailFor.username !== self}
         onClose={() => setEmailFor(null)}
         onChanged={() => state.reload().catch(() => {})}
       />
