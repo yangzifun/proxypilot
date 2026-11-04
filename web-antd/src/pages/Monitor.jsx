@@ -935,7 +935,7 @@ export function WorldMap({ servers, onPick, large = false, onExpand, zoomable = 
       if (ro) ro.disconnect();
       window.removeEventListener('resize', measure);
     };
-  }, [large]);
+  }, [large, servers.length]);
 
   const W = box.w || 1000;
   const H = box.h || 400;
@@ -1005,75 +1005,48 @@ export function WorldMap({ servers, onPick, large = false, onExpand, zoomable = 
   /* 地区名直接贴在地图点位上（纯文字 + 白色描边），不画卡片、不画引线 */
   const placeLabels = (() => {
     if (!pts.length) return [];
-    const groups = new Map();
+    const textWidth = (text) =>
+      Array.from(text).reduce((w, ch) => w + (/[\u2e80-\u9fff]/.test(ch) ? 11 : 6), 0) + 4;
+    const placed = [];
+    /* 同一坐标的多台服务器只保留一个标签，避免同名文字重复堆叠 */
+    const uniq = new Map();
     pts.forEach((p) => {
+      const k = `${p.left.toFixed(1)},${p.top.toFixed(1)}`;
+      if (!uniq.has(k)) uniq.set(k, p);
+    });
+    [...uniq.values()].forEach((p) => {
       const text =
         String(p.s.ip_region || '').trim() ||
         String(p.s.ip_country || '').trim().toUpperCase() ||
         '未知';
-      const cur = groups.get(text) || { text, n: 0, left: 0, top: 0 };
-      cur.n += 1;
-      cur.left += p.left;
-      cur.top += p.top;
-      groups.set(text, cur);
-    });
-    const textWidth = (text) =>
-      Array.from(text).reduce((w, ch) => w + (/[\u2e80-\u9fff]/.test(ch) ? 11 : 6), 0) + 4;
-    const dots = pts.map((p) => ({ x: toVX(p.left), y: toVY(p.top) }));
-    const placed = [];
-    const items = [...groups.values()]
-      .map((g) => ({ key: g.text, n: g.n, x: toVX(g.left / g.n), y: toVY(g.top / g.n) }))
-      .filter((it) => it.x > -40 && it.x < W + 40 && it.y > -20 && it.y < H + 20)
-      .sort((a, b) => a.x - b.x);
-
-    items.forEach((it) => {
-      const text = it.key;
       const w = Math.ceil(textWidth(text));
       const h = 14;
+      const cx = toVX(p.left);
+      const cy = toVY(p.top);
+      if (cx < -40 || cx > W + 40 || cy < -20 || cy > H + 20) return;
+      /* 标签紧贴该点：优先右侧居中，其次左侧、上下，全部冲突则跳过（避免错位远飘） */
       const candidates = [
-        [10, -16],
-        [-w - 10, -16],
-        [10, 6],
-        [-w - 10, 6],
-        [0, -24],
-        [0, 16],
+        [9, -7],
+        [-w - 9, -7],
+        [9, 11],
+        [-w - 9, 11],
+        [9, -22],
+        [9, 22],
       ];
       let chosen = null;
       for (const [dx, dy] of candidates) {
-        const x = Math.min(Math.max(2, it.x + dx), W - w - 2);
-        const y = Math.min(Math.max(2, it.y + dy), H - h - 2);
-        const hitsLabel = placed.some((p) => !(x + w < p.x || x > p.x + p.w || y + h < p.y || y > p.y + p.h));
-        const hitsDot = dots.some((d) => d.x > x - 6 && d.x < x + w + 6 && d.y > y - 6 && d.y < y + h + 6);
-        if (!hitsLabel && !hitsDot) {
+        const x = Math.min(Math.max(2, cx + dx), Math.max(2, W - w - 2));
+        const y = Math.min(Math.max(2, cy + dy), Math.max(2, H - h - 2));
+        const hitsLabel = placed.some((q) => !(x + w < q.x || x > q.x + q.w || y + h < q.y || y > q.y + q.h));
+        if (!hitsLabel) {
           chosen = { x, y };
           break;
         }
       }
-      if (!chosen) {
-        /* 密集区域向上/向下找空行，尽量不和已有文字重叠 */
-        for (let step = 1; step <= 10 && !chosen; step += 1) {
-          for (const dir of [-1, 1]) {
-            const x = Math.min(Math.max(2, it.x + (dir > 0 ? 10 : -w - 10)), W - w - 2);
-            const y = Math.min(Math.max(2, it.y - 16 + dir * step * (h + 4)), H - h - 2);
-            const hitsLabel = placed.some((p) => !(x + w < p.x || x > p.x + p.w || y + h < p.y || y > p.y + p.h));
-            if (!hitsLabel) {
-              chosen = { x, y };
-              break;
-            }
-          }
-        }
-      }
-      if (!chosen) {
-        chosen = {
-          x: Math.min(Math.max(2, it.x + 10), W - w - 2),
-          y: Math.min(Math.max(2, it.y - 16), H - h - 2),
-        };
-      }
-      placed.push({ key: it.key, text, x: chosen.x, y: chosen.y, w, h });
+      if (chosen) placed.push({ key: `pt-${p.s.id}`, text, x: chosen.x, y: chosen.y, w, h });
     });
     return placed;
   })();
-
   if (!servers.length) {
     return <Empty description="还没有服务器" image={Empty.PRESENTED_IMAGE_SIMPLE} style={{ padding: '40px 0' }} />;
   }
