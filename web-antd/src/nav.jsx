@@ -148,11 +148,13 @@ export const NAV_GROUPS = [
 ];
 
 export function menuItems(isSuper) {
-  return NAV_GROUPS.map((g) => {
+  const items = [];
+  for (const g of NAV_GROUPS) {
     const children = g.keys
       .filter((k) => PAGE_META[k])
       .filter((k) => !PAGE_META[k].superOnly || isSuper)
       .map((k) => ({ key: k, icon: PAGE_META[k].icon, label: PAGE_META[k].title }));
-    return { type: 'group', key: 'g-' + g.group, label: g.group, children };
-  }).filter((g) => g.children.length);
+    items.push(...children);
+  }
+  return items;
 }
