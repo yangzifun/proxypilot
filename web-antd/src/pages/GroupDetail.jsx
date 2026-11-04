@@ -278,6 +278,192 @@ function Configs({ uuid, onChanged }) {
     });
   };
 
+  const columns = [
+    { title: 'ID', dataIndex: 'id', width: 66 },
+    { title: '协议', dataIndex: 'protocol', width: 100, render: (v) => <Tag color="blue">{v || 'unknown'}</Tag> },
+    {
+      title: '配置',
+      dataIndex: 'config_data',
+      ellipsis: true,
+      render: (v) => <span className="pp-mono" style={{ color: '#475569' }}>{String(v || '').slice(0, 88)}</span>,
+    },
+    { title: '备注', dataIndex: 'remark', width: 110, ellipsis: true, render: (v) => v || <span className="pp-muted">—</span> },
+    { title: '更新时间', dataIndex: 'updated_at', width: 116, render: (v) => <span className="pp-muted">{fmtAgo(v)}</span> },
+    {
+      title: '操作',
+      width: 110,
+      render: (_, r) => (
+        <Space size={0}>
+          <IconAction title="查看" icon={<EyeOutlined />} onClick={() => setPreview(r)} />
+          <IconAction title="编辑" icon={<EditOutlined />} onClick={() => openEdit(r)} />
+          <Popconfirm title="删除这条配置？" okText="删除" okButtonProps={{ danger: true }} onConfirm={() => removeOne(r)}>
+            <Button type="text" size="small" danger icon={<DeleteOutlined />} aria-label="删除" />
+          </Popconfirm>
+        </Space>
+      ),
+    },
+  ];
+
+  return (
+    <div>
+      <Toolbar
+        left={
+          <Space wrap>
+            <Button type="primary" size="small" icon={<PlusOutlined />} onClick={openCreate}>
+              添加配置
+            </Button>
+            <Popconfirm
+              title={`删除选中的 ${selected.length} 条？`}
+              okText="删除"
+              okButtonProps={{ danger: true }}
+              disabled={!selected.length}
+              onConfirm={removeSelected}
+            >
+              <Button size="small" danger icon={<DeleteOutlined />} disabled={!selected.length}>
+                删除选中{selected.length ? `（${selected.length}）` : ''}
+              </Button>
+            </Popconfirm>
+            <Button size="small" danger type="dashed" onClick={clearAll}>
+              一键清理全部
+            </Button>
+            <Button size="small" icon={<ReloadOutlined />} onClick={load} loading={state.loading}>
+              刷新
+            </Button>
+          </Space>
+        }
+        right={<span className="pp-muted" style={{ fontSize: 12 }}>共 {fmtNum(state.total)} 条</span>}
+      />
+
+      {state.error ? <ErrorBlock error={state.error} onRetry={load} /> : null}
+
+      <Table
+        className="pp-table"
+        rowKey="id"
+        size="small"
+        loading={state.loading}
+        dataSource={state.data}
+        columns={columns}
+        rowSelection={{ selectedRowKeys: selected, onChange: (keys) => setSelected(keys) }}
+        pagination={{
+          current: page,
+          pageSize: size,
+          total: state.total,
+          size: 'small',
+          showSizeChanger: true,
+          pageSizeOptions: [10, 20, 50],
+          onChange: (p, s) => {
+            setPage(p);
+            setSize(s);
+          },
+        }}
+        locale={{ emptyText: <EmptyBlock text="该用户还没有节点配置" /> }}
+      />
+
+      {state.mtp && state.mtp.length ? (
+        <div style={{ marginTop: 18 }}>
+          <div className="pp-muted" style={{ fontSize: 12, marginBottom: 8 }}>
+            MTProto 配置（{state.mtp.length}）· 与该用户的 sing-box 节点一起计入节点配置
+          </div>
+          <Table
+            className="pp-table"
+            size="small"
+            dataSource={state.mtp}
+            pagination={false}
+            columns={[
+              { title: '节点', dataIndex: 'node_name', width: 150, render: (v) => <b>{v}</b> },
+              {
+                title: '主机',
+                dataIndex: 'host',
+                width: 200,
+                render: (v, r) => <span className="pp-mono">{v || '—'}:{r.port || 0}</span>,
+              },
+              { title: '密钥', dataIndex: 'secret_hint', width: 170, render: (v) => <span className="pp-mono">{v}</span> },
+              {
+                title: '状态',
+                dataIndex: 'status',
+                width: 90,
+                render: (v) => (v === 'active' ? <Tag color="success">启用</Tag> : <Tag>已撤销</Tag>),
+              },
+              { title: '创建时间', dataIndex: 'created_at', width: 110, render: (v) => <span className="pp-muted">{v ? fmtAgo(v) : '—'}</span> },
+              {
+                title: '操作',
+                width: 110,
+                render: (_, r) => (
+                  <Button type="link" size="small" onClick={() => copyMtp(r.tg)}>
+                    复制链接
+                  </Button>
+                ),
+              },
+            ]}
+            rowKey={(r) => `mtp-${r.id}`}
+          />
+        </div>
+      ) : null}
+
+      <Modal
+        open={!!edit}
+        title={edit && edit.mode === 'edit' ? `编辑配置 #${edit.row.id}` : '添加节点配置'}
+        onCancel={() => setEdit(null)}
+        onOk={save}
+        confirmLoading={saving}
+        okText="保存"
+        width={680}
+        destroyOnHidden
+      >
+        <Form form={form} layout="vertical" requiredMark={false} style={{ marginTop: 12 }}>
+          <Form.Item
+            name="config_data"
+            label="节点链接"
+            rules={[{ required: true, message: '请粘贴节点链接' }]}
+            extra={
+              edit && edit.mode === 'create'
+                ? '支持一次粘贴多行，每行会单独生成一条配置（自动识别协议）'
+                : undefined
+            }
+          >
+            <Input.TextArea
+              rows={edit && edit.mode === 'create' ? 8 : 6}
+              className="pp-mono"
+              spellCheck={false}
+              placeholder={'vless://uuid@host:443?type=ws&security=tls#hk\nhysteria2://pass@host:443#jp'}
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal open={!!preview} onCancel={() => setPreview(null)} footer={null} width={700} title="节点配置原文">
+        {preview ? <JsonView value={String(preview.config_data || '')} maxHeight={460} /> : null}
+      </Modal>
+    </div>
+  );
+}
+
+/* ---------------- 授权服务 ---------------- */
+function AuthorizeNodes({ uuid, onChanged }) {
+  const { message } = AntdApp.useApp();
+  const [state, setState] = useState({ data: [], loading: false, error: null });
+  const [selected, setSelected] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!uuid) return;
+    setState((s) => ({ ...s, loading: true, error: null }));
+    try {
+      const res = await api(`uuids/${uuid}/services`);
+      const data = (res && res.data) || [];
+      setState({ data, loading: false, error: null });
+      setSelected(data.filter((n) => n.authorized).map((n) => `${n.kind}:${n.id}`));
+      setDirty(false);
+    } catch (e) {
+      setState({ data: [], loading: false, error: e });
+    }
+  }, [uuid]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
   const nodeGroups = (() => {
     const map = new Map();
     for (const s of state.data || []) {
@@ -289,7 +475,30 @@ function Configs({ uuid, onChanged }) {
     }
     return [...map.values()];
   })();
-  const authorizedNodes = nodeGroups.filter((g) => g.items.length && g.items.every((i) => i.authorized)).map((g) => g.server_id);
+
+  const authorizedNodes = nodeGroups
+    .filter((g) => g.items.length && g.items.every((i) => i.authorized))
+    .map((g) => g.server_id);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const services = selected.map((k) => {
+        const [kind, id] = String(k).split(':');
+        return { kind, id: Number(id) };
+      });
+      const res = await api(`uuids/${uuid}/services`, { method: 'PUT', body: { services } });
+      const failed = (res.results || []).filter((r) => r.ok === false);
+      if (failed.length) message.warning(`已提交 ${res.changed || 0} 个变更，${failed.length} 个服务处理失败`);
+      else message.success(`已保存，${res.changed || 0} 个服务授权发生变化`);
+      load();
+      if (onChanged) onChanged();
+    } catch (e) {
+      message.error(e.message || '保存失败');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const columns = [
     {
@@ -321,7 +530,7 @@ function Configs({ uuid, onChanged }) {
     },
     {
       title: '授权服务数',
-      width: 120,
+      width: 130,
       align: 'right',
       render: (_, g) => g.items.filter((i) => i.authorized).length + ' / ' + g.items.length,
     },
@@ -345,7 +554,7 @@ function Configs({ uuid, onChanged }) {
         showIcon
         style={{ borderRadius: 10, marginBottom: 12 }}
         message="按节点授权：勾选一个节点，即同步授权它绑定的全部服务"
-        description="勾选节点后，自动把 UUID 写入该服务器上的 sing-box / mihomo / MTProto 全部服务并重渲染下发（mihomo 下次下发生效）；取消勾选则一并撤销。"
+        description="勾选节点后自动把 UUID 写入该服务器上的 sing-box / mihomo / MTProto 全部服务并重渲染下发（mihomo 下次下发生效）；取消勾选则一并撤销。"
       />
       <Toolbar
         left={
@@ -367,7 +576,7 @@ function Configs({ uuid, onChanged }) {
         }
         right={
           <span className="pp-muted" style={{ fontSize: 12 }}>
-            已选 {selected.length} / {state.data.length}
+            已选节点 {authorizedNodes.length} / {nodeGroups.length}
           </span>
         }
       />

@@ -51,9 +51,18 @@ export default function NodeBindings() {
   const submit = async () => {
     const v = await form.validateFields();
     const tasks = [];
-    if (v.sb_tpl) tasks.push(['singbox', '/api/singbox/nodes', { name: v.name + '-sb', server_id: v.server_id, template_id: v.sb_tpl, domain: v.domain || '' }]);
-    if (v.mh_tpl) tasks.push(['mihomo', '/api/mihomo/nodes', { name: v.name + '-mh', server_id: v.server_id, template_id: v.mh_tpl, domain: v.domain || '' }]);
-    if (v.mp_tpl) tasks.push(['MTProto', '/api/mtproto/nodes', { name: v.name + '-mp', server_id: v.server_id, template_id: v.mp_tpl, domain: v.domain || '' }]);
+    if (v.sb_tpl) tasks.push(['singbox', '/api/singbox/nodes', {
+      name: v.sb_name || v.name + '-sb', server_id: v.server_id, template_id: v.sb_tpl,
+      domain: v.sb_domain || v.domain || '', cdn_domain: v.sb_cdn || '', port_base: v.sb_port || 0,
+    }]);
+    if (v.mh_tpl) tasks.push(['mihomo', '/api/mihomo/nodes', {
+      name: v.mh_name || v.name + '-mh', server_id: v.server_id, template_id: v.mh_tpl,
+      domain: v.mh_domain || v.domain || '', port_base: v.mh_port || 0,
+    }]);
+    if (v.mp_tpl) tasks.push(['MTProto', '/api/mtproto/nodes', {
+      name: v.mp_name || v.name + '-mp', server_id: v.server_id, template_id: v.mp_tpl,
+      domain: v.mp_domain || v.domain || '', port: v.mp_port || 0,
+    }]);
     if (!tasks.length) {
       message.warning('请至少选择一个服务的模板');
       return;
@@ -137,7 +146,7 @@ export default function NodeBindings() {
           type="link"
           onClick={() => {
             setEditRow(r);
-            form.setFieldsValue({ server_id: r.server_id, name: r.node_name, domain: r.domain || '', sb_tpl: r.sb_tpl || undefined, mh_tpl: r.mh_tpl || undefined, mp_tpl: r.mp_tpl || undefined });
+            form.setFieldsValue({ server_id: r.server_id, name: r.node_name, domain: r.domain || '', sb_domain: r.domain || '', mh_domain: r.domain || '', mp_domain: r.domain || '', sb_tpl: r.sb_tpl || undefined, mh_tpl: r.mh_tpl || undefined, mp_tpl: r.mp_tpl || undefined });
             setOpen(true);
           }}
         >
@@ -174,11 +183,65 @@ export default function NodeBindings() {
           <Form.Item name="sb_tpl" label="sing-box 模板">
             <Select allowClear options={tpl.sb} placeholder="不绑定 sing-box" />
           </Form.Item>
+          <Form.Item noStyle shouldUpdate={(a, b) => a.sb_tpl !== b.sb_tpl}>
+            {({ getFieldValue }) =>
+              getFieldValue('sb_tpl') ? (
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                  <Form.Item name="sb_name" label="sing-box 节点名" style={{ width: 200 }}>
+                    <Input placeholder="留空自动生成" />
+                  </Form.Item>
+                  <Form.Item name="sb_domain" label="域名" style={{ width: 240 }}>
+                    <Input placeholder="hk.example.com" />
+                  </Form.Item>
+                  <Form.Item name="sb_cdn" label="CDN 域名" style={{ width: 240 }}>
+                    <Input placeholder="cdn.example.com（可选）" />
+                  </Form.Item>
+                  <Form.Item name="sb_port" label="端口基址" style={{ width: 140 }}>
+                    <Input placeholder="0 = 跟随模板" />
+                  </Form.Item>
+                </div>
+              ) : null
+            }
+          </Form.Item>
           <Form.Item name="mh_tpl" label="mihomo 模板（仅服务端模板）">
             <Select allowClear options={tpl.mh} placeholder="不绑定 mihomo" />
           </Form.Item>
+          <Form.Item noStyle shouldUpdate={(a, b) => a.mh_tpl !== b.mh_tpl}>
+            {({ getFieldValue }) =>
+              getFieldValue('mh_tpl') ? (
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                  <Form.Item name="mh_name" label="mihomo 节点名" style={{ width: 200 }}>
+                    <Input placeholder="留空自动生成" />
+                  </Form.Item>
+                  <Form.Item name="mh_domain" label="域名" style={{ width: 240 }}>
+                    <Input placeholder="hk.example.com" />
+                  </Form.Item>
+                  <Form.Item name="mh_port" label="端口基址" style={{ width: 140 }}>
+                    <Input placeholder="0 = 跟随模板" />
+                  </Form.Item>
+                </div>
+              ) : null
+            }
+          </Form.Item>
           <Form.Item name="mp_tpl" label="MTProto 模板">
             <Select allowClear options={tpl.mp} placeholder="不绑定 MTProto" />
+          </Form.Item>
+          <Form.Item noStyle shouldUpdate={(a, b) => a.mp_tpl !== b.mp_tpl}>
+            {({ getFieldValue }) =>
+              getFieldValue('mp_tpl') ? (
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                  <Form.Item name="mp_name" label="MTProto 节点名" style={{ width: 200 }}>
+                    <Input placeholder="留空自动生成" />
+                  </Form.Item>
+                  <Form.Item name="mp_domain" label="伪装域名" style={{ width: 240 }} rules={[{ required: true, message: '请填写 MTProto 伪装域名' }]}>
+                    <Input placeholder="www.microsoft.com" />
+                  </Form.Item>
+                  <Form.Item name="mp_port" label="端口" style={{ width: 140 }}>
+                    <Input placeholder="0 = 跟随模板" />
+                  </Form.Item>
+                </div>
+              ) : null
+            }
           </Form.Item>
         </Form>
       </Modal>
