@@ -724,74 +724,72 @@ export default function ServersUnified() {
         extra={<span className="pp-muted" style={{ fontSize: 12 }}>更新 {fmtTime(updatedAt, '').slice(11, 19) || '—'}</span>}
         bodyStyle={{ padding: 0 }}
       >
-        <div style={{ padding: '14px 16px 16px' }}>
-          <Row gutter={24}>
-            <Col xs={24} lg={9}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px' }}>
-                {[
-                  { label: '服务器总数', value: fmtNum(rows.length) },
-                  { label: '在线', value: fmtNum(counts.online), hint: rows.length ? `在线率 ${((counts.online / rows.length) * 100).toFixed(0)}%` : '—' },
-                  { label: '离线', value: fmtNum(counts.offline) },
-                  { label: '未接入', value: fmtNum(counts.unknown), hint: 'Agent 尚未上报心跳' },
-                  { label: '实时下行', value: fmtBytes(summary.rx_rate || 0), unit: '/s', hint: `${counts.online} 台在线` },
-                  { label: '实时上行', value: fmtBytes(summary.tx_rate || 0), unit: '/s', hint: `${counts.online} 台在线` },
-                  {
-                    label: '集群总流量',
-                    value: fmtBytes((summary.rx_rate || 0) + (summary.tx_rate || 0)),
-                    unit: '/s',
-                    hint: `下行 + 上行 · ${rows.length} 台服务器`,
-                  },
-                ].map((it) => (
-                  <div key={it.label} style={{ minWidth: 0 }}>
-                    <div className="pp-muted" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{it.label}</div>
-                    <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.25, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-                      {it.value}
-                      {it.unit ? <span style={{ fontSize: 12, fontWeight: 500, color: '#94a3b8', marginLeft: 4 }}>{it.unit}</span> : null}
-                    </div>
-                    {it.hint ? <div className="pp-muted" style={{ fontSize: 11, marginTop: 2 }}>{it.hint}</div> : null}
+        <div className="pp-overview-grid">
+          <div>
+            <div className="pp-ov-tiles">
+              {[
+                { label: '服务器总数', value: fmtNum(rows.length) },
+                { label: '在线', value: fmtNum(counts.online), hint: rows.length ? `在线率 ${((counts.online / rows.length) * 100).toFixed(0)}%` : '—' },
+                { label: '离线', value: fmtNum(counts.offline) },
+                { label: '未接入', value: fmtNum(counts.unknown), hint: 'Agent 未上报心跳' },
+                { label: '实时下行', value: fmtBytes(summary.rx_rate || 0), unit: '/s' },
+                { label: '实时上行', value: fmtBytes(summary.tx_rate || 0), unit: '/s' },
+              ].map((it) => (
+                <div key={it.label} className="pp-ov-tile">
+                  <div className="pp-ov-label">{it.label}</div>
+                  <div className="pp-ov-value">
+                    {it.value}
+                    {it.unit ? <span className="pp-ov-unit">{it.unit}</span> : null}
                   </div>
-                ))}
+                  {it.hint ? <div className="pp-ov-hint">{it.hint}</div> : null}
+                </div>
+              ))}
+              <div className="pp-ov-tile pp-ov-tile-wide">
+                <div className="pp-ov-label">集群总流量</div>
+                <div className="pp-ov-value">
+                  {fmtBytes((summary.rx_rate || 0) + (summary.tx_rate || 0))}
+                  <span className="pp-ov-unit">/s</span>
+                </div>
+                <div className="pp-ov-hint">下行 + 上行 · {rows.length} 台服务器</div>
               </div>
-              <div className="pp-muted" style={{ fontSize: 12, marginTop: 10 }}>
-                服务异常 {fmtNum(summary.failed_services || 0)} · 未安装 {fmtNum(summary.not_installed || 0)} 项
-              </div>
+            </div>
 
-              <div style={{ borderTop: '1px dashed #e2e8f0', margin: '12px 0' }} />
+            <div className="pp-ov-foot">
+              服务异常 <b>{fmtNum(summary.failed_services || 0)}</b> · 未安装 {fmtNum(summary.not_installed || 0)} 项
+            </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                <b style={{ fontSize: 13 }}>资源均值</b>
-                <span className="pp-muted" style={{ fontSize: 12 }}>仅在线节点</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <div style={{ flex: '0 0 106px', textAlign: 'center' }}>
-                  <GaugeChart value={avg.cpu} label="CPU" size={106} />
+            <div className="pp-ov-divider" />
+
+            <div className="pp-ov-sec-head">
+              <b>资源均值</b>
+              <span>仅在线节点</span>
+            </div>
+            <div className="pp-ov-avg">
+              <div className="pp-ov-gauge"><GaugeChart value={avg.cpu} label="CPU" size={96} /></div>
+              <div className="pp-ov-gauge"><GaugeChart value={avg.mem} label="内存" size={96} /></div>
+              <div className="pp-ov-disk">
+                <div className="pp-ov-disk-head">
+                  <span>磁盘均值</span>
+                  <b style={{ color: levelColor(avg.disk) }}>{Number(avg.disk || 0).toFixed(0)}%</b>
                 </div>
-                <div style={{ flex: '0 0 106px', textAlign: 'center' }}>
-                  <GaugeChart value={avg.mem} label="内存" size={106} />
-                </div>
-                <div style={{ flex: '1 1 auto', minWidth: 90 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#64748b' }}>
-                    <span>磁盘均值</span>
-                    <b style={{ color: levelColor(avg.disk) }}>{Number(avg.disk || 0).toFixed(0)}%</b>
-                  </div>
-                  <Progress percent={Math.round(Number(avg.disk || 0))} showInfo={false} strokeColor={levelColor(avg.disk)} />
-                </div>
+                <Progress percent={Math.round(Number(avg.disk || 0))} showInfo={false} strokeColor={levelColor(avg.disk)} />
               </div>
-            </Col>
-            <Col xs={24} lg={15}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8, flexWrap: 'wrap' }}>
-                <b style={{ fontSize: 13 }}>全球分布</b>
-                <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 12 }}>
-                  <ChartLegend items={[{ name: '在线', color: '#10b981' }, { name: '离线', color: '#f43f5e' }, { name: '未知', color: '#cbd5e1' }]} />
-                  <Button size="small" onClick={() => setMapOpen(true)}>查看大图</Button>
-                </span>
-              </div>
+            </div>
+          </div>
+
+          <div className="pp-ov-map">
+            <div className="pp-ov-sec-head">
+              <b>全球分布</b>
+              <span className="pp-ov-map-extra">
+                <ChartLegend items={[{ name: '在线', color: '#10b981' }, { name: '离线', color: '#f43f5e' }, { name: '未知', color: '#cbd5e1' }]} />
+                <Button size="small" onClick={() => setMapOpen(true)}>查看大图</Button>
+              </span>
+            </div>
+            <div className="pp-ov-map-box">
               <WorldMap servers={rows} onPick={(r) => setDetailId(r.id)} onExpand={() => setMapOpen(true)} />
-            </Col>
-          </Row>
-        </div>
-
-      </PageCard>
+            </div>
+          </div>
+        </div>      </PageCard>
 
       <Modal
         open={mapOpen}
