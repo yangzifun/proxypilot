@@ -30,7 +30,7 @@ import {
 } from 'antd';
 import { api, apiDelete, apiGet, apiPost, apiPut, getToken } from '../api';
 import { PageCard, StatCard } from '../components';
-import { fmtTime } from '../format';
+import { fmtAgo, fmtTime } from '../format';
 
 const { TextArea } = Input;
 
@@ -581,10 +581,20 @@ export default function Mihomo({ templatesOnly }) {
 
   const tplColumns = [
     { title: 'ID', dataIndex: 'id', width: 70 },
-    { title: '模板名称', dataIndex: 'name', width: 200, ellipsis: true },
+    {
+      title: '模板名称',
+      dataIndex: 'name',
+      width: 220,
+      render: (v, row) => (
+        <div>
+          <div>{v}</div>
+          {row.remark ? <div className="pp-muted" style={{ fontSize: 12 }}>{row.remark}</div> : null}
+        </div>
+      ),
+    },
     {
       title: '协议',
-      width: 260,
+      width: 300,
       render: (_, row) => {
         const asArr = (v) => {
           if (Array.isArray(v)) return v;
@@ -599,16 +609,14 @@ export default function Mihomo({ templatesOnly }) {
           return [];
         };
         const cfg = row.server_cfg && typeof row.server_cfg === 'object' ? row.server_cfg : {};
-        const list = row.mode === 'server' ? asArr(cfg.protocols) : asArr(row.protocols);
-        if (!list.length) return <Tag>全部（订阅模板）</Tag>;
+        const list = asArr(cfg.protocols);
+        if (!list.length) return <span className="pp-muted">—</span>;
         return (
           <span>
             {list.map((x) => (
               <Tag key={x} style={{ marginBottom: 4 }}>{x}</Tag>
             ))}
-            {row.mode === 'server' && cfg.port_base ? (
-              <span className="pp-muted" style={{ fontSize: 11.5, marginLeft: 4 }}>:{cfg.port_base}</span>
-            ) : null}
+            {cfg.port_base ? <span className="pp-muted" style={{ fontSize: 11.5, marginLeft: 4 }}>:{cfg.port_base}</span> : null}
           </span>
         );
       },
@@ -616,39 +624,20 @@ export default function Mihomo({ templatesOnly }) {
     {
       title: '状态',
       dataIndex: 'enabled',
-      width: 130,
-      render: (v, row) => (
-        <Space size={4}>
-          <Switch size="small" checked={!!v} onChange={(c) => toggleTemplate(row, c)} />
-          {!v ? <Tag color="red">订阅跳过</Tag> : null}
-        </Space>
-      ),
+      width: 80,
+      render: (v) => (Number(v) ? <Tag color="success">启用</Tag> : <Tag>停用</Tag>),
     },
-    { title: '更新时间', dataIndex: 'updated_at', width: 170, render: (v) => fmtTime(v) },
+    { title: '更新时间', dataIndex: 'updated_at', width: 112, render: (v) => <span className="pp-muted">{fmtAgo(v)}</span> },
     {
       title: '操作',
-      width: 360,
+      width: 118,
+      fixed: 'right',
       render: (_, row) => (
-        <Space size={4}>
-          <Button size="small" type="link" icon={<EditOutlined />} onClick={() => openEditTpl(row)}>
-            编辑
-          </Button>
-          <Button size="small" type="link" icon={<EyeOutlined />} onClick={() => openTplPreview(row)}>
-            预览
-          </Button>
-          <Button size="small" type="link" onClick={() => loadVersions(row)}>
-            版本
-          </Button>
-          <Button size="small" type="link" onClick={() => copyTemplate(row)}>
-            复制
-          </Button>
-          <Button size="small" type="link" onClick={() => exportTemplate(row)}>
-            导出
-          </Button>
+        <Space size={0}>
+          <Button type="text" size="small" title="编辑" icon={<EditOutlined />} onClick={() => openEditTpl(row)} />
+          <Button type="text" size="small" title="预览" icon={<EyeOutlined />} onClick={() => openTplPreview(row)} />
           <Popconfirm title="删除该模板？" onConfirm={() => removeTpl(row)}>
-            <Button size="small" type="link" danger icon={<DeleteOutlined />}>
-              删除
-            </Button>
+            <Button type="text" size="small" danger title="删除" icon={<DeleteOutlined />} />
           </Popconfirm>
         </Space>
       ),
@@ -732,14 +721,14 @@ export default function Mihomo({ templatesOnly }) {
   return (
     <div>
     <PageCard
-      title="mihomo"
-      subtitle="mihomo（Clash.Meta）模板管理与节点绑定，按服务器 + UUID 生成完整 YAML 配置"
+      title="协议模板（mihomo）"
+      subtitle="mihomo（Clash.Meta）服务端模板管理，按服务器生成 listeners 配置"
       extra={
         <Space>
+          <Button onClick={() => setHelpOpen(true)}>协议说明</Button>
           <Button icon={<ReloadOutlined />} onClick={loadAll} loading={loading}>
             刷新
           </Button>
-          <Button onClick={() => setHelpOpen(true)}>协议说明</Button>
           {tab === 'templates' ? (
             <Button type="primary" icon={<PlusOutlined />} onClick={openCreateTpl}>
               新建模板
