@@ -21,6 +21,7 @@ type sbParsed struct {
 	Warp           map[string]string
 	HasWarp        bool
 	Masque         bool
+	CDNPort        int
 	MasquePort     int
 	MasquePath     string
 	MasqueVersions []int
@@ -151,6 +152,9 @@ func parseSbConfig(text string) (*sbParsed, string) {
 		case "vless":
 			tr := asMap(ib["transport"])
 			if asString(tr["type"]) == "ws" {
+				if strings.Contains(strings.ToLower(asString(ib["tag"])), "-cdn") || asString(ib["listen"]) == "127.0.0.1" {
+					p.CDNPort = port
+				}
 				p.Enable["vlws"] = 1
 				p.Paths["vlws"] = firstNonEmpty(asString(tr["path"]), "/vlws")
 			} else if tls := asMap(ib["tls"]); tls["reality"] != nil {
@@ -302,6 +306,9 @@ func (h *handlers) singboxTemplateFromConfig(w http.ResponseWriter, r *http.Requ
 	}
 	if parsed.Paths["vlws"] != "" {
 		setOpt("vlws", map[string]any{"path": parsed.Paths["vlws"]})
+	}
+	if parsed.CDNPort > 0 {
+		setOpt("vlws", map[string]any{"cdn_port": parsed.CDNPort})
 	}
 	if parsed.Reality["server_name"] != "" || parsed.Reality["dest"] != "" || parsed.Reality["short_id"] != "" {
 		setOpt("reality", map[string]any{

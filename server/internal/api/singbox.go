@@ -334,7 +334,7 @@ func singboxRenderSb(tpl *singboxTemplate, users []sbUser, ports map[string]int,
 		})
 		// CDN / Cloudflare Tunnel 回源：隧道在本机以明文 HTTP 转发，
 		// 所以这里额外开一个「仅回环、无 TLS」的 WS 入站（默认 13716，可被模板 vlws.cdn_port 覆盖）。
-		if strings.TrimSpace(cdnDomain) != "" {
+		if strings.TrimSpace(cdnDomain) != "" || int(jsonInt(optMap(opts, "vlws")["cdn_port"])) > 0 {
 			cdnPort := int(jsonInt(optMap(opts, "vlws")["cdn_port"]))
 			if cdnPort <= 0 {
 				// 默认 13707（base+7）；MASQUE 已改用 13708，不再冲突
@@ -342,14 +342,6 @@ func singboxRenderSb(tpl *singboxTemplate, users []sbUser, ports map[string]int,
 			}
 			inbounds = append(inbounds, map[string]any{
 				"type": "vless", "tag": "vless-ws-cdn", "listen": "127.0.0.1", "listen_port": cdnPort,
-				"transport": map[string]any{"type": "ws", "path": wsPath},
-				"users":     u,
-			})
-			// CDN 转发服务：公网 443 直接终止 TLS 并复用同一 WS 路径，
-			// 供 Cloudflare 代理（橙云）回源；13707 仍保留给 Tunnel 明文回源。
-			inbounds = append(inbounds, map[string]any{
-				"type": "vless", "tag": "vless-ws-cdn-443", "listen": "::", "listen_port": 443,
-				"tls":       tlsBlock(),
 				"transport": map[string]any{"type": "ws", "path": wsPath},
 				"users":     u,
 			})
