@@ -58,15 +58,29 @@ func (h *handlers) backupImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 校验所有路径，拒绝 zip slip。
+	// 校验所有路径，拒绝 zip slip，并限制总量/条目数/压缩比。
+	if len(zr.File) > 3000 {
+		writeError(w, http.StatusBadRequest, "备份条目过多")
+		return
+	}
+	var totalUnzip uint64
 	for _, f := range zr.File {
 		name := strings.ReplaceAll(f.Name, "\\", "/")
 		if strings.Contains(name, "..") || strings.HasPrefix(name, "/") {
 			writeError(w, http.StatusBadRequest, "备份包含非法路径："+f.Name)
 			return
 		}
-		if f.UncompressedSize64 > 2<<30 {
+		if f.UncompressedSize64 > 1<<30 {
 			writeError(w, http.StatusBadRequest, "备份内文件过大："+f.Name)
+			return
+		}
+		totalUnzip += f.UncompressedSize64
+		if totalUnzip > 2<<30 {
+			writeError(w, http.StatusBadRequest, "备份解压总量超限")
+			return
+		}
+		if f.CompressedSize64 > 0 && f.UncompressedSize64/f.CompressedSize64 > 200 {
+			writeError(w, http.StatusBadRequest, "备份压缩比异常："+f.Name)
 			return
 		}
 	}

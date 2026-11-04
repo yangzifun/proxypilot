@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -86,10 +87,7 @@ func (h *handlers) probeNodeConfigs(ctx context.Context, rows []map[string]any) 
 		if id == 0 {
 			continue
 		}
-		path := strings.TrimSpace(mapStr(row, "target_path", ""))
-		if path == "" {
-			path = "/etc/sing-box/sb.json"
-		}
+		path := safeInspectPath(strings.TrimSpace(mapStr(row, "target_path", "")))
 		p := &nodeConfigProbe{NodeID: id, ServerID: mapInt(row, "server_id", 0),
 			Name: mapStr(row, "name", ""), Path: path}
 		probes[id] = p
@@ -170,4 +168,22 @@ func fillProbeFromJSON(p *nodeConfigProbe, raw string) {
 	}
 	p.Users = out.Users
 	p.Sha256 = out.Sha256
+}
+
+// safeInspectPath 仅允许配置目录内的普通 JSON 文件。
+func safeInspectPath(p string) string {
+	def := "/etc/sing-box/sb.json"
+	if strings.TrimSpace(p) == "" {
+		return def
+	}
+	abs, err := filepath.Abs(filepath.Clean(p))
+	if err != nil {
+		return def
+	}
+	for _, root := range []string{"/etc/sing-box/", "/etc/mihomo/", "/etc/mtg/"} {
+		if strings.HasPrefix(abs, root) {
+			return abs
+		}
+	}
+	return def
 }

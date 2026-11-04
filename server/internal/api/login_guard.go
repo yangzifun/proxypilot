@@ -57,32 +57,23 @@ func (l *loginRateLimiter) Blocked(key string) (time.Duration, bool) {
 	defer l.mu.Unlock()
 	a := l.m[key]
 	if a == nil {
-		return 0, false
+		a = &loginAttempt{firstFailure: now}
+		l.m[key] = a
 	}
 	if now.Before(a.blockedUntil) {
 		return a.blockedUntil.Sub(now), true
 	}
 	if !a.firstFailure.IsZero() && now.Sub(a.firstFailure) > loginFailWindow {
-		delete(l.m, key)
+		a.failures = 0
+		a.firstFailure = now
 	}
-	return 0, false
-}
-
-// Fail 记录一次失败；达到阈值后进入锁定窗口。
-func (l *loginRateLimiter) Fail(key string) {
-	now := time.Now()
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	a := l.m[key]
-	if a == nil || (!a.firstFailure.IsZero() && now.Sub(a.firstFailure) > loginFailWindow) {
-		a = &loginAttempt{firstFailure: now}
-		l.m[key] = a
-	}
+	// 预约即计数：并发请求在口令校验前先占用尝试额度，消除 check-then-act 窗口
 	a.failures++
 	if a.failures >= loginMaxFailures {
 		a.blockedUntil = now.Add(loginBlockFor)
 		a.failures = 0
 		a.firstFailure = now
+		return loginBlockFor, true
 	}
 	if len(l.m) > loginSweepAt {
 		for k, v := range l.m {
@@ -91,6 +82,12 @@ func (l *loginRateLimiter) Fail(key string) {
 			}
 		}
 	}
+	return 0, false
+}
+
+// Fail 保留兼容签名；尝试额度在 Blocked 中预约占位。
+func (l *loginRateLimiter) Fail(key string) {
+	_ = key
 }
 
 func (l *loginRateLimiter) Reset(key string) {

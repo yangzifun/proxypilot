@@ -74,9 +74,14 @@ func (h *handlers) bucketFile(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "创建目录失败")
 			return
 		}
+		r.Body = http.MaxBytesReader(w, r.Body, 64<<20)
+		if r.ContentLength > 64<<20 {
+			writeError(w, http.StatusRequestEntityTooLarge, "文件过大")
+			return
+		}
 		var src io.Reader = r.Body
 		if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
-			if err := r.ParseMultipartForm(64 << 20); err != nil {
+			if err := r.ParseMultipartForm(8 << 20); err != nil {
 				writeError(w, http.StatusBadRequest, "上传解析失败")
 				return
 			}

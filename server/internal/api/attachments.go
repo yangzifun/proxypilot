@@ -86,7 +86,12 @@ func (h *handlers) attachmentsUpload(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "R2 未配置")
 		return
 	}
-	if err := r.ParseMultipartForm(32 << 20); err != nil {
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<20)
+	if r.ContentLength > 64<<20 {
+		writeError(w, http.StatusRequestEntityTooLarge, "请求体过大")
+		return
+	}
+	if err := r.ParseMultipartForm(8 << 20); err != nil {
 		writeError(w, http.StatusBadRequest, "上传解析失败")
 		return
 	}
