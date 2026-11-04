@@ -765,9 +765,9 @@ body {
 .pp-ov-ring-label { font-size: 12px; color: #64748b; }
 .pp-ov-disk { width: 100%; min-width: 0; }
 .pp-ov-disk-head { display: flex; justify-content: space-between; font-size: 12px; color: #64748b; }
-.pp-ov-map { min-width: 0; display: flex; flex-direction: column; }
+.pp-ov-map { min-width: 0; display: flex; flex-direction: column; height: 100%; }
 .pp-ov-map-extra { margin-left: auto; display: inline-flex; align-items: center; gap: 12px; }
-.pp-ov-map-box { flex: 1 1 auto; min-width: 0; overflow: hidden; }
+.pp-ov-map-box { flex: 1 1 auto; min-width: 0; overflow: hidden; height: 100%; }
 .pp-mon-top-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

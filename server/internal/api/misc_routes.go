@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -9,6 +10,8 @@ import (
 // GET /api/servers/monitor 与 /api/servers/services（别名）
 // 返回结构与 Worker 对齐：{ success, servers, services, watch, matrix, summary }
 func (h *handlers) serversMonitor(w http.ResponseWriter, r *http.Request) {
+	h.fillServerGeoAsync(context.Background())
+
 	rows, err := queryRowsAsMaps(r.Context(), h.db, `SELECT * FROM servers ORDER BY id ASC`)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "查询失败")
@@ -44,9 +47,17 @@ func (h *handlers) serversMonitor(w http.ResponseWriter, r *http.Request) {
 		netMap := jsonMap(metrics["net"])
 		totalRxRate += jsonInt(netMap["rxRate"])
 		totalTxRate += jsonInt(netMap["txRate"])
+		var geoLat, geoLon any
+		if v := jsonNum(row["ip_lat"]); v != 0 {
+			geoLat = v
+		}
+		if v := jsonNum(row["ip_lon"]); v != 0 {
+			geoLon = v
+		}
 		servers = append(servers, map[string]any{
 			"id": mapInt(row, "id", 0), "name": mapStr(row, "name", ""),
 			"status": status, "last_status": status,
+			"ip_lat": geoLat, "ip_lon": geoLon,
 			"last_error": mapStr(row, "last_error", ""),
 			"last_ip":    mapStr(row, "last_ip", ""),
 			"last_ip4":   publicDisplayIPv4(mapStr(row, "last_ip4", ""), mapStr(row, "last_ip", "")),

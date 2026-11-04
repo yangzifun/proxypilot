@@ -41,9 +41,10 @@ import { api, apiPost } from '../api';
 import { useAsync, usePolling, readForm } from '../hooks';
 import { CopyText, ErrorBlock, JsonView, PageCard, StatCard, StatusPill } from '../components';
 import { watchBatch } from '../components/JobCenter';
+import L7WorldMap from '../components/L7WorldMap';
 import ServerDrawer from '../components/ServerDrawer';
 import ServerUnlockModal from '../components/ServerUnlockModal';
-import { ServerCard as FullServerCard, WorldMap } from './Monitor';
+import { ServerCard as FullServerCard } from './Monitor';
 import { fmtAgo, fmtBytes, fmtNum, fmtTime, fmtUptime, levelColor, splitIps } from '../format';
 import { chartPalette } from '../theme';
 
@@ -798,10 +799,30 @@ export default function ServersUnified() {
           <div className="pp-ov-map">
             <div className="pp-ov-sec-head">
               <b>全球分布</b>
-              <span className="pp-ov-map-extra">悬停圆点看信息，点击进详情</span>
+              <span className="pp-ov-map-extra">
+                {[
+                  { label: '在线', color: '#10b981' },
+                  { label: '离线', color: '#f43f5e' },
+                  { label: '未知', color: '#cbd5e1' },
+                ].map((it) => (
+                  <span key={it.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                    <i
+                      style={{
+                        display: 'inline-block',
+                        width: 8,
+                        height: 8,
+                        borderRadius: '50%',
+                        background: it.color,
+                        boxShadow: '0 0 0 1px rgba(15, 23, 42, 0.06)',
+                      }}
+                    />
+                    {it.label}
+                  </span>
+                ))}
+              </span>
             </div>
             <div className="pp-ov-map-box">
-              <WorldMap large zoomable servers={rows} onPick={(r) => setDetailId(r.id)} />
+              <L7WorldMap servers={rows} onPick={(r) => setDetailId(r.id)} fill />
             </div>
           </div>
         </div>      </PageCard>
