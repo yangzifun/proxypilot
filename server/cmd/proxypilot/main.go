@@ -23,7 +23,7 @@ import (
 )
 
 // version 由构建脚本注入：-ldflags "-X main.version=v1.0.0"
-var version = "V17.35"
+var version = "V17.36"
 
 func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -100,6 +100,12 @@ func securityHeaders(next http.Handler) http.Handler {
 		h.Set("X-Frame-Options", "SAMEORIGIN")
 		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+		h.Set("Content-Security-Policy-Report-Only", cspPolicy+"; report-uri /api/csp-report")
 		next.ServeHTTP(w, r)
 	})
 }
+
+// cspPolicy 先以 Report-Only 收集违规；确认无副作用后再切换为强制模式。
+const cspPolicy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
+	"img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; " +
+	"frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'"

@@ -25,6 +25,7 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", h.health)
 	mux.HandleFunc("POST /api/login", h.login)
+	mux.HandleFunc("POST /api/csp-report", h.cspReport)
 
 	// 账号
 	mux.HandleFunc("POST /api/change-password", h.authed(authOpts{}, h.changePassword))
