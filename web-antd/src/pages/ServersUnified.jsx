@@ -43,7 +43,7 @@ import { CopyText, ErrorBlock, JsonView, PageCard, StatCard, StatusPill } from '
 import { watchBatch } from '../components/JobCenter';
 import ServerDrawer from '../components/ServerDrawer';
 import ServerUnlockModal from '../components/ServerUnlockModal';
-import { GaugeChart, ChartLegend } from '../charts';
+import { ChartLegend } from '../charts';
 import { ServerCard as FullServerCard, WorldMap } from './Monitor';
 import { fmtAgo, fmtBytes, fmtNum, fmtTime, fmtUptime, levelColor, splitIps } from '../format';
 import { chartPalette } from '../theme';
@@ -115,6 +115,24 @@ const netText = (row) => {
 const connText = (row) => (row.conn && row.conn.total != null ? fmtNum(row.conn.total) : '—');
 const procText = (row) => (row.proc && row.proc.total != null ? fmtNum(row.proc.total) : '—');
 const loadText = (row) => (row.load1 == null ? '—' : Number(row.load1).toFixed(2));
+
+function MiniRing({ value, label }) {
+  const pct = Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
+  const color = pct >= 90 ? '#f43f5e' : pct >= 75 ? '#f59e0b' : pct >= 50 ? '#0ea5e9' : '#10b981';
+  return (
+    <div className="pp-ov-ring">
+      <Progress
+        type="circle"
+        size={92}
+        percent={pct}
+        strokeWidth={7}
+        strokeColor={color}
+        format={() => <span style={{ fontSize: 14, fontWeight: 600 }}>{pct}%</span>}
+      />
+      <div className="pp-ov-ring-label">{label}</div>
+    </div>
+  );
+}
 
 function Pct({ value }) {
   const v = toNum(value);
@@ -766,8 +784,8 @@ export default function ServersUnified() {
             </div>
             <div className="pp-ov-avg">
               <div className="pp-ov-gauges">
-                <div className="pp-ov-gauge"><GaugeChart value={avg.cpu} label="CPU" size={104} /></div>
-                <div className="pp-ov-gauge"><GaugeChart value={avg.mem} label="内存" size={104} /></div>
+                <div className="pp-ov-gauge"><MiniRing value={avg.cpu} label="CPU" /></div>
+                <div className="pp-ov-gauge"><MiniRing value={avg.mem} label="内存" /></div>
               </div>
               <div className="pp-ov-disk">
                 <div className="pp-ov-disk-head">
