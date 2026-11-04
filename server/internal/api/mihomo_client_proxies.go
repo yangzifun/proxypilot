@@ -60,7 +60,7 @@ func (h *handlers) buildMihomoServerProxies(ctx context.Context, uuid string) []
 		if protoSet["vless_ws"] {
 			add(map[string]any{
 				"name": name + "-vless-ws", "type": "vless", "server": host,
-				"port": cfg.PortBase + 1, "uuid": uuid, "udp": true, "tls": true,
+				"port": cfg.PortBase + 6, "uuid": uuid, "udp": true, "tls": true,
 				"servername": host, "network": "ws", "skip-cert-verify": true,
 				"ws-opts": map[string]any{"path": cfg.WSPath, "headers": map[string]any{"Host": host}},
 			})
@@ -69,7 +69,7 @@ func (h *handlers) buildMihomoServerProxies(ctx context.Context, uuid string) []
 			pub := x25519PublicKeyFromPrivate(cfg.RealityPriv)
 			add(map[string]any{
 				"name": name + "-vless-reality", "type": "vless", "server": host,
-				"port": cfg.PortBase + 2, "uuid": uuid, "udp": true, "tls": true,
+				"port": cfg.PortBase + 5, "uuid": uuid, "udp": true, "tls": true,
 				"servername": sni, "network": "tcp", "flow": "xtls-rprx-vision",
 				"reality-opts":       map[string]any{"public-key": pub, "short-id": cfg.RealitySID},
 				"client-fingerprint": "chrome", "skip-cert-verify": true,
@@ -78,7 +78,7 @@ func (h *handlers) buildMihomoServerProxies(ctx context.Context, uuid string) []
 		if protoSet["vmess"] {
 			add(map[string]any{
 				"name": name + "-vmess", "type": "vmess", "server": host,
-				"port": cfg.PortBase + 3, "uuid": uuid, "alterId": 0, "cipher": "auto",
+				"port": cfg.PortBase + 7, "uuid": uuid, "alterId": 0, "cipher": "auto",
 				"udp": true, "tls": true, "servername": host, "network": "ws", "skip-cert-verify": true,
 				"ws-opts": map[string]any{"path": cfg.WSPath, "headers": map[string]any{"Host": host}},
 			})
@@ -86,35 +86,35 @@ func (h *handlers) buildMihomoServerProxies(ctx context.Context, uuid string) []
 		if protoSet["trojan"] {
 			add(map[string]any{
 				"name": name + "-trojan", "type": "trojan", "server": host,
-				"port": cfg.PortBase + 4, "password": uuid, "udp": true,
+				"port": cfg.PortBase + 8, "password": uuid, "udp": true,
 				"sni": host, "skip-cert-verify": true,
 			})
 		}
 		if protoSet["anytls"] {
 			add(map[string]any{
 				"name": name + "-anytls", "type": "anytls", "server": host,
-				"port": cfg.PortBase + 5, "password": uuid, "udp": true,
+				"port": cfg.PortBase + 3, "password": uuid, "udp": true,
 				"sni": host, "skip-cert-verify": true,
 			})
 		}
 		if protoSet["hy2"] {
 			add(map[string]any{
 				"name": name + "-hy2", "type": "hysteria2", "server": host,
-				"port": cfg.PortBase + 6, "password": uuid,
+				"port": cfg.PortBase + 1, "password": uuid,
 				"sni": host, "skip-cert-verify": true,
 			})
 		}
 		if protoSet["tuic"] {
 			add(map[string]any{
 				"name": name + "-tuic", "type": "tuic", "server": host,
-				"port": cfg.PortBase + 7, "uuid": uuid, "password": uuid,
+				"port": cfg.PortBase + 4, "uuid": uuid, "password": uuid,
 				"sni": host, "skip-cert-verify": true, "udp-relay-mode": "native",
 			})
 		}
 		if protoSet["socks"] {
 			add(map[string]any{
 				"name": name + "-socks", "type": "socks5", "server": host,
-				"port": cfg.PortBase + 8, "username": uuid, "password": uuid, "udp": true,
+				"port": cfg.PortBase + 10, "username": uuid, "password": uuid, "udp": true,
 			})
 		}
 		if protoSet["http"] {
@@ -126,7 +126,7 @@ func (h *handlers) buildMihomoServerProxies(ctx context.Context, uuid string) []
 		if protoSet["ss"] {
 			add(map[string]any{
 				"name": name + "-ss", "type": "ss", "server": host,
-				"port": cfg.PortBase + 10, "cipher": cfg.SSMethod, "password": uuid, "udp": true,
+				"port": cfg.PortBase + 2, "cipher": cfg.SSMethod, "password": uuid, "udp": true,
 			})
 		}
 		_ = fmt.Sprint

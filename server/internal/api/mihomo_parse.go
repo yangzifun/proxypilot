@@ -69,7 +69,7 @@ func (h *handlers) mihomoTemplateParse(w http.ResponseWriter, r *http.Request) {
 	if rawList, ok := doc["listeners"].([]any); ok && len(rawList) > 0 {
 		seen := map[string]bool{}
 		basePort := 0
-		offsets := map[string]int{"vless_ws": 1, "vless_reality": 2, "vmess": 3, "trojan": 4, "anytls": 5, "hy2": 6, "tuic": 7, "socks": 8, "http": 9, "ss": 10}
+		offsets := map[string]int{"hy2": 1, "ss": 2, "anytls": 3, "tuic": 4, "vless_reality": 5, "vless_ws": 6, "vmess": 7, "trojan": 8, "socks": 9, "http": 10}
 		for _, item := range rawList {
 			lm, ok := item.(map[string]any)
 			if !ok {

@@ -15,6 +15,7 @@ import (
 type mihomoServerConfig struct {
 	Protocols   []string `json:"protocols"`
 	PortBase    int      `json:"port_base"`
+	Listen      string   `json:"listen"`
 	WSPath      string   `json:"ws_path"`
 	SSMethod    string   `json:"ss_method"`
 	CertPath    string   `json:"cert_path"`
@@ -29,8 +30,9 @@ type mihomoServerConfig struct {
 func defaultMihomoServerConfig() mihomoServerConfig {
 	return mihomoServerConfig{
 		Protocols:   []string{"vless_ws", "vless_reality", "vmess", "trojan", "anytls", "hy2", "tuic"},
-		PortBase:    13900,
+		PortBase:    13800,
 		WSPath:      "/vlws",
+		Listen:      "::",
 		SSMethod:    "2022-blake3-aes-256-gcm",
 		CertPath:    "/etc/mihomo/cert.crt",
 		KeyPath:     "/etc/mihomo/private.key",
@@ -45,10 +47,13 @@ func parseMihomoServerConfig(raw string) mihomoServerConfig {
 		_ = json.Unmarshal([]byte(raw), &cfg)
 	}
 	if cfg.PortBase == 0 {
-		cfg.PortBase = 13900
+		cfg.PortBase = 13800
 	}
 	if strings.TrimSpace(cfg.WSPath) == "" {
 		cfg.WSPath = "/vlws"
+	}
+	if strings.TrimSpace(cfg.Listen) == "" {
+		cfg.Listen = "::"
 	}
 	if strings.TrimSpace(cfg.CertPath) == "" {
 		cfg.CertPath = "/etc/mihomo/cert.crt"
@@ -80,7 +85,7 @@ func renderMihomoServer(cfg mihomoServerConfig, uuids []string) (string, map[str
 
 	var b strings.Builder
 	b.WriteString("# 由 ProxyPilot 生成，请勿手工修改\n")
-	b.WriteString("mixed-port: 0\nallow-lan: true\nmode: rule\nlog-level: info\nipv6: false\n")
+	b.WriteString("mixed-port: 7890\nsocks-port: 7891\nallow-lan: true\nmode: rule\nlog-level: warning\n")
 	b.WriteString("external-controller: 127.0.0.1:9090\n")
 	if strings.TrimSpace(cfg.Secret) != "" {
 		b.WriteString("secret: " + mihomoQuote(cfg.Secret) + "\n")
@@ -107,10 +112,10 @@ func renderMihomoServer(cfg mihomoServerConfig, uuids []string) (string, map[str
 	}
 
 	if protoSet["vless_ws"] {
-		p := port(1)
+		p := port(6)
 		ports["vless_ws"] = p
 		b.WriteString("  - name: vless-ws\n    type: vless\n")
-		b.WriteString("    port: " + strconv.Itoa(p) + "\n    listen: 0.0.0.0\n")
+		b.WriteString("    port: " + strconv.Itoa(p) + "\n    listen: " + mihomoQuote(cfg.Listen) + "\n")
 		b.WriteString("    ws-path: " + mihomoQuote(cfg.WSPath) + "\n")
 		b.WriteString("    certificate: " + mihomoQuote(cfg.CertPath) + "\n")
 		b.WriteString("    private-key: " + mihomoQuote(cfg.KeyPath) + "\n")
@@ -118,10 +123,10 @@ func renderMihomoServer(cfg mihomoServerConfig, uuids []string) (string, map[str
 		addUsersUUID("      ")
 	}
 	if protoSet["vless_reality"] {
-		p := port(2)
+		p := port(5)
 		ports["vless_reality"] = p
 		b.WriteString("  - name: vless-reality\n    type: vless\n")
-		b.WriteString("    port: " + strconv.Itoa(p) + "\n    listen: 0.0.0.0\n")
+		b.WriteString("    port: " + strconv.Itoa(p) + "\n    listen: " + mihomoQuote(cfg.Listen) + "\n")
 		b.WriteString("    reality-config:\n")
 		b.WriteString("      dest: " + mihomoQuote(cfg.RealityDest) + "\n")
 		b.WriteString("      private-key: " + mihomoQuote(cfg.RealityPriv) + "\n")
@@ -138,10 +143,10 @@ func renderMihomoServer(cfg mihomoServerConfig, uuids []string) (string, map[str
 		addUsersUUID("      ")
 	}
 	if protoSet["vmess"] {
-		p := port(3)
+		p := port(7)
 		ports["vmess"] = p
 		b.WriteString("  - name: vmess\n    type: vmess\n")
-		b.WriteString("    port: " + strconv.Itoa(p) + "\n    listen: 0.0.0.0\n")
+		b.WriteString("    port: " + strconv.Itoa(p) + "\n    listen: " + mihomoQuote(cfg.Listen) + "\n")
 		b.WriteString("    ws-path: " + mihomoQuote(cfg.WSPath) + "\n")
 		b.WriteString("    certificate: " + mihomoQuote(cfg.CertPath) + "\n")
 		b.WriteString("    private-key: " + mihomoQuote(cfg.KeyPath) + "\n")
@@ -149,66 +154,66 @@ func renderMihomoServer(cfg mihomoServerConfig, uuids []string) (string, map[str
 		addUsersUUID("      ")
 	}
 	if protoSet["trojan"] {
-		p := port(4)
+		p := port(8)
 		ports["trojan"] = p
 		b.WriteString("  - name: trojan\n    type: trojan\n")
-		b.WriteString("    port: " + strconv.Itoa(p) + "\n    listen: 0.0.0.0\n")
+		b.WriteString("    port: " + strconv.Itoa(p) + "\n    listen: " + mihomoQuote(cfg.Listen) + "\n")
 		b.WriteString("    certificate: " + mihomoQuote(cfg.CertPath) + "\n")
 		b.WriteString("    private-key: " + mihomoQuote(cfg.KeyPath) + "\n")
 		b.WriteString("    users:\n")
 		addUsersPass("      ")
 	}
 	if protoSet["anytls"] {
-		p := port(5)
+		p := port(3)
 		ports["anytls"] = p
 		b.WriteString("  - name: anytls\n    type: anytls\n")
-		b.WriteString("    port: " + strconv.Itoa(p) + "\n    listen: 0.0.0.0\n")
+		b.WriteString("    port: " + strconv.Itoa(p) + "\n    listen: " + mihomoQuote(cfg.Listen) + "\n")
 		b.WriteString("    certificate: " + mihomoQuote(cfg.CertPath) + "\n")
 		b.WriteString("    private-key: " + mihomoQuote(cfg.KeyPath) + "\n")
 		b.WriteString("    users:\n")
 		addUsersMap("      ")
 	}
 	if protoSet["hy2"] {
-		p := port(6)
+		p := port(1)
 		ports["hy2"] = p
 		b.WriteString("  - name: hysteria2\n    type: hysteria2\n")
-		b.WriteString("    port: " + strconv.Itoa(p) + "\n    listen: 0.0.0.0\n")
+		b.WriteString("    port: " + strconv.Itoa(p) + "\n    listen: " + mihomoQuote(cfg.Listen) + "\n")
 		b.WriteString("    certificate: " + mihomoQuote(cfg.CertPath) + "\n")
 		b.WriteString("    private-key: " + mihomoQuote(cfg.KeyPath) + "\n")
 		b.WriteString("    users:\n")
 		addUsersMap("      ")
 	}
 	if protoSet["tuic"] {
-		p := port(7)
+		p := port(4)
 		ports["tuic"] = p
 		b.WriteString("  - name: tuic\n    type: tuic\n")
-		b.WriteString("    port: " + strconv.Itoa(p) + "\n    listen: 0.0.0.0\n")
+		b.WriteString("    port: " + strconv.Itoa(p) + "\n    listen: " + mihomoQuote(cfg.Listen) + "\n")
 		b.WriteString("    certificate: " + mihomoQuote(cfg.CertPath) + "\n")
 		b.WriteString("    private-key: " + mihomoQuote(cfg.KeyPath) + "\n")
 		b.WriteString("    users:\n")
 		addUsersMap("      ")
 	}
 	if protoSet["socks"] {
-		p := port(8)
+		p := port(9)
 		ports["socks"] = p
 		b.WriteString("  - name: socks5\n    type: socks\n")
-		b.WriteString("    port: " + strconv.Itoa(p) + "\n    listen: 0.0.0.0\n")
+		b.WriteString("    port: " + strconv.Itoa(p) + "\n    listen: " + mihomoQuote(cfg.Listen) + "\n")
 		b.WriteString("    users:\n")
 		addUsersMap("      ")
 	}
 	if protoSet["http"] {
-		p := port(9)
+		p := port(10)
 		ports["http"] = p
 		b.WriteString("  - name: http\n    type: http\n")
-		b.WriteString("    port: " + strconv.Itoa(p) + "\n    listen: 0.0.0.0\n")
+		b.WriteString("    port: " + strconv.Itoa(p) + "\n    listen: " + mihomoQuote(cfg.Listen) + "\n")
 		b.WriteString("    users:\n")
 		addUsersMap("      ")
 	}
 	if protoSet["ss"] {
-		p := port(10)
+		p := port(2)
 		ports["ss"] = p
 		b.WriteString("  - name: shadowsocks\n    type: shadowsocks\n")
-		b.WriteString("    port: " + strconv.Itoa(p) + "\n    listen: 0.0.0.0\n")
+		b.WriteString("    port: " + strconv.Itoa(p) + "\n    listen: " + mihomoQuote(cfg.Listen) + "\n")
 		b.WriteString("    cipher: " + mihomoQuote(cfg.SSMethod) + "\n")
 		b.WriteString("    password: " + mihomoQuote(uuids[0]) + "\n")
 	}

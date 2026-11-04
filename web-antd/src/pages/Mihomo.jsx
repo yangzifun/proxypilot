@@ -122,7 +122,7 @@ const SERVER_PROTOCOLS = [
 
 const DEFAULT_SERVER_CFG = {
   protocols: ['vless_ws', 'vless_reality', 'vmess', 'trojan', 'anytls', 'hy2', 'tuic'],
-  port_base: 13900,
+  port_base: 13800,
   ws_path: '/vlws',
   ss_method: '2022-blake3-aes-256-gcm',
   cert_path: '/etc/mihomo/cert.crt',
