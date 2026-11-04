@@ -12,6 +12,7 @@ import Templates from './pages/Templates';
 import ServersUnified from './pages/ServersUnified';
 import Nodes from './pages/Nodes';
 import UserTraffic from './pages/UserTraffic';
+import MihomoPage from './pages/Mihomo';
 import MtprotoPage from './pages/MtprotoPage';
 import MasquePage from './pages/MasquePage';
 import Logs from './pages/Logs';
@@ -27,6 +28,7 @@ const PAGES = {
   userst: UserTraffic,
   servers: ServersUnified,
   normal: Nodes,
+  mihomo: MihomoPage,
   mtproto: MtprotoPage,
   masque: MasquePage,
   singbox: Nodes,

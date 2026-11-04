@@ -13,6 +13,7 @@ import {
   FolderOpenOutlined,
   LineChartOutlined,
   NodeIndexOutlined,
+  PartitionOutlined,
   SendOutlined,
   SafetyCertificateOutlined,
   SettingOutlined,
@@ -60,6 +61,13 @@ export const PAGE_META = {
     icon: <NodeIndexOutlined />,
     group: '节点运维',
     accent: '#8b5cf6',
+  },
+  mihomo: {
+    title: 'mihomo',
+    subtitle: 'mihomo 模板管理 · 按服务器绑定节点',
+    icon: <PartitionOutlined />,
+    group: '节点运维',
+    accent: '#10b981',
   },
   mtproto: {
     title: 'MTProto',
@@ -120,7 +128,7 @@ export const NAV_ORDER = ['dash', 'uuids', 'tpls', 'userst', 'servers', 'normal'
 export const NAV_GROUPS = [
   { group: '业务', keys: ['dash', 'uuids', 'tpls', 'userst'] },
   { group: '服务器运维', keys: ['servers'] },
-  { group: '节点运维', keys: ['normal', 'mtproto', 'masque'] },
+  { group: '节点运维', keys: ['normal', 'mihomo', 'mtproto', 'masque'] },
   { group: '系统', keys: ['logs', 'attachments', 'sys', 'backup', 'sec'] },
 ];
 

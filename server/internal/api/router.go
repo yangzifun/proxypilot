@@ -145,6 +145,17 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("POST /api/singbox/nodes/{id}/deploy", h.authed(authOpts{}, h.singboxNodeDeploy))
 	mux.HandleFunc("POST /api/singbox/nodes/{id}/warp", h.authed(authOpts{}, h.singboxNodeWarp))
 	mux.HandleFunc("GET /api/singbox/releases", h.authed(authOpts{}, h.singboxReleases))
+	// ---- mihomo 模板管理 / 节点绑定 ----
+	mux.HandleFunc("GET /api/mihomo/templates", h.authed(authOpts{}, h.mihomoTemplatesList))
+	mux.HandleFunc("GET /api/mihomo/templates/{id}", h.authed(authOpts{}, h.mihomoTemplateGet))
+	mux.HandleFunc("POST /api/mihomo/templates", h.authed(authOpts{}, h.mihomoTemplateCreate))
+	mux.HandleFunc("PUT /api/mihomo/templates/{id}", h.authed(authOpts{}, h.mihomoTemplateUpdate))
+	mux.HandleFunc("DELETE /api/mihomo/templates/{id}", h.authed(authOpts{}, h.mihomoTemplateDelete))
+	mux.HandleFunc("GET /api/mihomo/nodes", h.authed(authOpts{}, h.mihomoNodesList))
+	mux.HandleFunc("POST /api/mihomo/nodes", h.authed(authOpts{}, h.mihomoNodeCreate))
+	mux.HandleFunc("PUT /api/mihomo/nodes/{id}", h.authed(authOpts{}, h.mihomoNodeUpdate))
+	mux.HandleFunc("DELETE /api/mihomo/nodes/{id}", h.authed(authOpts{}, h.mihomoNodeDelete))
+	mux.HandleFunc("GET /api/mihomo/nodes/{id}/preview", h.authed(authOpts{}, h.mihomoNodePreview))
 
 	// Agent 接入（keycheck 用接入令牌鉴权；latest 走后台 JWT）
 	mux.HandleFunc("POST /api/agent/poll", h.agentPoll)
