@@ -214,6 +214,19 @@ proxypilot/
 5. **验收**：`server/tools/smoke.sh https://<域名>`；后台登录、订阅、Agent、WebSSH 各跑一遍。
 6. **切流/回滚**：DNS 指向新服务；旧系统可短期保留，必要时回滚 DNS。
 
+### Cloudflare Tunnel 部署（80 端口仅回环）
+
+生产面板通过 Cloudflare Tunnel 对外，源站只监听本机：
+
+1. **Tunnel**：`cloudflared` 与面板同机，Public Hostname 的 Service 指向 `http://127.0.0.1:80`
+2. **禁止公网直连 80**：安装仓库内 `deploy/pp-port80-guard.sh` 与 `deploy/pp-port80-guard.service`
+   （`iptables`/`ip6tables` 先放行 `lo`，再 DROP 其余 80/tcp，开机自启）
+3. **验收**：
+   - 公网 `curl http://<服务器IP>/` → 超时/拒绝
+   - 本机 `curl http://127.0.0.1/healthz` → 200
+   - 隧道域名 → 200
+4. 如需临时直连排查，先 `systemctl stop pp-port80-guard && iptables -D INPUT -p tcp --dport 80 -j DROP`
+
 > 已知限制：批量任务同步执行；WebSSH 会话在进程内存（多实例需按 server_id 粘性）。
 > MySQL 与真实 Agent 的端到端回归需在部署机完成。
 

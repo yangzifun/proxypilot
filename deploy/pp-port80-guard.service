@@ -1,0 +1,13 @@
+[Unit]
+Description=ProxyPilot: allow port 80 only from loopback (Cloudflare Tunnel)
+After=network-online.target
+Wants=network-online.target
+Before=proxypilot.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/pp-port80-guard.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
