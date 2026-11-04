@@ -25,7 +25,7 @@ import {
 } from 'antd';
 import { api, apiDelete, apiGet, apiPost, apiPut } from '../api';
 import { PageCard } from '../components';
-import { fmtTime } from '../format';
+import { fmtBytes, fmtTime } from '../format';
 
 const { TextArea } = Input;
 
@@ -34,7 +34,21 @@ export const DEFAULT_MIHOMO_TEMPLATE = `mixed-port: 7890
 allow-lan: false
 mode: rule
 log-level: info
+ipv6: false
+unified-delay: true
+tcp-concurrent: true
 external-controller: 127.0.0.1:9090
+
+dns:
+  enable: true
+  ipv6: false
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  nameserver:
+    - https://223.5.5.5/dns-query
+    - https://1.1.1.1/dns-query
+  fallback:
+    - https://8.8.8.8/dns-query
 
 proxies:
 
@@ -42,19 +56,21 @@ proxy-groups:
   - name: Proxy
     type: select
     proxies:
+      - Auto
       - DIRECT
   - name: Auto
     type: url-test
     url: http://www.gstatic.com/generate_204
     interval: 300
+    tolerance: 50
     proxies:
-      - DIRECT
+      - {{PROXY_NAMES}}
 
 rules:
   - GEOIP,LAN,DIRECT,no-resolve
+  - GEOIP,CN,DIRECT
   - MATCH,Proxy
 `;
-
 const downloadText = (name, text) => {
   const blob = new Blob([text], { type: 'text/yaml;charset=utf-8' });
   const url = URL.createObjectURL(blob);
@@ -335,6 +351,33 @@ export default function Mihomo() {
             ),
           },
           {
+            key: 'traffic',
+            label: '流量统计',
+            children: (
+              <Table
+                rowKey="id"
+                size="middle"
+                loading={loading}
+                dataSource={bindings}
+                pagination={{ pageSize: 10, hideOnSinglePage: true }}
+                columns={[
+                  { title: '绑定名称', dataIndex: 'name', ellipsis: true },
+                  { title: '服务器', dataIndex: 'server_name', ellipsis: true, render: (v, r) => v || '#' + r.server_id },
+                  { title: '今日', dataIndex: 'traffic_today', width: 130, render: (v) => fmtBytes(v || 0) },
+                  { title: '近 7 天', dataIndex: 'traffic_week', width: 130, render: (v) => fmtBytes(v || 0) },
+                  { title: '累计', dataIndex: 'traffic_total', width: 140, render: (v) => fmtBytes(v || 0) },
+                  {
+                    title: '在线 UUID',
+                    dataIndex: 'online_count',
+                    width: 110,
+                    render: (v) => (v ? <Tag color="green">{v}</Tag> : <Tag>0</Tag>),
+                  },
+                  { title: 'UUID 总数', dataIndex: 'uuid_count', width: 110 },
+                ]}
+              />
+            ),
+          },
+          {
             key: 'bindings',
             label: `节点绑定（${bindings.length}）`,
             children: (
@@ -369,9 +412,14 @@ export default function Mihomo() {
           <Form.Item name="remark" label="备注">
             <Input placeholder="可选，例如：含广告拦截规则" maxLength={200} />
           </Form.Item>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
+            <Button size="small" onClick={() => tplForm.setFieldsValue({ content: DEFAULT_MIHOMO_TEMPLATE })}>
+              填入默认配置
+            </Button>
+          </div>
           <Form.Item
             name="content"
-            label="YAML 模板（proxies: 下方保留一个空行，生成时会替换为实际节点）"
+            label="YAML 模板（proxies: 下方留空行；分组里可用 {{PROXY_NAMES}} 占位）"
             rules={[{ required: true, message: '请填写模板内容' }]}
           >
             <TextArea autoSize={{ minRows: 16, maxRows: 26 }} style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12.5 }} />

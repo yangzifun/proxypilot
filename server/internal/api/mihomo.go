@@ -3,8 +3,11 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // ---------------- mihomo 模板管理 / 节点绑定 ----------------
@@ -184,9 +187,53 @@ func (h *handlers) mihomoNodesList(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "查询 mihomo 节点绑定失败")
 		return
 	}
+	nowT := time.Now()
+	loc := nowT.Location()
+	dayStart := time.Date(nowT.Year(), nowT.Month(), nowT.Day(), 0, 0, 0, 0, loc).UnixMilli()
+	weekStart := dayStart - 6*86400000
+	onlineSince := nowT.Add(-5 * time.Minute).UnixMilli()
 	for _, row := range rows {
-		row["uuid_list"] = mihomoParseUUIDs(mapStr(row, "uuid_list", "[]"))
-		row["uuid_count"] = len(mihomoParseUUIDs(mapStr(row, "uuid_list", "[]")))
+		list := mihomoParseUUIDs(mapStr(row, "uuid_list", "[]"))
+		row["uuid_list"] = list
+		row["uuid_count"] = len(list)
+		var today, week, total int64
+		var online int
+		if len(list) > 0 {
+			ph := strings.TrimSuffix(strings.Repeat("?,", len(list)), ",")
+			args := make([]any, 0, len(list))
+			for _, u := range list {
+				args = append(args, u)
+			}
+			_ = h.db.QueryRowContext(r.Context(),
+				`SELECT COALESCE(SUM(up+down),0), COALESCE(SUM(CASE WHEN hour_ts >= ? THEN up+down ELSE 0 END),0)
+				   FROM user_traffic_hourly WHERE uuid IN (`+ph+`) AND hour_ts >= ?`,
+				append([]any{dayStart}, append(args, weekStart)...)...).Scan(&today, &week)
+			_ = h.db.QueryRowContext(r.Context(),
+				`SELECT COALESCE(SUM(up_total+down_total),0),
+				        COALESCE(SUM(CASE WHEN last_active_at >= ? THEN 1 ELSE 0 END),0)
+				   FROM user_traffic WHERE uuid IN (`+ph+`)`,
+				append([]any{onlineSince}, args...)...).Scan(&total, &online)
+		}
+		if len(list) == 0 {
+			var nodeID int64
+			if h.db.QueryRowContext(r.Context(),
+				`SELECT id FROM singbox_nodes WHERE server_id = ? ORDER BY enabled DESC, id ASC LIMIT 1`,
+				mapInt(row, "server_id", 0)).Scan(&nodeID) == nil && nodeID > 0 {
+				_ = h.db.QueryRowContext(r.Context(),
+					`SELECT COALESCE(SUM(up+down),0),
+					        COALESCE(SUM(CASE WHEN hour_ts >= ? THEN up+down ELSE 0 END),0),
+					        COALESCE(SUM(CASE WHEN hour_ts >= ? THEN up+down ELSE 0 END),0)
+					   FROM user_traffic_hourly WHERE node_id = ?`,
+					dayStart, weekStart, nodeID).Scan(&total, &today, &week)
+				_ = h.db.QueryRowContext(r.Context(),
+					`SELECT COUNT(DISTINCT uuid) FROM user_traffic_hourly WHERE node_id = ? AND hour_ts >= ?`,
+					nodeID, onlineSince).Scan(&online)
+			}
+		}
+		row["traffic_today"] = today
+		row["traffic_week"] = week
+		row["traffic_total"] = total
+		row["online_count"] = online
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"success": true, "data": rows})
 }
@@ -374,6 +421,20 @@ func (h *handlers) mihomoNodePreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	finalConfig := injectClashProxies(tplContent, proxies)
+	/* 把分组里的 {{PROXY_NAMES}} 替换为实际节点名（6 空格缩进，匹配默认模板） */
+	if strings.Contains(finalConfig, "{{PROXY_NAMES}}") {
+		names := make([]string, 0, len(proxies))
+		for _, p := range proxies {
+			if fmt.Sprint(p["type"]) == "direct" {
+				continue
+			}
+			names = append(names, "      - "+strconv.Quote(fmt.Sprint(p["name"])))
+		}
+		if len(names) == 0 {
+			names = append(names, "      - DIRECT")
+		}
+		finalConfig = strings.ReplaceAll(finalConfig, "{{PROXY_NAMES}}", strings.Join(names, "\n"))
+	}
 	skipped := 0
 	for _, n := range skippedBy {
 		skipped += n
@@ -392,4 +453,59 @@ func (h *handlers) mihomoNodePreview(w http.ResponseWriter, r *http.Request) {
 			"filename": strings.ReplaceAll(name, " ", "-") + ".yaml",
 		},
 	})
+}
+
+// 默认 mihomo 模板：proxies 下留空行用于注入节点，proxy-groups 用 {{PROXY_NAMES}} 占位
+const mihomoDefaultTemplate = `mixed-port: 7890
+allow-lan: false
+mode: rule
+log-level: info
+ipv6: false
+unified-delay: true
+tcp-concurrent: true
+external-controller: 127.0.0.1:9090
+
+dns:
+  enable: true
+  ipv6: false
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  nameserver:
+    - https://223.5.5.5/dns-query
+    - https://1.1.1.1/dns-query
+  fallback:
+    - https://8.8.8.8/dns-query
+
+proxies:
+
+proxy-groups:
+  - name: Proxy
+    type: select
+    proxies:
+      - Auto
+      - DIRECT
+  - name: Auto
+    type: url-test
+    url: http://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+    proxies:
+      - {{PROXY_NAMES}}
+
+rules:
+  - GEOIP,LAN,DIRECT,no-resolve
+  - GEOIP,CN,DIRECT
+  - MATCH,Proxy
+`
+
+// ensureMihomoDefaultTemplate 确保存在名为「默认配置」的模板（幂等）。
+func (h *handlers) ensureMihomoDefaultTemplate(ctx context.Context) {
+	var n int
+	if err := h.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM mihomo_templates WHERE name = '默认配置'`).Scan(&n); err != nil || n > 0 {
+		return
+	}
+	now := nowMillis()
+	_, _ = h.db.ExecContext(ctx,
+		`INSERT INTO mihomo_templates (name, remark, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
+		"默认配置", "开箱即用：fake-ip DNS、自动测速分组、国内直连", mihomoDefaultTemplate, now, now)
 }
