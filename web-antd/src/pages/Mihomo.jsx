@@ -107,6 +107,33 @@ const downloadText = (name, text) => {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 
+const SERVER_PROTOCOLS = [
+  { value: 'vless_ws', label: 'VLESS-WS' },
+  { value: 'vless_reality', label: 'VLESS-REALITY' },
+  { value: 'vmess', label: 'VMess' },
+  { value: 'trojan', label: 'Trojan' },
+  { value: 'anytls', label: 'AnyTLS' },
+  { value: 'hy2', label: 'Hysteria2' },
+  { value: 'tuic', label: 'TUIC' },
+  { value: 'socks', label: 'SOCKS' },
+  { value: 'http', label: 'HTTP' },
+  { value: 'ss', label: 'Shadowsocks' },
+];
+
+const DEFAULT_SERVER_CFG = {
+  protocols: ['vless_ws', 'vless_reality', 'vmess', 'trojan', 'anytls', 'hy2', 'tuic'],
+  port_base: 13900,
+  ws_path: '/vlws',
+  ss_method: '2022-blake3-aes-256-gcm',
+  cert_path: '/etc/mihomo/cert.crt',
+  key_path: '/etc/mihomo/private.key',
+  reality_dest: 'www.microsoft.com:443',
+  reality_private_key: '',
+  reality_short_id: '',
+  reality_server_names: ['www.microsoft.com'],
+  secret: '',
+};
+
 const PROTOCOLS = [
   { value: 'shadowsocks', label: 'SS2022' },
   { value: 'anytls', label: 'AnyTLS' },
@@ -152,6 +179,8 @@ export default function Mihomo() {
   const [selectedIds, setSelectedIds] = useState([]);
   const [checkState, setCheckState] = useState({ open: false, loading: false, data: null });
   const [helpOpen, setHelpOpen] = useState(false);
+  const [tplMode, setTplMode] = useState('subscription');
+  const [serverCfg, setServerCfg] = useState(DEFAULT_SERVER_CFG);
   const [preview, setPreview] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
@@ -246,6 +275,8 @@ export default function Mihomo() {
     setTplEditing(null);
     tplForm.setFieldsValue({ name: '', remark: '', content: DEFAULT_MIHOMO_TEMPLATE, enabled: true, protocols: [] });
     setQuick(parseQuick(DEFAULT_MIHOMO_TEMPLATE));
+    setTplMode('subscription');
+    setServerCfg(DEFAULT_SERVER_CFG);
     setTplOpen(true);
   };
   const openEditTpl = async (row) => {
@@ -260,6 +291,12 @@ export default function Mihomo() {
         protocols: res.data.protocols || [],
       });
       setQuick(parseQuick(res.data.content));
+      setTplMode(res.data.mode || 'subscription');
+      try {
+        setServerCfg({ ...DEFAULT_SERVER_CFG, ...(JSON.parse(res.data.server_json || '{}') || {}) });
+      } catch (e) {
+        setServerCfg(DEFAULT_SERVER_CFG);
+      }
       setTplOpen(true);
     } catch (e) {
       message.error(e.message || '读取模板失败');
@@ -267,9 +304,10 @@ export default function Mihomo() {
   };
   const saveTpl = async () => {
     const v = await tplForm.validateFields();
+    const body = { ...v, mode: tplMode, server_json: JSON.stringify(serverCfg || {}) };
     try {
-      if (tplEditing) await apiPut(`/api/mihomo/templates/${tplEditing.id}`, v);
-      else await apiPost('/api/mihomo/templates', v);
+      if (tplEditing) await apiPut(`/api/mihomo/templates/${tplEditing.id}`, body);
+      else await apiPost('/api/mihomo/templates', body);
       message.success(tplEditing ? '模板已保存' : '模板已创建');
       setTplOpen(false);
       loadTemplates();
@@ -289,6 +327,12 @@ export default function Mihomo() {
         protocols: res.data.protocols || [],
       });
       setQuick(parseQuick(res.data.content));
+      setTplMode(res.data.mode || 'subscription');
+      try {
+        setServerCfg({ ...DEFAULT_SERVER_CFG, ...(JSON.parse(res.data.server_json || '{}') || {}) });
+      } catch (e) {
+        setServerCfg(DEFAULT_SERVER_CFG);
+      }
       setTplOpen(true);
     } catch (e) {
       message.error(e.message || '复制失败');
@@ -401,6 +445,24 @@ export default function Mihomo() {
     }
   };
 
+  const renderServerConfig = async (row) => {
+    try {
+      const res = await apiPost(`/api/mihomo/nodes/${row.id}/render`, {});
+      const d = res.data || {};
+      const portLines = Object.entries(d.ports || {})
+        .map(([k, v]) => `${k}=${v}`)
+        .join('  ');
+      setPreview({
+        title: `服务端配置 · ${row.name}`,
+        yaml: d.yaml,
+        filename: d.filename,
+        server: `端口：${portLines}`,
+        template: `${d.config_path} · 服务 ${d.service}`,
+      });
+    } catch (e) {
+      message.error(e.message || '生成失败');
+    }
+  };
   const openCreateBind = (prefill) => {
     setBindEditing(null);
     bindForm.setFieldsValue({
@@ -410,6 +472,10 @@ export default function Mihomo() {
       uuid_list: prefill?.uuid_list || [],
       protocols: prefill?.protocols || [],
       advanced: { group_type: 'url-test', test_url: 'http://www.gstatic.com/generate_204', extra_rules: '' },
+      port_base: 0,
+      domain: '',
+      config_path: '/etc/mihomo/config.yaml',
+      service: 'mihomo',
       enabled: true,
       remark: prefill?.remark || '',
     });
@@ -420,6 +486,7 @@ export default function Mihomo() {
     bindForm.setFieldsValue({
       name: '', server_id: undefined, template_id: undefined, uuid_list: [], protocols: [],
       advanced: { group_type: 'url-test', test_url: 'http://www.gstatic.com/generate_204', extra_rules: '' },
+      port_base: 0, domain: '', config_path: '/etc/mihomo/config.yaml', service: 'mihomo',
       enabled: true, remark: '',
     });
     setBindOpen(true);
@@ -437,6 +504,10 @@ export default function Mihomo() {
         test_url: (row.advanced && row.advanced.test_url) || 'http://www.gstatic.com/generate_204',
         extra_rules: (row.advanced && row.advanced.extra_rules) || '',
       },
+      port_base: row.port_base || 0,
+      domain: row.domain || '',
+      config_path: row.config_path || '/etc/mihomo/config.yaml',
+      service: row.service || 'mihomo',
       enabled: !!row.enabled,
       remark: row.remark || '',
     });
@@ -579,6 +650,9 @@ export default function Mihomo() {
         <Space size={4}>
           <Button size="small" type="link" icon={<EyeOutlined />} onClick={() => openPreview(row)}>
             预览配置
+          </Button>
+          <Button size="small" type="link" onClick={() => renderServerConfig(row)}>
+            生成配置
           </Button>
           <Button size="small" type="link" icon={<EditOutlined />} onClick={() => openEditBind(row)}>
             编辑
@@ -727,6 +801,85 @@ export default function Mihomo() {
               </Form.Item>
             </span>
           </Space>
+          <Form.Item label="模板类型">
+            <Select
+              value={tplMode}
+              onChange={(v) => {
+                setTplMode(v);
+                if (v === 'server') setServerCfg((c) => ({ ...DEFAULT_SERVER_CFG, ...c }));
+              }}
+              options={[
+                { value: 'subscription', label: '订阅模板（客户端订阅注入节点）' },
+                { value: 'server', label: '服务端模板（生成 mihomo listeners 下发）' },
+              ]}
+            />
+          </Form.Item>
+          {tplMode === 'server' ? (
+            <>
+              <Form.Item label="协议（服务端 listener）">
+                <Select
+                  mode="multiple"
+                  allowClear
+                  options={SERVER_PROTOCOLS}
+                  value={serverCfg.protocols}
+                  onChange={(v) => setServerCfg((c) => ({ ...c, protocols: v }))}
+                  placeholder="选择协议"
+                />
+              </Form.Item>
+              <Space size={12} wrap>
+                <div>
+                  <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>端口基址</div>
+                  <InputNumber min={1024} max={65000} value={serverCfg.port_base} onChange={(v) => setServerCfg((c) => ({ ...c, port_base: v || 13900 }))} />
+                </div>
+                <div>
+                  <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>WS path</div>
+                  <Input value={serverCfg.ws_path} onChange={(e) => setServerCfg((c) => ({ ...c, ws_path: e.target.value }))} style={{ width: 160 }} />
+                </div>
+                <div>
+                  <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>SS method</div>
+                  <Input value={serverCfg.ss_method} onChange={(e) => setServerCfg((c) => ({ ...c, ss_method: e.target.value }))} style={{ width: 240 }} />
+                </div>
+                <div>
+                  <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>external-controller 密钥</div>
+                  <Input value={serverCfg.secret} onChange={(e) => setServerCfg((c) => ({ ...c, secret: e.target.value }))} style={{ width: 200 }} />
+                </div>
+              </Space>
+              <Space size={12} wrap style={{ marginTop: 10 }}>
+                <div>
+                  <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>证书路径</div>
+                  <Input value={serverCfg.cert_path} onChange={(e) => setServerCfg((c) => ({ ...c, cert_path: e.target.value }))} style={{ width: 240 }} />
+                </div>
+                <div>
+                  <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>私钥路径</div>
+                  <Input value={serverCfg.key_path} onChange={(e) => setServerCfg((c) => ({ ...c, key_path: e.target.value }))} style={{ width: 240 }} />
+                </div>
+              </Space>
+              <Space size={12} wrap style={{ marginTop: 10 }}>
+                <div>
+                  <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>REALITY dest</div>
+                  <Input value={serverCfg.reality_dest} onChange={(e) => setServerCfg((c) => ({ ...c, reality_dest: e.target.value }))} style={{ width: 220 }} />
+                </div>
+                <div>
+                  <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>REALITY 私钥</div>
+                  <Input value={serverCfg.reality_private_key} onChange={(e) => setServerCfg((c) => ({ ...c, reality_private_key: e.target.value }))} style={{ width: 260 }} />
+                </div>
+                <div>
+                  <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>short-id</div>
+                  <Input value={serverCfg.reality_short_id} onChange={(e) => setServerCfg((c) => ({ ...c, reality_short_id: e.target.value }))} style={{ width: 180 }} />
+                </div>
+                <div>
+                  <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>server-names</div>
+                  <Select
+                    mode="tags"
+                    value={serverCfg.reality_server_names}
+                    onChange={(v) => setServerCfg((c) => ({ ...c, reality_server_names: v }))}
+                    style={{ minWidth: 220 }}
+                    placeholder="www.microsoft.com"
+                  />
+                </div>
+              </Space>
+            </>
+          ) : null}
           <Form.Item name="protocols" label="默认协议（绑定未指定时生效，留空=全部）">
             <Select mode="multiple" allowClear options={PROTOCOLS} placeholder="全部协议" maxTagCount="responsive" />
           </Form.Item>
@@ -791,7 +944,7 @@ export default function Mihomo() {
           <Form.Item
             name="content"
             label="YAML 模板（proxies: 下方留空行；分组里可用 {{PROXY_NAMES}} 占位）"
-            rules={[{ required: true, message: '请填写模板内容' }]}
+            rules={tplMode === 'server' ? [] : [{ required: true, message: '请填写模板内容' }]}
           >
             <TextArea autoSize={{ minRows: 16, maxRows: 26 }} style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12.5 }} />
           </Form.Item>
@@ -852,6 +1005,18 @@ export default function Mihomo() {
           </Space>
           <Form.Item name={['advanced', 'extra_rules']} label="额外规则（每行一条，插入到 MATCH 之前）">
             <TextArea rows={3} placeholder="DOMAIN-SUFFIX,example.com,Proxy" />
+          </Form.Item>
+          <Form.Item name="port_base" label="端口基址（0 = 使用模板默认，服务端模板生效）">
+            <InputNumber min={0} max={65000} style={{ width: 200 }} />
+          </Form.Item>
+          <Form.Item name="domain" label="域名（可选，写入备注与后续下发）">
+            <Input placeholder="hk.example.com" />
+          </Form.Item>
+          <Form.Item name="config_path" label="配置文件路径">
+            <Input placeholder="/etc/mihomo/config.yaml" />
+          </Form.Item>
+          <Form.Item name="service" label="systemd 服务名">
+            <Input placeholder="mihomo" />
           </Form.Item>
           <Form.Item name="uuid_list" label="UUID（不选则使用模板中的全部用户）">
             <Select

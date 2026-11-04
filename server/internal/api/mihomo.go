@@ -83,11 +83,13 @@ func applyMihomoAdvanced(yamlText string, adv mihomoAdvanced) string {
 // ---------------- mihomo 模板管理 / 节点绑定 ----------------
 
 type mihomoTemplateInput struct {
-	Name      string   `json:"name"`
-	Remark    string   `json:"remark"`
-	Content   string   `json:"content"`
-	Enabled   *bool    `json:"enabled"`
-	Protocols []string `json:"protocols"`
+	Name       string   `json:"name"`
+	Remark     string   `json:"remark"`
+	Content    string   `json:"content"`
+	Enabled    *bool    `json:"enabled"`
+	Protocols  []string `json:"protocols"`
+	Mode       string   `json:"mode"`
+	ServerJSON string   `json:"server_json"`
 }
 
 type mihomoNodeInput struct {
@@ -99,6 +101,10 @@ type mihomoNodeInput struct {
 	Advanced   *mihomoAdvanced `json:"advanced"`
 	Enabled    *bool           `json:"enabled"`
 	Remark     string          `json:"remark"`
+	PortBase   int64           `json:"port_base"`
+	Domain     string          `json:"domain"`
+	ConfigPath string          `json:"config_path"`
+	Service    string          `json:"service"`
 }
 
 func mihomoParseUUIDs(raw string) []string {
@@ -127,7 +133,7 @@ func mihomoParseUUIDs(raw string) []string {
 func (h *handlers) mihomoTemplatesList(w http.ResponseWriter, r *http.Request) {
 	rows, err := queryRowsAsMaps(r.Context(), h.db,
 		`SELECT id, name, COALESCE(remark,'') AS remark, CHAR_LENGTH(COALESCE(content,'')) AS content_len,
-		        COALESCE(enabled,1) AS enabled, COALESCE(protocols,'[]') AS protocols,
+		        COALESCE(enabled,1) AS enabled, COALESCE(protocols,'[]') AS protocols, COALESCE(mode,'subscription') AS mode,
 		        (SELECT COUNT(*) FROM mihomo_nodes n WHERE n.template_id = mihomo_templates.id) AS bind_count,
 		        created_at, updated_at
 		   FROM mihomo_templates ORDER BY id DESC`)
@@ -146,20 +152,24 @@ func (h *handlers) mihomoTemplateGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var name, remark, content string
-	var protocolsRaw string
+	var protocolsRaw, mode, serverJSON string
 	var enabled int
 	var createdAt, updatedAt int64
 	err := h.db.QueryRowContext(r.Context(),
-		`SELECT name, COALESCE(remark,''), COALESCE(content,''), COALESCE(enabled,1), COALESCE(protocols,'[]'), created_at, updated_at FROM mihomo_templates WHERE id = ? LIMIT 1`,
-		id).Scan(&name, &remark, &content, &enabled, &protocolsRaw, &createdAt, &updatedAt)
+		`SELECT name, COALESCE(remark,''), COALESCE(content,''), COALESCE(enabled,1), COALESCE(protocols,'[]'),
+		        COALESCE(mode,'subscription'), COALESCE(server_json,''), created_at, updated_at
+		   FROM mihomo_templates WHERE id = ? LIMIT 1`,
+		id).Scan(&name, &remark, &content, &enabled, &protocolsRaw, &mode, &serverJSON, &createdAt, &updatedAt)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "模板不存在")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"success": true, "data": map[string]any{
 		"id": id, "name": name, "remark": remark, "content": content, "enabled": enabled,
-		"protocols":  mihomoParseProtocols(protocolsRaw),
-		"created_at": createdAt, "updated_at": updatedAt,
+		"protocols":   mihomoParseProtocols(protocolsRaw),
+		"mode":        mode,
+		"server_json": serverJSON,
+		"created_at":  createdAt, "updated_at": updatedAt,
 	}})
 }
 
@@ -175,13 +185,16 @@ func (h *handlers) mihomoTemplateCreate(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, "请填写模板名称")
 		return
 	}
-	if strings.TrimSpace(in.Content) == "" {
+	isServer := strings.EqualFold(strings.TrimSpace(in.Mode), "server")
+	if !isServer && strings.TrimSpace(in.Content) == "" {
 		writeError(w, http.StatusBadRequest, "请填写 mihomo YAML 模板内容")
 		return
 	}
-	if msg := validateMihomoYAML(in.Content); msg != "" {
-		writeError(w, http.StatusBadRequest, msg)
-		return
+	if !isServer {
+		if msg := validateMihomoYAML(in.Content); msg != "" {
+			writeError(w, http.StatusBadRequest, msg)
+			return
+		}
 	}
 	now := nowMillis()
 	enabled := 1
@@ -189,9 +202,14 @@ func (h *handlers) mihomoTemplateCreate(w http.ResponseWriter, r *http.Request) 
 		enabled = 0
 	}
 	protoRaw, _ := json.Marshal(in.Protocols)
+	mode := strings.TrimSpace(in.Mode)
+	if mode == "" {
+		mode = "subscription"
+	}
 	res, err := h.db.ExecContext(r.Context(),
-		`INSERT INTO mihomo_templates (name, remark, content, enabled, protocols, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		name, in.Remark, in.Content, enabled, string(protoRaw), now, now)
+		`INSERT INTO mihomo_templates (name, remark, content, enabled, protocols, mode, server_json, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		name, in.Remark, in.Content, enabled, string(protoRaw), mode, in.ServerJSON, now, now)
 	if err != nil {
 		if strings.Contains(err.Error(), "1062") {
 			writeError(w, http.StatusBadRequest, "模板名称已存在")
@@ -223,22 +241,29 @@ func (h *handlers) mihomoTemplateUpdate(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, "请填写模板名称")
 		return
 	}
-	if strings.TrimSpace(in.Content) == "" {
+	isServer := strings.EqualFold(strings.TrimSpace(in.Mode), "server")
+	if !isServer && strings.TrimSpace(in.Content) == "" {
 		writeError(w, http.StatusBadRequest, "请填写 mihomo YAML 模板内容")
 		return
 	}
-	if msg := validateMihomoYAML(in.Content); msg != "" {
-		writeError(w, http.StatusBadRequest, msg)
-		return
+	if !isServer {
+		if msg := validateMihomoYAML(in.Content); msg != "" {
+			writeError(w, http.StatusBadRequest, msg)
+			return
+		}
 	}
 	enabled := 1
 	if in.Enabled != nil && !*in.Enabled {
 		enabled = 0
 	}
 	protoRaw, _ := json.Marshal(in.Protocols)
+	mode := strings.TrimSpace(in.Mode)
+	if mode == "" {
+		mode = "subscription"
+	}
 	_, err := h.db.ExecContext(r.Context(),
-		`UPDATE mihomo_templates SET name = ?, remark = ?, content = ?, enabled = ?, protocols = ?, updated_at = ? WHERE id = ?`,
-		name, in.Remark, in.Content, enabled, string(protoRaw), nowMillis(), id)
+		`UPDATE mihomo_templates SET name = ?, remark = ?, content = ?, enabled = ?, protocols = ?, mode = ?, server_json = ?, updated_at = ? WHERE id = ?`,
+		name, in.Remark, in.Content, enabled, string(protoRaw), mode, in.ServerJSON, nowMillis(), id)
 	if err != nil {
 		if strings.Contains(err.Error(), "1062") {
 			writeError(w, http.StatusBadRequest, "模板名称已存在")
@@ -277,7 +302,11 @@ func (h *handlers) mihomoTemplateDelete(w http.ResponseWriter, r *http.Request) 
 func (h *handlers) mihomoNodesList(w http.ResponseWriter, r *http.Request) {
 	rows, err := queryRowsAsMaps(r.Context(), h.db,
 		`SELECT n.id, n.name, n.server_id, n.template_id, COALESCE(n.uuid_list,'[]') AS uuid_list,
-		        COALESCE(n.protocols,'[]') AS protocols, COALESCE(n.advanced_json,'{}') AS advanced_json, COALESCE(n.last_preview_at,0) AS last_preview_at,
+		        COALESCE(n.protocols,'[]') AS protocols, COALESCE(n.advanced_json,'{}') AS advanced_json,
+		        COALESCE(n.last_preview_at,0) AS last_preview_at,
+		        COALESCE(n.port_base,0) AS port_base, COALESCE(n.domain,'') AS domain,
+		        COALESCE(n.config_path,'') AS config_path, COALESCE(n.service,'') AS service,
+		        COALESCE(n.last_apply_at,0) AS last_apply_at,
 		        n.enabled, COALESCE(n.remark,'') AS remark, n.created_at, n.updated_at,
 		        COALESCE(s.name,'') AS server_name, COALESCE(s.host,'') AS server_host,
 		        COALESCE(s.ip_country,'') AS server_country,
@@ -367,10 +396,20 @@ func (h *handlers) mihomoNodeCreate(w http.ResponseWriter, r *http.Request) {
 		advRaw = []byte("{}")
 	}
 	now := nowMillis()
+	cfgPath := strings.TrimSpace(in.ConfigPath)
+	if cfgPath == "" {
+		cfgPath = "/etc/mihomo/config.yaml"
+	}
+	svc := strings.TrimSpace(in.Service)
+	if svc == "" {
+		svc = "mihomo"
+	}
 	res, err := h.db.ExecContext(r.Context(),
-		`INSERT INTO mihomo_nodes (name, server_id, template_id, uuid_list, protocols, advanced_json, enabled, remark, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		strings.TrimSpace(in.Name), in.ServerID, in.TemplateID, string(raw), string(protoRaw), string(advRaw), enabled, in.Remark, now, now)
+		`INSERT INTO mihomo_nodes (name, server_id, template_id, uuid_list, protocols, advanced_json, enabled, remark,
+		   port_base, domain, config_path, service, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		strings.TrimSpace(in.Name), in.ServerID, in.TemplateID, string(raw), string(protoRaw), string(advRaw), enabled, in.Remark,
+		in.PortBase, strings.TrimSpace(in.Domain), cfgPath, svc, now, now)
 	if err != nil {
 		if strings.Contains(err.Error(), "1062") {
 			writeError(w, http.StatusBadRequest, "名称或该服务器的绑定已存在")
@@ -410,10 +449,20 @@ func (h *handlers) mihomoNodeUpdate(w http.ResponseWriter, r *http.Request) {
 	if in.Advanced == nil {
 		advRaw = []byte("{}")
 	}
+	cfgPath := strings.TrimSpace(in.ConfigPath)
+	if cfgPath == "" {
+		cfgPath = "/etc/mihomo/config.yaml"
+	}
+	svc := strings.TrimSpace(in.Service)
+	if svc == "" {
+		svc = "mihomo"
+	}
 	_, err := h.db.ExecContext(r.Context(),
-		`UPDATE mihomo_nodes SET name = ?, server_id = ?, template_id = ?, uuid_list = ?, protocols = ?, advanced_json = ?, enabled = ?, remark = ?, updated_at = ?
+		`UPDATE mihomo_nodes SET name = ?, server_id = ?, template_id = ?, uuid_list = ?, protocols = ?, advanced_json = ?,
+		   enabled = ?, remark = ?, port_base = ?, domain = ?, config_path = ?, service = ?, updated_at = ?
 		  WHERE id = ?`,
-		strings.TrimSpace(in.Name), in.ServerID, in.TemplateID, string(raw), string(protoRaw), string(advRaw), enabled, in.Remark, nowMillis(), id)
+		strings.TrimSpace(in.Name), in.ServerID, in.TemplateID, string(raw), string(protoRaw), string(advRaw),
+		enabled, in.Remark, in.PortBase, strings.TrimSpace(in.Domain), cfgPath, svc, nowMillis(), id)
 	if err != nil {
 		if strings.Contains(err.Error(), "1062") {
 			writeError(w, http.StatusBadRequest, "名称或该服务器的绑定已存在")
