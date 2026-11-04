@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -193,10 +195,18 @@ func (h *handlers) batchCreateJob(ctx context.Context, kind string, params map[s
 	if len(title) > 120 {
 		title = title[:120]
 	}
+	sum := sha256.Sum256([]byte(kind + "|" + string(paramsText)))
+	dedupKey := hex.EncodeToString(sum[:])
 	now := nowMillis()
-	res, err := h.db.ExecContext(ctx, "INSERT INTO batch_jobs (kind, title, params, status, total, done, failed, `cursor`, actor, created_at, updated_at)\n\t  VALUES (?, ?, ?, 'queued', ?, 0, 0, 0, ?, ?, ?)", kind, title, string(paramsText), len(items), actor, now, now)
+	res, err := h.db.ExecContext(ctx, "INSERT INTO batch_jobs (kind, title, params, dedup_key, status, total, done, failed, `cursor`, actor, created_at, updated_at)\n\t  VALUES (?, ?, ?, ?, 'queued', ?, 0, 0, 0, ?, ?, ?) ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)", kind, title, string(paramsText), dedupKey, len(items), actor, now, now)
 	if err != nil {
 		return 0, 0, false, "创建任务失败：" + err.Error()
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		var dupID, dupTotal int64
+		if qerr := h.db.QueryRowContext(ctx, "SELECT id, total FROM batch_jobs WHERE dedup_key = ? LIMIT 1", dedupKey).Scan(&dupID, &dupTotal); qerr == nil {
+			return dupID, int(dupTotal), true, ""
+		}
 	}
 	jobID, _ := res.LastInsertId()
 	for i, it := range items {
@@ -297,7 +307,7 @@ func (h *handlers) runBatchJobInline(ctx context.Context, jobID int64, actor str
 		}
 	}
 	now := nowMillis()
-	_, _ = h.db.ExecContext(ctx, `UPDATE batch_jobs SET status = ?, locked_at = 0, runner_id = '', finished_at = ?, updated_at = ? WHERE id = ?`,
+	_, _ = h.db.ExecContext(ctx, `UPDATE batch_jobs SET status = ?, locked_at = 0, runner_id = '', finished_at = ?, updated_at = ?, dedup_key = NULL WHERE id = ?`,
 		finalStatus, now, now, jobID)
 	h.recordNodeLog(ctx, 0, 0, "batch-job", map[bool]string{true: "success", false: "failed"}[finalStatus == "success"],
 		0, "后台任务 #"+strconv.FormatInt(jobID, 10)+" 结束："+finalStatus+"（成功 "+strconv.FormatInt(done, 10)+"/"+strconv.Itoa(len(itemRows))+"）", "", "system")

@@ -63,6 +63,15 @@ func (h *handlers) issueEmailCode(ctx context.Context, email, username, purpose 
 	}
 	defer tx.Rollback()
 
+	var lockID int64
+	_ = tx.QueryRowContext(ctx, `SELECT id FROM admin_email_codes WHERE email = ? AND purpose = ? ORDER BY id DESC LIMIT 1 FOR UPDATE`, email, purpose).Scan(&lockID)
+	var lastCreated, hourCount int64
+	_ = tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(created_at),0) FROM admin_email_codes WHERE email = ? AND purpose = ?`, email, purpose).Scan(&lastCreated)
+	_ = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM admin_email_codes WHERE email = ? AND purpose = ? AND created_at > ?`, email, purpose, now-3600*1000).Scan(&hourCount)
+	if (lastCreated > 0 && now-lastCreated < 60*1000) || hourCount >= 10 {
+		return "", errors.New("验证码发送过于频繁，请稍后再试")
+	}
+
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE admin_email_codes SET used = 1 WHERE email = ? AND purpose = ? AND used = 0`,
 		email, purpose); err != nil {
@@ -112,8 +121,12 @@ func (h *handlers) consumeEmailCode(ctx context.Context, email, code, purpose st
 		_, _ = h.db.ExecContext(ctx, `UPDATE admin_email_codes SET attempts = attempts + 1 WHERE id = ?`, id)
 		return false, 401, errCodeWrong.Error()
 	}
-	if _, err := h.db.ExecContext(ctx, `UPDATE admin_email_codes SET used = 1 WHERE id = ?`, id); err != nil {
+	res, cerr := h.db.ExecContext(ctx, `UPDATE admin_email_codes SET used = 1 WHERE id = ? AND used = 0`, id)
+	if cerr != nil {
 		return false, 500, "服务器错误"
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return false, 401, errCodeWrong.Error()
 	}
 	return true, 200, ""
 }

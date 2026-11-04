@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 )
@@ -66,6 +67,9 @@ func VerifyPassword(stored, password string) (ok bool, needsRehash bool) {
 
 	// 遗留格式：hex(sha256(password))
 	if len(stored) == 64 && isHex(stored) {
+		if v := strings.ToLower(strings.TrimSpace(os.Getenv("PP_ALLOW_LEGACY_SHA256"))); v != "1" && v != "true" {
+			return false, false
+		}
 		sum := sha256.Sum256([]byte(password))
 		got := hex.EncodeToString(sum[:])
 		if subtle.ConstantTimeCompare([]byte(got), []byte(strings.ToLower(stored))) != 1 {
