@@ -151,6 +151,7 @@ export default function Mihomo() {
   const [stats, setStats] = useState({ templates: 0, templates_enabled: 0, bindings: 0, bindings_enabled: 0, servers: 0 });
   const [selectedIds, setSelectedIds] = useState([]);
   const [checkState, setCheckState] = useState({ open: false, loading: false, data: null });
+  const [helpOpen, setHelpOpen] = useState(false);
   const [preview, setPreview] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
@@ -374,6 +375,7 @@ export default function Mihomo() {
       template_id: prefill?.template_id,
       uuid_list: prefill?.uuid_list || [],
       protocols: prefill?.protocols || [],
+      advanced: { group_type: 'url-test', test_url: 'http://www.gstatic.com/generate_204', extra_rules: '' },
       enabled: true,
       remark: prefill?.remark || '',
     });
@@ -381,7 +383,11 @@ export default function Mihomo() {
   };
   const openCreateBindBlank = () => {
     setBindEditing(null);
-    bindForm.setFieldsValue({ name: '', server_id: undefined, template_id: undefined, uuid_list: [], protocols: [], enabled: true, remark: '' });
+    bindForm.setFieldsValue({
+      name: '', server_id: undefined, template_id: undefined, uuid_list: [], protocols: [],
+      advanced: { group_type: 'url-test', test_url: 'http://www.gstatic.com/generate_204', extra_rules: '' },
+      enabled: true, remark: '',
+    });
     setBindOpen(true);
   };
   const openEditBind = (row) => {
@@ -392,6 +398,11 @@ export default function Mihomo() {
       template_id: row.template_id,
       uuid_list: row.uuid_list || [],
       protocols: row.protocols || [],
+      advanced: {
+        group_type: (row.advanced && row.advanced.group_type) || 'url-test',
+        test_url: (row.advanced && row.advanced.test_url) || 'http://www.gstatic.com/generate_204',
+        extra_rules: (row.advanced && row.advanced.extra_rules) || '',
+      },
       enabled: !!row.enabled,
       remark: row.remark || '',
     });
@@ -399,7 +410,12 @@ export default function Mihomo() {
   };
   const saveBind = async () => {
     const v = await bindForm.validateFields();
-    const body = { ...v, uuid_list: v.uuid_list || [], protocols: v.protocols || [] };
+    const body = {
+      ...v,
+      uuid_list: v.uuid_list || [],
+      protocols: v.protocols || [],
+      advanced: v.advanced || {},
+    };
     try {
       if (bindEditing) await apiPut(`/api/mihomo/nodes/${bindEditing.id}`, body);
       else await apiPost('/api/mihomo/nodes', body);
@@ -578,6 +594,8 @@ export default function Mihomo() {
           <Button icon={<ReloadOutlined />} onClick={loadAll} loading={loading}>
             刷新
           </Button>
+          <Button onClick={() => setHelpOpen(true)}>配置说明</Button>
+          <Button onClick={() => { window.location.hash = '#/logs'; }}>操作记录</Button>
           {tab === 'templates' ? (
             <Button type="primary" icon={<PlusOutlined />} onClick={openCreateTpl}>
               新建模板
@@ -767,6 +785,33 @@ export default function Mihomo() {
               maxTagCount="responsive"
             />
           </Form.Item>
+          <Form.Item name="protocols" label="生成协议（不选则全部协议）">
+            <Select
+              mode="multiple"
+              allowClear
+              options={PROTOCOLS}
+              placeholder="全部协议"
+              maxTagCount="responsive"
+            />
+          </Form.Item>
+          <Space size={12} style={{ width: '100%' }} align="start">
+            <Form.Item name={['advanced', 'group_type']} label="自动分组类型" style={{ width: 200 }}>
+              <Select
+                options={[
+                  { value: 'url-test', label: 'url-test（测速选优）' },
+                  { value: 'fallback', label: 'fallback（故障切换）' },
+                  { value: 'load-balance', label: 'load-balance（负载均衡）' },
+                  { value: 'select', label: 'select（手动）' },
+                ]}
+              />
+            </Form.Item>
+            <Form.Item name={['advanced', 'test_url']} label="测速地址" style={{ flex: 1 }}>
+              <Input placeholder="http://www.gstatic.com/generate_204" />
+            </Form.Item>
+          </Space>
+          <Form.Item name={['advanced', 'extra_rules']} label="额外规则（每行一条，插入到 MATCH 之前）">
+            <TextArea rows={3} placeholder="DOMAIN-SUFFIX,example.com,Proxy" />
+          </Form.Item>
           <Form.Item name="uuid_list" label="UUID（不选则使用模板中的全部用户）">
             <Select
               mode="multiple"
@@ -880,6 +925,41 @@ export default function Mihomo() {
         </pre>
       </Modal>
     </PageCard>
+      <Modal
+        title="mihomo 配置说明"
+        open={helpOpen}
+        onCancel={() => setHelpOpen(false)}
+        footer={<Button onClick={() => setHelpOpen(false)}>关闭</Button>}
+        width={720}
+      >
+        <div style={{ fontSize: 13, lineHeight: 1.9, color: '#334155' }}>
+          <p><b>常用字段</b></p>
+          <ul style={{ paddingLeft: 18 }}>
+            <li><code>mixed-port</code>：HTTP/SOCKS 混合端口，默认 7890</li>
+            <li><code>mode</code>：rule（规则）/ global（全局）/ direct（直连）</li>
+            <li><code>log-level</code>：silent / error / warning / info / debug</li>
+            <li><code>external-controller</code>：RESTful 控制端口，供面板/客户端使用</li>
+            <li><code>dns.enhanced-mode</code>：fake-ip（推荐）或 redir-host</li>
+          </ul>
+          <p><b>节点注入</b></p>
+          <ul style={{ paddingLeft: 18 }}>
+            <li>模板中的 <code>proxies:</code> 下留一个空行，生成时会替换为实际节点</li>
+            <li>分组可用 <code>{'{{PROXY_NAMES}}'}</code> 占位，自动替换为节点名列表</li>
+          </ul>
+          <p><b>绑定高级项</b></p>
+          <ul style={{ paddingLeft: 18 }}>
+            <li>自动分组类型：改写 Auto 组的 type（url-test / fallback / load-balance / select）</li>
+            <li>测速地址：替换 url-test 的检测 URL</li>
+            <li>额外规则：按行插入到 MATCH 之前，例如 <code>DOMAIN-SUFFIX,openai.com,Proxy</code></li>
+          </ul>
+          <p><b>协议支持</b></p>
+          <ul style={{ paddingLeft: 18 }}>
+            <li>SS2022 / AnyTLS / Hysteria2 / VLESS-REALITY / VLESS-WS / VLESS-WS-CDN / TUIC</li>
+            <li>订阅地址：<code>/sub/mihomo/&lt;uuid&gt;</code>，可直接导入 Clash Verge、Mihomo Party、Stash</li>
+          </ul>
+        </div>
+      </Modal>
+
       <Modal
         title="一致性检查"
         open={checkState.open}

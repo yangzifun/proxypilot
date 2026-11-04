@@ -29,6 +29,57 @@ func mihomoLinkAllowed(item map[string]any, protoSet map[string]bool) bool {
 	}
 }
 
+type mihomoAdvanced struct {
+	GroupType  string `json:"group_type"`
+	TestURL    string `json:"test_url"`
+	ExtraRules string `json:"extra_rules"`
+}
+
+// applyMihomoAdvanced 把绑定的高级项写进生成的 YAML。
+func applyMihomoAdvanced(yamlText string, adv mihomoAdvanced) string {
+	out := yamlText
+	if adv.GroupType != "" {
+		out = strings.Replace(out, "type: url-test", "type: "+adv.GroupType, 1)
+		if adv.GroupType != "url-test" && adv.GroupType != "fallback" && adv.GroupType != "load-balance" {
+			out = strings.Replace(out, "    url: http://www.gstatic.com/generate_204\n", "", 1)
+			out = strings.Replace(out, "    interval: 300\n", "", 1)
+			out = strings.Replace(out, "    tolerance: 50\n", "", 1)
+		}
+	}
+	if strings.TrimSpace(adv.TestURL) != "" {
+		out = strings.Replace(out, "url: http://www.gstatic.com/generate_204", "url: "+strings.TrimSpace(adv.TestURL), 1)
+	}
+	if strings.TrimSpace(adv.ExtraRules) != "" {
+		lines := strings.Split(out, "\n")
+		insertAt := -1
+		for i, line := range lines {
+			if strings.HasPrefix(strings.TrimSpace(line), "- MATCH,") {
+				insertAt = i
+				break
+			}
+		}
+		extra := []string{}
+		for _, l := range strings.Split(adv.ExtraRules, "\n") {
+			l = strings.TrimSpace(l)
+			if l == "" {
+				continue
+			}
+			if !strings.HasPrefix(l, "- ") {
+				l = "- " + l
+			}
+			extra = append(extra, "  "+l)
+		}
+		if len(extra) > 0 {
+			if insertAt >= 0 {
+				out = strings.Join(append(append(append([]string{}, lines[:insertAt]...), extra...), lines[insertAt:]...), "\n")
+			} else {
+				out = strings.TrimRight(out, "\n") + "\n" + strings.Join(extra, "\n") + "\n"
+			}
+		}
+	}
+	return out
+}
+
 // ---------------- mihomo 模板管理 / 节点绑定 ----------------
 
 type mihomoTemplateInput struct {
@@ -39,13 +90,14 @@ type mihomoTemplateInput struct {
 }
 
 type mihomoNodeInput struct {
-	Name       string   `json:"name"`
-	ServerID   int64    `json:"server_id"`
-	TemplateID int64    `json:"template_id"`
-	UUIDList   []string `json:"uuid_list"`
-	Protocols  []string `json:"protocols"`
-	Enabled    *bool    `json:"enabled"`
-	Remark     string   `json:"remark"`
+	Name       string          `json:"name"`
+	ServerID   int64           `json:"server_id"`
+	TemplateID int64           `json:"template_id"`
+	UUIDList   []string        `json:"uuid_list"`
+	Protocols  []string        `json:"protocols"`
+	Advanced   *mihomoAdvanced `json:"advanced"`
+	Enabled    *bool           `json:"enabled"`
+	Remark     string          `json:"remark"`
 }
 
 func mihomoParseUUIDs(raw string) []string {
@@ -220,7 +272,7 @@ func (h *handlers) mihomoTemplateDelete(w http.ResponseWriter, r *http.Request) 
 func (h *handlers) mihomoNodesList(w http.ResponseWriter, r *http.Request) {
 	rows, err := queryRowsAsMaps(r.Context(), h.db,
 		`SELECT n.id, n.name, n.server_id, n.template_id, COALESCE(n.uuid_list,'[]') AS uuid_list,
-		        COALESCE(n.protocols,'[]') AS protocols, COALESCE(n.last_preview_at,0) AS last_preview_at,
+		        COALESCE(n.protocols,'[]') AS protocols, COALESCE(n.advanced_json,'{}') AS advanced_json, COALESCE(n.last_preview_at,0) AS last_preview_at,
 		        n.enabled, COALESCE(n.remark,'') AS remark, n.created_at, n.updated_at,
 		        COALESCE(s.name,'') AS server_name, COALESCE(s.host,'') AS server_host,
 		        COALESCE(s.ip_country,'') AS server_country,
@@ -243,6 +295,9 @@ func (h *handlers) mihomoNodesList(w http.ResponseWriter, r *http.Request) {
 		row["uuid_list"] = list
 		row["uuid_count"] = len(list)
 		row["protocols"] = mihomoParseProtocols(mapStr(row, "protocols", "[]"))
+		adv := mihomoAdvanced{}
+		_ = json.Unmarshal([]byte(mapStr(row, "advanced_json", "{}")), &adv)
+		row["advanced"] = adv
 		var today, week, total int64
 		var online int
 		if len(list) > 0 {
@@ -302,11 +357,15 @@ func (h *handlers) mihomoNodeCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	raw, _ := json.Marshal(in.UUIDList)
 	protoRaw, _ := json.Marshal(in.Protocols)
+	advRaw, _ := json.Marshal(in.Advanced)
+	if in.Advanced == nil {
+		advRaw = []byte("{}")
+	}
 	now := nowMillis()
 	res, err := h.db.ExecContext(r.Context(),
-		`INSERT INTO mihomo_nodes (name, server_id, template_id, uuid_list, protocols, enabled, remark, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		strings.TrimSpace(in.Name), in.ServerID, in.TemplateID, string(raw), string(protoRaw), enabled, in.Remark, now, now)
+		`INSERT INTO mihomo_nodes (name, server_id, template_id, uuid_list, protocols, advanced_json, enabled, remark, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		strings.TrimSpace(in.Name), in.ServerID, in.TemplateID, string(raw), string(protoRaw), string(advRaw), enabled, in.Remark, now, now)
 	if err != nil {
 		if strings.Contains(err.Error(), "1062") {
 			writeError(w, http.StatusBadRequest, "名称或该服务器的绑定已存在")
@@ -342,10 +401,14 @@ func (h *handlers) mihomoNodeUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	raw, _ := json.Marshal(in.UUIDList)
 	protoRaw, _ := json.Marshal(in.Protocols)
+	advRaw, _ := json.Marshal(in.Advanced)
+	if in.Advanced == nil {
+		advRaw = []byte("{}")
+	}
 	_, err := h.db.ExecContext(r.Context(),
-		`UPDATE mihomo_nodes SET name = ?, server_id = ?, template_id = ?, uuid_list = ?, protocols = ?, enabled = ?, remark = ?, updated_at = ?
+		`UPDATE mihomo_nodes SET name = ?, server_id = ?, template_id = ?, uuid_list = ?, protocols = ?, advanced_json = ?, enabled = ?, remark = ?, updated_at = ?
 		  WHERE id = ?`,
-		strings.TrimSpace(in.Name), in.ServerID, in.TemplateID, string(raw), string(protoRaw), enabled, in.Remark, nowMillis(), id)
+		strings.TrimSpace(in.Name), in.ServerID, in.TemplateID, string(raw), string(protoRaw), string(advRaw), enabled, in.Remark, nowMillis(), id)
 	if err != nil {
 		if strings.Contains(err.Error(), "1062") {
 			writeError(w, http.StatusBadRequest, "名称或该服务器的绑定已存在")
@@ -445,19 +508,20 @@ func (h *handlers) mihomoNodePreview(w http.ResponseWriter, r *http.Request) {
 		templateID int64
 		uuidRaw    string
 		protoRaw   string
+		advRaw     string
 		tplEnabled int
 		tplName    string
 		tplContent string
 		serverName string
 	)
 	err := h.db.QueryRowContext(r.Context(),
-		`SELECT n.name, n.server_id, n.template_id, COALESCE(n.uuid_list,'[]'), COALESCE(n.protocols,'[]'),
+		`SELECT n.name, n.server_id, n.template_id, COALESCE(n.uuid_list,'[]'), COALESCE(n.protocols,'[]'), COALESCE(n.advanced_json,'{}'),
 		        COALESCE(t.name,''), COALESCE(t.content,''), COALESCE(s.name,''), COALESCE(t.enabled,1)
 		   FROM mihomo_nodes n
 		   LEFT JOIN mihomo_templates t ON t.id = n.template_id
 		   LEFT JOIN servers s ON s.id = n.server_id
 		  WHERE n.id = ? LIMIT 1`, id).
-		Scan(&name, &serverID, &templateID, &uuidRaw, &protoRaw, &tplName, &tplContent, &serverName, &tplEnabled)
+		Scan(&name, &serverID, &templateID, &uuidRaw, &protoRaw, &advRaw, &tplName, &tplContent, &serverName, &tplEnabled)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "绑定不存在")
 		return
@@ -547,6 +611,9 @@ func (h *handlers) mihomoNodePreview(w http.ResponseWriter, r *http.Request) {
 	for proto, count := range skippedBy {
 		details = append(details, map[string]any{"protocol": proto, "count": count, "reason": reasons[proto]})
 	}
+	adv := mihomoAdvanced{}
+	_ = json.Unmarshal([]byte(advRaw), &adv)
+	finalConfig = applyMihomoAdvanced(finalConfig, adv)
 	_, _ = h.db.ExecContext(r.Context(), `UPDATE mihomo_nodes SET last_preview_at = ? WHERE id = ?`, nowMillis(), id)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"success": true,

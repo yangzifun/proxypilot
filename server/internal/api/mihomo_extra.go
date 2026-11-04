@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -15,17 +16,18 @@ func (h *handlers) renderMihomoBinding(ctx context.Context, id int64) (name, ser
 		templateID int64
 		uuidRaw    string
 		protoRaw   string
+		advRaw     string
 		tplContent string
 		tplEnabled int
 	)
 	err := h.db.QueryRowContext(ctx,
-		`SELECT n.name, n.server_id, n.template_id, COALESCE(n.uuid_list,'[]'), COALESCE(n.protocols,'[]'),
+		`SELECT n.name, n.server_id, n.template_id, COALESCE(n.uuid_list,'[]'), COALESCE(n.protocols,'[]'), COALESCE(n.advanced_json,'{}'),
 		        COALESCE(t.name,''), COALESCE(t.content,''), COALESCE(s.name,''), COALESCE(t.enabled,1)
 		   FROM mihomo_nodes n
 		   LEFT JOIN mihomo_templates t ON t.id = n.template_id
 		   LEFT JOIN servers s ON s.id = n.server_id
 		  WHERE n.id = ? LIMIT 1`, id).
-		Scan(&name, &serverID, &templateID, &uuidRaw, &protoRaw, &tplName, &tplContent, &serverName, &tplEnabled)
+		Scan(&name, &serverID, &templateID, &uuidRaw, &protoRaw, &advRaw, &tplName, &tplContent, &serverName, &tplEnabled)
 	if err != nil {
 		return "", "", "", "", "绑定不存在"
 	}
@@ -97,6 +99,9 @@ func (h *handlers) renderMihomoBinding(ctx context.Context, id int64) (name, ser
 		}
 		final = strings.ReplaceAll(final, "{{PROXY_NAMES}}", strings.Join(names, "\n"))
 	}
+	adv := mihomoAdvanced{}
+	_ = json.Unmarshal([]byte(advRaw), &adv)
+	final = applyMihomoAdvanced(final, adv)
 	_, _ = h.db.ExecContext(ctx, `UPDATE mihomo_nodes SET last_preview_at = ? WHERE id = ?`, nowMillis(), id)
 	return name, serverName, tplName, final, ""
 }
