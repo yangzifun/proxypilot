@@ -168,8 +168,8 @@ export default function PortalMobileApp({ email, onLogout }) {
         </div>
       ) : (
         <div className="ppm-body">
-          {/* 用户卡在所有页签共用：名称 / 节点数 / UUID / 状态 */}
-          {renderHero()}
+          {/* 用户卡只在「我的订阅」页展示 */}
+          {tab === 'sub' ? renderHero() : null}
           {uuid ? <MobileTraffic uuid={uuid} /> : null}
           {tab === 'tg' ? (
             <>
