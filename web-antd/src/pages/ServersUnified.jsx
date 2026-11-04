@@ -43,7 +43,6 @@ import { CopyText, ErrorBlock, JsonView, PageCard, StatCard, StatusPill } from '
 import { watchBatch } from '../components/JobCenter';
 import ServerDrawer from '../components/ServerDrawer';
 import ServerUnlockModal from '../components/ServerUnlockModal';
-import { ChartLegend } from '../charts';
 import { ServerCard as FullServerCard, WorldMap } from './Monitor';
 import { fmtAgo, fmtBytes, fmtNum, fmtTime, fmtUptime, levelColor, splitIps } from '../format';
 import { chartPalette } from '../theme';
@@ -349,7 +348,6 @@ export default function ServersUnified() {
   const [pushing, setPushing] = useState(false);
   const [updatedAt, setUpdatedAt] = useState(Date.now());
   const [form] = Form.useForm();
-  const [mapOpen, setMapOpen] = useState(false);
   const [unlockFor, setUnlockFor] = useState(null);
 
   /* 管理字段（名称 / 地区 / Agent / 心跳 …） */
@@ -800,36 +798,14 @@ export default function ServersUnified() {
           <div className="pp-ov-map">
             <div className="pp-ov-sec-head">
               <b>全球分布</b>
-              <span className="pp-ov-map-extra">
-                <ChartLegend items={[{ name: '在线', color: '#10b981' }, { name: '离线', color: '#f43f5e' }, { name: '未知', color: '#cbd5e1' }]} />
-                <Button size="small" onClick={() => setMapOpen(true)}>查看大图</Button>
-              </span>
+              <span className="pp-ov-map-extra">悬停圆点看信息，点击进详情</span>
             </div>
             <div className="pp-ov-map-box">
-              <WorldMap servers={rows} onPick={(r) => setDetailId(r.id)} onExpand={() => setMapOpen(true)} />
+              <WorldMap large zoomable servers={rows} onPick={(r) => setDetailId(r.id)} />
             </div>
           </div>
         </div>      </PageCard>
 
-      <Modal
-        open={mapOpen}
-        title="全球分布"
-        onCancel={() => setMapOpen(false)}
-        footer={<Button onClick={() => setMapOpen(false)}>关闭</Button>}
-        width={1120}
-        centered
-        destroyOnHidden
-      >
-        <WorldMap
-          large
-          zoomable
-          servers={rows}
-          onPick={(r) => {
-            setMapOpen(false);
-            setDetailId(r.id);
-          }}
-        />
-      </Modal>
 
       <div style={{ marginTop: 16 }}>
         <PageCard
