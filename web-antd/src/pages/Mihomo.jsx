@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   CloudDownloadOutlined,
   CopyOutlined,
+  DownloadOutlined,
+  SafetyCertificateOutlined,
   DeleteOutlined,
   EditOutlined,
   EyeOutlined,
@@ -19,13 +21,15 @@ import {
   Select,
   Space,
   Switch,
+  Col,
+  Row,
   Table,
   Tabs,
   Tag,
   Tooltip,
 } from 'antd';
-import { api, apiDelete, apiGet, apiPost, apiPut } from '../api';
-import { PageCard } from '../components';
+import { api, apiDelete, apiGet, apiPost, apiPut, getToken } from '../api';
+import { PageCard, StatCard } from '../components';
 import { fmtTime } from '../format';
 
 const { TextArea } = Input;
@@ -144,6 +148,9 @@ export default function Mihomo() {
   const [bindForm] = Form.useForm();
 
   const [versions, setVersions] = useState({ open: false, template: null, list: [], loading: false, content: '' });
+  const [stats, setStats] = useState({ templates: 0, templates_enabled: 0, bindings: 0, bindings_enabled: 0, servers: 0 });
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [checkState, setCheckState] = useState({ open: false, loading: false, data: null });
   const [preview, setPreview] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
@@ -155,10 +162,18 @@ export default function Mihomo() {
     const res = await apiGet('/api/mihomo/nodes');
     setBindings(res.data || []);
   };
+  const loadStats = async () => {
+    try {
+      const res = await apiGet('/api/mihomo/stats');
+      setStats(res.data || {});
+    } catch (e) {
+      /* ignore */
+    }
+  };
   const loadAll = async () => {
     setLoading(true);
     try {
-      await Promise.all([loadTemplates(), loadBindings()]);
+      await Promise.all([loadTemplates(), loadBindings(), loadStats()]);
     } catch (e) {
       message.error(e.message || '加载失败');
     } finally {
@@ -306,6 +321,51 @@ export default function Mihomo() {
     }
   };
 
+  const bulkToggle = async (enabled) => {
+    if (!selectedIds.length) return;
+    try {
+      await apiPost('/api/mihomo/nodes/bulk', { ids: selectedIds, enabled });
+      message.success(enabled ? '已批量启用' : '已批量停用');
+      setSelectedIds([]);
+      loadBindings();
+      loadStats();
+    } catch (e) {
+      message.error(e.message || '批量操作失败');
+    }
+  };
+  const exportBindings = async (ids) => {
+    if (!ids.length) return;
+    try {
+      const res = await fetch('/api/mihomo/export?ids=' + ids.join(','), {
+        headers: { Authorization: 'Bearer ' + getToken() },
+      });
+      if (!res.ok) throw new Error('导出失败');
+      const text = await res.text();
+      downloadText('mihomo-bindings.yaml', text);
+      message.success('已导出 ' + ids.length + ' 个绑定');
+    } catch (e) {
+      message.error(e.message || '导出失败');
+    }
+  };
+  const runCheck = async () => {
+    setCheckState({ open: true, loading: true, data: null });
+    try {
+      const res = await apiGet('/api/mihomo/check');
+      setCheckState({ open: true, loading: false, data: res.data });
+    } catch (e) {
+      setCheckState({ open: true, loading: false, data: { issues: [], issue_count: 0, checked: 0 } });
+      message.error(e.message || '检查失败');
+    }
+  };
+  const exportTemplate = async (row) => {
+    try {
+      const res = await apiGet(`/api/mihomo/templates/${row.id}`);
+      downloadText((res.data.name || 'mihomo') + '.yaml', res.data.content || '');
+    } catch (e) {
+      message.error(e.message || '导出失败');
+    }
+  };
+
   const openCreateBind = (prefill) => {
     setBindEditing(null);
     bindForm.setFieldsValue({
@@ -413,6 +473,9 @@ export default function Mihomo() {
           <Button size="small" type="link" onClick={() => copyTemplate(row)}>
             复制
           </Button>
+          <Button size="small" type="link" onClick={() => exportTemplate(row)}>
+            导出
+          </Button>
           <Popconfirm title="删除该模板？" onConfirm={() => removeTpl(row)}>
             <Button size="small" type="link" danger icon={<DeleteOutlined />}>
               删除
@@ -456,7 +519,8 @@ export default function Mihomo() {
     { title: '更新时间', dataIndex: 'updated_at', width: 170, render: (v) => fmtTime(v) },
     {
       title: '操作',
-      width: 230,
+      width: 300,
+      fixed: 'right',
       render: (_, row) => (
         <Space size={4}>
           <Button size="small" type="link" icon={<EyeOutlined />} onClick={() => openPreview(row)}>
@@ -491,6 +555,21 @@ export default function Mihomo() {
   ];
 
   return (
+    <div>
+      <Row gutter={[14, 14]} style={{ marginBottom: 14 }}>
+        <Col xs={12} md={6}>
+          <StatCard label="模板总数" value={stats.templates || 0} hint={`启用 ${stats.templates_enabled || 0}`} accent="#10b981" />
+        </Col>
+        <Col xs={12} md={6}>
+          <StatCard label="节点绑定" value={stats.bindings || 0} hint={`启用 ${stats.bindings_enabled || 0}`} accent="#6366f1" />
+        </Col>
+        <Col xs={12} md={6}>
+          <StatCard label="覆盖服务器" value={stats.servers || 0} hint="已绑定 mihomo 的服务器" accent="#0ea5e9" />
+        </Col>
+        <Col xs={12} md={6}>
+          <StatCard label="默认配置" value={templates.some((x) => x.name === '默认配置') ? '已就绪' : '缺失'} hint="开箱即用模板" accent="#f59e0b" />
+        </Col>
+      </Row>
     <PageCard
       title="mihomo"
       subtitle="mihomo（Clash.Meta）模板管理与节点绑定，按服务器 + UUID 生成完整 YAML 配置"
@@ -533,14 +612,40 @@ export default function Mihomo() {
             key: 'bindings',
             label: `节点绑定（${bindings.length}）`,
             children: (
-              <Table
-                rowKey="id"
-                size="middle"
-                loading={loading}
-                dataSource={bindings}
-                columns={bindColumns}
-                pagination={{ pageSize: 10, hideOnSinglePage: true }}
-              />
+              <>
+                <Space wrap style={{ marginBottom: 12 }}>
+                  <Button size="small" icon={<SafetyCertificateOutlined />} onClick={runCheck} loading={checkState.loading}>
+                    一致性检查
+                  </Button>
+                  <Button size="small" disabled={!selectedIds.length} onClick={() => bulkToggle(true)}>
+                    批量启用
+                  </Button>
+                  <Button size="small" disabled={!selectedIds.length} onClick={() => bulkToggle(false)}>
+                    批量停用
+                  </Button>
+                  <Button
+                    size="small"
+                    icon={<DownloadOutlined />}
+                    disabled={!selectedIds.length}
+                    onClick={() => exportBindings(selectedIds)}
+                  >
+                    批量导出
+                  </Button>
+                  <span className="pp-muted" style={{ fontSize: 12 }}>
+                    已选 {selectedIds.length} 项
+                  </span>
+                </Space>
+                <Table
+                  rowKey="id"
+                  size="middle"
+                  loading={loading}
+                  dataSource={bindings}
+                  columns={bindColumns}
+                  rowSelection={{ selectedRowKeys: selectedIds, onChange: setSelectedIds }}
+                  scroll={{ x: 1250 }}
+                  pagination={{ pageSize: 10, hideOnSinglePage: true }}
+                />
+              </>
             ),
           },
         ]}
@@ -775,5 +880,35 @@ export default function Mihomo() {
         </pre>
       </Modal>
     </PageCard>
+      <Modal
+        title="一致性检查"
+        open={checkState.open}
+        onCancel={() => setCheckState({ open: false, loading: false, data: null })}
+        footer={<Button onClick={() => setCheckState({ open: false, loading: false, data: null })}>关闭</Button>}
+        width={760}
+      >
+        {checkState.data ? (
+          <>
+            <div style={{ marginBottom: 10, color: '#64748b', fontSize: 12.5 }}>
+              已检查 {checkState.data.checked || 0} 个绑定，发现 {checkState.data.issue_count || 0} 个问题
+            </div>
+            <Table
+              rowKey={(r, i) => i}
+              size="small"
+              dataSource={checkState.data.issues || []}
+              pagination={false}
+              locale={{ emptyText: '未发现问题' }}
+              columns={[
+                { title: '级别', dataIndex: 'level', width: 90, render: (v) => <Tag color={v === 'error' ? 'red' : 'orange'}>{v === 'error' ? '错误' : '警告'}</Tag> },
+                { title: '绑定', dataIndex: 'name', width: 180, ellipsis: true },
+                { title: '问题', dataIndex: 'message' },
+              ]}
+            />
+          </>
+        ) : (
+          <div style={{ padding: '20px 0', color: '#94a3b8' }}>检查中…</div>
+        )}
+      </Modal>
+    </div>
   );
 }
