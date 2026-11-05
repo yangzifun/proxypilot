@@ -477,8 +477,10 @@ function AuthorizeNodes({ uuid, onChanged }) {
     return [...map.values()];
   })();
 
+  // 以本地 selected（kind:id）为准：勾选后立即反映，而不是等服务器数据回写
+  const selectedSet = new Set(selected);
   const authorizedNodes = nodeGroups
-    .filter((g) => g.items.length && g.items.every((i) => i.authorized))
+    .filter((g) => g.items.length && g.items.every((i) => selectedSet.has(i.kind + ':' + i.id)))
     .map((g) => g.server_id);
 
   const save = async () => {
