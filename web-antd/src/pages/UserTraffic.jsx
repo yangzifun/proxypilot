@@ -47,6 +47,7 @@ export default function UserTraffic() {
   const { message, modal } = AntdApp.useApp();
   const [range, setRange] = useState('7d');
   const [trendDays, setTrendDays] = useState(14);
+  const [nodeWindow, setNodeWindow] = useState('week');
   const [q, setQ] = useState('');
   const [sortBy, setSortBy] = useState('today');
   const [onlyOnline, setOnlyOnline] = useState(false);
@@ -381,14 +382,24 @@ export default function UserTraffic() {
       </PageCard>
 
       <PageCard
-        title={<span className="pp-section-title">节点流量 Top 8（近 7 天）</span>}
-        extra={<span className="pp-muted" style={{ fontSize: 12 }}>sing-box + mihomo 汇总</span>}
+        title={<span className="pp-section-title">节点流量 Top 8</span>}
+        extra={
+          <Space size={8}>
+            <span className="pp-muted" style={{ fontSize: 12 }}>sing-box + mihomo 汇总</span>
+            <Segmented
+              size="small"
+              value={nodeWindow}
+              onChange={setNodeWindow}
+              options={[{ label: '今日', value: 'today' }, { label: '7 天', value: 'week' }, { label: '累计', value: 'total' }]}
+            />
+          </Space>
+        }
         style={{ marginBottom: 16 }}
       >
         {(() => {
           const raw = (nodes.data && nodes.data.data) || {};
           const list = [...(raw.singbox || []), ...(raw.mihomo || [])]
-            .map((n) => ({ name: n.name || n.server_name || ('#' + n.id), value: Number(n.week || n.total || 0) }))
+            .map((n) => ({ name: n.name || n.server_name || ('#' + n.id), value: Number(n[nodeWindow] || 0) }))
             .filter((n) => n.value > 0)
             .sort((a, b) => b.value - a.value)
             .slice(0, 8);
