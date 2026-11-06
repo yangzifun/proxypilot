@@ -289,6 +289,7 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /api/uuid-configs/stats", h.authed(authOpts{}, h.uuidConfigsStats))
 
 	// 流量 / 连接统计（V15.6）
+	mux.HandleFunc("GET /api/stats/protocols", h.authed(authOpts{}, h.statsProtocols))
 	mux.HandleFunc("GET /api/stats/users/growth", h.authed(authOpts{}, h.statsUsersGrowth))
 	mux.HandleFunc("GET /api/stats/traffic/rate", h.authed(authOpts{}, h.statsTrafficRate))
 	mux.HandleFunc("GET /api/stats/traffic/series", h.authed(authOpts{}, h.statsTrafficSeries))

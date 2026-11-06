@@ -79,6 +79,7 @@ export default function UserTraffic() {
   const series = useAsync(() => api(`stats/traffic/series?days=${trendDays}`), [trendDays]);
   const rate = useAsync(() => api(`stats/traffic/rate?minutes=${rateMinutes}`), [rateMinutes]);
   const growth = useAsync(() => api('stats/users/growth?days=30'), []);
+  const protocols = useAsync(() => api('stats/protocols'), []);
   useEffect(() => {
     const id = setInterval(() => { rate.reload(); }, 10000);
     return () => clearInterval(id);
@@ -321,6 +322,58 @@ export default function UserTraffic() {
           />
         </Col>
       </Row>
+
+      <PageCard
+        title={<span className="pp-section-title">协议分布</span>}
+        extra={<span className="pp-muted" style={{ fontSize: 12 }}>按 UUID 数量</span>}
+        style={{ marginBottom: 16 }}
+      >
+        {protocols.error ? (
+          <ErrorBlock error={protocols.error} onRetry={() => protocols.reload()} />
+        ) : !protocols.data || !(protocols.data.data || []).length ? (
+          <Empty description="暂无协议数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        ) : (() => {
+          const colors = ['#10b981', '#0ea5e9', '#8b5cf6', '#f59e0b', '#ef4444', '#14b8a6'];
+          const list = (protocols.data.data || []).slice(0, 6);
+          const total = list.reduce((s, x) => s + Number(x.count || 0), 0) || 1;
+          let acc = 0;
+          const R = 54;
+          const C = 2 * Math.PI * R;
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 36, flexWrap: 'wrap' }}>
+              <svg width="140" height="140" viewBox="0 0 140 140">
+                <circle cx="70" cy="70" r={R} fill="none" stroke="#eef2f7" strokeWidth="16" />
+                {list.map((x, i) => {
+                  const frac = Number(x.count || 0) / total;
+                  const dash = frac * C;
+                  const el = (
+                    <circle
+                      key={x.protocol}
+                      cx="70" cy="70" r={R} fill="none"
+                      stroke={colors[i % colors.length]} strokeWidth="16"
+                      strokeDasharray={dash + ' ' + (C - dash)}
+                      strokeDashoffset={-acc}
+                      transform="rotate(-90 70 70)"
+                    />
+                  );
+                  acc += dash;
+                  return el;
+                })}
+                <text x="70" y="74" textAnchor="middle" style={{ fontSize: 18, fontWeight: 700, fill: '#0f172a' }}>{total}</text>
+              </svg>
+              <div style={{ display: 'grid', gap: 8 }}>
+                {list.map((x, i) => (
+                  <div key={x.protocol} style={{ fontSize: 13 }}>
+                    <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: colors[i % colors.length], marginRight: 8 }} />
+                    {String(x.protocol || 'unknown').toUpperCase()} <b>{x.count}</b>
+                    <span className="pp-muted" style={{ marginLeft: 6 }}>{((Number(x.count || 0) / total) * 100).toFixed(0)}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+      </PageCard>
 
       <PageCard
         title={<span className="pp-section-title">用户增长（近 30 天）</span>}
