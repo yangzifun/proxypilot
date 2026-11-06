@@ -23,7 +23,7 @@ import (
 )
 
 // version 由构建脚本注入：-ldflags "-X main.version=v1.0.0"
-var version = "V23.53"
+var version = "V23.56"
 
 func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -85,6 +85,24 @@ func run(log *slog.Logger) error {
 		errCh <- srv.ListenAndServe()
 	}()
 
+	// 节点直连通道：存在证书时额外监听 :443（走 agent.yangzifun.org，绕过 CDN）
+	if certFile, keyFile := "/etc/proxypilot/tls/agent.crt", "/etc/proxypilot/tls/agent.key"; fileExists(certFile) && fileExists(keyFile) {
+		tlsSrv := &http.Server{
+			Addr:              ":443",
+			Handler:           securityHeaders(api.New(cfg, pool, log)),
+			ReadHeaderTimeout: 10 * time.Second,
+			ReadTimeout:       60 * time.Second,
+			WriteTimeout:      180 * time.Second,
+			IdleTimeout:       120 * time.Second,
+		}
+		go func() {
+			log.Info("HTTPS(Agent 直连) 已启动", "addr", ":443")
+			if err := tlsSrv.ListenAndServeTLS(certFile, keyFile); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				log.Error("HTTPS 启动失败", "err", err)
+			}
+		}()
+	}
+
 	select {
 	case err := <-errCh:
 		if errors.Is(err, http.ErrServerClosed) {
@@ -117,3 +135,8 @@ const cspPolicy = "default-src 'self'; script-src 'self' https://static.cloudfla
 	"style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://s3.yangzifun.org; font-src 'self' data:; " +
 	"connect-src 'self' https://cloudflareinsights.com; frame-src https://challenges.cloudflare.com; " +
 	"frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'"
+
+func fileExists(p string) bool {
+	st, err := os.Stat(p)
+	return err == nil && !st.IsDir()
+}
