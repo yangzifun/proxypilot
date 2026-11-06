@@ -117,3 +117,49 @@ export const themeConfig = {
 /* 图表里复用的坐标轴/网格样式 */
 export const chartAxisColor = '#94a3b8';
 export const chartGridColor = '#eef2f7';
+
+/* ---- 全站主题切换 ---- */
+const THEME_KEY = 'pp.theme';
+const THEME_EVENT = 'pp-theme-change';
+
+export function getTheme() {
+  try {
+    return localStorage.getItem(THEME_KEY) || 'light';
+  } catch (e) {
+    return 'light';
+  }
+}
+
+export function applyTheme(theme) {
+  const t = theme || 'light';
+  document.body.classList.remove(
+    'pp-site-theme-light', 'pp-site-theme-emerald', 'pp-site-theme-pulse',
+    'pp-site-theme-horizon', 'pp-site-theme-glass',
+  );
+  document.body.classList.add('pp-site-theme-' + t);
+}
+
+export function setTheme(theme) {
+  const t = theme || 'light';
+  try {
+    localStorage.setItem(THEME_KEY, t);
+  } catch (e) {
+    /* ignore */
+  }
+  applyTheme(t);
+  window.dispatchEvent(new CustomEvent(THEME_EVENT, { detail: t }));
+}
+
+export function subscribeTheme(fn) {
+  const handler = (e) => fn(e.detail || getTheme());
+  window.addEventListener(THEME_EVENT, handler);
+  return () => window.removeEventListener(THEME_EVENT, handler);
+}
+
+export const THEME_OPTIONS = [
+  { value: 'light', label: '默认' },
+  { value: 'emerald', label: '翠绿' },
+  { value: 'pulse', label: '极简' },
+  { value: 'horizon', label: '扁平' },
+  { value: 'glass', label: '毛玻璃' },
+];

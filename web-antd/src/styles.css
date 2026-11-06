@@ -3746,3 +3746,34 @@ body {
 @media (max-width: 1100px) {
   .pp-pair-row { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ================= 全站主题 ================= */
+body.pp-site-theme-emerald .pp-content { background: linear-gradient(180deg, #f2fbf6 0%, #ffffff 40%) !important; }
+body.pp-site-theme-emerald .pp-card { background: rgba(255,255,255,0.85) !important; border-color: rgba(16,185,129,0.16) !important; }
+body.pp-site-theme-emerald .pp-section-title { color: #065f46 !important; }
+body.pp-site-theme-emerald .ant-table-thead > tr > th { background: #ecfdf5 !important; color: #065f46 !important; }
+body.pp-site-theme-emerald .ant-btn-primary { background: #10b981 !important; border-color: #10b981 !important; }
+body.pp-site-theme-emerald .ant-menu-dark .ant-menu-item-selected { background: rgba(16,185,129,0.22) !important; }
+
+body.pp-site-theme-pulse .pp-content { background: #ffffff !important; }
+body.pp-site-theme-pulse .pp-card { background: #ffffff !important; border: 1px solid #e5e7eb !important; box-shadow: none !important; }
+body.pp-site-theme-pulse .ant-btn-primary { background: #111827 !important; border-color: #111827 !important; }
+body.pp-site-theme-pulse .ant-menu-dark .ant-menu-item-selected { background: #111827 !important; }
+
+body.pp-site-theme-horizon .pp-content { background: #f8fafc !important; }
+body.pp-site-theme-horizon .pp-card { background: #ffffff !important; border: 1px solid #e2e8f0 !important; box-shadow: none !important; border-radius: 8px !important; }
+body.pp-site-theme-horizon .ant-btn-primary { background: #2563eb !important; border-color: #2563eb !important; box-shadow: none !important; }
+
+body.pp-site-theme-glass .pp-content {
+  background:
+    radial-gradient(50% 40% at 12% 0%, rgba(196,181,253,0.32) 0%, rgba(196,181,253,0) 60%),
+    radial-gradient(45% 40% at 92% 8%, rgba(125,211,252,0.32) 0%, rgba(125,211,252,0) 60%),
+    linear-gradient(160deg, #eef2ff 0%, #f8fafc 60%) !important;
+}
+body.pp-site-theme-glass .pp-card {
+  background: rgba(255,255,255,0.55) !important;
+  border: 1px solid rgba(255,255,255,0.7) !important;
+  backdrop-filter: blur(14px);
+  box-shadow: 0 16px 40px -30px rgba(15,23,42,0.6) !important;
+}
+body.pp-site-theme-glass .ant-btn-primary { background: rgba(79,70,229,0.9) !important; border-color: transparent !important; }

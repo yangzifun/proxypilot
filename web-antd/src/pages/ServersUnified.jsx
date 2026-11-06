@@ -50,7 +50,7 @@ import ServerDrawer from '../components/ServerDrawer';
 import ServerUnlockModal from '../components/ServerUnlockModal';
 import { ServerCard as FullServerCard } from './Monitor';
 import { fmtAgo, fmtBytes, fmtNum, fmtTime, fmtUptime, levelColor, splitIps } from '../format';
-import { chartPalette } from '../theme';
+import { chartPalette, getTheme, setTheme, subscribeTheme, THEME_OPTIONS } from '../theme';
 
 const VIEW_KEY = 'pp.servers.view';
 
@@ -349,8 +349,9 @@ export default function ServersUnified() {
   const [mapOpen, setMapOpen] = useState(false);
   const [status, setStatus] = useState('');
   const [auto, setAuto] = useState(true);
-  const [pageTheme, setPageTheme] = useState(() => localStorage.getItem('pp.servers.theme') || 'light');
-  const changeTheme = (v) => { setPageTheme(v); localStorage.setItem('pp.servers.theme', v); };
+  const [pageTheme, setPageTheme] = useState(() => getTheme());
+  useEffect(() => subscribeTheme((t) => setPageTheme(t)), []);
+  const changeTheme = (v) => { setTheme(v); };
   const [sseStatus, setSseStatus] = useState({});
   const [, forceTick] = useState(0);
   useEffect(() => {
@@ -971,13 +972,7 @@ export default function ServersUnified() {
                     size="small"
                     value={pageTheme}
                     onChange={changeTheme}
-                    options={[
-                      { value: 'light', label: '默认' },
-                      { value: 'emerald', label: '翠绿' },
-                      { value: 'pulse', label: '极简' },
-                      { value: 'horizon', label: '扁平' },
-                      { value: 'glass', label: '毛玻璃' },
-                    ]}
+                    options={THEME_OPTIONS}
                   />
                   <Tooltip title="每 5 秒只刷新监控数据（资源 / 网络 / 连接），不重新拉取列表">
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}>

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { applyTheme, getTheme, subscribeTheme } from './theme';
 import { Button, Result } from 'antd';
 import { useAuth } from './auth';
 import { useHashRoute } from './hooks';
@@ -82,6 +83,12 @@ export default function App() {
   } else {
     body = <PageComp initialTab={legacySettings ? 'settings' : undefined} />;
   }
+
+  // 全站主题：启动时应用并订阅变化
+  useEffect(() => {
+    applyTheme(getTheme());
+    return subscribeTheme((t) => applyTheme(t));
+  }, []);
 
   return (
     <AppLayout activeKey={key} onNavigate={navigate}>
