@@ -3273,3 +3273,23 @@ body {
     padding: clamp(64px, 14vh, 120px) 22px calc(30px + env(safe-area-inset-bottom, 0px)) !important;
   }
 }
+
+/* ---- 服务器概览：地图卡片限宽 + 3D 效果 ---- */
+.pp-overview-grid { grid-template-columns: minmax(300px, 380px) minmax(0, 860px); }
+.pp-map-3d {
+  perspective: 1400px;
+  border-radius: 14px;
+  background: radial-gradient(120% 90% at 50% 0%, #eef4ff 0%, #f8fafc 55%, #eef2f7 100%);
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.05), 0 18px 40px -28px rgba(15, 23, 42, 0.45);
+}
+.pp-map-3d > * {
+  transform: rotateX(12deg) scale(0.985);
+  transform-origin: 50% 60%;
+  transition: transform 0.28s ease;
+  height: 100%;
+}
+.pp-map-3d:hover > * { transform: rotateX(0deg) scale(1); }
+@media (max-width: 1180px) {
+  .pp-overview-grid { grid-template-columns: minmax(0, 1fr); }
+}

@@ -10,6 +10,7 @@ import {
   CloudDownloadOutlined,
   CloudServerOutlined,
   DisconnectOutlined,
+  FullscreenOutlined,
   PlusOutlined,
   PoweroffOutlined,
   QuestionCircleOutlined,
@@ -342,6 +343,7 @@ export default function ServersUnified() {
   const { message } = AntdApp.useApp();
   const [view, setView] = useState(readView);
   const [q, setQ] = useState('');
+  const [mapOpen, setMapOpen] = useState(false);
   const [status, setStatus] = useState('');
   const [auto, setAuto] = useState(true);
   const [selected, setSelected] = useState([]);
@@ -825,7 +827,7 @@ export default function ServersUnified() {
             </div>
           </div>
 
-          <div className="pp-ov-map">
+          <div className="pp-ov-map" style={{ height: 360, maxHeight: 360 }}>
             <div className="pp-ov-sec-head">
               <b>全球分布</b>
               <span className="pp-ov-map-extra">
@@ -848,13 +850,29 @@ export default function ServersUnified() {
                     {it.label}
                   </span>
                 ))}
+                <Button size="small" type="link" icon={<FullscreenOutlined />} onClick={() => setMapOpen(true)}>大屏</Button>
               </span>
             </div>
-            <div className="pp-ov-map-box">
+            <div className="pp-ov-map-box pp-map-3d">
               <WorldMap large zoomable servers={rows} onPick={(r) => setDetailId(r.id)} />
             </div>
           </div>
         </div>      </PageCard>
+
+      <Modal
+        title="全球分布 · 大屏"
+        open={mapOpen}
+        onCancel={() => setMapOpen(false)}
+        footer={null}
+        width="96vw"
+        style={{ top: 16 }}
+        styles={{ body: { height: '84vh', padding: 8 } }}
+        destroyOnHidden
+      >
+        <div className="pp-ov-map-box pp-map-3d" style={{ height: '100%' }}>
+          <WorldMap large zoomable servers={rows} onPick={(r) => { setMapOpen(false); setDetailId(r.id); }} />
+        </div>
+      </Modal>
 
 
       <div style={{ marginTop: 16 }}>
