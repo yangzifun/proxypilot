@@ -78,6 +78,7 @@ export default function UserTraffic() {
   const users = useAsync(() => api(`stats/traffic/users?range=${range}`), [range]);
   const series = useAsync(() => api(`stats/traffic/series?days=${trendDays}`), [trendDays]);
   const rate = useAsync(() => api(`stats/traffic/rate?minutes=${rateMinutes}`), [rateMinutes]);
+  const growth = useAsync(() => api('stats/users/growth?days=30'), []);
   useEffect(() => {
     const id = setInterval(() => { rate.reload(); }, 10000);
     return () => clearInterval(id);
@@ -320,6 +321,25 @@ export default function UserTraffic() {
           />
         </Col>
       </Row>
+
+      <PageCard
+        title={<span className="pp-section-title">用户增长（近 30 天）</span>}
+        extra={<span className="pp-muted" style={{ fontSize: 12 }}>按创建时间每日新增</span>}
+        style={{ marginBottom: 16 }}
+      >
+        {growth.error ? (
+          <ErrorBlock error={growth.error} onRetry={() => growth.reload()} />
+        ) : !growth.data || !(growth.data.data || []).length ? (
+          <Empty description="暂无新增用户数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        ) : (
+          <AreaChart
+            data={growth.data.data}
+            series={[{ key: 'value', name: '新增用户', color: '#10b981' }]}
+            height={200}
+            formatValue={(v) => String(v) + ' 人'}
+          />
+        )}
+      </PageCard>
 
       <PageCard
         title={<span className="pp-section-title">用户在线分布</span>}
