@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { applyTheme, getTheme, subscribeTheme } from './theme';
+import { applyTheme, getTheme, subscribeTheme, THEME_TOKENS } from './theme';
+import { ConfigProvider } from 'antd';
 import { Button, Result } from 'antd';
 import { useAuth } from './auth';
 import { useHashRoute } from './hooks';
@@ -85,17 +86,22 @@ export default function App() {
   }
 
   // 全站主题：启动时应用并订阅变化
+  const [siteTheme, setSiteTheme] = useState(() => getTheme());
   useEffect(() => {
     applyTheme(getTheme());
-    return subscribeTheme((t) => applyTheme(t));
+    return subscribeTheme((t) => { setSiteTheme(t); applyTheme(t); });
   }, []);
 
+  const themeTokens = THEME_TOKENS[siteTheme] || THEME_TOKENS.light;
+
   return (
+    <ConfigProvider theme={{ token: themeTokens }}>
     <AppLayout activeKey={key} onNavigate={navigate}>
       {routeLoading ? <div className="pp-route-progress" aria-hidden="true"><span /></div> : null}
       <div className="pp-page-enter" key={key}>
         {body}
       </div>
     </AppLayout>
+    </ConfigProvider>
   );
 }

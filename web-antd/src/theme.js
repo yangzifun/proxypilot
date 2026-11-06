@@ -163,3 +163,38 @@ export const THEME_OPTIONS = [
   { value: 'horizon', label: '扁平' },
   { value: 'glass', label: '毛玻璃' },
 ];
+
+/* 各主题对应的 AntD Design Token */
+export const THEME_TOKENS = {
+  light: {
+    colorPrimary: '#4f46e5',
+    colorInfo: '#4f46e5',
+    colorSuccess: '#10b981',
+    borderRadius: 8,
+  },
+  emerald: {
+    colorPrimary: '#10b981',
+    colorInfo: '#10b981',
+    colorSuccess: '#059669',
+    colorLink: '#047857',
+    borderRadius: 10,
+  },
+  pulse: {
+    colorPrimary: '#111827',
+    colorInfo: '#111827',
+    colorSuccess: '#10b981',
+    borderRadius: 8,
+  },
+  horizon: {
+    colorPrimary: '#2563eb',
+    colorInfo: '#2563eb',
+    colorSuccess: '#16a34a',
+    borderRadius: 8,
+  },
+  glass: {
+    colorPrimary: '#4f46e5',
+    colorInfo: '#6366f1',
+    colorSuccess: '#10b981',
+    borderRadius: 14,
+  },
+};
