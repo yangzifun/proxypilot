@@ -828,9 +828,12 @@ export default function UserTraffic() {
                 for (const [k, v] of map) if (n.includes(k)) return v;
                 return '';
               };
+              const shown = nodes.slice(0, 12);
               const rowH = 44;
-              const h = Math.max(180, 60 + nodes.length * rowH);
-              const midY = h / 2;
+              const topY = 34;
+              const lastY = topY + Math.max(0, shown.length - 1) * rowH;
+              const midY = (topY + lastY) / 2;
+              const h = lastY + 62;
               const label = detail.data.owner || detail.data.email || String(detail.data.uuid).slice(0, 8);
               const short = String(label).slice(0, 6);
               return (
@@ -838,7 +841,7 @@ export default function UserTraffic() {
                   <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>
                     用户流向（绿=近 3 分钟活跃，动态光点表示实时流量）
                   </div>
-                  <svg className="pp-flow-svg" viewBox={'0 0 720 ' + h} style={{ width: '100%', height: h }}>
+                  <svg className="pp-flow-svg" viewBox={'0 0 720 ' + h} style={{ width: '100%', height: 'auto', display: 'block' }}>
                     <defs>
                       <linearGradient id="ppFlowGrad" x1="0" x2="1">
                         <stop offset="0%" stopColor="#10b981" stopOpacity="0.15" />
@@ -847,7 +850,7 @@ export default function UserTraffic() {
                     </defs>
                     <circle cx="80" cy={midY} r="34" fill="#ecfdf5" stroke="#10b981" strokeWidth="2" />
                     <text x="80" y={midY + 5} textAnchor="middle" fontSize="13" fontWeight="600" fill="#065f46">{short}</text>
-                    {nodes.slice(0, 12).map((n, i) => {
+                    {shown.map((n, i) => {
                       const y = 34 + i * rowH;
                       const on = recent.has(n.node_id);
                       const d = 'M114 ' + midY + ' C 320 ' + midY + ', 380 ' + y + ', 560 ' + y;
