@@ -83,16 +83,6 @@ export default function TrafficLimits() {
     }
   };
 
-  const unsuspend = async (row) => {
-    try {
-      await apiPost(`servers/${row.server_id}/traffic-limit/unsuspend`, {});
-      message.success('已解除暂停');
-      load();
-    } catch (e) {
-      message.error(e.message || '操作失败');
-    }
-  };
-
   const usedOf = (row) => {
     if (row.mode === 'rx') return Number(row.rx_bytes) || 0;
     if (row.mode === 'tx') return Number(row.tx_bytes) || 0;
@@ -127,15 +117,12 @@ export default function TrafficLimits() {
     {
       title: '重置周期', width: 140, render: (_, row) => `每月 ${row.reset_day || 1} 日 ${String(row.reset_hour || 0).padStart(2, '0')}:00`,
     },
-    {
-      title: '超限动作', width: 120, render: (_, row) => (row.action === 'suspend' ? <Tag color="red">暂停节点</Tag> : <Tag>仅告警</Tag>),
-    },
+    { title: '超限处理', width: 160, render: () => <Tag>仅提醒（后台 + 邮件）</Tag> },
     {
       title: '操作', width: 180,
       render: (_, row) => (
         <Space size={0}>
           <Button size="small" type="link" icon={<SettingOutlined />} onClick={() => openEdit(row)}>设置</Button>
-          {row.state === 'exceeded' ? <Button size="small" type="link" onClick={() => unsuspend(row)}>解除暂停</Button> : null}
         </Space>
       ),
     },
@@ -147,7 +134,7 @@ export default function TrafficLimits() {
       extra={<Button icon={<ReloadOutlined />} onClick={load} loading={loading}>刷新</Button>}
     >
       <div style={{ padding: '0 16px 8px' }} className="pp-muted">
-        按服务器统计上行/下行累计流量，支持设置上限与按月重置；超限后可仅告警或暂停节点（暂停后该节点不再出现在用户订阅中）。
+        按服务器统计上行/下行累计流量，支持设置上限与按月重置；超限后仅在管理后台提醒并发送邮件，不影响订阅，也不会停止服务。
       </div>
       <Table rowKey="server_id" size="medium" loading={loading} dataSource={rows} columns={columns} pagination={false} />
 
@@ -189,7 +176,7 @@ export default function TrafficLimits() {
           <div>
             超限动作：
             <Select value={form.action} style={{ width: 200, marginLeft: 8 }} onChange={(v) => setForm((f) => ({ ...f, action: v }))}
-              options={[{ value: 'notify', label: '仅告警' }, { value: 'suspend', label: '暂停节点（订阅移除）' }]} />
+                options={[{ value: 'notify', label: '仅提醒（后台 + 邮件）' }]} />
           </div>
           <div>
             告警阈值：

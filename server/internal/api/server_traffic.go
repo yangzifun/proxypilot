@@ -158,9 +158,11 @@ func (h *handlers) evalTrafficState(ctx context.Context, serverID int64, lim ser
 	if state == "exceeded" {
 		_, _ = h.db.ExecContext(ctx, "UPDATE server_traffic_usage SET exceeded_at = ? WHERE server_id = ? AND period_start = ?",
 			nowMillis(), serverID, period)
-		h.log.Warn("服务器流量超出上限", "server_id", serverID, "used", used, "limit", lim.LimitBytes, "action", lim.Action)
-		h.recordNodeLog(ctx, serverID, 0, "traffic-limit", "failed", 0,
-			fmt.Sprintf("流量超限：已用 %d MB / 上限 %d MB（%s）", used>>20, lim.LimitBytes>>20, lim.Action), "", "cron")
+		h.log.Warn("服务器流量超出上限", "server_id", serverID, "used", used, "limit", lim.LimitBytes)
+		detail := fmt.Sprintf("流量超限：已用 %d MB / 上限 %d MB（仅提醒，不影响订阅与服务）", used>>20, lim.LimitBytes>>20)
+		h.recordNodeLog(ctx, serverID, 0, "traffic-limit", "failed", 0, detail, "", "cron")
+		notices := []serverStatusNotice{{ID: serverID, Detail: detail}}
+		go h.notifyStatus(context.Background(), "服务器流量超限", notices)
 	}
 }
 
