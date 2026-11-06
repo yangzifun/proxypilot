@@ -49,6 +49,26 @@ export default function Globe3D({ servers = [], onPick, height = 320 }) {
     const sphere = new THREE.Mesh(new THREE.SphereGeometry(1, 96, 64), sphereMat);
     group.add(sphere);
 
+    // 点阵球面（参考 emerald 主题的粒子地球）
+    const dotCount = 3600;
+    const dotPositions = new Float32Array(dotCount * 3);
+    for (let i = 0; i < dotCount; i += 1) {
+      const u = Math.random() * 2 - 1;
+      const th = Math.random() * Math.PI * 2;
+      const r = 1.004;
+      const s = Math.sqrt(1 - u * u);
+      dotPositions[i * 3] = r * s * Math.cos(th);
+      dotPositions[i * 3 + 1] = r * u;
+      dotPositions[i * 3 + 2] = r * s * Math.sin(th);
+    }
+    const dotGeo = new THREE.BufferGeometry();
+    dotGeo.setAttribute('position', new THREE.BufferAttribute(dotPositions, 3));
+    const dotCloud = new THREE.Points(dotGeo, new THREE.PointsMaterial({
+      color: 0x67e8f9, size: 0.006, transparent: true, opacity: 0.55,
+      depthWrite: false, blending: THREE.AdditiveBlending,
+    }));
+    group.add(dotCloud);
+
     // 贴图重着色
     const canvas = document.createElement('canvas');
     canvas.width = 2048;
