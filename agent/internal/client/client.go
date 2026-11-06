@@ -81,6 +81,7 @@ type PollResponse struct {
 	NextPollSec        int        `json:"next_poll_sec"`
 	MetricsEvery       int        `json:"metrics_every"`
 	ServerTime         int64      `json:"server_time"`
+	AgentAccessURL     string     `json:"agent_access_url"`
 	AgentScriptVersion string     `json:"agent_script_version"`
 	Wire               string     `json:"wire"`
 	Shell              *ShellHint `json:"shell,omitempty"`

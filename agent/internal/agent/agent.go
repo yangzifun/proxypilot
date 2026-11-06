@@ -3,11 +3,13 @@ package agent
 
 import (
 	"context"
+	"os"
+	"strings"
+	"net/http"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
-	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -41,7 +43,7 @@ import (
 // 1.8.5：组件二进制改为「临时文件 + rename」写入，修复运行中覆盖导致的 text file busy
 // 1.8.6：解包改流式写盘，避免小内存节点在安装 78MB sing-box 时被 OOM kill
 // 1.8.7：新增 inspect 动作（只读检查配置文件，供 UUID 一致性巡检核对机器实际配置）
-const Version = "1.8.11"
+const Version = "1.8.12"
 
 // maxActionsPerRound 单轮执行任务数上限（服务端 AGENT_ACTIONS_PER_POLL = 5，这里留足余量）。
 const maxActionsPerRound = 20
@@ -140,6 +142,17 @@ func (a *Agent) Once(ctx context.Context) error {
 	if err != nil {
 		a.opts.Log("poll 失败：%v", err)
 		return err
+	}
+	// 服务端下发直连地址且允许迁移时，先探测再改写配置并重启
+	if resp.AgentAccessURL != "" && a.opts.Config.AllowURLMigration {
+		if target := strings.TrimRight(resp.AgentAccessURL, "/"); target != "" && target != a.opts.Config.Origin {
+			if err := migrateOrigin(a.opts.Config, target); err != nil {
+				a.opts.Log("地址迁移失败（保持原地址）：%v", err)
+			} else {
+				a.opts.Log("地址已迁移到 %s，进程退出等待 systemd 重启", target)
+				os.Exit(0)
+			}
+		}
 	}
 	next := clampInterval(resp.NextPollSec, a.opts.Config.Interval)
 	if resp.NextPollSec > 0 {
@@ -530,4 +543,36 @@ func nameOr(v, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+
+// migrateOrigin 探测新地址可用后，改写配置文件中的 PROXYPILOT_URL。
+func migrateOrigin(cfg config.Config, target string) error {
+	client := &http.Client{Timeout: 8 * time.Second}
+	resp, err := client.Get(target + "/healthz")
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		return fmt.Errorf("新地址返回 %d", resp.StatusCode)
+	}
+	path := config.DefaultPath
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	lines := strings.Split(string(raw), "\n")
+	found := false
+	for i, line := range lines {
+		if strings.HasPrefix(strings.ToUpper(strings.TrimSpace(line)), "PROXYPILOT_URL=") {
+			lines[i] = "PROXYPILOT_URL=" + target
+			found = true
+		}
+	}
+	if !found {
+		lines = append(lines, "PROXYPILOT_URL="+target)
+	}
+	_ = os.WriteFile(path+".bak", raw, 0o600)
+	return os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o600)
 }

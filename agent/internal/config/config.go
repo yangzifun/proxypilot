@@ -38,6 +38,7 @@ type Config struct {
 	StateDir string   // 状态目录
 	Services []string // 需要上报 systemd 状态的服务名
 	Insecure bool     // 跳过 TLS 证书校验（仅排查用）
+	AllowURLMigration bool // 允许按服务端下发的 agent_access_url 自动迁移
 }
 
 // Defaults 返回默认配置（未读取任何文件）。
@@ -46,6 +47,7 @@ func Defaults() Config {
 		Interval: DefaultInterval,
 		StateDir: DefaultStateDir,
 		Services: append([]string(nil), DefaultServices...),
+		AllowURLMigration: true,
 	}
 }
 
@@ -90,6 +92,8 @@ func Parse(text string) Config {
 				merged = append(merged, name)
 			}
 			c.Services = merged
+		case "PROXYPILOT_ALLOW_URL_MIGRATION", "ALLOW_URL_MIGRATION":
+			c.AllowURLMigration = truthy(val)
 		case "PROXYPILOT_INSECURE", "INSECURE":
 			c.Insecure = truthy(val)
 		}
