@@ -363,6 +363,15 @@ export default function Settings({ embedded = false }) {
                   <Form.Item name="agent_binary_base_url" label="Agent 分发基址" extra="留空使用本站 /agent-dist">
                     <Input placeholder="https://cdn.example.com/agent-dist" allowClear />
                   </Form.Item>
+
+                  <Form.Item
+                    name="agent_access_url"
+                    label="Agent 访问地址"
+                    extra="节点直连地址（绕过 CDN），用于安装命令与升级任务；留空回落到对外访问地址"
+                    rules={[{ type: 'url', message: '请输入合法 URL' }]}
+                  >
+                    <Input placeholder="https://agent.example.com" allowClear />
+                  </Form.Item>
                   <Form.Item
                     name="component_base_url"
                     label="sing-box 分发基址"
