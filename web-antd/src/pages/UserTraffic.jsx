@@ -223,7 +223,7 @@ export default function UserTraffic() {
       title: '状态',
       dataIndex: 'active',
       width: 110,
-      render: (on) => (on ? <Tag color="green">在线</Tag> : <Tag>离线</Tag>),
+      render: (on) => (on ? <Tag color="green">活跃</Tag> : <Tag>空闲</Tag>),
     },
     {
       title: '今日',
@@ -300,7 +300,7 @@ export default function UserTraffic() {
         <Col xs={12} md={6}>
           <StatCard
             icon={<ThunderboltOutlined />}
-            label="在线用户"
+            label="活跃用户"
             value={summary.online}
             hint="近 3 分钟有流量"
             accent="#10b981"
@@ -409,7 +409,7 @@ export default function UserTraffic() {
 
       <PageCard
         title={<span className="pp-section-title">用户在线分布</span>}
-        extra={<span className="pp-muted" style={{ fontSize: 12 }}>近 5 分钟有流量视为在线</span>}
+        extra={<span className="pp-muted" style={{ fontSize: 12 }}>近 5 分钟有流量视为活跃</span>}
         style={{ marginBottom: 16 }}
       >
         {(() => {
@@ -435,7 +435,7 @@ export default function UserTraffic() {
               <div style={{ display: 'grid', gap: 10 }}>
                 <div><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 5, background: '#10b981', marginRight: 8 }} />在线 <b>{online}</b></div>
                 <div><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 5, background: '#cbd5e1', marginRight: 8 }} />离线 <b>{offline}</b></div>
-                <div className="pp-muted" style={{ fontSize: 12 }}>合计 {total} 个用户 · 在线率 {total ? pct.toFixed(0) : 0}%</div>
+                <div className="pp-muted" style={{ fontSize: 12 }}>合计 {total} 个用户 · 活跃率 {total ? pct.toFixed(0) : 0}%</div>
               </div>
             </div>
           );
