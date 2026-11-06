@@ -811,7 +811,18 @@ export default function UserTraffic() {
             ) : (
               <Empty description="该时间窗口没有流量记录" image={Empty.PRESENTED_IMAGE_SIMPLE} />
             )}
-            {detail.data.nodes && detail.data.nodes.length ? (
+            {Array.isArray(detail.data.recent_nodes) && detail.data.recent_nodes.length ? (
+              <div style={{ margin: '10px 0 14px' }}>
+                <div className="pp-muted" style={{ fontSize: 12, marginBottom: 6 }}>实时连接的服务器（近 3 分钟）</div>
+                <Space size={8} wrap>
+                  {detail.data.recent_nodes.map((n) => (
+                    <Tag key={n.node_id} color="green">
+                      {n.node_name || '#' + n.node_id} · {fmtAgo(n.last_ts)}
+                    </Tag>
+                  ))}
+                </Space>
+              </div>
+            ) : null}            {detail.data.nodes && detail.data.nodes.length ? (
               <div style={{ marginTop: 16 }}>
                 <div className="pp-muted" style={{ fontSize: 12, marginBottom: 6 }}>按节点分布</div>
                 <Table

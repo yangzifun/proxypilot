@@ -152,6 +152,10 @@ func (h *handlers) ingestUserCounters(ctx context.Context, nodeID int64, users [
 		if dUp <= 0 && dDown <= 0 {
 			continue
 		}
+		_, _ = h.db.ExecContext(ctx, `INSERT INTO user_node_recent (uuid, node_id, last_ts, up, down)
+		      VALUES (?, ?, ?, ?, ?)
+		      ON DUPLICATE KEY UPDATE last_ts = VALUES(last_ts), up = up + VALUES(up), down = down + VALUES(down)`,
+			uuid, nodeID, now, dUp, dDown)
 		if _, err := h.db.ExecContext(ctx, `INSERT INTO user_traffic_hourly
 		      (uuid, node_id, hour_ts, up, down) VALUES (?, ?, ?, ?, ?)
 		      ON DUPLICATE KEY UPDATE up = up + VALUES(up), down = down + VALUES(down)`,
@@ -451,11 +455,30 @@ func (h *handlers) statsTrafficUserDetail(w http.ResponseWriter, r *http.Request
 		}
 	}
 
+	recentNodes := []map[string]any{}
+	if rrows, err := h.db.QueryContext(ctx,
+		`SELECT r.node_id, COALESCE(n.name,''), r.up, r.down, r.last_ts
+		  FROM user_node_recent r LEFT JOIN singbox_nodes n ON n.id = r.node_id
+		  WHERE r.uuid = ? AND r.last_ts >= ? ORDER BY r.last_ts DESC`,
+		uuid, nowMillis()-180000); err == nil {
+		for rrows.Next() {
+			var nodeID, up, down, lastTS int64
+			var nodeName string
+			if rrows.Scan(&nodeID, &nodeName, &up, &down, &lastTS) == nil {
+				recentNodes = append(recentNodes, map[string]any{
+					"node_id": nodeID, "node_name": nodeName,
+					"up": up, "down": down, "last_ts": lastTS,
+				})
+			}
+		}
+		rrows.Close()
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"success": true, "uuid": uuid, "owner": owner, "email": email,
 		"up": sumUp, "down": sumDown, "last_active_at": lastActive,
 		"active": lastActive > 0 && nowMillis()-lastActive <= statsActiveWindowMs,
-		"series": series, "nodes": nodes, "start": start, "end": end,
+		"series": series, "nodes": nodes, "recent_nodes": recentNodes, "start": start, "end": end,
 	})
 }
 
