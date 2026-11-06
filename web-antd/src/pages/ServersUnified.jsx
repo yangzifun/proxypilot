@@ -38,7 +38,7 @@ import {
   Tag,
   Tooltip,
 } from 'antd';
-import { api, apiPost } from '../api';
+import { api, apiPost, getToken } from '../api';
 import { useAsync, usePolling, readForm } from '../hooks';
 import { CopyText, ErrorBlock, JsonView, PageCard, StatCard, StatusPill } from '../components';
 import { watchBatch } from '../components/JobCenter';
@@ -382,8 +382,22 @@ export default function ServersUnified() {
     [live.reload]
   );
 
-  usePolling(() => refreshLive(), auto ? 1000 : 0);
-  usePolling(() => monitor.reload().catch(() => {}), auto ? 1000 : 0);
+  useEffect(() => {
+    if (!auto) return undefined;
+    const token = getToken();
+    if (!token) return undefined;
+    let es;
+    try {
+      es = new EventSource(`/api/servers/stream?token=${encodeURIComponent(token)}`);
+      es.onmessage = () => { refreshLive(); };
+      es.onerror = () => {};
+    } catch (e) {
+      es = null;
+    }
+    return () => { if (es) es.close(); };
+  }, [auto]);
+  usePolling(() => refreshLive(), auto ? 10000 : 0);
+  usePolling(() => monitor.reload().catch(() => {}), auto ? 10000 : 0);
   usePolling(() => nodes.reload().catch(() => {}), auto ? 15000 : 0);
 
   const liveById = useMemo(() => {
@@ -928,7 +942,7 @@ export default function ServersUnified() {
                   <Tooltip title="每 5 秒只刷新监控数据（资源 / 网络 / 连接），不重新拉取列表">
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
                       <Switch size="small" checked={auto} onChange={setAuto} />
-                      自动刷新 1s
+                      实时推送
                     </span>
                   </Tooltip>
                   <Button icon={<ReloadOutlined />} onClick={refreshAll} loading={list.loading}>

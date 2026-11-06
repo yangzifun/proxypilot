@@ -198,6 +198,7 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("PUT /api/servers/{id}/traffic-limit", h.authed(authOpts{superOnly: true}, h.serverTrafficLimitSet))
 	mux.HandleFunc("POST /api/servers/{id}/traffic-limit/reset", h.authed(authOpts{superOnly: true}, h.serverTrafficLimitReset))
 	mux.HandleFunc("POST /api/servers/{id}/traffic-limit/unsuspend", h.authed(authOpts{superOnly: true}, h.serverTrafficUnsuspend))
+	mux.HandleFunc("GET /api/servers/stream", h.sseServersStream)
 	mux.HandleFunc("GET /api/servers", h.authed(authOpts{}, h.serversList))
 	mux.HandleFunc("GET /api/nodes/bindings", h.authed(authOpts{}, h.nodeBindingsList))
 	mux.HandleFunc("GET /api/cdn-preferred", h.authed(authOpts{}, h.cdnPreferredList))
