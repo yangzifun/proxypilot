@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { App as AntdApp, AutoComplete, Button, Input, Modal, Popconfirm, Space, Switch, Table, Tag } from 'antd';
-import { CheckCircleOutlined, CloudDownloadOutlined, DeleteOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
+import { CheckCircleOutlined, CloudDownloadOutlined, DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import { apiDelete, apiGet, apiPost, apiPut } from '../api';
 import { PageCard } from '../components';
 
@@ -15,6 +15,8 @@ export default function CdnPreferred() {
   const [importText, setImportText] = useState('');
   const [importGroup, setImportGroup] = useState('default');
   const [enabled, setEnabled] = useState(false);
+  const [editRow, setEditRow] = useState(null);
+  const [editForm, setEditForm] = useState({ address: '', port: 443, remark: '' });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -69,6 +71,32 @@ export default function CdnPreferred() {
       load();
     } catch (e) {
       message.error(e.message || '删除失败');
+    }
+  };
+
+  const openEdit = (row) => {
+    setEditRow(row);
+    setEditForm({ address: row.address, port: row.port || 443, remark: row.remark || '' });
+  };
+
+  const saveEdit = async () => {
+    if (!editRow) return;
+    const addr = String(editForm.address || '').trim();
+    if (!addr) {
+      message.warning('地址不能为空');
+      return;
+    }
+    const port = Number(editForm.port) || 443;
+    setBusy('edit');
+    try {
+      await apiPut(`/api/cdn-preferred/${editRow.id}`, { address: addr, port, remark: String(editForm.remark || '').trim() });
+      message.success('已保存');
+      setEditRow(null);
+      load();
+    } catch (e) {
+      message.error(e.message || '保存失败');
+    } finally {
+      setBusy('');
     }
   };
 
@@ -163,11 +191,14 @@ export default function CdnPreferred() {
         : <span className="pp-muted">未检测</span>),
     },
     {
-      title: '操作', width: 90,
+      title: '操作', width: 150,
       render: (_, row) => (
-        <Popconfirm title="删除该地址？" onConfirm={() => remove(row)}>
-          <Button size="small" type="link" danger icon={<DeleteOutlined />}>删除</Button>
-        </Popconfirm>
+        <Space size={0}>
+          <Button size="small" type="link" icon={<EditOutlined />} onClick={() => openEdit(row)}>编辑</Button>
+          <Popconfirm title="删除该地址？" onConfirm={() => remove(row)}>
+            <Button size="small" type="link" danger icon={<DeleteOutlined />}>删除</Button>
+          </Popconfirm>
+        </Space>
       ),
     },
   ];
@@ -193,6 +224,23 @@ export default function CdnPreferred() {
         当前分组：<b>{group}</b>，共 {rows.length} 条，启用 {rows.filter((r) => r.enabled).length} 条。
       </div>
       <Table className="pp-table" rowKey="id" size="medium" loading={loading} dataSource={rows} columns={columns} pagination={false} />
+
+      <Modal
+        title="编辑优选地址"
+        open={!!editRow}
+        onCancel={() => setEditRow(null)}
+        onOk={saveEdit}
+        confirmLoading={busy === 'edit'}
+        okText="保存"
+        destroyOnHidden
+      >
+        <div className="pp-muted" style={{ fontSize: 12, marginBottom: 8 }}>修改后立即生效，已刷新订阅的客户端下次更新即可看到。</div>
+        <div style={{ display: 'grid', gap: 10 }}>
+          <Input addonBefore="地址" value={editForm.address} onChange={(e) => setEditForm((f) => ({ ...f, address: e.target.value }))} placeholder="162.159.198.1 或 yg1.ygkkk.dpdns.org" />
+          <Input addonBefore="端口" type="number" value={editForm.port} onChange={(e) => setEditForm((f) => ({ ...f, port: e.target.value }))} />
+          <Input addonBefore="备注" value={editForm.remark} onChange={(e) => setEditForm((f) => ({ ...f, remark: e.target.value }))} placeholder="甬哥优选 | 备注" />
+        </div>
+      </Modal>
 
       <Modal title="批量导入优选地址" open={importOpen} onCancel={() => setImportOpen(false)} onOk={doImport} confirmLoading={busy === 'import'} width={640} destroyOnHidden>
         <div className="pp-muted" style={{ fontSize: 12, marginBottom: 8 }}>
