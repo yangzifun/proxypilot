@@ -47,6 +47,7 @@ export default function UserTraffic() {
   const { message, modal } = AntdApp.useApp();
   const [range, setRange] = useState('7d');
   const [trendDays, setTrendDays] = useState(14);
+  const [trendUuid, setTrendUuid] = useState('');
   const [nodeWindow, setNodeWindow] = useState('week');
   const [rateMinutes, setRateMinutes] = useState(60);
   const [q, setQ] = useState('');
@@ -76,7 +77,7 @@ export default function UserTraffic() {
   }, [range]);
 
   const users = useAsync(() => api(`stats/traffic/users?range=${range}`), [range]);
-  const series = useAsync(() => api(`stats/traffic/series?days=${trendDays}`), [trendDays]);
+  const series = useAsync(() => api(`stats/traffic/series?days=${trendDays}${trendUuid ? '&uuid=' + encodeURIComponent(trendUuid) : ''}`), [trendDays, trendUuid]);
   const rate = useAsync(() => api(`stats/traffic/rate?minutes=${rateMinutes}`), [rateMinutes]);
   const growth = useAsync(() => api('stats/users/growth?days=30'), []);
   const protocols = useAsync(() => api('stats/protocols'), []);
@@ -94,7 +95,7 @@ export default function UserTraffic() {
       protocols.reload().catch(() => {});
     }, 30000);
     return () => clearInterval(id);
-  }, [range, trendDays]);
+  }, [range, trendDays, trendUuid]);
 
   useEffect(() => {
     const t = setInterval(() => users.reload().catch(() => {}), 60000);
@@ -294,7 +295,7 @@ export default function UserTraffic() {
   };
 
   return (
-    <div>
+    <div className="pp-traffic-tight">
       <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
         <Col xs={12} md={6}>
           <StatCard
@@ -446,8 +447,21 @@ export default function UserTraffic() {
       <PageCard
         title={<span className="pp-section-title">流量趋势</span>}
         extra={
-          <Space size={8}>
-            <span className="pp-muted" style={{ fontSize: 12 }}>全体用户 · 每日汇总</span>
+          <Space size={8} wrap>
+            <Select
+              size="small"
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              placeholder="全体用户"
+              style={{ width: 200 }}
+              value={trendUuid || undefined}
+              onChange={(v) => setTrendUuid(v || '')}
+              options={((users.data && users.data.data) || []).map((u) => ({
+                value: u.uuid,
+                label: u.owner || u.remark || u.email || String(u.uuid).slice(0, 8),
+              }))}
+            />
             <Segmented
               size="small"
               value={trendDays}
