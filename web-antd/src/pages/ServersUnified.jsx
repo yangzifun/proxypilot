@@ -4,7 +4,7 @@
  *  · 批量动作只在页面工具条（选中后出现）
  *  · 单台动作全部收进「服务器详情」抽屉（ServerDrawer）
  * ================================================================= */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CheckCircleOutlined,
   CloudDownloadOutlined,
@@ -589,6 +589,18 @@ export default function ServersUnified() {
 
   /* ---------------- 表格列（与卡片字段一一对应） ---------------- */
 
+  const histRef = useRef({ rx: [], tx: [], sum: [] });
+  const [, setHistTick] = useState(0);
+  useEffect(() => {
+    const rx = Number(summary.rx_rate) || 0;
+    const tx = Number(summary.tx_rate) || 0;
+    const h = histRef.current;
+    h.rx = [...h.rx.slice(-23), rx];
+    h.tx = [...h.tx.slice(-23), tx];
+    h.sum = [...h.sum.slice(-23), rx + tx];
+    setHistTick((n) => n + 1);
+  }, [summary.rx_rate, summary.tx_rate]);
+
   const columns = [
     {
       title: '流量剩余',
@@ -778,11 +790,12 @@ export default function ServersUnified() {
               <div className="pp-ov-tiles">
                 {[
                   { label: '服务器总数', value: fmtNum(rows.length) },
-                  { label: '在线', value: fmtNum(counts.online), hint: rows.length ? `在线率 ${((counts.online / rows.length) * 100).toFixed(0)}%` : '—' },
-                  { label: '离线', value: fmtNum(counts.offline) },
-                  { label: '未接入', value: fmtNum(counts.unknown), hint: 'Agent 未上报心跳' },
-                  { label: '实时下行', value: fmtBytes(summary.rx_rate || 0), unit: '/s' },
-                  { label: '实时上行', value: fmtBytes(summary.tx_rate || 0), unit: '/s' },
+                  { label: '在线', value: fmtNum(counts.online), hint: rows.length ? `在线率 ${((counts.online / rows.length) * 100).toFixed(0)}%` : '—', chart: 'online' },
+                  { label: '离线', value: fmtNum(counts.offline), chart: 'offline' },
+                  { label: '未接入', value: fmtNum(counts.unknown), hint: 'Agent 未上报心跳', chart: 'unknown' },
+                  { label: '实时下行', value: fmtBytes(summary.rx_rate || 0), unit: '/s', chart: 'rx' },
+                  { label: '实时上行', value: fmtBytes(summary.tx_rate || 0), unit: '/s', chart: 'tx' },
+                  { label: '集群总流量', value: fmtBytes((summary.rx_rate || 0) + (summary.tx_rate || 0)), unit: '/s', hint: `下行 + 上行 · ${rows.length} 台服务器`, chart: 'sum' },
                 ].map((it) => (
                   <div key={it.label} className="pp-ov-tile">
                     <div className="pp-ov-label">{it.label}</div>
@@ -790,17 +803,16 @@ export default function ServersUnified() {
                       {it.value}
                       {it.unit ? <span className="pp-ov-unit">{it.unit}</span> : null}
                     </div>
+                    {renderOvChart(it.chart, {
+                      online: counts.online,
+                      offline: counts.offline,
+                      unknown: counts.unknown,
+                      total: rows.length,
+                      hist: histRef.current,
+                    })}
                     {it.hint ? <div className="pp-ov-hint">{it.hint}</div> : null}
                   </div>
                 ))}
-                <div className="pp-ov-tile pp-ov-tile-wide">
-                  <div className="pp-ov-label">集群总流量</div>
-                  <div className="pp-ov-value">
-                    {fmtBytes((summary.rx_rate || 0) + (summary.tx_rate || 0))}
-                    <span className="pp-ov-unit">/s</span>
-                  </div>
-                  <div className="pp-ov-hint">下行 + 上行 · {rows.length} 台服务器</div>
-                </div>
               </div>
   
               <div className="pp-ov-foot">
@@ -1132,4 +1144,57 @@ export default function ServersUnified() {
       </Modal>
     </div>
   );
+}
+
+function OvRing({ pct = 0, color = '#22c55e', size = 36 }) {
+  const r = (size - 6) / 2;
+  const c = 2 * Math.PI * r;
+  const v = Math.max(0, Math.min(100, pct));
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ display: 'block' }}>
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#eef2f7" strokeWidth="3" />
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={r}
+        fill="none"
+        stroke={color}
+        strokeWidth="3"
+        strokeDasharray={c}
+        strokeDashoffset={c - (v / 100) * c}
+        strokeLinecap="round"
+        transform={`rotate(-90 ${size / 2} ${size / 2})`}
+      />
+    </svg>
+  );
+}
+
+function OvSpark({ data = [], color = '#38bdf8', height = 26 }) {
+  const arr = (data || []).slice(-24);
+  if (arr.length < 2) return <div style={{ height }} />;
+  const max = Math.max(...arr, 1);
+  const w = 100;
+  const h = height;
+  const pts = arr.map((v, i) => [(i / (arr.length - 1)) * w, h - (v / max) * (h - 4) - 2]);
+  const line = pts.map((p) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
+  const area = `0,${h} ${line} ${w},${h}`;
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ width: '100%', height, display: 'block' }}>
+      <polygon points={area} fill={color} opacity="0.12" />
+      <polyline points={line} fill="none" stroke={color} strokeWidth="1.4" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function renderOvChart(kind, ctx) {
+  if (!kind) return null;
+  const total = ctx.total || 0;
+  const pct = (n) => (total ? (n / total) * 100 : 0);
+  if (kind === 'online') return <div className="pp-ov-chart"><OvRing pct={pct(ctx.online)} color="#22c55e" /></div>;
+  if (kind === 'offline') return <div className="pp-ov-chart"><OvRing pct={pct(ctx.offline)} color="#f43f5e" /></div>;
+  if (kind === 'unknown') return <div className="pp-ov-chart"><OvRing pct={pct(ctx.unknown)} color="#cbd5e1" /></div>;
+  if (kind === 'rx') return <div className="pp-ov-chart"><OvSpark data={ctx.hist.rx} color="#38bdf8" /></div>;
+  if (kind === 'tx') return <div className="pp-ov-chart"><OvSpark data={ctx.hist.tx} color="#a78bfa" /></div>;
+  if (kind === 'sum') return <div className="pp-ov-chart"><OvSpark data={ctx.hist.sum} color="#22c55e" /></div>;
+  return null;
 }
