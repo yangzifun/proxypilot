@@ -334,6 +334,7 @@ export default function UserTraffic() {
         </Col>
       </Row>
 
+      <div className="pp-chart-row">
       <PageCard
         title={<span className="pp-section-title">协议分布</span>}
         extra={<span className="pp-muted" style={{ fontSize: 12 }}>按 UUID 数量</span>}
@@ -439,6 +440,8 @@ export default function UserTraffic() {
           );
         })()}
       </PageCard>
+
+      </div>
 
       <PageCard
         title={<span className="pp-section-title">流量趋势</span>}
