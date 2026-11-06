@@ -3410,3 +3410,53 @@ body {
 
 .pp-ov-chart { margin-top: 6px; width: 100%; }
 .pp-ov-tile .pp-ov-chart svg { max-width: 120px; }
+
+/* ---- 宽屏(>=1400px)：概览单排，图表自适应 ---- */
+.pp-overview-grid { max-width: none !important; margin: 0 !important; width: 100% !important; }
+@media (min-width: 1400px) {
+  .pp-overview-grid {
+    display: flex !important;
+    align-items: stretch !important;
+    gap: 0 !important;
+    padding: 18px 20px !important;
+  }
+  .pp-overview-grid .pp-ov-top,
+  .pp-overview-grid .pp-ov-tiles,
+  .pp-overview-grid .pp-ov-bottom { display: contents !important; }
+  .pp-overview-grid .pp-ov-foot { display: none !important; }
+  .pp-overview-grid .pp-ov-tile {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    height: auto !important;
+    padding: 0 14px !important;
+    background: transparent !important;
+    border: 0 !important;
+    border-left: 1px solid #eef2f7 !important;
+    border-radius: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: flex-start !important;
+    gap: 2px !important;
+  }
+  .pp-overview-grid .pp-ov-tile:first-of-type { border-left: 0 !important; padding-left: 0 !important; }
+  .pp-overview-grid .pp-ov-res {
+    flex: 0 0 250px !important;
+    height: auto !important;
+    background: transparent !important;
+    border: 0 !important;
+    border-left: 1px solid #eef2f7 !important;
+    padding: 0 16px !important;
+  }
+  .pp-overview-grid .pp-ov-map {
+    flex: 1 1 30% !important;
+    min-width: 320px !important;
+    height: auto !important;
+    min-height: 200px !important;
+    border-left: 1px solid #eef2f7 !important;
+    padding-left: 16px !important;
+  }
+  .pp-overview-grid .pp-ov-map-box { height: 100% !important; min-height: 180px !important; }
+  .pp-overview-grid .pp-ov-chart svg { max-width: 150px !important; }
+  .pp-overview-grid .pp-ov-gauge { transform: scale(0.62) !important; transform-origin: top center !important; }
+  .pp-overview-grid .pp-ov-disk { margin-top: -12px !important; }
+}
