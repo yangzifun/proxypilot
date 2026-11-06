@@ -20,8 +20,10 @@ import (
 //      → 本文件差分入库（user_traffic / user_traffic_hourly / node_connections）
 // =====================================================================
 
-// statsActiveWindowMs 「活跃」判定窗口：10 分钟（采集间隔约 36s，容忍空闲与抖动）
-const statsActiveWindowMs int64 = 600_000
+// statsActiveWindowMs 「活跃」判定窗口：5 分钟（采集间隔约 36s，容忍抖动）
+var inboundUUIDRe = regexp.MustCompile(`[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`)
+
+const statsActiveWindowMs int64 = 300_000
 
 var regexpUUID = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
@@ -177,6 +179,7 @@ func (h *handlers) ingestConnections(ctx context.Context, nodeID int64, conns []
 		conns = conns[:2000]
 	}
 	onlineUUIDs := map[string]bool{}
+	realTimeByIP := map[string]bool{}
 	for _, raw := range conns {
 		c := jsonMap(raw)
 		id := strings.TrimSpace(jsonStr(c["id"]))
@@ -187,7 +190,16 @@ func (h *handlers) ingestConnections(ctx context.Context, nodeID int64, conns []
 		if u := jsonStr(meta["user"]); u != "" && regexpUUID.MatchString(u) {
 			onlineUUIDs[u] = true
 		}
+		// 入站 tag 含 UUID（按用户拆分的入站）时同样视为在线
+		if tag := jsonStr(meta["inbound"]); tag != "" {
+			if u := inboundUUIDRe.FindString(tag); u != "" {
+				onlineUUIDs[u] = true
+			}
+		}
 		srcIP := jsonStr(meta["sourceIP"])
+		if srcIP != "" {
+			realTimeByIP[srcIP] = true
+		}
 		if srcIP == "" {
 			srcIP = jsonStr(c["source_ip"])
 		}
@@ -220,6 +232,27 @@ func (h *handlers) ingestConnections(ctx context.Context, nodeID int64, conns []
 			return
 		}
 	}
+	if len(realTimeByIP) > 0 && len(realTimeByIP) <= 200 {
+		ips := make([]any, 0, len(realTimeByIP))
+		for ip := range realTimeByIP {
+			ips = append(ips, ip)
+		}
+		ph := make([]string, len(ips))
+		for i := range ips {
+			ph[i] = "?"
+		}
+		q := "SELECT DISTINCT uuid FROM config_access_logs WHERE client_ip IN (" + strings.Join(ph, ",") + ") AND uuid <> ''"
+		if r2, err2 := h.db.QueryContext(ctx, q, ips...); err2 == nil {
+			for r2.Next() {
+				var u string
+				if r2.Scan(&u) == nil && regexpUUID.MatchString(u) {
+					onlineUUIDs[u] = true
+				}
+			}
+			r2.Close()
+		}
+	}
+
 	for u := range onlineUUIDs {
 		_, _ = h.db.ExecContext(ctx, `INSERT INTO user_traffic (uuid, up_total, down_total, last_active_at, updated_at)
 			VALUES (?, 0, 0, ?, ?)

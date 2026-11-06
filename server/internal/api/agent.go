@@ -197,12 +197,11 @@ func (h *handlers) agentLatestManifest(ctx context.Context, force bool) manifest
 	}
 	base := h.agentBinaryBaseURL()
 	data := manifestData{Base: base, Files: map[string]any{}}
-	if strings.TrimSpace(h.cfg.AgentBinaryBaseURL) == "" {
-		if local, err := h.readLocalManifest(); err == nil {
-			local.Base = base
-			manifestMemo, manifestAt = &local, time.Now()
-			return local
-		}
+	// local-first：本地分发目录存在时优先使用，避免外部基址/CDN 缓存导致版本不一致
+	if local, err := h.readLocalManifest(); err == nil && strings.TrimSpace(local.Version) != "" {
+		local.Base = base
+		manifestMemo, manifestAt = &local, time.Now()
+		return local
 	}
 
 	client := &http.Client{Timeout: 8 * time.Second}
