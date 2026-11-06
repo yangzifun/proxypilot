@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/hmac"
@@ -123,7 +124,11 @@ func decryptAgentToken(secret, enc string) string {
 }
 
 // agentInstallCommand 复刻 Worker：优先对象存储脚本，否则用本站 /api/agent/install.sh。
-func (h *handlers) agentInstallCommand(origin, token string) string {
+func (h *handlers) agentInstallCommand(ctx context.Context, origin, token string) string {
+	// 节点直连地址优先（系统管理 → Agent 访问地址），留空回落到请求来源
+	if v := strings.TrimSpace(h.settingValue(ctx, settingAgentAccessURL)); v != "" {
+		origin = v
+	}
 	base := strings.TrimRight(strings.TrimSpace(h.cfg.AgentInstallBase), "/")
 	if base != "" {
 		return fmt.Sprintf("curl -fsSL %s/install.sh | sudo sh -s -- --key %s --url %s", base, token, origin)

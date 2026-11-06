@@ -157,7 +157,7 @@ func (h *handlers) serverCreate(w http.ResponseWriter, r *http.Request) {
 		"success":         true,
 		"data":            row,
 		"agent_token":     token,
-		"install_command": h.agentInstallCommand(origin, token),
+		"install_command": h.agentInstallCommand(r.Context(), origin, token),
 		"message":         "请把 install_command 复制到服务器执行；密钥已加密保存，之后可在后台随时查看",
 		"probe":           nil,
 	})
@@ -366,7 +366,7 @@ func (h *handlers) serverUpdate(w http.ResponseWriter, r *http.Request) {
 	resp := map[string]any{"success": true, "data": row}
 	if newToken != "" {
 		resp["agent_token"] = newToken
-		resp["install_command"] = h.agentInstallCommand(requestOrigin(r), newToken)
+		resp["install_command"] = h.agentInstallCommand(r.Context(), requestOrigin(r), newToken)
 		resp["message"] = "已切换为 Agent 接入；令牌明文仅显示这一次"
 	}
 	writeJSON(w, http.StatusOK, resp)
@@ -438,7 +438,7 @@ func (h *handlers) serverRotateToken(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "轮换失败")
 		return
 	}
-	cmd := h.agentInstallCommand(requestOrigin(r), token)
+	cmd := h.agentInstallCommand(r.Context(), requestOrigin(r), token)
 	if r.URL.Query().Get("disable_ssh") == "1" {
 		cmd += " --disable-ssh"
 	}

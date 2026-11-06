@@ -42,7 +42,7 @@ func (h *handlers) serverAction(w http.ResponseWriter, r *http.Request) {
 		}
 		h.recordNodeLog(r.Context(), 0, id, "agent-key-view", "success", 0, "查看接入密钥", "", "admin")
 		disableSSH := r.URL.Query().Get("disable_ssh") == "1"
-		cmd := h.agentInstallCommand(requestOrigin(r), token)
+		cmd := h.agentInstallCommand(r.Context(), requestOrigin(r), token)
 		if disableSSH {
 			cmd += " --disable-ssh"
 		}
@@ -63,7 +63,7 @@ func (h *handlers) serverAction(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "无法生成安装命令：密钥不可查看，请先重置接入密钥")
 			return
 		}
-		cmd := h.agentInstallCommand(requestOrigin(r), token)
+		cmd := h.agentInstallCommand(r.Context(), requestOrigin(r), token)
 		if r.URL.Query().Get("disable_ssh") == "1" {
 			cmd += " --disable-ssh"
 		}
