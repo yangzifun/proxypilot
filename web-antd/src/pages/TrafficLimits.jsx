@@ -112,6 +112,25 @@ export default function TrafficLimits() {
       },
     },
     {
+      title: '剩余流量', width: 180,
+      render: (_, row) => {
+        const limit = Number(row.limit_bytes) || 0;
+        if (!row.enabled || limit <= 0) return <span className="pp-muted">—</span>;
+        const left = Math.max(0, limit - usedOf(row));
+        const pct = (left * 100) / limit;
+        const color = pct <= 10 ? '#f43f5e' : pct <= 20 ? '#f59e0b' : '#16a34a';
+        return (
+          <div>
+            <div style={{ fontSize: 12, color, fontWeight: 600 }}>
+              {fmtBytes(left)}（{pct.toFixed(1)}%）
+            </div>
+            <Progress percent={Number((100 - pct).toFixed(1))} size="small" showInfo={false}
+              strokeColor={color} status={pct <= 0 ? 'exception' : 'normal'} />
+          </div>
+        );
+      },
+    },
+    {
       title: '计费方向', width: 110, render: (_, row) => (MODE_LABEL[row.mode] || '上行+下行'),
     },
     {

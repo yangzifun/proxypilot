@@ -361,6 +361,12 @@ export default function ServersUnified() {
   const live = useAsync(() => api('servers/status'), []);
   /* 完整监控字段（机型 / 系统 / 运行时长 / 累计网络 / 磁盘 IO / 节点统计） */
   const monitor = useAsync(() => api('servers/monitor'), []);
+  const traffic = useAsync(() => api('servers/traffic-limits'), []);
+  const trafficMap = useMemo(() => {
+    const m = {};
+    for (const x of (traffic.data && traffic.data.data) || []) m[x.server_id] = x;
+    return m;
+  }, [traffic.data]);
   /* 节点连接数（按 server_id 聚合） */
   const nodes = useAsync(() => api('stats/traffic/nodes'), []);
 
@@ -581,6 +587,25 @@ export default function ServersUnified() {
   /* ---------------- 表格列（与卡片字段一一对应） ---------------- */
 
   const columns = [
+    {
+      title: '流量剩余',
+      width: 150,
+      render: (_, row) => {
+        const x = trafficMap[row.id];
+        if (!x || !x.enabled || Number(x.limit_bytes) <= 0) return <span className="pp-muted">未设置</span>;
+        const used = Number(x.mode === 'rx' ? x.rx_bytes : x.mode === 'tx' ? x.tx_bytes : Number(x.rx_bytes) + Number(x.tx_bytes));
+        const limit = Number(x.limit_bytes);
+        const left = Math.max(0, limit - used);
+        const pct = (left * 100) / limit;
+        const color = pct <= 10 ? '#f43f5e' : pct <= 20 ? '#f59e0b' : '#16a34a';
+        return (
+          <div>
+            <div style={{ fontSize: 12, color, fontWeight: 600 }}>{fmtBytes(left)}（{pct.toFixed(1)}%）</div>
+            <div className="pp-muted" style={{ fontSize: 11 }}>已用 {fmtBytes(used)} / {fmtBytes(limit)}</div>
+          </div>
+        );
+      },
+    },
     {
       title: '名称',
       dataIndex: 'name',
