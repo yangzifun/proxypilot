@@ -815,13 +815,27 @@ export default function UserTraffic() {
               const nodes = detail.data.nodes || [];
               if (!nodes.length) return null;
               const recent = new Set((detail.data.recent_nodes || []).map((x) => x.node_id));
-              const rowH = 46;
-              const h = Math.max(180, 70 + nodes.length * rowH);
+              const flagOf = (name) => {
+                const n = String(name || '');
+                const map = [
+                  ['香港', '🇭🇰'], ['台湾', '🇹🇼'], ['台北', '🇹🇼'], ['彰化', '🇹🇼'],
+                  ['东京', '🇯🇵'], ['日本', '🇯🇵'], ['新加坡', '🇸🇬'], ['狮城', '🇸🇬'],
+                  ['洛杉矶', '🇺🇸'], ['美国', '🇺🇸'], ['德国', '🇩🇪'], ['法兰克福', '🇩🇪'],
+                  ['马来西亚', '🇲🇾'], ['吉隆坡', '🇲🇾'], ['雅加达', '🇮🇩'], ['印尼', '🇮🇩'],
+                  ['曼谷', '🇹🇭'], ['泰国', '🇹🇭'], ['韩国', '🇰🇷'], ['首尔', '🇰🇷'],
+                  ['英国', '🇬🇧'], ['伦敦', '🇬🇧'], ['法国', '🇫🇷'], ['荷兰', '🇳🇱'],
+                ];
+                for (const [k, v] of map) if (n.includes(k)) return v;
+                return '🌐';
+              };
+              const rowH = 44;
+              const h = Math.max(180, 60 + nodes.length * rowH);
               const midY = h / 2;
               const label = detail.data.owner || detail.data.email || String(detail.data.uuid).slice(0, 8);
+              const short = String(label).slice(0, 6);
               return (
-                <div style={{ marginTop: 16 }}>
-                  <div className="pp-muted" style={{ fontSize: 12, marginBottom: 6 }}>
+                <div style={{ marginTop: 8, marginBottom: 0 }}>
+                  <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>
                     用户流向（绿=近 3 分钟活跃，动态光点表示实时流量）
                   </div>
                   <svg className="pp-flow-svg" viewBox={'0 0 720 ' + h} style={{ width: '100%', height: h }}>
@@ -831,13 +845,12 @@ export default function UserTraffic() {
                         <stop offset="100%" stopColor="#22d3ee" stopOpacity="0.9" />
                       </linearGradient>
                     </defs>
-                    <circle cx="80" cy={midY} r="26" fill="#ecfdf5" stroke="#10b981" strokeWidth="2" />
-                    <text x="80" y={midY + 4} textAnchor="middle" fontSize="12" fill="#065f46">用户</text>
-                    <text x="80" y={midY + 48} textAnchor="middle" fontSize="11" fill="#6b7280">{String(label).slice(0, 16)}</text>
+                    <circle cx="80" cy={midY} r="34" fill="#ecfdf5" stroke="#10b981" strokeWidth="2" />
+                    <text x="80" y={midY + 5} textAnchor="middle" fontSize="13" fontWeight="600" fill="#065f46">{short}</text>
                     {nodes.slice(0, 12).map((n, i) => {
-                      const y = 40 + i * rowH;
+                      const y = 34 + i * rowH;
                       const on = recent.has(n.node_id);
-                      const d = 'M110 ' + midY + ' C 320 ' + midY + ', 380 ' + y + ', 560 ' + y;
+                      const d = 'M114 ' + midY + ' C 320 ' + midY + ', 380 ' + y + ', 560 ' + y;
                       return (
                         <g key={n.node_id}>
                           <path d={d} fill="none" stroke={on ? 'url(#ppFlowGrad)' : '#e2e8f0'} strokeWidth={on ? 2.5 : 1.5} strokeDasharray={on ? '6 8' : '4 8'} className={on ? 'pp-flow-dash' : ''} />
@@ -848,7 +861,7 @@ export default function UserTraffic() {
                           ) : null}
                           <circle cx="572" cy={y} r="9" fill={on ? '#10b981' : '#cbd5e1'} />
                           <text x="590" y={y + 4} fontSize="12" fill={on ? '#065f46' : '#64748b'}>
-                            {(n.node_name || '#' + n.node_id).slice(0, 18)} · {fmtBytes(n.total)}
+                            {flagOf(n.node_name)} {String(n.node_name || '#' + n.node_id).slice(0, 16)} · {fmtBytes(n.total)}
                           </text>
                         </g>
                       );
