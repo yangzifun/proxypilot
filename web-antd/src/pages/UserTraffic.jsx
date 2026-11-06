@@ -88,7 +88,7 @@ export default function UserTraffic() {
   useEffect(() => {
     const id = setInterval(() => {
       users.reload().catch(() => {});
-      nodes.reload().catch(() => {});
+      loadNodeTraffic();
       series.reload().catch(() => {});
       growth.reload().catch(() => {});
       protocols.reload().catch(() => {});
@@ -557,7 +557,7 @@ export default function UserTraffic() {
         style={{ marginBottom: 16 }}
       >
         {(() => {
-          const raw = (nodes.data && nodes.data.data) || {};
+          const raw = nodeTraffic || {};
           const list = [...(raw.singbox || []), ...(raw.mihomo || [])]
             .map((n) => ({ name: n.name || n.server_name || ('#' + n.id), value: Number(n[nodeWindow] || 0) }))
             .filter((n) => n.value > 0)
