@@ -352,6 +352,11 @@ export default function ServersUnified() {
   const [pageTheme, setPageTheme] = useState(() => localStorage.getItem('pp.servers.theme') || 'light');
   const changeTheme = (v) => { setPageTheme(v); localStorage.setItem('pp.servers.theme', v); };
   const [sseStatus, setSseStatus] = useState({});
+  const [, forceTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => forceTick((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
   const [selected, setSelected] = useState([]);
   const [detailId, setDetailId] = useState(null);
   const [compose, setCompose] = useState(false);
