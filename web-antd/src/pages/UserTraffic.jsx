@@ -444,6 +444,7 @@ export default function UserTraffic() {
 
       </div>
 
+      <div className="pp-pair-row">
       <PageCard
         title={<span className="pp-section-title">流量趋势</span>}
         extra={
@@ -521,6 +522,9 @@ export default function UserTraffic() {
         )}
       </PageCard>
 
+      </div>
+
+      <div className="pp-pair-row">
       <PageCard
         title={<span className="pp-section-title">Top 10 用户（当前区间）</span>}
         extra={<span className="pp-muted" style={{ fontSize: 12 }}>按上下行合计排序</span>}
@@ -597,6 +601,8 @@ export default function UserTraffic() {
           );
         })()}
       </PageCard>
+
+      </div>
 
       <PageCard
         title={<span className="pp-section-title">用户流量与在线状态</span>}
