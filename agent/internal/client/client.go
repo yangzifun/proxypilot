@@ -116,6 +116,7 @@ type ConnInfo struct {
 	Host       string `json:"host"`
 	Network    string `json:"network"`
 	Inbound    string `json:"inbound"`
+	User       string `json:"user"`
 	Upload     int64  `json:"upload"`
 	Download   int64  `json:"download"`
 	StartedAt  int64  `json:"started_at"`

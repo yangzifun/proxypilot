@@ -30,6 +30,7 @@ type clashResponse struct {
 			SourceIP   string `json:"sourceIP"`
 			SourcePort string `json:"sourcePort"`
 			Host       string `json:"host"`
+			User       string `json:"user"`
 		} `json:"metadata"`
 		Upload   int64  `json:"upload"`
 		Download int64  `json:"download"`
@@ -76,6 +77,7 @@ func clashSnapshot(ctx context.Context, addr, secret string) (clashTotals, []cli
 			Host:       c.Metadata.Host,
 			Network:    c.Metadata.Network,
 			Inbound:    c.Metadata.Type,
+			User:       c.Metadata.User,
 			Upload:     c.Upload,
 			Download:   c.Download,
 			StartedAt:  startedAt,

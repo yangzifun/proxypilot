@@ -37,7 +37,7 @@ const SORTS = [
   { value: 'active', label: '最近活跃' },
 ];
 
-const ONLINE_WINDOW_MS = 3 * 60 * 1000;
+const ONLINE_WINDOW_MS = 10 * 60 * 1000;
 
 /**
  * 业务 · 用户流量：以「用户」为主视角，展示在线状态与各时间口径的用量。
@@ -409,7 +409,7 @@ export default function UserTraffic() {
 
       <PageCard
         title={<span className="pp-section-title">用户在线分布</span>}
-        extra={<span className="pp-muted" style={{ fontSize: 12 }}>近 3 分钟有流量视为在线</span>}
+        extra={<span className="pp-muted" style={{ fontSize: 12 }}>近 10 分钟有流量视为在线</span>}
         style={{ marginBottom: 16 }}
       >
         {(() => {

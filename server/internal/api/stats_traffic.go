@@ -20,8 +20,8 @@ import (
 //      → 本文件差分入库（user_traffic / user_traffic_hourly / node_connections）
 // =====================================================================
 
-// statsActiveWindowMs 「活跃」判定窗口：3 个默认采样周期（60s × 3）
-const statsActiveWindowMs int64 = 180_000
+// statsActiveWindowMs 「活跃」判定窗口：10 分钟（采集间隔约 36s，容忍空闲与抖动）
+const statsActiveWindowMs int64 = 600_000
 
 var regexpUUID = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
@@ -176,6 +176,7 @@ func (h *handlers) ingestConnections(ctx context.Context, nodeID int64, conns []
 	if len(conns) > 2000 {
 		conns = conns[:2000]
 	}
+	onlineUUIDs := map[string]bool{}
 	for _, raw := range conns {
 		c := jsonMap(raw)
 		id := strings.TrimSpace(jsonStr(c["id"]))
@@ -183,6 +184,9 @@ func (h *handlers) ingestConnections(ctx context.Context, nodeID int64, conns []
 			continue
 		}
 		meta := jsonMap(c["metadata"])
+		if u := jsonStr(meta["user"]); u != "" && regexpUUID.MatchString(u) {
+			onlineUUIDs[u] = true
+		}
 		srcIP := jsonStr(meta["sourceIP"])
 		if srcIP == "" {
 			srcIP = jsonStr(c["source_ip"])
@@ -215,6 +219,12 @@ func (h *handlers) ingestConnections(ctx context.Context, nodeID int64, conns []
 			h.log.Warn("写入连接快照失败", "err", err)
 			return
 		}
+	}
+	for u := range onlineUUIDs {
+		_, _ = h.db.ExecContext(ctx, `INSERT INTO user_traffic (uuid, up_total, down_total, last_active_at, updated_at)
+			VALUES (?, 0, 0, ?, ?)
+			ON DUPLICATE KEY UPDATE last_active_at = GREATEST(last_active_at, VALUES(last_active_at)), updated_at = VALUES(updated_at)`,
+			u, now, now)
 	}
 }
 
