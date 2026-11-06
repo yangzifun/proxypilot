@@ -347,6 +347,7 @@ export default function ServersUnified() {
   const [mapOpen, setMapOpen] = useState(false);
   const [status, setStatus] = useState('');
   const [auto, setAuto] = useState(true);
+  const [sseStatus, setSseStatus] = useState({});
   const [selected, setSelected] = useState([]);
   const [detailId, setDetailId] = useState(null);
   const [compose, setCompose] = useState(false);
@@ -389,7 +390,16 @@ export default function ServersUnified() {
     let es;
     try {
       es = new EventSource(`/api/servers/stream?token=${encodeURIComponent(token)}`);
-      es.onmessage = () => { refreshLive(); };
+      es.onmessage = (ev) => {
+        try {
+          const arr = JSON.parse(ev.data);
+          if (Array.isArray(arr)) {
+            const m = {};
+            for (const it of arr) m[it.id] = it;
+            setSseStatus(m);
+          }
+        } catch (e) { /* ignore */ }
+      };
       es.onerror = () => {};
     } catch (e) {
       es = null;
@@ -403,8 +413,9 @@ export default function ServersUnified() {
   const liveById = useMemo(() => {
     const map = new Map();
     ((live.data && live.data.data) || []).forEach((x) => map.set(Number(x.id), x));
+    for (const [id, v] of Object.entries(sseStatus || {})) map.set(Number(id), v);
     return map;
-  }, [live.data]);
+  }, [live.data, sseStatus]);
 
   const monitorById = useMemo(() => {
     const map = new Map();
