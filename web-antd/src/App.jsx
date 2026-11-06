@@ -35,6 +35,7 @@ const PAGES = {
   tplhub: TemplateHub,
   mtproto: MtprotoPage,
   masque: MasquePage,
+  cdnpref: CdnPreferred,
   singbox: Nodes,
   status: ServersUnified,
   logs: Logs,

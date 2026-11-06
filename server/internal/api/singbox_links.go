@@ -3,6 +3,8 @@ package api
 import (
 	"crypto/ecdh"
 	"encoding/base64"
+	"math/rand"
+	"net"
 	"net/url"
 	"strconv"
 	"strings"
@@ -109,15 +111,56 @@ func singboxClientLinks(tpl *singboxTemplate, node singboxNode, users []sbUser) 
 				enc(wsPath) + "&host=" + enc(domain) + "#" + enc(tag("vlws"))
 			add("vless-ws", ports["vlws"], u.Name, link, "直连源站 "+strconv.Itoa(ports["vlws"])+"；依赖 80/443 签证书")
 			if cdnDomain != "" {
-				cdnLink := "vless://" + u.UUID + "@" + cdnDomain + ":443/?security=tls&encryption=none&sni=" +
-					enc(cdnDomain) + "&fp=chrome&type=ws&path=" + enc(wsPath) + "&host=" + enc(cdnDomain) +
-					"#" + enc(tag("vlws")+"-cdn")
-				item := map[string]any{
-					"id": len(out) + 1, "protocol": "vless-ws", "port": 443, "user": u.Name,
-					"link": cdnLink, "note": "CDN/Tunnel 加速：客户端连 " + cdnDomain + ":443，隧道回源 http://127.0.0.1:" + strconv.Itoa(cdnPortOf(tpl, ports)) + "（vless-ws-cdn，明文 WS）",
-					"cdn": true,
+				// CDN 优选：按模板配置展开为多个地址；未配置时回退 cdn_domain
+				vlwsOpt := optMap(tpl.protoOptions(), "vlws")
+				prefer := optMap(vlwsOpt, "cdn_prefer")
+				preferOn := cdnPreferEnabled() || jsonInt(prefer["enabled"]) != 0
+				preferGroup := jsonStr(prefer["group"])
+				preferMode := jsonStr(prefer["mode"])
+				preferLimit := int(jsonInt(prefer["limit"]))
+				addrs := []cdnPrefer{}
+				if preferOn {
+					list := cdnPreferredForGroup(preferGroup)
+					if preferMode == "random" {
+						rand.Shuffle(len(list), func(i, j int) { list[i], list[j] = list[j], list[i] })
+						n := preferLimit
+						if n <= 0 {
+							n = 1
+						}
+						if n > len(list) {
+							n = len(list)
+						}
+						addrs = list[:n]
+					} else {
+						if preferLimit > 0 && len(list) > preferLimit {
+							list = list[:preferLimit]
+						}
+						addrs = list
+					}
 				}
-				out = append(out, item)
+				buildCdnLink := func(addr string, suffix string) map[string]any {
+					host := net.JoinHostPort(addr, "443")
+					link := "vless://" + u.UUID + "@" + host + "/?security=tls&encryption=none&sni=" +
+						enc(cdnDomain) + "&fp=chrome&type=ws&path=" + enc(wsPath) + "&host=" + enc(cdnDomain) +
+						"#" + enc(tag("vlws")+"-cdn"+suffix)
+					return map[string]any{
+						"id": 0, "protocol": "vless-ws", "port": 443, "user": u.Name, "link": link, "cdn": true,
+						"note": "CDN 优选：" + host + ":443（SNI/Host 保持 " + cdnDomain + "）",
+					}
+				}
+				if len(addrs) == 0 {
+					item := buildCdnLink(cdnDomain, "")
+					item["id"] = len(out) + 1
+					out = append(out, item)
+				} else {
+					for i, a := range addrs {
+						item := buildCdnLink(a.Address, "-"+strconv.Itoa(i+1))
+						item["id"] = len(out) + 1
+						item["cdn_preferred"] = true
+						item["remark"] = a.Remark
+						out = append(out, item)
+					}
+				}
 			}
 		}
 		if engineSb && tpl.EnableVMess != 0 && domain != "" {

@@ -98,6 +98,13 @@ export const PAGE_META = {
     group: '运维',
     accent: '#22c55e',
   },
+  cdnpref: {
+    title: 'CDN 优选',
+    subtitle: 'CDN 节点优选地址池与订阅替换',
+    icon: <CloudDownloadOutlined />,
+    group: '节点运维',
+    accent: '#0ea5e9',
+  },
   logs: {
     title: '日志管理',
     subtitle: '下发记录、访问日志与清理维护',
@@ -141,7 +148,7 @@ export const NAV_ORDER = ['dash', 'uuids', 'tpls', 'userst', 'servers', 'normal'
 export const NAV_GROUPS = [
   { group: '业务', keys: ['dash', 'uuids', 'tpls', 'userst'] },
   { group: '服务器运维', keys: ['servers'] },
-  { group: '节点运维', keys: ['bindings', 'tplhub', 'masque'] },
+  { group: '节点运维', keys: ['bindings', 'tplhub', 'cdnpref', 'masque'] },
   { group: '系统', keys: ['logs', 'attachments', 'sys', 'backup', 'sec'] },
 ];
 
