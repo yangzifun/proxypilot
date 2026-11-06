@@ -86,7 +86,7 @@ export default function NotifySettings({ open, onClose }) {
           type="warning"
           showIcon
           style={{ borderRadius: 10, margin: '8px 0 14px' }}
-          message="Worker 还没有配置邮件服务"
+          message="还没有配置邮件服务"
           description="需要配置 EMAIL（邮件发送 binding）与 SENDER_EMAIL（发件人）后才能发送通知。"
         />
       ) : null}

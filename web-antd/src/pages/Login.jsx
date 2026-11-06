@@ -219,7 +219,7 @@ export default function Login() {
             <Tag color="geekblue" style={{ background: 'rgba(99,102,241,.14)', border: 'none', color: '#a5b4fc' }}>
               {boot.version || 'V15.0'} · Ant Design
             </Tag>
-            <span style={{ marginLeft: 8 }}>worker.js 提供全部后端能力</span>
+            <span style={{ marginLeft: 8 }}>后端由 Go 服务端与节点 Agent 提供</span>
           </div>
         </div>
 
@@ -242,7 +242,7 @@ export default function Login() {
               showIcon
               style={{ marginBottom: 16, borderRadius: 10 }}
               message="服务端开启了人机验证，但前端没有拿到站点密钥"
-              description="Worker 环境变量里 TURNSTILE_SECRET_KEY 与 TURNSTILE_SITE_KEY 必须成对配置。只配了 secret 时，服务端会对所有登录请求返回「请完成人机验证」。"
+              description="Turnstile 的 Site Key 与 Secret 必须成对配置；只配置 Secret 时，服务端会对所有登录请求返回「请完成人机验证」。"
             />
           ) : null}
 
@@ -468,7 +468,7 @@ export default function Login() {
 
           {!EMAIL_ENABLED && !OIDC.enabled ? (
             <div style={{ marginTop: 18, fontSize: 12, color: '#b6c2d1', lineHeight: 1.7 }}>
-              提示：邮箱验证码登录需要 Worker 配置 <code>EMAIL</code> 与 <code>SENDER_EMAIL</code>；
+              提示：邮箱验证码登录需要先在系统设置中配置邮件服务；
               单点登录需要 <code>OIDC_ISSUER</code> / <code>OIDC_CLIENT_ID</code>。
             </div>
           ) : null}

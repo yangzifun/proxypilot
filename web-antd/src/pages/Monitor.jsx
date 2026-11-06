@@ -68,7 +68,7 @@ const stateText = (s) => {
   return hit ? hit[1] : s || '—';
 };
 
-/** 与 worker.js 的 mapXY 保持同一套等距圆柱投影 */
+/** 与后端保持同一套等距圆柱投影 */
 function mapXY(lat, lon) {
   const left = (Number(lon) + 180) / 360;
   const top = (MAP_LAT_TOP - Number(lat)) / (MAP_LAT_TOP - MAP_LAT_BOTTOM);
@@ -840,7 +840,7 @@ export function WorldMap({ servers, onPick, large = false, onExpand, zoomable = 
   /**
    * 定位优先级：
    *  1) 服务端已解析出的经纬度（ip_lat / ip_lon）
-   *  2) 只有国家码时，退回国家中心点（与 worker.js 的 mapPointOf 同一策略）
+   *  2) 只有国家码时，退回国家中心点（与后端 mapPointOf 同一策略）
    * 同一国家的多台服务器会叠在一个点上，按 id 做一点点稳定偏移，避免互相盖住。
    */
   const pts = servers

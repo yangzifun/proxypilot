@@ -8,7 +8,7 @@ import JobCenter from '../components/JobCenter';
 
 const { Sider, Header, Content } = Layout;
 
-/* 版本号以 Worker 注入的 boot 为准，避免前端硬编码落后于后端 */
+/* 版本号以服务端注入的 boot 为准，避免前端硬编码落后于后端 */
 const boot = (typeof window !== 'undefined' && window.__PP_BOOT__) || {};
 
 export default function AppLayout({ activeKey, onNavigate, children }) {

@@ -1,7 +1,7 @@
 ﻿/* =================================================================
  *  服务器实时终端（WebSocket + Durable Object + Agent PTY）
  *  · 打开即连 wss://<本站>/api/shell/browser/<id>?token=<JWT>
- *  · Worker 把连接转给 Durable Object；Agent 下一次 poll 拿到 session 后主动拨号，
+ *  · 服务端保存会话；Agent 下一次 poll 拿到 session 后主动拨号，
  *    两端在 DO 里配对，输入输出按字节双向转发（真正的交互式 shell）
  *  · 没有 canvas 的环境（jsdom / 极简浏览器）退化成 <pre> 输出，不阻塞连接
  * ================================================================= */

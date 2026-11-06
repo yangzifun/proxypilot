@@ -688,7 +688,7 @@ function KeysTab({ rows, state }) {
 
 /** 生成 X-API-Key 调用示例（纯前端拼，不消耗接口） */
 function apiKeyExample(row) {
-  const base = (typeof window !== 'undefined' && window.location.origin) || 'https://your-worker';
+  const base = (typeof window !== 'undefined' && window.location.origin) || 'https://panel.example.com';
   return [
     '# X-API-Key 调用示例',
     '# 当前密钥：' + (row.key_hint || '***') + '（明文只在创建 / 轮换时显示一次）',

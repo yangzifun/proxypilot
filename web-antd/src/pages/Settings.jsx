@@ -142,7 +142,7 @@ export default function Settings({ embedded = false }) {
         showIcon
         style={{ marginBottom: 16 }}
         message={`当前可用登录方式：${status.length ? status.join(' / ') : '无（保存会被拒绝）'}`}
-        description="以下配置原先是 Worker 环境变量（TURNSTILE / OIDC / SMTP），现在可在后台直接维护；未填写的值回落环境变量。Secret 留空表示保持原值。"
+        description="以下配置可在后台直接维护，未填写的值回落环境变量。Secret 留空表示保持原值。"
       />
 
       <Form form={form} layout="vertical" onFinish={save}>
@@ -177,7 +177,7 @@ export default function Settings({ embedded = false }) {
                   <Alert
                     type="warning"
                     showIcon
-                    message="Turnstile 仍调用 Cloudflare 的 siteverify 接口，但不再依赖 Worker 运行时；留空 Secret 即关闭。"
+                    message="Turnstile 调用 Cloudflare siteverify 接口；留空 Secret 即关闭。"
                   />
                   <Divider orientation="left">
                     <GlobalOutlined /> SSO / OIDC
@@ -384,7 +384,7 @@ export default function Settings({ embedded = false }) {
                     <InputNumber min={1} max={365} style={{ width: 180 }} />
                   </Form.Item>
                   <Typography.Text type="secondary">
-                    <ApiOutlined /> 这些值原为 Worker 环境变量；保存后写入 app_settings，30 秒内全节点生效。
+                    <ApiOutlined /> 保存后写入 app_settings，30 秒内全节点生效。
                   </Typography.Text>
                 </>
               ),

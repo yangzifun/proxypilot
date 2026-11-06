@@ -6,7 +6,7 @@ import { api } from '../api';
 /**
  * 邮箱绑定 / 验证 / 解绑（系统管理与安全中心共用）
  *
- * 后端语义（worker.js handleAdminEmailCode / Verify）：
+ * 后端语义（服务端 handleAdminEmailCode / Verify）：
  *   · 发码与验证都接受 body.email —— 所以不需要先改账号邮箱、也不需要超管权限，
  *     验证通过后会把该邮箱直接写到账号上并置 email_verified=1。
  *   · 解绑只需要 username（本人或超管）。

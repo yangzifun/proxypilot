@@ -403,7 +403,7 @@ function BucketBrowser() {
             loading={state.loading}
             dataSource={state.files}
             pagination={{ pageSize: 20, showTotal: (t) => `共 ${t} 个文件` }}
-            locale={{ emptyText: '该前缀下没有文件（需要 Worker 绑定 R2 bucket）' }}
+            locale={{ emptyText: '该前缀下没有文件（需要配置对象存储）' }}
             columns={[
               {
                 title: '文件',
