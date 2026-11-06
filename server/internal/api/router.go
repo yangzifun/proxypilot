@@ -193,6 +193,11 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("DELETE /api/agent/tasks/{id}", h.authed(authOpts{}, h.agentTaskDelete))
 
 	// 服务器管理
+	mux.HandleFunc("GET /api/servers/traffic-limits", h.authed(authOpts{}, h.serverTrafficLimitsList))
+	mux.HandleFunc("GET /api/servers/{id}/traffic-limit", h.authed(authOpts{}, h.serverTrafficLimitGet))
+	mux.HandleFunc("PUT /api/servers/{id}/traffic-limit", h.authed(authOpts{superOnly: true}, h.serverTrafficLimitSet))
+	mux.HandleFunc("POST /api/servers/{id}/traffic-limit/reset", h.authed(authOpts{superOnly: true}, h.serverTrafficLimitReset))
+	mux.HandleFunc("POST /api/servers/{id}/traffic-limit/unsuspend", h.authed(authOpts{superOnly: true}, h.serverTrafficUnsuspend))
 	mux.HandleFunc("GET /api/servers", h.authed(authOpts{}, h.serversList))
 	mux.HandleFunc("GET /api/nodes/bindings", h.authed(authOpts{}, h.nodeBindingsList))
 	mux.HandleFunc("GET /api/cdn-preferred", h.authed(authOpts{}, h.cdnPreferredList))

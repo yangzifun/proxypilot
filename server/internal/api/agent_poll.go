@@ -420,7 +420,9 @@ func (h *handlers) insertServerMetric(ctx context.Context, serverID int64, m *ag
 		m.ConnTotal, m.ConnEstablished, m.ConnTimeWait, m.ProcTotal)
 	if err != nil {
 		h.log.Warn("写入监控采样失败", "err", err)
+		return
 	}
+	h.accrueServerTraffic(ctx, serverID, m.NetRxBytes, m.NetTxBytes)
 }
 
 // ---------------- 任务队列与 wire ----------------

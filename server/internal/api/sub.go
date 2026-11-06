@@ -157,6 +157,7 @@ func (h *handlers) subscriptionLines(ctx context.Context, uuid string) ([]string
 	}
 
 	lines = expandStoredCDNLinks(lines)
+	lines = h.filterSuspendedLines(ctx, lines, uuid)
 
 	ext, summary := h.externalLinks(ctx, uuid)
 	for _, line := range ext {
