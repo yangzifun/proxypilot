@@ -63,3 +63,37 @@ func TestCDNPreferredExpandsLinks(t *testing.T) {
 		t.Fatal("未启用优选时应回退 cdn.example.com")
 	}
 }
+
+func TestExpandStoredCDNLinks(t *testing.T) {
+	cdnPreferMu.Lock()
+	oldCache, oldOn := cdnPreferCache, cdnPreferGlobalOn
+	cdnPreferCache = []cdnPrefer{
+		{Address: "162.159.198.1", Port: 443, Group: "default", Enabled: 1},
+		{Address: "yg1.ygkkk.dpdns.org", Port: 443, Group: "default", Enabled: 1},
+	}
+	cdnPreferGlobalOn = true
+	cdnPreferMu.Unlock()
+	defer func() {
+		cdnPreferMu.Lock()
+		cdnPreferCache, cdnPreferGlobalOn = oldCache, oldOn
+		cdnPreferMu.Unlock()
+	}()
+
+	in := []string{
+		"vless://11111111-1111-4111-8111-111111111111@cdn.example.com:443/?security=tls&sni=cdn.example.com&host=cdn.example.com&type=ws#%F0%9F%87%BA%F0%9F%87%B8%E6%B4%9B%E6%9D%89%E7%9F%B6-vlws-cdn",
+		"vless://11111111-1111-4111-8111-111111111111@direct.example.com:8443/?security=tls#direct-vlws",
+	}
+	out := expandStoredCDNLinks(in)
+	if len(out) != 3 {
+		t.Fatalf("期望 3 条（2 优选 + 1 直连），实际 %d", len(out))
+	}
+	joined := strings.Join(out, "\\n")
+	for _, want := range []string{"@162.159.198.1:443/?", "yg1.ygkkk.dpdns.org:443/?", "-cdn-1", "-cdn-2", "sni=cdn.example.com"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("缺少 %q:\n%s", want, joined)
+		}
+	}
+	if !strings.Contains(joined, "@direct.example.com:8443") {
+		t.Fatal("直连链接不应被改写")
+	}
+}

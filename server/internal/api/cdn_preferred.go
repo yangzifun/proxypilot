@@ -351,3 +351,43 @@ func (h *handlers) cdnPreferredEnabledSet(w http.ResponseWriter, r *http.Request
 	ReloadCDNPreferred(r.Context(), h.db)
 	writeJSON(w, http.StatusOK, map[string]any{"success": true, "enabled": body.Enabled})
 }
+
+// expandStoredCDNLinks 对历史存量订阅做动态优选替换：
+// configs 表中保存的是单条 CDN 链接（备注以 -cdn 结尾），
+// 订阅输出时按当前优选池展开，无需重建全部用户配置。
+func expandStoredCDNLinks(lines []string) []string {
+	if !cdnPreferEnabled() {
+		return lines
+	}
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		hash := strings.Index(line, "#")
+		if hash < 0 || !strings.HasSuffix(line[hash+1:], "-cdn") {
+			out = append(out, line)
+			continue
+		}
+		at := strings.LastIndex(line[:hash], "@")
+		slash := strings.Index(line[at+1:], "/")
+		if at < 0 || slash < 0 {
+			out = append(out, line)
+			continue
+		}
+		rest := line[at+1:]
+		suffix := rest[slash:] // /?security=...#tag
+		addrs := cdnPreferredForGroup("")
+		if len(addrs) == 0 {
+			out = append(out, line)
+			continue
+		}
+		for idx, a := range addrs {
+			var b strings.Builder
+			b.WriteString(line[:at+1])
+			b.WriteString(net.JoinHostPort(a.Address, "443"))
+			b.WriteString(suffix)
+			b.WriteString("-")
+			b.WriteString(strconv.Itoa(idx + 1))
+			out = append(out, b.String())
+		}
+	}
+	return out
+}

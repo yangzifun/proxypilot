@@ -156,6 +156,8 @@ func (h *handlers) subscriptionLines(ctx context.Context, uuid string) ([]string
 		return nil, extSummary{}, err
 	}
 
+	lines = expandStoredCDNLinks(lines)
+
 	ext, summary := h.externalLinks(ctx, uuid)
 	for _, line := range ext {
 		if seen[line] {
