@@ -8,6 +8,7 @@ package main
 
 import (
 	"context"
+	"strings"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -23,7 +24,7 @@ import (
 )
 
 // version 由构建脚本注入：-ldflags "-X main.version=v1.0.0"
-var version = "V23.60"
+var version = "V23.62"
 
 func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -89,7 +90,7 @@ func run(log *slog.Logger) error {
 	if certFile, keyFile := "/etc/proxypilot/tls/agent.crt", "/etc/proxypilot/tls/agent.key"; fileExists(certFile) && fileExists(keyFile) {
 		tlsSrv := &http.Server{
 			Addr:              ":443",
-			Handler:           securityHeaders(api.New(cfg, pool, log)),
+			Handler:           agentOnlyHandler(securityHeaders(api.New(cfg, pool, log))),
 			ReadHeaderTimeout: 10 * time.Second,
 			ReadTimeout:       60 * time.Second,
 			WriteTimeout:      180 * time.Second,
@@ -139,4 +140,28 @@ const cspPolicy = "default-src 'self'; script-src 'self' https://static.cloudfla
 func fileExists(p string) bool {
 	st, err := os.Stat(p)
 	return err == nil && !st.IsDir()
+}
+
+// agentOnlyHandler 限制直连端口只服务 Agent 相关接口，避免网页暴露在源站 IP。
+func agentOnlyHandler(next http.Handler) http.Handler {
+	allow := func(p string) bool {
+		switch {
+		case p == "/healthz", p == "/api/healthz":
+			return true
+		case strings.HasPrefix(p, "/api/agent/"):
+			return true
+		case strings.HasPrefix(p, "/agent-dist/"):
+			return true
+		case p == "/install.sh", p == "/agent/install.sh":
+			return true
+		}
+		return false
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !allow(r.URL.Path) {
+			http.NotFound(w, r)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
