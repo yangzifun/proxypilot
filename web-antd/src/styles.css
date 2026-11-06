@@ -3407,3 +3407,6 @@ body {
   .pp-ov-bottom { grid-template-columns: minmax(0, 1fr); }
   .pp-ov-top .pp-ov-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* 概览：宽屏铺满 */
+.pp-overview-grid { max-width: none !important; margin: 0 !important; width: 100% !important; }

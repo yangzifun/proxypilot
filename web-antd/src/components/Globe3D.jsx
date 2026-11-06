@@ -198,38 +198,51 @@ export default function Globe3D({ servers = [], onPick, height = 340 }) {
     gctx.fillStyle = grad;
     gctx.fillRect(0, 0, 64, 64);
     const glowTexture = new THREE.CanvasTexture(glowCanvas);
+    const markerCanvas = document.createElement('canvas');
+    markerCanvas.width = 64; markerCanvas.height = 64;
+    const mctx = markerCanvas.getContext('2d');
+    const mgrad = mctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    mgrad.addColorStop(0, 'rgba(255,255,255,1)');
+    mgrad.addColorStop(0.45, 'rgba(255,255,255,0.55)');
+    mgrad.addColorStop(1, 'rgba(255,255,255,0)');
+    mctx.fillStyle = mgrad;
+    mctx.fillRect(0, 0, 64, 64);
+    const markerGlowTex = new THREE.CanvasTexture(markerCanvas);
+    let markerPoints = null;
     const rebuildMarkers = (list) => {
-      for (const m of markers) {
-        markerGroup.remove(m);
-        m.geometry.dispose();
-        m.material.dispose();
+      if (markerPoints) {
+        markerGroup.remove(markerPoints);
+        markerPoints.geometry.dispose();
+        markerPoints.material.dispose();
+        markerPoints = null;
       }
       markers.length = 0;
+      const positions = [];
+      const colors = [];
       for (const s of list || []) {
         const lat = Number(s.ip_lat);
         const lon = Number(s.ip_lon);
-        if (s.ip_lat === null || s.ip_lon === null || !Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
         const phi = ((90 - lat) * Math.PI) / 180;
         const theta = ((lon + 180) * Math.PI) / 180;
-        const r = 1.012;
-        const pos = new THREE.Vector3(
-          -r * Math.sin(phi) * Math.cos(theta),
-          r * Math.cos(phi),
-          r * Math.sin(phi) * Math.sin(theta),
-        );
+        const r = 1.015;
+        positions.push(-r * Math.sin(phi) * Math.cos(theta), r * Math.cos(phi), r * Math.sin(phi) * Math.sin(theta));
         const online = s.last_status === 'online' || s.status === 'online';
-        const color = online ? 0x22c55e : s.last_status === 'unknown' ? 0xcbd5e1 : 0xf43f5e;
-        const mesh = new THREE.Mesh(
-          new THREE.SphereGeometry(0.05, 16, 16),
-          new THREE.MeshBasicMaterial({ color, depthTest: false, transparent: true, opacity: 0.95 }),
-        );
-        mesh.position.copy(pos);
-        mesh.userData = { server: s };
-
-        mesh.renderOrder = 20;
-        markerGroup.add(mesh);
-        markers.push(mesh);
+        const c = new THREE.Color(online ? 0x22c55e : s.last_status === 'unknown' ? 0xcbd5e1 : 0xf43f5e);
+        colors.push(c.r, c.g, c.b);
       }
+      if (positions.length === 0) return;
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+      const mat = new THREE.PointsMaterial({
+        size: 9, sizeAttenuation: false, vertexColors: true, map: markerGlowTex,
+        transparent: true, depthTest: false, depthWrite: false, alphaTest: 0.01,
+      });
+      markerPoints = new THREE.Points(geo, mat);
+      markerPoints.renderOrder = 30;
+      markerGroup.add(markerPoints);
+      markers.push(markerPoints);
     };
     const dotLayer = document.createElement('div');
     dotLayer.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:2';
@@ -327,7 +340,10 @@ export default function Globe3D({ servers = [], onPick, height = 340 }) {
       pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
       raycaster.setFromCamera(pointer, camera);
       const hit = raycaster.intersectObjects(markers, false)[0];
-      if (hit && onPickRef.current) onPickRef.current(hit.object.userData.server);
+      if (hit && hit.index != null && markers[0] && markers[0].userData && Array.isArray(markers[0].userData.list)) {
+        const s = markers[0].userData.list[hit.index];
+        if (s && onPickRef.current) onPickRef.current(s);
+      }
       setTimeout(() => { spin = true; }, 2500);
     };
     const el = renderer.domElement;
