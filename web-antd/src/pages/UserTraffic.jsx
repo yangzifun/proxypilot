@@ -76,6 +76,7 @@ export default function UserTraffic() {
 
   const users = useAsync(() => api(`stats/traffic/users?range=${range}`), [range]);
   const series = useAsync(() => api(`stats/traffic/series?days=${trendDays}`), [trendDays]);
+  const rate = useAsync(() => api('stats/traffic/rate?minutes=60'), []);
 
   useEffect(() => {
     const t = setInterval(() => users.reload().catch(() => {}), 60000);
@@ -343,6 +344,28 @@ export default function UserTraffic() {
             ]}
             height={240}
             formatValue={fmtBytes}
+          />
+        )}
+      </PageCard>
+
+      <PageCard
+        title={<span className="pp-section-title">实时速率（近 60 分钟）</span>}
+        extra={<span className="pp-muted" style={{ fontSize: 12 }}>全站上下行速率 / 每分钟</span>}
+        style={{ marginBottom: 16 }}
+      >
+        {rate.error ? (
+          <ErrorBlock error={rate.error} onRetry={() => rate.reload()} />
+        ) : !rate.data || !(rate.data.data || []).length ? (
+          <Empty description="暂无速率数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        ) : (
+          <AreaChart
+            data={rate.data.data}
+            series={[
+              { key: 'down', name: '下行', color: '#0ea5e9' },
+              { key: 'up', name: '上行', color: '#8b5cf6' },
+            ]}
+            height={200}
+            formatValue={(v) => fmtBytes(v) + '/s'}
           />
         )}
       </PageCard>
