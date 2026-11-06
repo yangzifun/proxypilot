@@ -98,7 +98,7 @@ export default function UserTraffic() {
   }, [range, trendDays, trendUuid]);
 
   useEffect(() => {
-    const t = setInterval(() => users.reload().catch(() => {}), 3000);
+    const t = setInterval(() => users.reload().catch(() => {}), 30000);
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range]);
