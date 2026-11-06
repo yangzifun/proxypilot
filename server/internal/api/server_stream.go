@@ -73,13 +73,13 @@ func (h *handlers) sseServersStream(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprint(w, "retry: 3000\n\n")
+	fmt.Fprint(w, "retry: 1500\n\n")
 	flusher.Flush()
 
 	last := ""
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
-	ping := time.NewTicker(20 * time.Second)
+	ping := time.NewTicker(10 * time.Second)
 	defer ping.Stop()
 
 	for {
