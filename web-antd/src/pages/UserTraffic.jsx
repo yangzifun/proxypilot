@@ -381,6 +381,39 @@ export default function UserTraffic() {
       </PageCard>
 
       <PageCard
+        title={<span className="pp-section-title">节点流量 Top 8（近 7 天）</span>}
+        extra={<span className="pp-muted" style={{ fontSize: 12 }}>sing-box + mihomo 汇总</span>}
+        style={{ marginBottom: 16 }}
+      >
+        {(() => {
+          const raw = (nodes.data && nodes.data.data) || {};
+          const list = [...(raw.singbox || []), ...(raw.mihomo || [])]
+            .map((n) => ({ name: n.name || n.server_name || ('#' + n.id), value: Number(n.week || n.total || 0) }))
+            .filter((n) => n.value > 0)
+            .sort((a, b) => b.value - a.value)
+            .slice(0, 8);
+          if (!list.length) {
+            return <Empty description="暂无节点流量数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />;
+          }
+          const max = list[0].value || 1;
+          return (
+            <div style={{ display: 'grid', gap: 10 }}>
+              {list.map((n, i) => (
+                <div key={n.name + i} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span className="pp-muted" style={{ width: 22, textAlign: 'right', fontSize: 12 }}>{i + 1}</span>
+                  <span style={{ width: 210, fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.name}</span>
+                  <div style={{ flex: 1, height: 8, background: '#eef2f7', borderRadius: 4, overflow: 'hidden' }}>
+                    <div style={{ width: (n.value / max) * 100 + '%', height: '100%', borderRadius: 4, background: 'linear-gradient(90deg,#10b981,#22d3ee)' }} />
+                  </div>
+                  <span className="pp-mono" style={{ width: 96, textAlign: 'right', fontSize: 12 }}>{fmtBytes(n.value)}</span>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+      </PageCard>
+
+      <PageCard
         title={<span className="pp-section-title">用户流量与在线状态</span>}
         extra={
           <Space wrap>
