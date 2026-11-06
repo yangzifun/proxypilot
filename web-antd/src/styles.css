@@ -3802,3 +3802,29 @@ body.pp-site-theme-glass .pp-login-form {
   backdrop-filter: blur(16px);
   border: 1px solid rgba(255,255,255,0.75) !important;
 }
+/* ---- 图表配色随主题 ---- */
+body.pp-site-theme-emerald svg [stroke="#0ea5e9"],
+body.pp-site-theme-emerald svg [stroke="#38bdf8"] { stroke: #10b981 !important; }
+body.pp-site-theme-emerald svg [stroke="#8b5cf6"],
+body.pp-site-theme-emerald svg [stroke="#a78bfa"] { stroke: #059669 !important; }
+body.pp-site-theme-emerald svg [stroke="#f59e0b"] { stroke: #34d399 !important; }
+body.pp-site-theme-emerald svg [fill="#0ea5e9"],
+body.pp-site-theme-emerald svg [fill="#38bdf8"] { fill: #10b981 !important; }
+body.pp-site-theme-emerald svg [fill="#8b5cf6"],
+body.pp-site-theme-emerald svg [fill="#a78bfa"] { fill: #059669 !important; }
+
+body.pp-site-theme-pulse svg [stroke="#0ea5e9"], body.pp-site-theme-pulse svg [stroke="#38bdf8"] { stroke: #111827 !important; }
+body.pp-site-theme-pulse svg [stroke="#8b5cf6"], body.pp-site-theme-pulse svg [stroke="#a78bfa"] { stroke: #6b7280 !important; }
+body.pp-site-theme-pulse svg [stroke="#f59e0b"] { stroke: #374151 !important; }
+body.pp-site-theme-pulse svg [fill="#0ea5e9"], body.pp-site-theme-pulse svg [fill="#38bdf8"] { fill: #111827 !important; }
+body.pp-site-theme-pulse svg [fill="#8b5cf6"], body.pp-site-theme-pulse svg [fill="#a78bfa"] { fill: #6b7280 !important; }
+
+body.pp-site-theme-horizon svg [stroke="#0ea5e9"], body.pp-site-theme-horizon svg [stroke="#38bdf8"] { stroke: #2563eb !important; }
+body.pp-site-theme-horizon svg [stroke="#8b5cf6"], body.pp-site-theme-horizon svg [stroke="#a78bfa"] { stroke: #60a5fa !important; }
+body.pp-site-theme-horizon svg [fill="#0ea5e9"], body.pp-site-theme-horizon svg [fill="#38bdf8"] { fill: #2563eb !important; }
+body.pp-site-theme-horizon svg [fill="#8b5cf6"], body.pp-site-theme-horizon svg [fill="#a78bfa"] { fill: #60a5fa !important; }
+
+body.pp-site-theme-glass svg [stroke="#0ea5e9"], body.pp-site-theme-glass svg [stroke="#38bdf8"] { stroke: #6366f1 !important; }
+body.pp-site-theme-glass svg [stroke="#8b5cf6"], body.pp-site-theme-glass svg [stroke="#a78bfa"] { stroke: #22d3ee !important; }
+body.pp-site-theme-glass svg [fill="#0ea5e9"], body.pp-site-theme-glass svg [fill="#38bdf8"] { fill: #6366f1 !important; }
+body.pp-site-theme-glass svg [fill="#8b5cf6"], body.pp-site-theme-glass svg [fill="#a78bfa"] { fill: #22d3ee !important; }
