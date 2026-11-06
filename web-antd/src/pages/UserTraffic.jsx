@@ -73,6 +73,7 @@ export default function UserTraffic() {
   }, [range]);
 
   const users = useAsync(() => api(`stats/traffic/users?range=${range}`), [range]);
+  const series = useAsync(() => api('stats/traffic/series?days=14'), []);
 
   useEffect(() => {
     const t = setInterval(() => users.reload().catch(() => {}), 60000);
@@ -311,6 +312,28 @@ export default function UserTraffic() {
           />
         </Col>
       </Row>
+
+      <PageCard
+        title={<span className="pp-section-title">近 14 天流量趋势</span>}
+        extra={<span className="pp-muted" style={{ fontSize: 12 }}>全体用户 · 每日汇总</span>}
+        style={{ marginBottom: 16 }}
+      >
+        {series.error ? (
+          <ErrorBlock error={series.error} onRetry={() => series.reload()} />
+        ) : series.loading && !series.data ? (
+          <div style={{ padding: 40, textAlign: 'center' }} className="pp-muted">读取中…</div>
+        ) : (
+          <AreaChart
+            data={(series.data && series.data.data) || []}
+            series={[
+              { key: 'down', name: '下行', color: '#0ea5e9' },
+              { key: 'up', name: '上行', color: '#8b5cf6' },
+            ]}
+            height={240}
+            formatValue={fmtBytes}
+          />
+        )}
+      </PageCard>
 
       <PageCard
         title={<span className="pp-section-title">用户流量与在线状态</span>}
