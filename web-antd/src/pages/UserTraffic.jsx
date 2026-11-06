@@ -796,7 +796,7 @@ export default function UserTraffic() {
             <Space size={24} style={{ marginBottom: 8 }}>
               <span>上行 <b>{fmtBytes(detail.data.up)}</b></span>
               <span>下行 <b>{fmtBytes(detail.data.down)}</b></span>
-              <span className="pp-muted">最近活跃 {fmtAgo(detail.data.last_active_at)}</span>
+              <span className="pp-muted">最近活跃 {fmtActiveAt(detail.data.last_active_at)}</span>
             </Space>
             {detailSeries.length ? (
               <AreaChart
@@ -845,4 +845,18 @@ export default function UserTraffic() {
       </Modal>
     </div>
   );
+}
+
+function fmtActiveAt(ts) {
+  if (!ts) return '—';
+  const gap = Date.now() - Number(ts);
+  if (gap < 0) return '刚刚';
+  const s = Math.floor(gap / 1000);
+  if (s < 10) return '刚刚';
+  if (s < 60) return s + ' 秒前';
+  const m = Math.floor(s / 60);
+  if (m < 60) return m + ' 分钟前';
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + ' 小时前';
+  return Math.floor(h / 24) + ' 天前';
 }

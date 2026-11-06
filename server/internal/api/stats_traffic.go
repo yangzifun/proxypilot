@@ -149,13 +149,20 @@ func (h *handlers) ingestUserCounters(ctx context.Context, nodeID int64, users [
 			h.log.Warn("写入用户计数基线失败", "err", err, "uuid", uuid)
 			continue
 		}
-		if dUp <= 0 && dDown <= 0 {
-			continue
+		// 只要该用户仍出现在节点统计里就刷新在线时间（即使本次无流量增量）
+		if dUp < 0 {
+			dUp = 0
+		}
+		if dDown < 0 {
+			dDown = 0
 		}
 		_, _ = h.db.ExecContext(ctx, `INSERT INTO user_node_recent (uuid, node_id, last_ts, up, down)
 		      VALUES (?, ?, ?, ?, ?)
 		      ON DUPLICATE KEY UPDATE last_ts = VALUES(last_ts), up = up + VALUES(up), down = down + VALUES(down)`,
 			uuid, nodeID, now, dUp, dDown)
+		if dUp == 0 && dDown == 0 {
+			continue
+		}
 		if _, err := h.db.ExecContext(ctx, `INSERT INTO user_traffic_hourly
 		      (uuid, node_id, hour_ts, up, down) VALUES (?, ?, ?, ?, ?)
 		      ON DUPLICATE KEY UPDATE up = up + VALUES(up), down = down + VALUES(down)`,
@@ -347,6 +354,18 @@ func (h *handlers) statsTrafficUsers(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
+	recents := map[string]int64{}
+	if rrows, err := h.db.QueryContext(ctx, "SELECT uuid, MAX(last_ts) FROM user_node_recent GROUP BY uuid"); err == nil {
+		for rrows.Next() {
+			var u string
+			var ts int64
+			if rrows.Scan(&u, &ts) == nil {
+				recents[u] = ts
+			}
+		}
+		rrows.Close()
+	}
+
 	data := []map[string]any{}
 	for rows.Next() {
 		var (
@@ -357,6 +376,9 @@ func (h *handlers) statsTrafficUsers(w http.ResponseWriter, r *http.Request) {
 		)
 		if rows.Scan(&uuid, &up, &down, &upToday, &dnToday, &owner, &email, &lastAt, &upTotal, &downTotal) != nil {
 			continue
+		}
+		if r := recents[uuid]; r > lastAt {
+			lastAt = r
 		}
 		data = append(data, map[string]any{
 			"uuid": uuid, "owner": owner, "email": email,
