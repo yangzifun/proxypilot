@@ -774,91 +774,94 @@ export default function ServersUnified() {
         bodyStyle={{ padding: 0 }}
       >
         <div className="pp-overview-grid">
-          <div>
-            <div className="pp-ov-tiles">
-              {[
-                { label: '服务器总数', value: fmtNum(rows.length) },
-                { label: '在线', value: fmtNum(counts.online), hint: rows.length ? `在线率 ${((counts.online / rows.length) * 100).toFixed(0)}%` : '—' },
-                { label: '离线', value: fmtNum(counts.offline) },
-                { label: '未接入', value: fmtNum(counts.unknown), hint: 'Agent 未上报心跳' },
-                { label: '实时下行', value: fmtBytes(summary.rx_rate || 0), unit: '/s' },
-                { label: '实时上行', value: fmtBytes(summary.tx_rate || 0), unit: '/s' },
-              ].map((it) => (
-                <div key={it.label} className="pp-ov-tile">
-                  <div className="pp-ov-label">{it.label}</div>
-                  <div className="pp-ov-value">
-                    {it.value}
-                    {it.unit ? <span className="pp-ov-unit">{it.unit}</span> : null}
-                  </div>
-                  {it.hint ? <div className="pp-ov-hint">{it.hint}</div> : null}
-                </div>
-              ))}
-              <div className="pp-ov-tile pp-ov-tile-wide">
-                <div className="pp-ov-label">集群总流量</div>
-                <div className="pp-ov-value">
-                  {fmtBytes((summary.rx_rate || 0) + (summary.tx_rate || 0))}
-                  <span className="pp-ov-unit">/s</span>
-                </div>
-                <div className="pp-ov-hint">下行 + 上行 · {rows.length} 台服务器</div>
-              </div>
-            </div>
-
-            <div className="pp-ov-foot">
-              服务异常 <b>{fmtNum(summary.failed_services || 0)}</b> · 未安装 {fmtNum(summary.not_installed || 0)} 项
-            </div>
-
-            <div className="pp-ov-divider" />
-
-            <div className="pp-ov-sec-head">
-              <b>资源均值</b>
-              <span>仅在线节点</span>
-            </div>
-            <div className="pp-ov-avg">
-              <div className="pp-ov-gauges">
-                <div className="pp-ov-gauge"><MiniRing value={avg.cpu} label="CPU" /></div>
-                <div className="pp-ov-gauge"><MiniRing value={avg.mem} label="内存" /></div>
-              </div>
-              <div className="pp-ov-disk">
-                <div className="pp-ov-disk-head">
-                  <span>磁盘均值</span>
-                  <b style={{ color: levelColor(avg.disk) }}>{Number(avg.disk || 0).toFixed(0)}%</b>
-                </div>
-                <Progress percent={Math.round(Number(avg.disk || 0))} showInfo={false} strokeColor={levelColor(avg.disk)} />
-              </div>
-            </div>
-          </div>
-
-          <div className="pp-ov-map">
-            <div className="pp-ov-sec-head">
-              <b>全球分布</b>
-              <span className="pp-ov-map-extra">
+          <div className="pp-ov-top">
+              <div className="pp-ov-tiles">
                 {[
-                  { label: '在线', color: '#10b981' },
-                  { label: '离线', color: '#f43f5e' },
-                  { label: '未知', color: '#cbd5e1' },
+                  { label: '服务器总数', value: fmtNum(rows.length) },
+                  { label: '在线', value: fmtNum(counts.online), hint: rows.length ? `在线率 ${((counts.online / rows.length) * 100).toFixed(0)}%` : '—' },
+                  { label: '离线', value: fmtNum(counts.offline) },
+                  { label: '未接入', value: fmtNum(counts.unknown), hint: 'Agent 未上报心跳' },
+                  { label: '实时下行', value: fmtBytes(summary.rx_rate || 0), unit: '/s' },
+                  { label: '实时上行', value: fmtBytes(summary.tx_rate || 0), unit: '/s' },
                 ].map((it) => (
-                  <span key={it.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                    <i
-                      style={{
-                        display: 'inline-block',
-                        width: 8,
-                        height: 8,
-                        borderRadius: '50%',
-                        background: it.color,
-                        boxShadow: '0 0 0 1px rgba(15, 23, 42, 0.06)',
-                      }}
-                    />
-                    {it.label}
-                  </span>
+                  <div key={it.label} className="pp-ov-tile">
+                    <div className="pp-ov-label">{it.label}</div>
+                    <div className="pp-ov-value">
+                      {it.value}
+                      {it.unit ? <span className="pp-ov-unit">{it.unit}</span> : null}
+                    </div>
+                    {it.hint ? <div className="pp-ov-hint">{it.hint}</div> : null}
+                  </div>
                 ))}
-                <Button size="small" type="link" icon={<FullscreenOutlined />} onClick={() => setMapOpen(true)}>大屏</Button>
-              </span>
+                <div className="pp-ov-tile pp-ov-tile-wide">
+                  <div className="pp-ov-label">集群总流量</div>
+                  <div className="pp-ov-value">
+                    {fmtBytes((summary.rx_rate || 0) + (summary.tx_rate || 0))}
+                    <span className="pp-ov-unit">/s</span>
+                  </div>
+                  <div className="pp-ov-hint">下行 + 上行 · {rows.length} 台服务器</div>
+                </div>
+              </div>
+  
+              <div className="pp-ov-foot">
+                服务异常 <b>{fmtNum(summary.failed_services || 0)}</b> · 未安装 {fmtNum(summary.not_installed || 0)} 项
+              </div>
+          </div>
+
+          <div className="pp-ov-bottom">
+            <div className="pp-ov-res">
+              <div className="pp-ov-sec-head">
+                <b>资源均值</b>
+                <span>仅在线节点</span>
+              </div>
+              <div className="pp-ov-avg">
+                <div className="pp-ov-gauges">
+                  <div className="pp-ov-gauge"><MiniRing value={avg.cpu} label="CPU" /></div>
+                  <div className="pp-ov-gauge"><MiniRing value={avg.mem} label="内存" /></div>
+                </div>
+                <div className="pp-ov-disk">
+                  <div className="pp-ov-disk-head">
+                    <span>磁盘均值</span>
+                    <b style={{ color: levelColor(avg.disk) }}>{Number(avg.disk || 0).toFixed(0)}%</b>
+                  </div>
+                  <Progress percent={Math.round(Number(avg.disk || 0))} showInfo={false} strokeColor={levelColor(avg.disk)} />
+                </div>
+              </div>
             </div>
-            <div className="pp-ov-map-box">
-              <Globe3D servers={rows} onPick={(r) => setDetailId(r.id)} height="100%" />
+
+            <div className="pp-ov-map">
+              <div className="pp-ov-sec-head">
+                <b>全球分布</b>
+                <span className="pp-ov-map-extra">
+                  {[
+                    { label: '在线', color: '#10b981' },
+                    { label: '离线', color: '#f43f5e' },
+                    { label: '未知', color: '#cbd5e1' },
+                  ].map((it) => (
+                    <span key={it.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                      <i
+                        style={{
+                          display: 'inline-block',
+                          width: 8,
+                          height: 8,
+                          borderRadius: '50%',
+                          background: it.color,
+                          boxShadow: '0 0 0 1px rgba(15, 23, 42, 0.06)',
+                        }}
+                      />
+                      {it.label}
+                    </span>
+                  ))}
+                  <Button size="small" type="link" icon={<FullscreenOutlined />} onClick={() => setMapOpen(true)}>大屏</Button>
+                </span>
+              </div>
+              <div className="pp-ov-map-box">
+                <Globe3D servers={rows} onPick={(r) => setDetailId(r.id)} height="100%" />
+              </div>
             </div>
           </div>
-        </div>      </PageCard>
+        </div>
+      </PageCard>
 
       <Modal
         title="全球分布 · 大屏"
