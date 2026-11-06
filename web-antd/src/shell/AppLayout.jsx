@@ -1,4 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Segmented, Tooltip } from 'antd';
+import { getTheme, setTheme, subscribeTheme, THEME_OPTIONS } from '../theme';
 import { Avatar, Badge, Dropdown, Layout, Menu, Tag } from 'antd';
 import { LogoutOutlined, SafetyCertificateOutlined, UserOutlined } from '@ant-design/icons';
 import { useAuth } from '../auth';
@@ -12,6 +14,8 @@ const { Sider, Header, Content } = Layout;
 const boot = (typeof window !== 'undefined' && window.__PP_BOOT__) || {};
 
 export default function AppLayout({ activeKey, onNavigate, children }) {
+  const [siteTheme, setSiteTheme] = useState(() => getTheme());
+  useEffect(() => subscribeTheme((v) => setSiteTheme(v)), []);
   const { user, isSuper, logout } = useAuth();
   const meta = PAGE_META[activeKey] || PAGE_META.dash;
 
@@ -81,6 +85,14 @@ export default function AppLayout({ activeKey, onNavigate, children }) {
           </div>
 
           <div className="pp-header-actions">
+            <Tooltip title="切换整站主题">
+              <Segmented
+                size="small"
+                value={siteTheme}
+                onChange={(v) => setTheme(v)}
+                options={THEME_OPTIONS}
+              />
+            </Tooltip>
             <JobCenter />
             <Dropdown menu={userMenu} trigger={['click']} placement="bottomRight">
               <div className="pp-user">
