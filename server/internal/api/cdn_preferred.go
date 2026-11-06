@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 )
 
 // cdnPrefer 是「CDN 优选地址」的一条记录。
@@ -85,7 +84,7 @@ func cdnPreferredForGroup(group string) []cdnPrefer {
 
 func (h *handlers) cdnPreferredList(w http.ResponseWriter, r *http.Request) {
 	group := strings.TrimSpace(r.URL.Query().Get("group"))
-	query := "SELECT id, group_name, address, port, COALESCE(remark,'') AS remark, enabled, sort, COALESCE(last_check_at,0) AS last_check_at, COALESCE(last_check_ok,0) AS last_check_ok, COALESCE(last_latency_ms,0) AS last_latency_ms FROM cdn_preferred_addresses"
+	query := "SELECT id, group_name, address, port, COALESCE(remark,'') AS remark, enabled, sort, COALESCE(last_check_at,0) AS last_check_at, COALESCE(last_check_ok,0) AS last_check_ok, COALESCE(last_latency_ms,0) AS last_latency_ms, COALESCE(fail_count,0) AS fail_count FROM cdn_preferred_addresses"
 	args := []any{}
 	if group != "" {
 		query += " WHERE group_name = ?"
@@ -282,43 +281,12 @@ func (h *handlers) cdnPreferredImport(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"success": true, "added": added, "skipped": skipped})
 }
 
-// cdnPreferredCheck 对地址做 TCP 443 连通性探测。
+// cdnPreferredCheck 手动检测全部地址（TCP/TLS/HTTP 由检测设置决定）。
 func (h *handlers) cdnPreferredCheck(w http.ResponseWriter, r *http.Request) {
-	rows, err := queryRowsAsMaps(r.Context(), h.db, "SELECT id, address, port FROM cdn_preferred_addresses LIMIT 500")
+	results, err := h.runCDNPreferChecks(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "查询失败")
+		writeError(w, http.StatusInternalServerError, "检测失败")
 		return
-	}
-	type result struct {
-		ID      int64  `json:"id"`
-		OK      bool   `json:"ok"`
-		Latency int    `json:"latency_ms"`
-		Error   string `json:"error,omitempty"`
-	}
-	results := make([]result, 0, len(rows))
-	for _, row := range rows {
-		id := mapInt(row, "id", 0)
-		addr := mapStr(row, "address", "")
-		port := mapInt(row, "port", 443)
-		start := time.Now()
-		conn, derr := net.DialTimeout("tcp", net.JoinHostPort(addr, strconv.FormatInt(port, 10)), 3*time.Second)
-		lat := int(time.Since(start).Milliseconds())
-		ok := derr == nil
-		msg := ""
-		if conn != nil {
-			_ = conn.Close()
-		}
-		if derr != nil {
-			msg = derr.Error()
-		}
-		okv := 0
-		if ok {
-			okv = 1
-		}
-		_, _ = h.db.ExecContext(r.Context(),
-			"UPDATE cdn_preferred_addresses SET last_check_at = ?, last_check_ok = ?, last_latency_ms = ? WHERE id = ?",
-			nowMillis(), okv, lat, id)
-		results = append(results, result{ID: id, OK: ok, Latency: lat, Error: msg})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"success": true, "data": results})
 }

@@ -17,6 +17,8 @@ export default function CdnPreferred() {
   const [enabled, setEnabled] = useState(false);
   const [editRow, setEditRow] = useState(null);
   const [editForm, setEditForm] = useState({ address: '', port: 443, remark: '' });
+  const [cfgOpen, setCfgOpen] = useState(false);
+  const [cfg, setCfg] = useState({ sni: '', path: '' });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -27,6 +29,8 @@ export default function CdnPreferred() {
       setGroups(g.data || []);
       const en = await apiGet('/api/cdn-preferred/enabled');
       setEnabled(!!en.enabled);
+      const cs = await apiGet('/api/cdn-preferred/settings');
+      setCfg({ sni: cs.sni || '', path: cs.path || '' });
     } catch (e) {
       message.error(e.message || '加载失败');
     } finally {
@@ -131,13 +135,24 @@ export default function CdnPreferred() {
     }
   };
 
+  const saveCfg = async () => {
+    try {
+      await apiPut('/api/cdn-preferred/settings', { sni: cfg.sni.trim(), path: cfg.path.trim() });
+      message.success('检测设置已保存');
+      setCfgOpen(false);
+    } catch (e) {
+      message.error(e.message || '保存失败');
+    }
+  };
+
   const checkAll = async () => {
     setBusy('check');
     try {
       const res = await apiPost('/api/cdn-preferred/check', {});
       const list = res.data || [];
       const ok = list.filter((x) => x.ok).length;
-      message.success(`检测完成：可用 ${ok} / ${list.length}`);
+      const off = list.filter((x) => x.auto_disabled).length;
+      message.success(`检测完成：可用 ${ok} / ${list.length}` + (off ? `，自动停用 ${off} 条` : ''));
       load();
     } catch (e) {
       message.error(e.message || '检测失败');
@@ -185,6 +200,10 @@ export default function CdnPreferred() {
       ),
     },
     {
+      title: '连续失败', dataIndex: 'fail_count', width: 100,
+      render: (v) => (Number(v) > 0 ? <Tag color="error">{v} 次</Tag> : <span className="pp-muted">0</span>),
+    },
+    {
       title: '最近检测', width: 160,
       render: (_, row) => (row.last_check_at
         ? <span className="pp-muted">{row.last_check_ok ? `可用 · ${row.last_latency_ms}ms` : '不可用'}</span>
@@ -214,6 +233,7 @@ export default function CdnPreferred() {
           <AutoComplete options={groupOptions} value={group} onChange={setGroup} style={{ width: 160 }} placeholder="分组" />
           <Button icon={<ReloadOutlined />} onClick={load} loading={loading}>刷新</Button>
           <Button icon={<CheckCircleOutlined />} loading={busy === 'check'} onClick={checkAll}>一键检测</Button>
+          <Button onClick={() => setCfgOpen(true)}>检测设置</Button>
           <Button onClick={() => { setImportGroup(group); setImportOpen(true); }}>批量导入</Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={addOne}>新增</Button>
         </Space>
@@ -224,6 +244,24 @@ export default function CdnPreferred() {
         当前分组：<b>{group}</b>，共 {rows.length} 条，启用 {rows.filter((r) => r.enabled).length} 条。
       </div>
       <Table className="pp-table" rowKey="id" size="medium" loading={loading} dataSource={rows} columns={columns} pagination={false} />
+
+      <Modal
+        title="检测设置"
+        open={cfgOpen}
+        onCancel={() => setCfgOpen(false)}
+        onOk={saveCfg}
+        okText="保存"
+        destroyOnHidden
+      >
+        <div className="pp-muted" style={{ fontSize: 12, marginBottom: 10 }}>
+          留空只做 TCP 连通性检测；填写 SNI 后升级为 TLS 握手校验，再填路径则额外发一次 HTTPS 请求。
+          连续失败 3 次的地址会被自动停用。
+        </div>
+        <div style={{ display: 'grid', gap: 10 }}>
+          <Input addonBefore="检测 SNI" value={cfg.sni} onChange={(e) => setCfg((c) => ({ ...c, sni: e.target.value }))} placeholder="例如 vmpt-lax.yzfn.top" />
+          <Input addonBefore="检测路径" value={cfg.path} onChange={(e) => setCfg((c) => ({ ...c, path: e.target.value }))} placeholder="/vlws（可留空）" />
+        </div>
+      </Modal>
 
       <Modal
         title="编辑优选地址"

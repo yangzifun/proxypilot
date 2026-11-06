@@ -201,6 +201,8 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("PUT /api/cdn-preferred/{id}", h.authed(authOpts{superOnly: true}, h.cdnPreferredUpdate))
 	mux.HandleFunc("DELETE /api/cdn-preferred/{id}", h.authed(authOpts{superOnly: true}, h.cdnPreferredDelete))
 	mux.HandleFunc("POST /api/cdn-preferred/import", h.authed(authOpts{superOnly: true}, h.cdnPreferredImport))
+	mux.HandleFunc("GET /api/cdn-preferred/settings", h.authed(authOpts{}, h.cdnPreferredSettingsGet))
+	mux.HandleFunc("PUT /api/cdn-preferred/settings", h.authed(authOpts{superOnly: true}, h.cdnPreferredSettingsSet))
 	mux.HandleFunc("GET /api/cdn-preferred/enabled", h.authed(authOpts{}, h.cdnPreferredEnabledGet))
 	mux.HandleFunc("PUT /api/cdn-preferred/enabled", h.authed(authOpts{superOnly: true}, h.cdnPreferredEnabledSet))
 	mux.HandleFunc("POST /api/cdn-preferred/check", h.authed(authOpts{superOnly: true}, h.cdnPreferredCheck))

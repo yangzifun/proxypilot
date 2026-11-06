@@ -57,6 +57,7 @@ func (h *handlers) runCronOnce(ctx context.Context) {
 	h.cronResumeJobs(ctx, now)
 	h.cronCleanup(ctx, now)
 	h.cronUUIDReconcile(ctx, now)
+	h.cronCDNPreferred(ctx, now)
 }
 
 func (h *handlers) cronOffline(ctx context.Context, now int64) {
