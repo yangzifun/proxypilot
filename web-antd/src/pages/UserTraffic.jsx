@@ -322,6 +322,41 @@ export default function UserTraffic() {
       </Row>
 
       <PageCard
+        title={<span className="pp-section-title">用户在线分布</span>}
+        extra={<span className="pp-muted" style={{ fontSize: 12 }}>近 3 分钟有流量视为在线</span>}
+        style={{ marginBottom: 16 }}
+      >
+        {(() => {
+          const list = (users.data && users.data.data) || [];
+          const online = list.filter((u) => u.active).length;
+          const offline = Math.max(0, list.length - online);
+          const total = online + offline;
+          const pct = total ? (online / total) * 100 : 0;
+          const r = 54;
+          const c = 2 * Math.PI * r;
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 36, flexWrap: 'wrap', padding: '4px 0' }}>
+              <svg width="140" height="140" viewBox="0 0 140 140">
+                <circle cx="70" cy="70" r={r} fill="none" stroke="#eef2f7" strokeWidth="16" />
+                <circle
+                  cx="70" cy="70" r={r} fill="none" stroke="#10b981" strokeWidth="16"
+                  strokeDasharray={c} strokeDashoffset={c - (pct / 100) * c}
+                  strokeLinecap="round" transform="rotate(-90 70 70)"
+                />
+                <text x="70" y="66" textAnchor="middle" style={{ fontSize: 22, fontWeight: 700, fill: '#065f46' }}>{online}</text>
+                <text x="70" y="86" textAnchor="middle" style={{ fontSize: 12, fill: '#6b7280' }}>在线</text>
+              </svg>
+              <div style={{ display: 'grid', gap: 10 }}>
+                <div><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 5, background: '#10b981', marginRight: 8 }} />在线 <b>{online}</b></div>
+                <div><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 5, background: '#cbd5e1', marginRight: 8 }} />离线 <b>{offline}</b></div>
+                <div className="pp-muted" style={{ fontSize: 12 }}>合计 {total} 个用户 · 在线率 {total ? pct.toFixed(0) : 0}%</div>
+              </div>
+            </div>
+          );
+        })()}
+      </PageCard>
+
+      <PageCard
         title={<span className="pp-section-title">流量趋势</span>}
         extra={
           <Space size={8}>
