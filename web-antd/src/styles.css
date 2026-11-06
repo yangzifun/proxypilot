@@ -3346,3 +3346,41 @@ body {
   font-size: 11px;
   color: rgba(148, 163, 184, 0.85);
 }
+/* ---- 3D 地球视觉增强 ---- */
+.pp-globe-wrap::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 62%;
+  height: 62%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  box-shadow: 0 0 70px 14px rgba(56, 189, 248, 0.22), inset 0 0 60px rgba(56, 189, 248, 0.12);
+  pointer-events: none;
+}
+.pp-globe {
+  z-index: 1;
+  transition: box-shadow 0.3s ease;
+}
+.pp-globe:hover {
+  box-shadow:
+    inset -24px -16px 56px rgba(0, 0, 0, 0.6),
+    inset 16px 8px 44px rgba(125, 211, 252, 0.3),
+    0 0 90px rgba(56, 189, 248, 0.32);
+}
+.pp-globe::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(148, 197, 255, 0.18);
+  pointer-events: none;
+}
+.pp-globe-marker {
+  animation: ppGlobePulse 2.4s ease-in-out infinite;
+}
+@keyframes ppGlobePulse {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.14), 0 0 8px currentColor; }
+  50% { box-shadow: 0 0 0 5px rgba(255, 255, 255, 0.06), 0 0 16px currentColor; }
+}

@@ -871,7 +871,7 @@ export default function ServersUnified() {
         destroyOnHidden
       >
         <div className="pp-ov-map-box" style={{ height: '100%' }}>
-          <GlobeMap servers={rows} onPick={(r) => { setMapOpen(false); setDetailId(r.id); }} height="100%" />
+          <WorldMap large zoomable servers={rows} onPick={(r) => { setMapOpen(false); setDetailId(r.id); }} />
         </div>
       </Modal>
 

@@ -105,6 +105,7 @@ export default function GlobeMap({ servers = [], onPick, height = 360 }) {
                   width: 10 * scale,
                   height: 10 * scale,
                   background: color,
+                  color,
                   boxShadow: `0 0 0 ${2 * scale}px rgba(255,255,255,0.18), 0 0 10px ${color}`,
                 }}
                 onClick={(e) => {
