@@ -45,7 +45,7 @@ func serverComponentVersion(row serverRow, name string) string {
 }
 
 // singboxRenderBundle 复刻 Worker：校验 + 生成待下发文件。
-func singboxRenderBundle(tpl *singboxTemplate, node singboxRenderNode, srv serverRow, extraInbounds []any) ([]map[string]any, map[string]int, []map[string]string, string) {
+func singboxRenderBundle(tpl *singboxTemplate, node singboxRenderNode, srv serverRow, extraFn func([]sbUser, map[string]int) []any) ([]map[string]any, map[string]int, []map[string]string, string) {
 	users := singboxParseUsers(currentTemplateUsers(tpl))
 	for _, u := range users {
 		if strings.ToLower(u.UUID) == singboxDemoUUID {
@@ -95,9 +95,11 @@ func singboxRenderBundle(tpl *singboxTemplate, node singboxRenderNode, srv serve
 		// 上线顺序：先切版本（第一次下发），节点回报新版本后再下发一次（第二次带 v2ray_api）。
 		userStats := singboxUserStatsCapable(serverComponentVersion(srv, "sing-box"))
 		cfg := singboxRenderSb(tpl, users, ports, node.StatsSecret, userStats, node.CDNDomain)
-		if len(extraInbounds) > 0 {
-			if inb, ok := cfg["inbounds"].([]any); ok {
-				cfg["inbounds"] = append(inb, extraInbounds...)
+		if extraFn != nil {
+			if extra := extraFn(users, ports); len(extra) > 0 {
+				if inb, ok := cfg["inbounds"].([]any); ok {
+					cfg["inbounds"] = append(inb, extra...)
+				}
 			}
 		}
 		files = append(files, map[string]any{

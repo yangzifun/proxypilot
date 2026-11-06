@@ -1,6 +1,9 @@
 package api
 
-import "strings"
+import (
+	"context"
+	"strings"
+)
 
 // singboxPerUserInbounds 生成「按用户拆分的入站」（方案A）。
 // 仅当开关开启时由调用方追加；每个入站只包含一个用户，tag 带 UUID 前 8 位，
@@ -60,4 +63,22 @@ func singboxPerUserInbounds(tpl *singboxTemplate, users []sbUser, userPorts map[
 		}
 	}
 	return out
+}
+
+// perUserExtraFn 返回注入回调：开关开启时按用户拆入站，关闭时返回 nil。
+func (h *handlers) perUserExtraFn(ctx context.Context, tpl *singboxTemplate, serverID int64, statsSecret string) func([]sbUser, map[string]int) []any {
+	return func(users []sbUser, _ map[string]int) []any {
+		if !h.perUserInboundsEnabled(ctx) {
+			return nil
+		}
+		uuids := make([]string, 0, len(users))
+		for _, u := range users {
+			uuids = append(uuids, u.UUID)
+		}
+		ports, err := h.ensureUUIDPorts(ctx, serverID, uuids)
+		if err != nil {
+			return nil
+		}
+		return singboxPerUserInbounds(tpl, users, ports, statsSecret)
+	}
 }

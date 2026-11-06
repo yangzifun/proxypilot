@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -87,14 +88,14 @@ func TestAgentTokenEncryptRoundTrip(t *testing.T) {
 
 func TestAgentInstallCommand(t *testing.T) {
 	h := &handlers{cfg: config.Config{}}
-	got := h.agentInstallCommand("https://pp.example.com", "ag_abc")
+	got := h.agentInstallCommand(context.Background(), "https://pp.example.com", "ag_abc")
 	want := "curl -fsSL https://pp.example.com/api/agent/install.sh | sudo sh -s -- --key ag_abc"
 	if got != want {
 		t.Fatalf("install = %q，期望 %q", got, want)
 	}
 
 	h.cfg.AgentInstallBase = "https://s3.example.com/agent/"
-	got = h.agentInstallCommand("https://pp.example.com", "ag_abc")
+	got = h.agentInstallCommand(context.Background(), "https://pp.example.com", "ag_abc")
 	want = "curl -fsSL https://s3.example.com/agent/install.sh | sudo sh -s -- --key ag_abc --url https://pp.example.com"
 	if got != want {
 		t.Fatalf("install(base) = %q，期望 %q", got, want)
