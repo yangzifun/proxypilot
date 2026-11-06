@@ -86,6 +86,17 @@ export default function UserTraffic() {
   }, [rateMinutes]);
 
   useEffect(() => {
+    const id = setInterval(() => {
+      users.reload().catch(() => {});
+      nodes.reload().catch(() => {});
+      series.reload().catch(() => {});
+      growth.reload().catch(() => {});
+      protocols.reload().catch(() => {});
+    }, 30000);
+    return () => clearInterval(id);
+  }, [range, trendDays]);
+
+  useEffect(() => {
     const t = setInterval(() => users.reload().catch(() => {}), 60000);
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
