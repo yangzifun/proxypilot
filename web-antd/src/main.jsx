@@ -8,6 +8,9 @@ import 'dayjs/locale/zh-cn';
 import { themeConfig } from './theme';
 import { AuthProvider } from './auth';
 import App from './App';
+import { applyTheme, getTheme } from './theme';
+
+applyTheme(getTheme());
 import PortalApp from './portal/PortalApp';
 import './styles.css';
 

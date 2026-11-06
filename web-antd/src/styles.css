@@ -3777,3 +3777,28 @@ body.pp-site-theme-glass .pp-card {
   box-shadow: 0 16px 40px -30px rgba(15,23,42,0.6) !important;
 }
 body.pp-site-theme-glass .ant-btn-primary { background: rgba(79,70,229,0.9) !important; border-color: transparent !important; }
+/* ---- 登录页主题 ---- */
+body.pp-site-theme-emerald .pp-login { background: linear-gradient(160deg, #eafaf1 0%, #f7fdfa 40%, #ffffff 100%) !important; }
+body.pp-site-theme-emerald .pp-login-form { background: rgba(255,255,255,0.9) !important; border-color: rgba(16,185,129,0.18) !important; }
+body.pp-site-theme-emerald .pp-login-hero { background: linear-gradient(150deg, #064e3b 0%, #065f46 55%, #047857 100%) !important; }
+body.pp-site-theme-emerald .pp-login .ant-btn-primary { background: #10b981 !important; border-color: #10b981 !important; }
+
+body.pp-site-theme-pulse .pp-login { background: #ffffff !important; }
+body.pp-site-theme-pulse .pp-login-form { background: #ffffff !important; border: 1px solid #e5e7eb !important; box-shadow: none !important; }
+body.pp-site-theme-pulse .pp-login .ant-btn-primary { background: #111827 !important; border-color: #111827 !important; }
+
+body.pp-site-theme-horizon .pp-login { background: #f8fafc !important; }
+body.pp-site-theme-horizon .pp-login-form { background: #ffffff !important; border: 1px solid #e2e8f0 !important; box-shadow: none !important; }
+body.pp-site-theme-horizon .pp-login .ant-btn-primary { background: #2563eb !important; border-color: #2563eb !important; }
+
+body.pp-site-theme-glass .pp-login {
+  background:
+    radial-gradient(50% 40% at 15% 0%, rgba(196,181,253,0.35) 0%, rgba(196,181,253,0) 60%),
+    radial-gradient(45% 40% at 90% 10%, rgba(125,211,252,0.35) 0%, rgba(125,211,252,0) 60%),
+    linear-gradient(160deg, #eef2ff 0%, #f8fafc 60%) !important;
+}
+body.pp-site-theme-glass .pp-login-form {
+  background: rgba(255,255,255,0.6) !important;
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255,255,255,0.75) !important;
+}
