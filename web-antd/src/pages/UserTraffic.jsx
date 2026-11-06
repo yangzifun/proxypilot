@@ -811,35 +811,52 @@ export default function UserTraffic() {
             ) : (
               <Empty description="该时间窗口没有流量记录" image={Empty.PRESENTED_IMAGE_SIMPLE} />
             )}
-            {Array.isArray(detail.data.recent_nodes) && detail.data.recent_nodes.length ? (
-              <div style={{ margin: '10px 0 14px' }}>
-                <div className="pp-muted" style={{ fontSize: 12, marginBottom: 6 }}>实时连接的服务器（近 3 分钟）</div>
-                <Space size={8} wrap>
-                  {detail.data.recent_nodes.map((n) => (
-                    <Tag key={n.node_id} color="green">
-                      {n.node_name || '#' + n.node_id} · {fmtAgo(n.last_ts)}
-                    </Tag>
-                  ))}
-                </Space>
-              </div>
-            ) : null}            {detail.data.nodes && detail.data.nodes.length ? (
-              <div style={{ marginTop: 16 }}>
-                <div className="pp-muted" style={{ fontSize: 12, marginBottom: 6 }}>按节点分布</div>
-                <Table
-                  className="pp-table"
-                  rowKey={(r) => `${r.node_id}`}
-                  size="small"
-                  dataSource={detail.data.nodes}
-                  pagination={false}
-                  columns={[
-                    { title: '节点', dataIndex: 'node_name', render: (v) => v || '已删除节点' },
-                    { title: '上行', dataIndex: 'up', width: 120, align: 'right', render: (v) => fmtBytes(v) },
-                    { title: '下行', dataIndex: 'down', width: 120, align: 'right', render: (v) => fmtBytes(v) },
-                    { title: '合计', dataIndex: 'total', width: 120, align: 'right', render: (v) => <b>{fmtBytes(v)}</b> },
-                  ]}
-                />
-              </div>
-            ) : null}
+            {(() => {
+              const nodes = detail.data.nodes || [];
+              if (!nodes.length) return null;
+              const recent = new Set((detail.data.recent_nodes || []).map((x) => x.node_id));
+              const rowH = 46;
+              const h = Math.max(180, 70 + nodes.length * rowH);
+              const midY = h / 2;
+              const label = detail.data.owner || detail.data.email || String(detail.data.uuid).slice(0, 8);
+              return (
+                <div style={{ marginTop: 16 }}>
+                  <div className="pp-muted" style={{ fontSize: 12, marginBottom: 6 }}>
+                    用户流向（绿=近 3 分钟活跃，动态光点表示实时流量）
+                  </div>
+                  <svg className="pp-flow-svg" viewBox={'0 0 720 ' + h} style={{ width: '100%', height: h }}>
+                    <defs>
+                      <linearGradient id="ppFlowGrad" x1="0" x2="1">
+                        <stop offset="0%" stopColor="#10b981" stopOpacity="0.15" />
+                        <stop offset="100%" stopColor="#22d3ee" stopOpacity="0.9" />
+                      </linearGradient>
+                    </defs>
+                    <circle cx="80" cy={midY} r="26" fill="#ecfdf5" stroke="#10b981" strokeWidth="2" />
+                    <text x="80" y={midY + 4} textAnchor="middle" fontSize="12" fill="#065f46">用户</text>
+                    <text x="80" y={midY + 48} textAnchor="middle" fontSize="11" fill="#6b7280">{String(label).slice(0, 16)}</text>
+                    {nodes.slice(0, 12).map((n, i) => {
+                      const y = 40 + i * rowH;
+                      const on = recent.has(n.node_id);
+                      const d = 'M110 ' + midY + ' C 320 ' + midY + ', 380 ' + y + ', 560 ' + y;
+                      return (
+                        <g key={n.node_id}>
+                          <path d={d} fill="none" stroke={on ? 'url(#ppFlowGrad)' : '#e2e8f0'} strokeWidth={on ? 2.5 : 1.5} strokeDasharray={on ? '6 8' : '4 8'} className={on ? 'pp-flow-dash' : ''} />
+                          {on ? (
+                            <circle r="3.5" fill="#22d3ee">
+                              <animateMotion dur="2.2s" repeatCount="indefinite" path={d} />
+                            </circle>
+                          ) : null}
+                          <circle cx="572" cy={y} r="9" fill={on ? '#10b981' : '#cbd5e1'} />
+                          <text x="590" y={y + 4} fontSize="12" fill={on ? '#065f46' : '#64748b'}>
+                            {(n.node_name || '#' + n.node_id).slice(0, 18)} · {fmtBytes(n.total)}
+                          </text>
+                        </g>
+                      );
+                    })}
+                  </svg>
+                </div>
+              );
+            })()}
           </>
         ) : null}
       </Modal>

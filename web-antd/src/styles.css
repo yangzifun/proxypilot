@@ -3854,3 +3854,7 @@ body.pp-site-theme-glass .pp-portal-card {
   backdrop-filter: blur(14px);
   border: 1px solid rgba(255,255,255,0.75) !important;
 }
+/* 用户流向图 */
+.pp-flow-svg { display:block; }
+.pp-flow-dash { animation: ppFlowDash 1.2s linear infinite; }
+@keyframes ppFlowDash { to { stroke-dashoffset: -28; } }
