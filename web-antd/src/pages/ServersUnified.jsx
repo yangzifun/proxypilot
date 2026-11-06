@@ -15,6 +15,8 @@ import {
   PoweroffOutlined,
   QuestionCircleOutlined,
   ReloadOutlined,
+  AppstoreOutlined,
+  TableOutlined,
   SearchOutlined,
   SyncOutlined,
 } from '@ant-design/icons';
@@ -976,8 +978,8 @@ export default function ServersUnified() {
                     value={view}
                     onChange={changeView}
                     options={[
-                      { label: '卡片', value: 'cards' },
-                      { label: '表格', value: 'table' },
+                      { label: <Tooltip title="卡片视图"><AppstoreOutlined /></Tooltip>, value: 'cards' },
+                      { label: <Tooltip title="表格视图"><TableOutlined /></Tooltip>, value: 'table' },
                     ]}
                   />
                   <Button type="primary" icon={<PlusOutlined />} onClick={() => setCompose(true)}>
