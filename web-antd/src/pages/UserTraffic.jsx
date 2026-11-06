@@ -48,6 +48,7 @@ export default function UserTraffic() {
   const [range, setRange] = useState('7d');
   const [trendDays, setTrendDays] = useState(14);
   const [nodeWindow, setNodeWindow] = useState('week');
+  const [rateMinutes, setRateMinutes] = useState(60);
   const [q, setQ] = useState('');
   const [sortBy, setSortBy] = useState('today');
   const [onlyOnline, setOnlyOnline] = useState(false);
@@ -76,7 +77,11 @@ export default function UserTraffic() {
 
   const users = useAsync(() => api(`stats/traffic/users?range=${range}`), [range]);
   const series = useAsync(() => api(`stats/traffic/series?days=${trendDays}`), [trendDays]);
-  const rate = useAsync(() => api('stats/traffic/rate?minutes=60'), []);
+  const rate = useAsync(() => api(`stats/traffic/rate?minutes=${rateMinutes}`), [rateMinutes]);
+  useEffect(() => {
+    const id = setInterval(() => { rate.reload(); }, 10000);
+    return () => clearInterval(id);
+  }, [rateMinutes]);
 
   useEffect(() => {
     const t = setInterval(() => users.reload().catch(() => {}), 60000);
@@ -349,8 +354,18 @@ export default function UserTraffic() {
       </PageCard>
 
       <PageCard
-        title={<span className="pp-section-title">实时速率（近 60 分钟）</span>}
-        extra={<span className="pp-muted" style={{ fontSize: 12 }}>全站上下行速率 / 每分钟</span>}
+        title={<span className="pp-section-title">全站实时速率</span>}
+        extra={
+          <Space size={8}>
+            <span className="pp-muted" style={{ fontSize: 12 }}>全站速率 · 每 10 秒刷新</span>
+            <Segmented
+              size="small"
+              value={rateMinutes}
+              onChange={setRateMinutes}
+              options={[{ label: '15 分钟', value: 15 }, { label: '60 分钟', value: 60 }, { label: '3 小时', value: 180 }]}
+            />
+          </Space>
+        }
         style={{ marginBottom: 16 }}
       >
         {rate.error ? (
