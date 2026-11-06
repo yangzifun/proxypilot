@@ -3293,3 +3293,56 @@ body {
 @media (max-width: 1180px) {
   .pp-overview-grid { grid-template-columns: minmax(0, 1fr); }
 }
+/* ---- 3D 地球视图 ---- */
+.pp-globe-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  background:
+    radial-gradient(60% 60% at 50% 45%, #0b2545 0%, #071528 60%, #050d18 100%);
+  overflow: hidden;
+}
+.pp-globe {
+  position: relative;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #0a2a4d;
+  box-shadow:
+    inset -26px -18px 60px rgba(0, 0, 0, 0.65),
+    inset 18px 10px 50px rgba(125, 211, 252, 0.22),
+    0 0 70px rgba(56, 189, 248, 0.22);
+}
+.pp-globe-tex {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  width: 200%;
+  will-change: transform;
+}
+.pp-globe-tex img { width: 50%; height: 100%; object-fit: fill; opacity: 1; mix-blend-mode: screen; filter: invert(1) sepia(0.5) hue-rotate(155deg) saturate(1.8) brightness(1.35); }
+.pp-globe-shade {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 30% 26%, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0) 40%),
+    radial-gradient(circle at 72% 78%, rgba(0, 0, 0, 0.62), rgba(0, 0, 0, 0) 58%);
+}
+.pp-globe-marker {
+  position: absolute;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+.pp-globe-marker:hover { transform: translate(-50%, -50%) scale(1.5); }
+.pp-globe-hint {
+  position: absolute;
+  left: 12px;
+  bottom: 8px;
+  font-size: 11px;
+  color: rgba(148, 163, 184, 0.85);
+}

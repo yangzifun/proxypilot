@@ -43,6 +43,7 @@ import { useAsync, usePolling, readForm } from '../hooks';
 import { CopyText, ErrorBlock, JsonView, PageCard, StatCard, StatusPill } from '../components';
 import { watchBatch } from '../components/JobCenter';
 import { WorldMap } from './Monitor';
+import GlobeMap from '../components/GlobeMap';
 import ServerDrawer from '../components/ServerDrawer';
 import ServerUnlockModal from '../components/ServerUnlockModal';
 import { ServerCard as FullServerCard } from './Monitor';
@@ -853,8 +854,8 @@ export default function ServersUnified() {
                 <Button size="small" type="link" icon={<FullscreenOutlined />} onClick={() => setMapOpen(true)}>大屏</Button>
               </span>
             </div>
-            <div className="pp-ov-map-box pp-map-3d">
-              <WorldMap large zoomable servers={rows} onPick={(r) => setDetailId(r.id)} />
+            <div className="pp-ov-map-box">
+              <GlobeMap servers={rows} onPick={(r) => setDetailId(r.id)} height={318} />
             </div>
           </div>
         </div>      </PageCard>
@@ -869,8 +870,8 @@ export default function ServersUnified() {
         styles={{ body: { height: '84vh', padding: 8 } }}
         destroyOnHidden
       >
-        <div className="pp-ov-map-box pp-map-3d" style={{ height: '100%' }}>
-          <WorldMap large zoomable servers={rows} onPick={(r) => { setMapOpen(false); setDetailId(r.id); }} />
+        <div className="pp-ov-map-box" style={{ height: '100%' }}>
+          <GlobeMap servers={rows} onPick={(r) => { setMapOpen(false); setDetailId(r.id); }} height="100%" />
         </div>
       </Modal>
 
