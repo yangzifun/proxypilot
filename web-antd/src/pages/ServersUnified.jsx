@@ -816,8 +816,7 @@ export default function ServersUnified() {
           <div className="pp-ov-top">
               <div className="pp-ov-tiles">
                 {[
-                  { label: '服务器总数', value: fmtNum(rows.length) },
-                  { label: '在线', value: fmtNum(counts.online), hint: rows.length ? `在线率 ${((counts.online / rows.length) * 100).toFixed(0)}%` : '—', chart: 'online' },
+                  { label: '在线', value: fmtNum(counts.online), hint: rows.length ? `在线率 ${((counts.online / rows.length) * 100).toFixed(0)}% · 共 ${rows.length} 台` : '—', chart: 'online' },
                   { label: '离线', value: fmtNum(counts.offline), chart: 'offline' },
                   { label: '未接入', value: fmtNum(counts.unknown), hint: 'Agent 未上报心跳', chart: 'unknown' },
                   { label: '实时下行', value: fmtBytes(summary.rx_rate || 0), unit: '/s', chart: 'rx' },
@@ -956,7 +955,13 @@ export default function ServersUnified() {
                     size="small"
                     value={pageTheme}
                     onChange={changeTheme}
-                    options={[{ value: 'light', label: '默认' }, { value: 'emerald', label: '翠绿' }]}
+                    options={[
+                      { value: 'light', label: '默认' },
+                      { value: 'emerald', label: '翠绿' },
+                      { value: 'pulse', label: '极简' },
+                      { value: 'horizon', label: '扁平' },
+                      { value: 'glass', label: '毛玻璃' },
+                    ]}
                   />
                   <Tooltip title="每 5 秒只刷新监控数据（资源 / 网络 / 连接），不重新拉取列表">
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}>

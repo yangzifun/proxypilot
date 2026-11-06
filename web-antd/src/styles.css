@@ -3550,3 +3550,75 @@ body {
 .pp-servers-theme-emerald .ant-tag-green,
 .pp-servers-theme-emerald .ant-badge-status-success { color: #047857; }
 .pp-servers-theme-emerald .pp-ov-chart svg polyline { filter: drop-shadow(0 2px 4px rgba(16, 185, 129, 0.25)); }
+/* ---- 概览指标：3×2 宫格（参考 emerald 布局） ---- */
+.pp-overview-grid .pp-ov-tiles {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 12px !important;
+}
+.pp-overview-grid .pp-ov-tiles .pp-ov-tile {
+  min-height: 96px !important;
+  padding: 14px 16px !important;
+  border: 1px solid #eef2f7 !important;
+  border-radius: 12px !important;
+  background: #fbfdff !important;
+  justify-content: flex-start !important;
+}
+.pp-servers-theme-emerald .pp-overview-grid .pp-ov-tiles .pp-ov-tile {
+  background: rgba(255, 255, 255, 0.75) !important;
+  border-color: rgba(16, 185, 129, 0.14) !important;
+}
+.pp-overview-grid .pp-ov-tile .pp-ov-label { font-size: 12px !important; color: #64748b !important; }
+.pp-overview-grid .pp-ov-tile .pp-ov-value { font-size: 22px !important; margin: 2px 0 6px !important; }
+.pp-overview-grid .pp-ov-tile .pp-ov-chart { margin-top: 2px !important; }
+.pp-overview-grid .pp-ov-tile .pp-ov-hint { font-size: 11px !important; margin-top: 4px !important; }
+@media (max-width: 720px) {
+  .pp-overview-grid .pp-ov-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+}
+/* ================= Pulse 极简 ================= */
+.pp-servers-theme-pulse { padding: 12px; border-radius: 12px; background: #ffffff; }
+.pp-servers-theme-pulse .pp-card { background: #ffffff !important; border: 1px solid #e5e7eb !important; box-shadow: none !important; }
+.pp-servers-theme-pulse .pp-ov-tile { background: #ffffff !important; border: 1px solid #eceff3 !important; border-radius: 10px !important; }
+.pp-servers-theme-pulse .pp-ov-value { color: #111827 !important; font-weight: 700 !important; letter-spacing: -0.4px; }
+.pp-servers-theme-pulse .pp-ov-label,
+.pp-servers-theme-pulse .pp-muted { color: #6b7280 !important; }
+.pp-servers-theme-pulse .ant-table-thead > tr > th { background: #fafafa !important; color: #374151 !important; }
+.pp-servers-theme-pulse .ant-btn-primary { background: #111827 !important; border-color: #111827 !important; }
+
+/* ================= Horizon 扁平 ================= */
+.pp-servers-theme-horizon { padding: 12px; border-radius: 12px; background: #f8fafc; }
+.pp-servers-theme-horizon .pp-card { background: #ffffff !important; border: 1px solid #e2e8f0 !important; box-shadow: none !important; border-radius: 8px !important; }
+.pp-servers-theme-horizon .pp-ov-tile { background: #ffffff !important; border: 1px solid #e2e8f0 !important; border-radius: 8px !important; }
+.pp-servers-theme-horizon .pp-ov-value { color: #0f172a !important; }
+.pp-servers-theme-horizon .pp-ov-label,
+.pp-servers-theme-horizon .pp-muted { color: #64748b !important; }
+.pp-servers-theme-horizon .ant-table-thead > tr > th { background: #f1f5f9 !important; color: #334155 !important; }
+.pp-servers-theme-horizon .ant-btn-primary { background: #2563eb !important; border-color: #2563eb !important; box-shadow: none !important; }
+
+/* ================= Glassmorphism 毛玻璃 ================= */
+.pp-servers-theme-glass {
+  padding: 12px;
+  border-radius: 16px;
+  background:
+    radial-gradient(50% 40% at 15% 0%, rgba(196, 181, 253, 0.35) 0%, rgba(196,181,253,0) 60%),
+    radial-gradient(45% 40% at 90% 10%, rgba(125, 211, 252, 0.35) 0%, rgba(125,211,252,0) 60%),
+    linear-gradient(160deg, #eef2ff 0%, #f8fafc 60%);
+}
+.pp-servers-theme-glass .pp-card {
+  background: rgba(255, 255, 255, 0.55) !important;
+  border: 1px solid rgba(255, 255, 255, 0.7) !important;
+  backdrop-filter: blur(14px);
+  box-shadow: 0 16px 40px -30px rgba(15, 23, 42, 0.6) !important;
+  border-radius: 16px !important;
+}
+.pp-servers-theme-glass .pp-ov-tile {
+  background: rgba(255, 255, 255, 0.5) !important;
+  border: 1px solid rgba(255, 255, 255, 0.75) !important;
+  border-radius: 14px !important;
+  backdrop-filter: blur(10px);
+}
+.pp-servers-theme-glass .pp-ov-value { color: #1e293b !important; }
+.pp-servers-theme-glass .pp-ov-label,
+.pp-servers-theme-glass .pp-muted { color: #64748b !important; }
+.pp-servers-theme-glass .ant-table-thead > tr > th { background: rgba(255,255,255,0.6) !important; }
+.pp-servers-theme-glass .ant-btn-primary { background: rgba(79, 70, 229, 0.9) !important; border-color: transparent !important; }
