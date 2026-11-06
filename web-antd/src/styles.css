@@ -3410,3 +3410,65 @@ body {
 
 /* 概览：宽屏铺满 */
 .pp-overview-grid { max-width: none !important; margin: 0 !important; width: 100% !important; }
+
+/* ---- 宽屏：概览单排（竖线分隔） ---- */
+@media (min-width: 1200px) {
+  .pp-overview-grid {
+    display: flex !important;
+    align-items: stretch !important;
+    gap: 0 !important;
+  }
+  .pp-overview-grid .pp-ov-top,
+  .pp-overview-grid .pp-ov-tiles,
+  .pp-overview-grid .pp-ov-bottom { display: contents !important; }
+  .pp-overview-grid .pp-ov-foot { display: none !important; }
+  .pp-overview-grid .pp-ov-tile {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    height: auto !important;
+    padding: 0 12px !important;
+    background: transparent !important;
+    border: 0 !important;
+    border-left: 1px solid #eef2f7 !important;
+    border-radius: 0 !important;
+  }
+  .pp-overview-grid .pp-ov-tile:first-of-type { border-left: 0 !important; padding-left: 0 !important; }
+  .pp-overview-grid .pp-ov-tile .pp-ov-label { font-size: 11px !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }
+  .pp-overview-grid .pp-ov-tile .pp-ov-value { font-size: 16px !important; white-space: nowrap !important; }
+  .pp-overview-grid .pp-ov-tile .pp-ov-hint { display: none !important; }
+  .pp-overview-grid .pp-ov-res {
+    flex: 0 0 230px !important;
+    height: auto !important;
+    background: transparent !important;
+    border: 0 !important;
+    border-left: 1px solid #eef2f7 !important;
+    padding: 0 16px !important;
+  }
+  .pp-overview-grid .pp-ov-map {
+    flex: 1 1 30% !important;
+    min-width: 280px !important;
+    height: 190px !important;
+    border-left: 1px solid #eef2f7 !important;
+    padding-left: 16px !important;
+  }
+  .pp-overview-grid .pp-ov-map-box { height: 100% !important; min-height: 0 !important; }
+  .pp-overview-grid .pp-ov-gauge { transform: scale(0.6) !important; transform-origin: top center !important; }
+  .pp-overview-grid .pp-ov-avg { margin-top: 0 !important; }
+  .pp-overview-grid .pp-ov-disk { margin-top: -16px !important; }
+}
+/* 宽屏单排：收紧数值避免截断 */
+@media (min-width: 1200px) {
+  .pp-overview-grid .pp-ov-tile .pp-ov-value { font-size: 15px !important; }
+  .pp-overview-grid .pp-ov-tile .pp-ov-unit { font-size: 9px !important; margin-left: 0 !important; }
+  .pp-overview-grid .pp-ov-res { flex: 0 0 200px !important; padding: 0 12px !important; }
+  .pp-overview-grid .pp-ov-map { min-width: 240px !important; }
+}
+/* 宽屏单排：进一步压缩字号，确保数值完整 */
+@media (min-width: 1200px) {
+  .pp-overview-grid .pp-ov-tile { padding: 0 8px !important; }
+  .pp-overview-grid .pp-ov-tile .pp-ov-value { font-size: 13px !important; }
+  .pp-overview-grid .pp-ov-tile .pp-ov-label { font-size: 10px !important; }
+  .pp-overview-grid .pp-ov-tile .pp-ov-unit { font-size: 9px !important; }
+  .pp-overview-grid .pp-ov-res { flex: 0 0 190px !important; padding: 0 10px !important; }
+  .pp-overview-grid .pp-ov-map { min-width: 230px !important; }
+}
