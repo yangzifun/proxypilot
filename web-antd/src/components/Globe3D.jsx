@@ -151,6 +151,37 @@ export default function Globe3D({ servers = [], onPick, height = 340 }) {
       scene.add(ring);
       rings.push(ring);
     });
+    // ------ 线条穿透（球面外发射线） ------
+    const spikeGroup = new THREE.Group();
+    const spikeMat = new THREE.LineBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending });
+    for (let i = 0; i < 140; i += 1) {
+      const th = Math.random() * Math.PI * 2;
+      const ph = Math.acos(2 * Math.random() - 1);
+      const dir = new THREE.Vector3(Math.sin(ph) * Math.cos(th), Math.cos(ph), Math.sin(ph) * Math.sin(th));
+      const len = 0.04 + Math.random() * 0.35;
+      const geo = new THREE.BufferGeometry().setFromPoints([
+        dir.clone().multiplyScalar(1.002),
+        dir.clone().multiplyScalar(1.002 + len),
+      ]);
+      spikeGroup.add(new THREE.Line(geo, spikeMat));
+    }
+    group.add(spikeGroup);
+
+    // ------ 扫描带 ------
+    const scan = new THREE.Mesh(
+      new THREE.TorusGeometry(1, 0.006, 8, 160),
+      new THREE.MeshBasicMaterial({ color: 0x67e8f9, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending }),
+    );
+    scan.rotation.x = Math.PI / 2;
+    scene.add(scan);
+
+    // 扫描带外发光
+    const scanGlow = new THREE.Mesh(
+      new THREE.TorusGeometry(1, 0.05, 8, 160),
+      new THREE.MeshBasicMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.10, blending: THREE.AdditiveBlending }),
+    );
+    scanGlow.rotation.x = Math.PI / 2;
+    scene.add(scanGlow);
 
     // ------ 服务器光点（可增量重建，避免整球重建） ------
     const markers = [];
@@ -299,6 +330,14 @@ export default function Globe3D({ servers = [], onPick, height = 340 }) {
       atmo.scale.setScalar(1 + Math.sin(t * 1.2) * 0.006);
       rings.forEach((r) => { r.rotation.z += r.userData.speed; });
       arcGroup.children.forEach((l) => { if (l.material) l.material.dashOffset -= 0.006; });
+      spikeGroup.rotation.y += 0.0012;
+      const sy = Math.sin(t * 0.55) * 0.92;
+      const sr = Math.sqrt(Math.max(0.02, 1 - sy * sy));
+      scan.position.y = sy;
+      scan.scale.set(sr, sr, 1);
+      scanGlow.position.y = sy;
+      scanGlow.scale.set(sr, sr, 1);
+      scanGlow.material.opacity = 0.08 + 0.06 * (1 - Math.abs(sy));
       renderer.render(scene, camera);
     };
     animate();
