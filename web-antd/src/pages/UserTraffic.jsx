@@ -347,6 +347,40 @@ export default function UserTraffic() {
       </PageCard>
 
       <PageCard
+        title={<span className="pp-section-title">Top 10 用户（当前区间）</span>}
+        extra={<span className="pp-muted" style={{ fontSize: 12 }}>按上下行合计排序</span>}
+        style={{ marginBottom: 16 }}
+      >
+        {(() => {
+          const list = ((users.data && users.data.data) || [])
+            .map((u) => ({ ...u, _sum: Number(u.up || 0) + Number(u.down || 0) }))
+            .filter((u) => u._sum > 0)
+            .sort((a, b) => b._sum - a._sum)
+            .slice(0, 10);
+          if (!list.length) {
+            return <Empty description="当前区间没有流量数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />;
+          }
+          const max = list[0]._sum || 1;
+          return (
+            <div style={{ display: 'grid', gap: 10 }}>
+              {list.map((u, i) => (
+                <div key={u.uuid} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span className="pp-muted" style={{ width: 22, textAlign: 'right', fontSize: 12 }}>{i + 1}</span>
+                  <span style={{ width: 210, fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {u.owner || u.remark || u.email || String(u.uuid).slice(0, 8)}
+                  </span>
+                  <div style={{ flex: 1, height: 8, background: '#eef2f7', borderRadius: 4, overflow: 'hidden' }}>
+                    <div style={{ width: (u._sum / max) * 100 + '%', height: '100%', borderRadius: 4, background: 'linear-gradient(90deg,#38bdf8,#8b5cf6)' }} />
+                  </div>
+                  <span className="pp-mono" style={{ width: 96, textAlign: 'right', fontSize: 12 }}>{fmtBytes(u._sum)}</span>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+      </PageCard>
+
+      <PageCard
         title={<span className="pp-section-title">用户流量与在线状态</span>}
         extra={
           <Space wrap>
