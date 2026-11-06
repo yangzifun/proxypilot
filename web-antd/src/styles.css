@@ -3674,3 +3674,17 @@ body {
   .pp-overview-grid { grid-template-columns: minmax(0, 1fr) !important; }
   .pp-overview-grid .pp-ov-map { grid-column: 1 !important; grid-row: 3 !important; border-left: 0 !important; padding-left: 0 !important; }
 }
+/* ---- 服务器页空状态（参考 emerald 插图风格） ---- */
+.pp-servers-theme-emerald .ant-empty,
+.pp-servers-theme-glass .ant-empty { margin: 48px 0; }
+.pp-servers-theme-emerald .ant-empty-image { opacity: 0.55; }
+.pp-servers-theme-emerald .ant-empty-description { color: #6b8f7f !important; font-size: 13px; }
+.pp-servers-theme-glass .ant-empty-description { color: #64748b !important; }
+.pp-servers-theme-pulse .ant-empty-description { color: #6b7280 !important; font-size: 13px; }
+.pp-servers-theme-horizon .ant-empty-description { color: #64748b !important; }
+
+/* 搜索框与筛选在主题下的统一圆角 */
+.pp-servers-theme-emerald .ant-input-affix-wrapper,
+.pp-servers-theme-emerald .ant-segmented { border-radius: 10px !important; }
+.pp-servers-theme-glass .ant-input-affix-wrapper,
+.pp-servers-theme-glass .ant-segmented { border-radius: 12px !important; background: rgba(255,255,255,0.6) !important; }
