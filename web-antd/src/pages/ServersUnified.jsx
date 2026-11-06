@@ -828,7 +828,7 @@ export default function ServersUnified() {
             </div>
           </div>
 
-          <div className="pp-ov-map" style={{ height: 360, maxHeight: 360 }}>
+          <div className="pp-ov-map">
             <div className="pp-ov-sec-head">
               <b>全球分布</b>
               <span className="pp-ov-map-extra">
@@ -855,7 +855,7 @@ export default function ServersUnified() {
               </span>
             </div>
             <div className="pp-ov-map-box">
-              <Globe3D servers={rows} onPick={(r) => setDetailId(r.id)} height={318} />
+              <Globe3D servers={rows} onPick={(r) => setDetailId(r.id)} height="100%" />
             </div>
           </div>
         </div>      </PageCard>

@@ -3384,3 +3384,13 @@ body {
   0%, 100% { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.14), 0 0 8px currentColor; }
   50% { box-shadow: 0 0 0 5px rgba(255, 255, 255, 0.06), 0 0 16px currentColor; }
 }
+/* ---- 服务器概览：左侧小卡片上下堆叠，右侧大地图单独一列 ---- */
+.pp-overview-grid { grid-template-columns: 320px minmax(0, 1fr); align-items: start; gap: 18px; }
+.pp-overview-grid .pp-ov-tiles { grid-template-columns: 1fr; gap: 10px; }
+.pp-overview-grid .pp-ov-tile-wide { grid-column: auto; }
+.pp-overview-grid .pp-ov-map { height: 520px; min-height: 460px; max-height: 560px; }
+.pp-overview-grid .pp-ov-map-box { min-height: 400px; }
+@media (max-width: 1180px) {
+  .pp-overview-grid { grid-template-columns: minmax(0, 1fr); }
+  .pp-overview-grid .pp-ov-map { min-height: 360px; }
+}
