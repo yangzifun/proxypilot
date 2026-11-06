@@ -89,6 +89,11 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
   }, [serverId]);
 
   useEffect(() => {
+    if (!serverId) return undefined;
+    const timer = setInterval(() => { load().catch(() => {}); }, 3000);
+    return () => clearInterval(timer);
+  }, [serverId, load]);
+  useEffect(() => {
     if (serverId) load();
     else setState({ data: null, metrics: [], configs: [], loading: false, error: null });
   }, [serverId, load]);
