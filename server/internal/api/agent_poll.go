@@ -384,7 +384,7 @@ func (h *handlers) agentUpdateSnapshot(ctx context.Context, srv *agentServer, m 
 	_, err := h.db.ExecContext(ctx, `UPDATE servers SET last_status = ?, last_error = ?, last_check_at = ?,
 	      last_metrics = ?, os_info = ?, link_mode = ?, agent_platform = ?, agent_version = ?,
 	      agent_last_seen = ?, agent_last_poll_at = IF(?, ?, agent_last_poll_at),
-	      agent_next_poll_sec = ?, agent_poll_count = IF(?, ?, agent_poll_count),
+	      agent_next_poll_sec = LEAST(agent_next_poll_sec, ?), agent_poll_count = IF(?, ?, agent_poll_count),
 	      last_ip = COALESCE(NULLIF(?, ''), last_ip),
 	      last_ip4 = COALESCE(NULLIF(?, ''), last_ip4),
 	      last_ip6 = COALESCE(NULLIF(?, ''), last_ip6),

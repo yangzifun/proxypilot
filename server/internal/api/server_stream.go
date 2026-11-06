@@ -20,7 +20,7 @@ var (
 func sseAcquire(sub string) bool {
 	sseConnMu.Lock()
 	defer sseConnMu.Unlock()
-	if sseConns[sub] >= 2 {
+	if sseConns[sub] >= 4 {
 		return false
 	}
 	sseConns[sub]++
@@ -59,7 +59,7 @@ func (h *handlers) sseServersStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !sseAcquire(claims.Sub) {
-		writeError(w, http.StatusTooManyRequests, "SSE 连接数已达上限（每管理员最多 2 条）")
+		writeError(w, http.StatusTooManyRequests, "SSE 连接数已达上限（每管理员最多 4 条）")
 		return
 	}
 	defer sseRelease(claims.Sub)
