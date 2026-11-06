@@ -13,7 +13,7 @@ export default function Globe3D({ servers = [], onPick, height = 340 }) {
   const stateRef = useRef({});
   const onPickRef = useRef(onPick);
   useEffect(() => { onPickRef.current = onPick; }, [onPick]);
-  useEffect(() => { if (stateRef.current.rebuildMarkers) stateRef.current.rebuildMarkers(servers); if (stateRef.current.rebuildArcs) stateRef.current.rebuildArcs(servers); }, [servers]);
+  useEffect(() => { if (stateRef.current.rebuildMarkers) stateRef.current.rebuildMarkers(servers); if (stateRef.current.rebuildArcs) stateRef.current.rebuildArcs(servers); if (stateRef.current.makeDots) stateRef.current.makeDots(servers); }, [servers]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -220,16 +220,43 @@ export default function Globe3D({ servers = [], onPick, height = 340 }) {
         const online = s.last_status === 'online' || s.status === 'online';
         const color = online ? 0x22c55e : s.last_status === 'unknown' ? 0xcbd5e1 : 0xf43f5e;
         const mesh = new THREE.Mesh(
-          new THREE.SphereGeometry(0.013, 12, 12),
-          new THREE.MeshBasicMaterial({ color }),
+          new THREE.SphereGeometry(0.05, 16, 16),
+          new THREE.MeshBasicMaterial({ color, depthTest: false, transparent: true, opacity: 0.95 }),
         );
         mesh.position.copy(pos);
         mesh.userData = { server: s };
 
+        mesh.renderOrder = 20;
         markerGroup.add(mesh);
         markers.push(mesh);
       }
     };
+    const dotLayer = document.createElement('div');
+    dotLayer.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:2';
+    host.appendChild(dotLayer);
+    const dots = [];
+    const makeDots = (list) => {
+      dotLayer.innerHTML = '';
+      dots.length = 0;
+      for (const s of list || []) {
+        const lat = Number(s.ip_lat);
+        const lon = Number(s.ip_lon);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+        const phi = ((90 - lat) * Math.PI) / 180;
+        const theta = ((lon + 180) * Math.PI) / 180;
+        const vec = new THREE.Vector3(-Math.sin(phi) * Math.cos(theta), Math.cos(phi), Math.sin(phi) * Math.sin(theta));
+        const online = s.last_status === 'online' || s.status === 'online';
+        const el = document.createElement('div');
+        el.style.cssText = 'position:absolute;width:7px;height:7px;margin:-3.5px 0 0 -3.5px;border-radius:50%;' +
+          'background:' + (online ? '#22c55e' : '#f43f5e') + ';box-shadow:0 0 6px ' + (online ? '#22c55e' : '#f43f5e') + ';' +
+          'border:1px solid rgba(255,255,255,.7);transition:opacity .2s';
+        el.title = s.name || String(s.id);
+        dotLayer.appendChild(el);
+        dots.push({ el, vec, server: s });
+      }
+    };
+    makeDots(servers);
+    stateRef.current.makeDots = makeDots;
     // ------ 服务器之间的数据弧线 ------
     const arcGroup = new THREE.Group();
     group.add(arcGroup);
@@ -308,6 +335,28 @@ export default function Globe3D({ servers = [], onPick, height = 340 }) {
     el.addEventListener('pointermove', onMove);
     el.addEventListener('pointerup', onUp);
 
+    const tip = document.createElement('div');
+    tip.style.cssText = 'position:absolute;pointer-events:none;padding:2px 6px;border-radius:6px;background:rgba(2,6,23,.85);color:#e2e8f0;font-size:11px;white-space:nowrap;display:none;transform:translate(-50%,-160%);z-index:3;border:1px solid rgba(56,189,248,.35)';
+    host.appendChild(tip);
+    const updateHover = (e) => {
+      const rect = renderer.domElement.getBoundingClientRect();
+      pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(pointer, camera);
+      const hit = raycaster.intersectObjects(markers, false)[0];
+      if (hit) {
+        const s = hit.object.userData.server || {};
+        tip.textContent = (s.name || s.id) + (s.last_status === 'online' || s.status === 'online' ? ' · 在线' : ' · 离线');
+        tip.style.left = e.clientX - rect.left + 'px';
+        tip.style.top = e.clientY - rect.top + 'px';
+        tip.style.display = 'block';
+        renderer.domElement.style.cursor = 'pointer';
+      } else {
+        tip.style.display = 'none';
+        renderer.domElement.style.cursor = dragging ? 'grabbing' : 'grab';
+      }
+    };
+    el.addEventListener('pointermove', updateHover);
     const onResize = () => {
       const w = host.clientWidth;
       const h = host.clientHeight;
@@ -338,6 +387,18 @@ export default function Globe3D({ servers = [], onPick, height = 340 }) {
       scanGlow.position.y = sy;
       scanGlow.scale.set(sr, sr, 1);
       scanGlow.material.opacity = 0.08 + 0.06 * (1 - Math.abs(sy));
+      const rect = renderer.domElement.getBoundingClientRect();
+      const world = new THREE.Vector3();
+      for (const d of dots) {
+        world.copy(d.vec).applyMatrix4(group.matrixWorld).project(camera);
+        const x = (world.x * 0.5 + 0.5) * rect.width;
+        const y = (-world.y * 0.5 + 0.5) * rect.height;
+        const front = world.z < 1;
+        d.el.style.transform = 'translate(' + x + 'px,' + y + 'px)';
+        d.el.style.opacity = front ? '1' : '0.55';
+        d.el.style.width = d.el.style.height = (front ? '7px' : '5px');
+        d.el.style.margin = front ? '-3.5px 0 0 -3.5px' : '-2.5px 0 0 -2.5px';
+      }
       renderer.render(scene, camera);
     };
     animate();
@@ -349,6 +410,9 @@ export default function Globe3D({ servers = [], onPick, height = 340 }) {
       el.removeEventListener('pointerdown', onDown);
       el.removeEventListener('pointermove', onMove);
       el.removeEventListener('pointerup', onUp);
+      el.removeEventListener('pointermove', updateHover);
+      if (host.contains(tip)) host.removeChild(tip);
+      if (host.contains(dotLayer)) host.removeChild(dotLayer);
       renderer.dispose();
       sphereGeo.dispose();
       sphereMat.dispose();
