@@ -2,18 +2,20 @@ import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 
 /**
- * WebGL 3D 地球（three.js）
- *  - world.svg 绘制到 Canvas 后重着色为球面贴图
- *  - 大气层 Fresnel 光晕
- *  - 服务器经纬度转球面坐标，光点呼吸
- *  - 拖拽旋转 + 自动自转，点击光点回调
+ * WebGL 3D 地球（three.js，重写版）
+ *  - world.svg 重着色为球面贴图（海洋深蓝 / 陆地暗青）
+ *  - 大气光晕 + 经纬网格 + 旋转光环 + 扫描带
+ *  - 服务器光点：Points（固定像素大小），从 props 实时重建
+ *  - 拖拽旋转 / 自动自转 / 点击光点
  */
-export default function Globe3D({ servers = [], onPick, height = 340 }) {
+export default function Globe3D({ servers = [], onPick, height = 320 }) {
   const hostRef = useRef(null);
-  const stateRef = useRef({});
-  const onPickRef = useRef(onPick);
-  useEffect(() => { onPickRef.current = onPick; }, [onPick]);
-  useEffect(() => { if (stateRef.current.rebuildMarkers) stateRef.current.rebuildMarkers(servers); if (stateRef.current.rebuildArcs) stateRef.current.rebuildArcs(servers); if (stateRef.current.makeDots) stateRef.current.makeDots(servers); }, [servers]);
+  const apiRef = useRef({});
+  const serversRef = useRef(servers);
+  const pickRef = useRef(onPick);
+
+  serversRef.current = servers;
+  pickRef.current = onPick;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -23,7 +25,7 @@ export default function Globe3D({ servers = [], onPick, height = 340 }) {
     try {
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     } catch (e) {
-      host.innerHTML = '<div style="color:#94a3b8;font-size:12px;padding:20px">当前浏览器不支持 WebGL</div>';
+      host.innerHTML = '<div style="color:#94a3b8;font-size:12px;padding:16px">当前浏览器不支持 WebGL</div>';
       return undefined;
     }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -31,79 +33,54 @@ export default function Globe3D({ servers = [], onPick, height = 340 }) {
     host.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(38, host.clientWidth / host.clientHeight, 0.1, 100);
-    camera.position.set(0, 0.25, 3.2);
+    const camera = new THREE.PerspectiveCamera(40, host.clientWidth / host.clientHeight, 0.1, 100);
+    camera.position.set(0, 0.15, 3.1);
 
     const group = new THREE.Group();
     scene.add(group);
 
-    scene.add(new THREE.AmbientLight(0xbfdbfe, 1.1));
-    const dir = new THREE.DirectionalLight(0xffffff, 1.5);
-    dir.position.set(-2, 1.6, 2.4);
-    scene.add(dir);
-    const rim = new THREE.DirectionalLight(0x38bdf8, 0.7);
-    rim.position.set(2, -1, -2);
-    scene.add(rim);
+    scene.add(new THREE.AmbientLight(0xffffff, 1.2));
+    const key = new THREE.DirectionalLight(0xffffff, 1.4);
+    key.position.set(-2, 1.5, 2.2);
+    scene.add(key);
 
-    // ------ 贴图：把 world.svg 重着色成海洋深蓝 / 陆地青绿 ------
-    const texCanvas = document.createElement('canvas');
-    texCanvas.width = 2048;
-    texCanvas.height = 1024;
-    const tctx = texCanvas.getContext('2d');
-    tctx.fillStyle = '#0b2a4a';
-    tctx.fillRect(0, 0, texCanvas.width, texCanvas.height);
-
-    const sphereGeo = new THREE.SphereGeometry(1, 96, 64);
-    const sphereMat = new THREE.MeshPhongMaterial({ color: 0x0d2f52, shininess: 12, specular: 0x224466 });
-    const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+    // 球体
+    const sphereMat = new THREE.MeshPhongMaterial({ color: 0x0b2a4a, shininess: 8, specular: 0x1e3a5f });
+    const sphere = new THREE.Mesh(new THREE.SphereGeometry(1, 96, 64), sphereMat);
     group.add(sphere);
 
+    // 贴图重着色
+    const canvas = document.createElement('canvas');
+    canvas.width = 2048;
+    canvas.height = 1024;
+    const cctx = canvas.getContext('2d');
+    cctx.fillStyle = '#04121f';
+    cctx.fillRect(0, 0, canvas.width, canvas.height);
     const img = new Image();
-    img.crossOrigin = 'anonymous';
     img.onload = () => {
-      tctx.drawImage(img, 0, 0, texCanvas.width, texCanvas.height);
-      const data = tctx.getImageData(0, 0, texCanvas.width, texCanvas.height);
+      cctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const data = cctx.getImageData(0, 0, canvas.width, canvas.height);
       const px = data.data;
       for (let i = 0; i < px.length; i += 4) {
         const lum = (px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114) / 255;
-        // world.svg：背景 #f7f9fb（亮），陆地 #dfe6ee（略暗），用亮度阈值区分
         if (lum < 0.945) {
-          // 陆地：青绿渐变，纬度越高越亮
-          const y = Math.floor(i / 4 / texCanvas.width);
-          const t = 1 - y / texCanvas.height;
-          px[i] = 10 + 14 * t;
-          px[i + 1] = 52 + 40 * t;
-          px[i + 2] = 66 + 44 * t;
+          px[i] = 12; px[i + 1] = 62; px[i + 2] = 78;
         } else {
-          px[i] = 4;
-          px[i + 1] = 16;
-          px[i + 2] = 32;
+          px[i] = 5; px[i + 1] = 18; px[i + 2] = 34;
         }
       }
-      tctx.putImageData(data, 0, 0);
-      const tex = new THREE.CanvasTexture(texCanvas);
+      cctx.putImageData(data, 0, 0);
+      const tex = new THREE.CanvasTexture(canvas);
       tex.colorSpace = THREE.SRGBColorSpace;
-      tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
       sphereMat.map = tex;
       sphereMat.color = new THREE.Color(0xffffff);
       sphereMat.needsUpdate = true;
     };
     img.src = '/assets/world.svg';
 
-    // ------ 大气层 ------
-    const atmoMat = new THREE.ShaderMaterial({
-      transparent: true,
-      side: THREE.BackSide,
-      blending: THREE.AdditiveBlending,
-      uniforms: { glowColor: { value: new THREE.Color(0x38bdf8) } },
-      vertexShader: `varying vec3 vNormal; void main(){ vNormal = normalize(normalMatrix * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
-      fragmentShader: `varying vec3 vNormal; uniform vec3 glowColor; void main(){ float intensity = pow(0.72 - dot(vNormal, vec3(0.0,0.0,1.0)), 3.0); gl_FragColor = vec4(glowColor, 1.0) * intensity; }`,
-    });
-    const atmo = new THREE.Mesh(new THREE.SphereGeometry(1.14, 96, 64), atmoMat);
-    scene.add(atmo);
-    // ------ 经纬网格（全息线条） ------
+    // 经纬网格
     const gridMat = new THREE.LineBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending });
-    const gridGroup = new THREE.Group();
+    const grid = new THREE.Group();
     for (let lon = -180; lon < 180; lon += 15) {
       const pts = [];
       for (let lat = -90; lat <= 90; lat += 4) {
@@ -111,7 +88,7 @@ export default function Globe3D({ servers = [], onPick, height = 340 }) {
         const theta = ((lon + 180) * Math.PI) / 180;
         pts.push(new THREE.Vector3(-Math.sin(phi) * Math.cos(theta), Math.cos(phi), Math.sin(phi) * Math.sin(theta)));
       }
-      gridGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), gridMat));
+      grid.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), gridMat));
     }
     for (let lat = -75; lat <= 75; lat += 15) {
       const pts = [];
@@ -120,263 +97,130 @@ export default function Globe3D({ servers = [], onPick, height = 340 }) {
         const theta = ((lon + 180) * Math.PI) / 180;
         pts.push(new THREE.Vector3(-Math.sin(phi) * Math.cos(theta), Math.cos(phi), Math.sin(phi) * Math.sin(theta)));
       }
-      gridGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), gridMat));
+      grid.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), gridMat));
     }
-    group.add(gridGroup);
+    group.add(grid);
 
-    // ------ 星点背景 ------
-    const starGeo = new THREE.BufferGeometry();
-    const starPos = new Float32Array(900 * 3);
-    for (let i = 0; i < 900; i += 1) {
-      const r = 2.6 + Math.random() * 1.8;
-      const th = Math.random() * Math.PI * 2;
-      const ph = Math.acos(2 * Math.random() - 1);
-      starPos[i * 3] = r * Math.sin(ph) * Math.cos(th);
-      starPos[i * 3 + 1] = r * Math.cos(ph);
-      starPos[i * 3 + 2] = r * Math.sin(ph) * Math.sin(th);
-    }
-    starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
-    const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0x7dd3fc, size: 0.012, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending }));
-    // 背景星点已按需求移除
+    // 大气
+    const atmo = new THREE.Mesh(
+      new THREE.SphereGeometry(1.12, 64, 48),
+      new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.1, side: THREE.BackSide, blending: THREE.AdditiveBlending }),
+    );
+    scene.add(atmo);
 
-    // ------ 旋转光环 ------
+    // 光环
     const rings = [];
-    [[1.28, 0.0025, 0.35], [1.42, 0.0018, -0.5]].forEach(([radius, speed, tilt]) => {
+    [[1.28, 0.0022, 0.3], [1.4, 0.0016, -0.45]].forEach(([r, speed]) => {
       const ring = new THREE.Mesh(
-        new THREE.TorusGeometry(radius, 0.0035, 8, 160),
-        new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending }),
+        new THREE.TorusGeometry(r, 0.003, 8, 128),
+        new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending }),
       );
-      ring.rotation.x = Math.PI / 2 + tilt;
+      ring.rotation.x = Math.PI / 2 + 0.3;
       ring.userData.speed = speed;
       scene.add(ring);
       rings.push(ring);
     });
-    // ------ 线条穿透（球面外发射线） ------
-    const spikeGroup = new THREE.Group();
-    const spikeMat = new THREE.LineBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending });
-    for (let i = 0; i < 140; i += 1) {
-      const th = Math.random() * Math.PI * 2;
-      const ph = Math.acos(2 * Math.random() - 1);
-      const dir = new THREE.Vector3(Math.sin(ph) * Math.cos(th), Math.cos(ph), Math.sin(ph) * Math.sin(th));
-      const len = 0.04 + Math.random() * 0.35;
-      const geo = new THREE.BufferGeometry().setFromPoints([
-        dir.clone().multiplyScalar(1.002),
-        dir.clone().multiplyScalar(1.002 + len),
-      ]);
-      spikeGroup.add(new THREE.Line(geo, spikeMat));
-    }
-    group.add(spikeGroup);
 
-    // ------ 扫描带 ------
+    // 扫描带
     const scan = new THREE.Mesh(
-      new THREE.TorusGeometry(1, 0.006, 8, 160),
-      new THREE.MeshBasicMaterial({ color: 0x67e8f9, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending }),
+      new THREE.TorusGeometry(1, 0.005, 8, 128),
+      new THREE.MeshBasicMaterial({ color: 0x67e8f9, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending }),
     );
     scan.rotation.x = Math.PI / 2;
     scene.add(scan);
 
-    // 扫描带外发光
-    const scanGlow = new THREE.Mesh(
-      new THREE.TorusGeometry(1, 0.05, 8, 160),
-      new THREE.MeshBasicMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.10, blending: THREE.AdditiveBlending }),
-    );
-    scanGlow.rotation.x = Math.PI / 2;
-    scene.add(scanGlow);
-
-    // ------ 服务器光点（可增量重建，避免整球重建） ------
-    const markers = [];
-    const markerGroup = new THREE.Group();
-    group.add(markerGroup);
-    // 光晕贴图
+    // ---------------- 服务器光点 ----------------
     const glowCanvas = document.createElement('canvas');
     glowCanvas.width = 64; glowCanvas.height = 64;
     const gctx = glowCanvas.getContext('2d');
     const grad = gctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-    grad.addColorStop(0, 'rgba(255,255,255,0.95)');
-    grad.addColorStop(0.35, 'rgba(255,255,255,0.45)');
+    grad.addColorStop(0, 'rgba(255,255,255,1)');
+    grad.addColorStop(0.4, 'rgba(255,255,255,0.7)');
     grad.addColorStop(1, 'rgba(255,255,255,0)');
     gctx.fillStyle = grad;
     gctx.fillRect(0, 0, 64, 64);
-    const glowTexture = new THREE.CanvasTexture(glowCanvas);
-    const markerCanvas = document.createElement('canvas');
-    markerCanvas.width = 64; markerCanvas.height = 64;
-    const mctx = markerCanvas.getContext('2d');
-    const mgrad = mctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-    mgrad.addColorStop(0, 'rgba(255,255,255,1)');
-    mgrad.addColorStop(0.45, 'rgba(255,255,255,0.55)');
-    mgrad.addColorStop(1, 'rgba(255,255,255,0)');
-    mctx.fillStyle = mgrad;
-    mctx.fillRect(0, 0, 64, 64);
-    const markerGlowTex = new THREE.CanvasTexture(markerCanvas);
-    let markerPoints = null;
-    const rebuildMarkers = (list) => {
-      if (markerPoints) {
-        markerGroup.remove(markerPoints);
-        markerPoints.geometry.dispose();
-        markerPoints.material.dispose();
-        markerPoints = null;
-      }
-      markers.length = 0;
+    const dotTex = new THREE.CanvasTexture(glowCanvas);
+
+    let points = null;
+    const rebuildPoints = () => {
+      const list = serversRef.current || [];
       const positions = [];
       const colors = [];
-      for (const s of list || []) {
+      for (const s of list) {
         const lat = Number(s.ip_lat);
         const lon = Number(s.ip_lon);
         if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
         const phi = ((90 - lat) * Math.PI) / 180;
         const theta = ((lon + 180) * Math.PI) / 180;
-        const r = 1.015;
+        const r = 1.03;
         positions.push(-r * Math.sin(phi) * Math.cos(theta), r * Math.cos(phi), r * Math.sin(phi) * Math.sin(theta));
         const online = s.last_status === 'online' || s.status === 'online';
-        const c = new THREE.Color(online ? 0x22c55e : s.last_status === 'unknown' ? 0xcbd5e1 : 0xf43f5e);
+        const c = new THREE.Color(online ? 0x22c55e : 0xf43f5e);
         colors.push(c.r, c.g, c.b);
       }
-      if (positions.length === 0) return;
+      if (points) {
+        group.remove(points);
+        points.geometry.dispose();
+        points.material.dispose();
+        points = null;
+      }
+      if (!positions.length) return;
       const geo = new THREE.BufferGeometry();
       geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
       geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
       const mat = new THREE.PointsMaterial({
-        size: 9, sizeAttenuation: false, vertexColors: true, map: markerGlowTex,
-        transparent: true, depthTest: false, depthWrite: false, alphaTest: 0.01,
+        size: 12,
+        sizeAttenuation: false,
+        vertexColors: true,
+        map: dotTex,
+        transparent: true,
+        depthTest: false,
+        depthWrite: false,
+        alphaTest: 0.01,
       });
-      markerPoints = new THREE.Points(geo, mat);
-      markerPoints.renderOrder = 30;
-      markerGroup.add(markerPoints);
-      markers.push(markerPoints);
+      points = new THREE.Points(geo, mat);
+      points.renderOrder = 999;
+      group.add(points);
     };
-    const dotLayer = document.createElement('div');
-    dotLayer.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:2';
-    host.appendChild(dotLayer);
-    const dots = [];
-    const makeDots = (list) => {
-      dotLayer.innerHTML = '';
-      dots.length = 0;
-      for (const s of list || []) {
-        const lat = Number(s.ip_lat);
-        const lon = Number(s.ip_lon);
-        if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
-        const phi = ((90 - lat) * Math.PI) / 180;
-        const theta = ((lon + 180) * Math.PI) / 180;
-        const vec = new THREE.Vector3(-Math.sin(phi) * Math.cos(theta), Math.cos(phi), Math.sin(phi) * Math.sin(theta));
-        const online = s.last_status === 'online' || s.status === 'online';
-        const el = document.createElement('div');
-        el.style.cssText = 'position:absolute;width:7px;height:7px;margin:-3.5px 0 0 -3.5px;border-radius:50%;' +
-          'background:' + (online ? '#22c55e' : '#f43f5e') + ';box-shadow:0 0 6px ' + (online ? '#22c55e' : '#f43f5e') + ';' +
-          'border:1px solid rgba(255,255,255,.7);transition:opacity .2s';
-        el.title = s.name || String(s.id);
-        dotLayer.appendChild(el);
-        dots.push({ el, vec, server: s });
-      }
-    };
-    makeDots(servers);
-    stateRef.current.makeDots = makeDots;
-    // ------ 服务器之间的数据弧线 ------
-    const arcGroup = new THREE.Group();
-    group.add(arcGroup);
-    const rebuildArcs = (list) => {
-      for (const child of [...arcGroup.children]) {
-        arcGroup.remove(child);
-        child.geometry.dispose();
-        child.material.dispose();
-      }
-      const pts = [];
-      for (const s of list || []) {
-        const lat = Number(s.ip_lat);
-        const lon = Number(s.ip_lon);
-        if (s.ip_lat === null || s.ip_lon === null || !Number.isFinite(lat) || !Number.isFinite(lon)) continue;
-        const phi = ((90 - lat) * Math.PI) / 180;
-        const theta = ((lon + 180) * Math.PI) / 180;
-        pts.push(new THREE.Vector3(-Math.sin(phi) * Math.cos(theta), Math.cos(phi), Math.sin(phi) * Math.sin(theta)));
-        if (pts.length >= 10) break;
-      }
-      if (pts.length < 2) return;
-      const hub = pts[0];
-      for (let i = 1; i < pts.length; i += 1) {
-        const a = hub;
-        const b = pts[i];
-        const mid = a.clone().add(b).multiplyScalar(0.5);
-        if (mid.lengthSq() < 0.01) continue;
-        mid.normalize().multiplyScalar(1 + a.distanceTo(b) * 0.22);
-        const curve = new THREE.QuadraticBezierCurve3(a.clone().multiplyScalar(1.005), mid, b.clone().multiplyScalar(1.005));
-        const geo = new THREE.BufferGeometry().setFromPoints(curve.getPoints(48));
-        const line = new THREE.Line(geo, new THREE.LineDashedMaterial({
-          color: 0x38bdf8, dashSize: 0.05, gapSize: 0.035, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending,
-        }));
-        line.computeLineDistances();
-        arcGroup.add(line);
-      }
-    };
-    rebuildArcs(servers);
-    stateRef.current.rebuildArcs = rebuildArcs;
-    rebuildMarkers(servers);
-    stateRef.current.rebuildMarkers = rebuildMarkers;
+    rebuildPoints();
+    apiRef.current.rebuild = rebuildPoints;
 
-    // 初始朝向：经度 105° 附近（东亚）
     group.rotation.y = (105 * Math.PI) / 180;
 
-    // ------ 交互 ------
+    // 交互
     let dragging = false;
     let lastX = 0;
     let spin = true;
     const raycaster = new THREE.Raycaster();
+    raycaster.params.Points.threshold = 0.05;
     const pointer = new THREE.Vector2();
 
-    const onDown = (e) => {
-      dragging = true;
-      spin = false;
-      lastX = e.clientX;
-      renderer.domElement.setPointerCapture?.(e.pointerId);
-    };
-    const onMove = (e) => {
-      if (!dragging) return;
-      group.rotation.y += (e.clientX - lastX) * 0.005;
-      lastX = e.clientX;
-    };
+    const el = renderer.domElement;
+    const onDown = (e) => { dragging = true; spin = false; lastX = e.clientX; el.setPointerCapture?.(e.pointerId); };
+    const onMove = (e) => { if (!dragging) return; group.rotation.y += (e.clientX - lastX) * 0.006; lastX = e.clientX; };
     const onUp = (e) => {
-      if (!dragging) return;
       dragging = false;
-      const rect = renderer.domElement.getBoundingClientRect();
+      if (!points) return;
+      const rect = el.getBoundingClientRect();
       pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
       pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
       raycaster.setFromCamera(pointer, camera);
-      const hit = raycaster.intersectObjects(markers, false)[0];
-      if (hit && hit.index != null && markers[0] && markers[0].userData && Array.isArray(markers[0].userData.list)) {
-        const s = markers[0].userData.list[hit.index];
-        if (s && onPickRef.current) onPickRef.current(s);
+      const hit = raycaster.intersectObject(points, false)[0];
+      if (hit && pickRef.current) {
+        const geoList = points.geometry.getAttribute('position').count;
+        const s = (serversRef.current || []).filter((x) => Number.isFinite(Number(x.ip_lat)) && Number.isFinite(Number(x.ip_lon)))[hit.index];
+        if (s) pickRef.current(s);
       }
-      setTimeout(() => { spin = true; }, 2500);
+      setTimeout(() => { spin = true; }, 2000);
     };
-    const el = renderer.domElement;
     el.addEventListener('pointerdown', onDown);
     el.addEventListener('pointermove', onMove);
     el.addEventListener('pointerup', onUp);
 
-    const tip = document.createElement('div');
-    tip.style.cssText = 'position:absolute;pointer-events:none;padding:2px 6px;border-radius:6px;background:rgba(2,6,23,.85);color:#e2e8f0;font-size:11px;white-space:nowrap;display:none;transform:translate(-50%,-160%);z-index:3;border:1px solid rgba(56,189,248,.35)';
-    host.appendChild(tip);
-    const updateHover = (e) => {
-      const rect = renderer.domElement.getBoundingClientRect();
-      pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-      pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-      raycaster.setFromCamera(pointer, camera);
-      const hit = raycaster.intersectObjects(markers, false)[0];
-      if (hit) {
-        const s = hit.object.userData.server || {};
-        tip.textContent = (s.name || s.id) + (s.last_status === 'online' || s.status === 'online' ? ' · 在线' : ' · 离线');
-        tip.style.left = e.clientX - rect.left + 'px';
-        tip.style.top = e.clientY - rect.top + 'px';
-        tip.style.display = 'block';
-        renderer.domElement.style.cursor = 'pointer';
-      } else {
-        tip.style.display = 'none';
-        renderer.domElement.style.cursor = dragging ? 'grabbing' : 'grab';
-      }
-    };
-    el.addEventListener('pointermove', updateHover);
     const onResize = () => {
       const w = host.clientWidth;
       const h = host.clientHeight;
-      if (w === 0 || h === 0) return;
+      if (!w || !h) return;
       renderer.setSize(w, h);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
@@ -386,64 +230,44 @@ export default function Globe3D({ servers = [], onPick, height = 340 }) {
 
     let raf = 0;
     const clock = new THREE.Clock();
-    const animate = () => {
-      raf = requestAnimationFrame(animate);
+    const loop = () => {
+      raf = requestAnimationFrame(loop);
       const t = clock.getElapsedTime();
-      if (spin && !dragging) group.rotation.y += 0.0016;
-      const pulse = 1 + Math.sin(t * 2.4) * 0.25;
-      markers.forEach((m) => m.scale.setScalar(pulse));
-      atmo.scale.setScalar(1 + Math.sin(t * 1.2) * 0.006);
+      if (spin && !dragging) group.rotation.y += 0.0015;
       rings.forEach((r) => { r.rotation.z += r.userData.speed; });
-      arcGroup.children.forEach((l) => { if (l.material) l.material.dashOffset -= 0.006; });
-      spikeGroup.rotation.y += 0.0012;
       const sy = Math.sin(t * 0.55) * 0.92;
       const sr = Math.sqrt(Math.max(0.02, 1 - sy * sy));
       scan.position.y = sy;
       scan.scale.set(sr, sr, 1);
-      scanGlow.position.y = sy;
-      scanGlow.scale.set(sr, sr, 1);
-      scanGlow.material.opacity = 0.08 + 0.06 * (1 - Math.abs(sy));
-      const rect = renderer.domElement.getBoundingClientRect();
-      const world = new THREE.Vector3();
-      for (const d of dots) {
-        world.copy(d.vec).applyMatrix4(group.matrixWorld).project(camera);
-        const x = (world.x * 0.5 + 0.5) * rect.width;
-        const y = (-world.y * 0.5 + 0.5) * rect.height;
-        const front = world.z < 1;
-        d.el.style.transform = 'translate(' + x + 'px,' + y + 'px)';
-        d.el.style.opacity = front ? '1' : '0.55';
-        d.el.style.width = d.el.style.height = (front ? '7px' : '5px');
-        d.el.style.margin = front ? '-3.5px 0 0 -3.5px' : '-2.5px 0 0 -2.5px';
-      }
       renderer.render(scene, camera);
     };
-    animate();
+    loop();
 
-    stateRef.current = {};
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
       el.removeEventListener('pointerdown', onDown);
       el.removeEventListener('pointermove', onMove);
       el.removeEventListener('pointerup', onUp);
-      el.removeEventListener('pointermove', updateHover);
-      if (host.contains(tip)) host.removeChild(tip);
-      if (host.contains(dotLayer)) host.removeChild(dotLayer);
       renderer.dispose();
-      sphereGeo.dispose();
+      sphere.geometry.dispose();
       sphereMat.dispose();
-      markers.forEach((m) => { m.geometry.dispose(); m.material.dispose(); m.children.forEach((c) => { if (c.material && c.material.map) c.material.map.dispose(); if (c.material) c.material.dispose(); }); });
-      arcGroup.children.forEach((l) => { l.geometry.dispose(); l.material.dispose(); });
-      glowTexture.dispose();
+      if (points) { points.geometry.dispose(); points.material.dispose(); }
+      dotTex.dispose();
       if (host.contains(el)) host.removeChild(el);
     };
-  }, []); // 只初始化一次，服务器变化走 rebuildMarkers
+  }, []);
+
+  // servers 变化时重建光点
+  useEffect(() => {
+    if (apiRef.current.rebuild) apiRef.current.rebuild();
+  }, [servers]);
 
   return (
     <div
       ref={hostRef}
       className="pp-globe3d"
-      style={{ width: '100%', height, position: 'relative', borderRadius: 14, overflow: 'hidden', background: 'transparent' }}
+      style={{ width: '100%', height, position: 'relative', borderRadius: 12, overflow: 'hidden', background: 'transparent' }}
     />
   );
 }
