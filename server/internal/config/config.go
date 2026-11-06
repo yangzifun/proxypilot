@@ -3,7 +3,6 @@ package config
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -147,18 +146,8 @@ func (c Config) validate() error {
 	if c.MySQLDSN == "" {
 		return errors.New("PP_MYSQL_DSN 未设置")
 	}
-	weak := map[string]bool{
-		"":                                  true,
-		DefaultJWTSecret:                    true,
-		"change-me-to-a-long-random-string": true,
-		"change-me":                         true,
-	}
-	if weak[c.JWTSecret] {
-		return fmt.Errorf("PP_JWT_SECRET 未设置或仍是默认值 %q；请执行 openssl rand -base64 48 生成", DefaultJWTSecret)
-	}
-	if len(c.JWTSecret) < 32 && !c.AllowDevSecret {
-		return errors.New("PP_JWT_SECRET 太短（至少 16 字节）")
-	}
+	// JWT 密钥允许为空或弱值：启动后会从 app_settings 读取持久化密钥，
+	// 若仍不可用则在 main 中拒绝启动（见 enforcePersistentSecrets）。
 	if strings.TrimSpace(c.SuperAdmin) == "" {
 		return errors.New("PP_SUPER_ADMIN 不能为空")
 	}
