@@ -48,7 +48,7 @@ func (h *handlers) singboxTemplatePreview(w http.ResponseWriter, r *http.Request
 		SBPath:    "/etc/sing-box/sb.json", CaddyPath: "/etc/sing-box/Caddyfile",
 		ServiceSBName: "sing-box", ServiceCaddyName: "caddy-naive",
 	}
-	files, ports, _, msg := singboxRenderBundle(tpl, node, serverRow{})
+	files, ports, _, msg := singboxRenderBundle(tpl, node, serverRow{}, nil)
 	if msg != "" {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": msg})
 		return

@@ -57,7 +57,7 @@ func (h *handlers) singboxNodePreview(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, msg)
 		return
 	}
-	files, ports, users, msg := singboxRenderBundle(tpl, node, server)
+	files, ports, users, msg := singboxRenderBundle(tpl, node, server, nil)
 	if msg != "" {
 		writeError(w, http.StatusBadRequest, msg)
 		return
@@ -98,7 +98,7 @@ func (h *handlers) singboxNodeGet(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, msg)
 		return
 	}
-	files, ports, users, renderMsg := singboxRenderBundle(tpl, node, server)
+	files, ports, users, renderMsg := singboxRenderBundle(tpl, node, server, nil)
 	preview := map[string]any{"ports": ports, "users": users, "error": renderMsg}
 	if renderMsg == "" {
 		view := make([]map[string]any, 0, len(files))
@@ -124,7 +124,7 @@ func (h *handlers) singboxNodeApply(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, msg)
 		return
 	}
-	files, ports, users, msg := singboxRenderBundle(tpl, node, server)
+	files, ports, users, msg := singboxRenderBundle(tpl, node, server, nil)
 	if msg != "" {
 		writeError(w, http.StatusBadRequest, msg)
 		return

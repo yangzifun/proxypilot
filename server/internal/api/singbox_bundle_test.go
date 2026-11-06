@@ -12,19 +12,19 @@ func TestSingboxRenderBundleValidation(t *testing.T) {
 	// vless-ws 缺域名
 	tpl := *base
 	tpl.EnableVLWS = 1
-	if _, _, _, msg := singboxRenderBundle(&tpl, singboxRenderNode{Name: "n1"}, serverRow{}); msg == "" {
+	if _, _, _, msg := singboxRenderBundle(&tpl, singboxRenderNode{Name: "n1"}, serverRow{}, nil); msg == "" {
 		t.Fatal("启用 vlws 但无域名应报错")
 	}
 
 	// 占位 UUID
 	demo := *base
 	demo.UsersJSON = `[{"name":"u","uuid":"00000000-0000-4000-8000-000000000000","ss_password":"p"}]`
-	if _, _, _, msg := singboxRenderBundle(&demo, node, serverRow{}); msg == "" {
+	if _, _, _, msg := singboxRenderBundle(&demo, node, serverRow{}, nil); msg == "" {
 		t.Fatal("占位 UUID 应报错")
 	}
 
 	// 正常：仅 sing-box → 1 份 sb.json
-	files, ports, users, msg := singboxRenderBundle(&tpl, node, serverRow{})
+	files, ports, users, msg := singboxRenderBundle(&tpl, node, serverRow{}, nil)
 	if msg != "" {
 		t.Fatalf("msg = %s", msg)
 	}

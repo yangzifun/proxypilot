@@ -45,7 +45,7 @@ func serverComponentVersion(row serverRow, name string) string {
 }
 
 // singboxRenderBundle 复刻 Worker：校验 + 生成待下发文件。
-func singboxRenderBundle(tpl *singboxTemplate, node singboxRenderNode, srv serverRow) ([]map[string]any, map[string]int, []map[string]string, string) {
+func singboxRenderBundle(tpl *singboxTemplate, node singboxRenderNode, srv serverRow, extraInbounds []any) ([]map[string]any, map[string]int, []map[string]string, string) {
 	users := singboxParseUsers(currentTemplateUsers(tpl))
 	for _, u := range users {
 		if strings.ToLower(u.UUID) == singboxDemoUUID {
@@ -94,12 +94,18 @@ func singboxRenderBundle(tpl *singboxTemplate, node singboxRenderNode, srv serve
 		// 官方 sing-box 没有 with_v2ray_api 标签，提前写会让 sing-box check 失败。
 		// 上线顺序：先切版本（第一次下发），节点回报新版本后再下发一次（第二次带 v2ray_api）。
 		userStats := singboxUserStatsCapable(serverComponentVersion(srv, "sing-box"))
+		cfg := singboxRenderSb(tpl, users, ports, node.StatsSecret, userStats, node.CDNDomain)
+		if len(extraInbounds) > 0 {
+			if inb, ok := cfg["inbounds"].([]any); ok {
+				cfg["inbounds"] = append(inb, extraInbounds...)
+			}
+		}
 		files = append(files, map[string]any{
 			"key": "sb", "name": "sb.json", "engine": "sing-box",
 			"path":         sbPath,
 			"service_name": firstNonEmpty(node.ServiceSBName, "sing-box"),
 			"check_cmd":    "sing-box check -c " + sbPath,
-			"content":      mustJSON(singboxRenderSb(tpl, users, ports, node.StatsSecret, userStats, node.CDNDomain)),
+			"content":      mustJSON(cfg),
 		})
 	}
 	if tpl.EnableMasque != 0 {
@@ -187,7 +193,7 @@ func (h *handlers) singboxPreview(w http.ResponseWriter, r *http.Request) {
 
 	tpl := inputToTemplate(tplInput)
 	node := inputToNode(nodeInput)
-	files, ports, users, msg := singboxRenderBundle(tpl, node, row)
+	files, ports, users, msg := singboxRenderBundle(tpl, node, row, nil)
 	if msg != "" {
 		writeError(w, http.StatusBadRequest, msg)
 		return

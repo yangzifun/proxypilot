@@ -55,7 +55,7 @@ func (h *handlers) applySingboxNode(ctx context.Context, nodeID int64, usersOver
 		b, _ := json.Marshal(usersOverride)
 		tpl.UsersJSON = string(b)
 	}
-	files, ports, users, msg := singboxRenderBundle(tpl, node, server)
+	files, ports, users, msg := singboxRenderBundle(tpl, node, server, nil)
 	if msg != "" {
 		return nil, nil, nil, 0, msg
 	}
