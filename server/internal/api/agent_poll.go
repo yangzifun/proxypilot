@@ -752,6 +752,7 @@ func (h *handlers) agentPoll(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok": true, "server_id": srv.ID, "server_name": srv.Name,
 		"next_poll_sec": nextPollSec, "metrics_every": metricsEvery,
+		"agent_access_url":  h.settingValue(r.Context(), settingAgentAccessURL),
 		"server_time": now, "agent_script_version": agentScriptVersion,
 		"shell": shell, "actions": agentActionsJSON(actions),
 		"stats_targets":     statsTargets,
