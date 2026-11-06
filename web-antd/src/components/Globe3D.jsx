@@ -13,7 +13,7 @@ export default function Globe3D({ servers = [], onPick, height = 340 }) {
   const stateRef = useRef({});
   const onPickRef = useRef(onPick);
   useEffect(() => { onPickRef.current = onPick; }, [onPick]);
-  useEffect(() => { if (stateRef.current.rebuildMarkers) stateRef.current.rebuildMarkers(servers); }, [servers]);
+  useEffect(() => { if (stateRef.current.rebuildMarkers) stateRef.current.rebuildMarkers(servers); if (stateRef.current.rebuildArcs) stateRef.current.rebuildArcs(servers); }, [servers]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -156,6 +156,17 @@ export default function Globe3D({ servers = [], onPick, height = 340 }) {
     const markers = [];
     const markerGroup = new THREE.Group();
     group.add(markerGroup);
+    // 光晕贴图
+    const glowCanvas = document.createElement('canvas');
+    glowCanvas.width = 64; glowCanvas.height = 64;
+    const gctx = glowCanvas.getContext('2d');
+    const grad = gctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, 'rgba(255,255,255,0.95)');
+    grad.addColorStop(0.35, 'rgba(255,255,255,0.45)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    gctx.fillStyle = grad;
+    gctx.fillRect(0, 0, 64, 64);
+    const glowTexture = new THREE.CanvasTexture(glowCanvas);
     const rebuildMarkers = (list) => {
       for (const m of markers) {
         markerGroup.remove(m);
@@ -183,10 +194,49 @@ export default function Globe3D({ servers = [], onPick, height = 340 }) {
         );
         mesh.position.copy(pos);
         mesh.userData = { server: s };
+
         markerGroup.add(mesh);
         markers.push(mesh);
       }
     };
+    // ------ 服务器之间的数据弧线 ------
+    const arcGroup = new THREE.Group();
+    group.add(arcGroup);
+    const rebuildArcs = (list) => {
+      for (const child of [...arcGroup.children]) {
+        arcGroup.remove(child);
+        child.geometry.dispose();
+        child.material.dispose();
+      }
+      const pts = [];
+      for (const s of list || []) {
+        const lat = Number(s.ip_lat);
+        const lon = Number(s.ip_lon);
+        if (s.ip_lat === null || s.ip_lon === null || !Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+        const phi = ((90 - lat) * Math.PI) / 180;
+        const theta = ((lon + 180) * Math.PI) / 180;
+        pts.push(new THREE.Vector3(-Math.sin(phi) * Math.cos(theta), Math.cos(phi), Math.sin(phi) * Math.sin(theta)));
+        if (pts.length >= 10) break;
+      }
+      if (pts.length < 2) return;
+      const hub = pts[0];
+      for (let i = 1; i < pts.length; i += 1) {
+        const a = hub;
+        const b = pts[i];
+        const mid = a.clone().add(b).multiplyScalar(0.5);
+        if (mid.lengthSq() < 0.01) continue;
+        mid.normalize().multiplyScalar(1 + a.distanceTo(b) * 0.22);
+        const curve = new THREE.QuadraticBezierCurve3(a.clone().multiplyScalar(1.005), mid, b.clone().multiplyScalar(1.005));
+        const geo = new THREE.BufferGeometry().setFromPoints(curve.getPoints(48));
+        const line = new THREE.Line(geo, new THREE.LineDashedMaterial({
+          color: 0x38bdf8, dashSize: 0.05, gapSize: 0.035, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending,
+        }));
+        line.computeLineDistances();
+        arcGroup.add(line);
+      }
+    };
+    rebuildArcs(servers);
+    stateRef.current.rebuildArcs = rebuildArcs;
     rebuildMarkers(servers);
     stateRef.current.rebuildMarkers = rebuildMarkers;
 
@@ -248,6 +298,7 @@ export default function Globe3D({ servers = [], onPick, height = 340 }) {
       markers.forEach((m) => m.scale.setScalar(pulse));
       atmo.scale.setScalar(1 + Math.sin(t * 1.2) * 0.006);
       rings.forEach((r) => { r.rotation.z += r.userData.speed; });
+      arcGroup.children.forEach((l) => { if (l.material) l.material.dashOffset -= 0.006; });
       renderer.render(scene, camera);
     };
     animate();
@@ -262,7 +313,9 @@ export default function Globe3D({ servers = [], onPick, height = 340 }) {
       renderer.dispose();
       sphereGeo.dispose();
       sphereMat.dispose();
-      markers.forEach((m) => { m.geometry.dispose(); m.material.dispose(); });
+      markers.forEach((m) => { m.geometry.dispose(); m.material.dispose(); m.children.forEach((c) => { if (c.material && c.material.map) c.material.map.dispose(); if (c.material) c.material.dispose(); }); });
+      arcGroup.children.forEach((l) => { l.geometry.dispose(); l.material.dispose(); });
+      glowTexture.dispose();
       if (host.contains(el)) host.removeChild(el);
     };
   }, []); // 只初始化一次，服务器变化走 rebuildMarkers
