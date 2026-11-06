@@ -46,6 +46,7 @@ const ONLINE_WINDOW_MS = 3 * 60 * 1000;
 export default function UserTraffic() {
   const { message, modal } = AntdApp.useApp();
   const [range, setRange] = useState('7d');
+  const [trendDays, setTrendDays] = useState(14);
   const [q, setQ] = useState('');
   const [sortBy, setSortBy] = useState('today');
   const [onlyOnline, setOnlyOnline] = useState(false);
@@ -73,7 +74,7 @@ export default function UserTraffic() {
   }, [range]);
 
   const users = useAsync(() => api(`stats/traffic/users?range=${range}`), [range]);
-  const series = useAsync(() => api('stats/traffic/series?days=14'), []);
+  const series = useAsync(() => api(`stats/traffic/series?days=${trendDays}`), [trendDays]);
 
   useEffect(() => {
     const t = setInterval(() => users.reload().catch(() => {}), 60000);
@@ -314,8 +315,18 @@ export default function UserTraffic() {
       </Row>
 
       <PageCard
-        title={<span className="pp-section-title">近 14 天流量趋势</span>}
-        extra={<span className="pp-muted" style={{ fontSize: 12 }}>全体用户 · 每日汇总</span>}
+        title={<span className="pp-section-title">流量趋势</span>}
+        extra={
+          <Space size={8}>
+            <span className="pp-muted" style={{ fontSize: 12 }}>全体用户 · 每日汇总</span>
+            <Segmented
+              size="small"
+              value={trendDays}
+              onChange={setTrendDays}
+              options={[{ label: '7 天', value: 7 }, { label: '14 天', value: 14 }, { label: '30 天', value: 30 }]}
+            />
+          </Space>
+        }
         style={{ marginBottom: 16 }}
       >
         {series.error ? (
