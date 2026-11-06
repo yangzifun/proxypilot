@@ -43,7 +43,7 @@ import { useAsync, usePolling, readForm } from '../hooks';
 import { CopyText, ErrorBlock, JsonView, PageCard, StatCard, StatusPill } from '../components';
 import { watchBatch } from '../components/JobCenter';
 import { WorldMap } from './Monitor';
-import GlobeMap from '../components/GlobeMap';
+import Globe3D from '../components/Globe3D';
 import ServerDrawer from '../components/ServerDrawer';
 import ServerUnlockModal from '../components/ServerUnlockModal';
 import { ServerCard as FullServerCard } from './Monitor';
@@ -855,7 +855,7 @@ export default function ServersUnified() {
               </span>
             </div>
             <div className="pp-ov-map-box">
-              <GlobeMap servers={rows} onPick={(r) => setDetailId(r.id)} height={318} />
+              <Globe3D servers={rows} onPick={(r) => setDetailId(r.id)} height={318} />
             </div>
           </div>
         </div>      </PageCard>
