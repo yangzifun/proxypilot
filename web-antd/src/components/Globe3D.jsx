@@ -71,13 +71,13 @@ export default function Globe3D({ servers = [], onPick, height = 340 }) {
           // 陆地：青绿渐变，纬度越高越亮
           const y = Math.floor(i / 4 / texCanvas.width);
           const t = 1 - y / texCanvas.height;
-          px[i] = 34 + 30 * t;
-          px[i + 1] = 96 + 60 * t;
-          px[i + 2] = 86 + 50 * t;
+          px[i] = 10 + 14 * t;
+          px[i + 1] = 52 + 40 * t;
+          px[i + 2] = 66 + 44 * t;
         } else {
-          px[i] = 8;
-          px[i + 1] = 34;
-          px[i + 2] = 62;
+          px[i] = 4;
+          px[i + 1] = 16;
+          px[i + 2] = 32;
         }
       }
       tctx.putImageData(data, 0, 0);
@@ -101,6 +101,56 @@ export default function Globe3D({ servers = [], onPick, height = 340 }) {
     });
     const atmo = new THREE.Mesh(new THREE.SphereGeometry(1.14, 96, 64), atmoMat);
     scene.add(atmo);
+    // ------ 经纬网格（全息线条） ------
+    const gridMat = new THREE.LineBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending });
+    const gridGroup = new THREE.Group();
+    for (let lon = -180; lon < 180; lon += 15) {
+      const pts = [];
+      for (let lat = -90; lat <= 90; lat += 4) {
+        const phi = ((90 - lat) * Math.PI) / 180;
+        const theta = ((lon + 180) * Math.PI) / 180;
+        pts.push(new THREE.Vector3(-Math.sin(phi) * Math.cos(theta), Math.cos(phi), Math.sin(phi) * Math.sin(theta)));
+      }
+      gridGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), gridMat));
+    }
+    for (let lat = -75; lat <= 75; lat += 15) {
+      const pts = [];
+      const phi = ((90 - lat) * Math.PI) / 180;
+      for (let lon = -180; lon <= 180; lon += 4) {
+        const theta = ((lon + 180) * Math.PI) / 180;
+        pts.push(new THREE.Vector3(-Math.sin(phi) * Math.cos(theta), Math.cos(phi), Math.sin(phi) * Math.sin(theta)));
+      }
+      gridGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), gridMat));
+    }
+    group.add(gridGroup);
+
+    // ------ 星点背景 ------
+    const starGeo = new THREE.BufferGeometry();
+    const starPos = new Float32Array(900 * 3);
+    for (let i = 0; i < 900; i += 1) {
+      const r = 2.6 + Math.random() * 1.8;
+      const th = Math.random() * Math.PI * 2;
+      const ph = Math.acos(2 * Math.random() - 1);
+      starPos[i * 3] = r * Math.sin(ph) * Math.cos(th);
+      starPos[i * 3 + 1] = r * Math.cos(ph);
+      starPos[i * 3 + 2] = r * Math.sin(ph) * Math.sin(th);
+    }
+    starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+    const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0x7dd3fc, size: 0.012, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending }));
+    scene.add(stars);
+
+    // ------ 旋转光环 ------
+    const rings = [];
+    [[1.28, 0.0025, 0.35], [1.42, 0.0018, -0.5]].forEach(([radius, speed, tilt]) => {
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(radius, 0.0035, 8, 160),
+        new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending }),
+      );
+      ring.rotation.x = Math.PI / 2 + tilt;
+      ring.userData.speed = speed;
+      scene.add(ring);
+      rings.push(ring);
+    });
 
     // ------ 服务器光点（可增量重建，避免整球重建） ------
     const markers = [];
@@ -197,6 +247,7 @@ export default function Globe3D({ servers = [], onPick, height = 340 }) {
       const pulse = 1 + Math.sin(t * 2.4) * 0.25;
       markers.forEach((m) => m.scale.setScalar(pulse));
       atmo.scale.setScalar(1 + Math.sin(t * 1.2) * 0.006);
+      rings.forEach((r) => { r.rotation.z += r.userData.speed; });
       renderer.render(scene, camera);
     };
     animate();
