@@ -17,6 +17,7 @@ import NodeBindings from './pages/NodeBindings';
 import TemplateHub from './pages/TemplateHub';
 import MtprotoPage from './pages/MtprotoPage';
 import MasquePage from './pages/MasquePage';
+import CdnPreferred from './pages/CdnPreferred';
 import Logs from './pages/Logs';
 import System from './pages/System';
 import Security from './pages/Security';

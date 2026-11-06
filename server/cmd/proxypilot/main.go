@@ -23,7 +23,7 @@ import (
 )
 
 // version 由构建脚本注入：-ldflags "-X main.version=v1.0.0"
-var version = "V18.0"
+var version = "V18.02"
 
 func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -113,6 +113,7 @@ func securityHeaders(next http.Handler) http.Handler {
 }
 
 // cspPolicy 先以 Report-Only 收集违规；确认无副作用后再切换为强制模式。
-const cspPolicy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
-	"img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; " +
+const cspPolicy = "default-src 'self'; script-src 'self' https://static.cloudflareinsights.com https://challenges.cloudflare.com; " +
+	"style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; " +
+	"connect-src 'self' https://cloudflareinsights.com; frame-src https://challenges.cloudflare.com; " +
 	"frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'"
