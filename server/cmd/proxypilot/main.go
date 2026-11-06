@@ -23,7 +23,7 @@ import (
 )
 
 // version 由构建脚本注入：-ldflags "-X main.version=v1.0.0"
-var version = "V17.45"
+var version = "V17.46"
 
 func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -60,6 +60,9 @@ func run(log *slog.Logger) error {
 
 	api.Version = version
 	api.EnsureAdminPassword(ctx, pool, cfg, log)
+	// 密钥持久化：JWT / Agent 密钥写入 app_settings，重启或容器重建后登录态与 Agent 令牌不失效
+	cfg.JWTSecret = api.EnsurePersistentSecret(ctx, pool, "jwt_secret", cfg.JWTSecret, 32, log)
+	cfg.AgentKeySecret = api.EnsurePersistentSecret(ctx, pool, "agent_key_secret", cfg.AgentKeySecret, 16, log)
 	api.EnsureLocalServer(ctx, pool, log)
 	api.StartLocalMonitor(ctx, pool, log)
 	api.StartCronFor(ctx, cfg, pool, log)
