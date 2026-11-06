@@ -3622,3 +3622,55 @@ body {
 .pp-servers-theme-glass .pp-muted { color: #64748b !important; }
 .pp-servers-theme-glass .ant-table-thead > tr > th { background: rgba(255,255,255,0.6) !important; }
 .pp-servers-theme-glass .ant-btn-primary { background: rgba(79, 70, 229, 0.9) !important; border-color: transparent !important; }
+/* ---- 主题：服务器卡片视图适配 ---- */
+.pp-servers-theme-emerald .pp-srv-card { background: rgba(255,255,255,0.8) !important; border-color: rgba(16,185,129,0.16) !important; }
+.pp-servers-theme-emerald .pp-srv-card:hover { border-color: rgba(16,185,129,0.4) !important; box-shadow: 0 12px 28px -20px rgba(5,150,105,0.6) !important; }
+.pp-servers-theme-emerald .pp-srv-card .pp-muted { color: #6b8f7f !important; }
+
+.pp-servers-theme-pulse .pp-srv-card { background: #fff !important; border-color: #eceff3 !important; box-shadow: none !important; border-radius: 10px !important; }
+.pp-servers-theme-pulse .pp-srv-card:hover { border-color: #111827 !important; }
+
+.pp-servers-theme-horizon .pp-srv-card { background: #fff !important; border-color: #e2e8f0 !important; box-shadow: none !important; border-radius: 8px !important; }
+
+.pp-servers-theme-glass .pp-srv-card {
+  background: rgba(255,255,255,0.55) !important;
+  border-color: rgba(255,255,255,0.75) !important;
+  backdrop-filter: blur(12px);
+  border-radius: 16px !important;
+}
+
+/* 主题：地球/图表容器与背景融合 */
+.pp-servers-theme-emerald .pp-globe3d { background: linear-gradient(180deg, #f2fbf6 0%, #ffffff 70%) !important; }
+.pp-servers-theme-glass .pp-globe3d { background: transparent !important; }
+/* ---- 概览布局参考：左侧 3x2 指标 + 右侧地球 ---- */
+.pp-overview-grid {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1.25fr) minmax(300px, 1fr) !important;
+  gap: 16px !important;
+  align-items: start !important;
+  padding: 16px !important;
+}
+.pp-overview-grid .pp-ov-top,
+.pp-overview-grid .pp-ov-bottom { display: contents !important; }
+.pp-overview-grid .pp-ov-tiles {
+  grid-column: 1 !important;
+  grid-row: 1 !important;
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 12px !important;
+}
+.pp-overview-grid .pp-ov-res { grid-column: 1 !important; grid-row: 2 !important; }
+.pp-overview-grid .pp-ov-foot { grid-column: 1 !important; grid-row: 3 !important; }
+.pp-overview-grid .pp-ov-map {
+  grid-column: 2 !important;
+  grid-row: 1 / span 2 !important;
+  height: 100% !important;
+  min-height: 430px !important;
+  border-left: 1px solid #eef2f7 !important;
+  padding-left: 16px !important;
+}
+.pp-overview-grid .pp-ov-map-box { height: 100% !important; min-height: 380px !important; }
+@media (max-width: 1100px) {
+  .pp-overview-grid { grid-template-columns: minmax(0, 1fr) !important; }
+  .pp-overview-grid .pp-ov-map { grid-column: 1 !important; grid-row: 3 !important; border-left: 0 !important; padding-left: 0 !important; }
+}
