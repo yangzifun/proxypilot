@@ -63,7 +63,7 @@ const readView = () => {
 };
 
 const STATUS_OPTIONS = [
-  { label: '全部', value: 'all' },
+  { label: '全部节点', value: 'all' },
   { label: '在线', value: 'online' },
   { label: '离线', value: 'offline' },
   { label: '未知', value: 'unknown' },
@@ -809,6 +809,15 @@ export default function ServersUnified() {
 
   return (
     <div className={'pp-servers-theme-' + pageTheme}>
+      {list.error ? (
+        <Alert
+          type="error"
+          showIcon
+          style={{ marginBottom: 12 }}
+          message="监控服务错误"
+          description={'连接服务器失败，请检查网络后重试：' + ((list.error && list.error.message) || '')}
+        />
+      ) : null}
       <PageCard
         title={<span className="pp-section-title">服务器概览</span>}
         extra={<span className="pp-muted" style={{ fontSize: 12 }}>更新 {fmtTime(updatedAt, '').slice(11, 19) || '—'}</span>}
