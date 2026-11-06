@@ -815,18 +815,18 @@ export default function UserTraffic() {
               const nodes = detail.data.nodes || [];
               if (!nodes.length) return null;
               const recent = new Set((detail.data.recent_nodes || []).map((x) => x.node_id));
-              const flagOf = (name) => {
+              const ccOf = (name) => {
                 const n = String(name || '');
                 const map = [
-                  ['香港', '🇭🇰'], ['台湾', '🇹🇼'], ['台北', '🇹🇼'], ['彰化', '🇹🇼'],
-                  ['东京', '🇯🇵'], ['日本', '🇯🇵'], ['新加坡', '🇸🇬'], ['狮城', '🇸🇬'],
-                  ['洛杉矶', '🇺🇸'], ['美国', '🇺🇸'], ['德国', '🇩🇪'], ['法兰克福', '🇩🇪'],
-                  ['马来西亚', '🇲🇾'], ['吉隆坡', '🇲🇾'], ['雅加达', '🇮🇩'], ['印尼', '🇮🇩'],
-                  ['曼谷', '🇹🇭'], ['泰国', '🇹🇭'], ['韩国', '🇰🇷'], ['首尔', '🇰🇷'],
-                  ['英国', '🇬🇧'], ['伦敦', '🇬🇧'], ['法国', '🇫🇷'], ['荷兰', '🇳🇱'],
+                  ['香港', 'hk'], ['台湾', 'tw'], ['台北', 'tw'], ['彰化', 'tw'],
+                  ['东京', 'jp'], ['日本', 'jp'], ['新加坡', 'sg'], ['狮城', 'sg'],
+                  ['洛杉矶', 'us'], ['美国', 'us'], ['德国', 'de'], ['法兰克福', 'de'],
+                  ['马来西亚', 'my'], ['吉隆坡', 'my'], ['雅加达', 'id'], ['印尼', 'id'],
+                  ['曼谷', 'th'], ['泰国', 'th'], ['韩国', 'kr'], ['首尔', 'kr'],
+                  ['英国', 'gb'], ['伦敦', 'gb'], ['法国', 'fr'], ['荷兰', 'nl'],
                 ];
                 for (const [k, v] of map) if (n.includes(k)) return v;
-                return '🌐';
+                return '';
               };
               const rowH = 44;
               const h = Math.max(180, 60 + nodes.length * rowH);
@@ -860,8 +860,15 @@ export default function UserTraffic() {
                             </circle>
                           ) : null}
                           <circle cx="572" cy={y} r="9" fill={on ? '#10b981' : '#cbd5e1'} />
-                          <text x="590" y={y + 4} fontSize="12" fill={on ? '#065f46' : '#64748b'}>
-                            {flagOf(n.node_name)} {String(n.node_name || '#' + n.node_id).slice(0, 16)} · {fmtBytes(n.total)}
+                          {ccOf(n.node_name) ? (
+                            <image
+                              href={'/api/flag/' + ccOf(n.node_name)}
+                              x="590" y={y - 6} width="16" height="12"
+                              preserveAspectRatio="none"
+                            />
+                          ) : null}
+                          <text x={ccOf(n.node_name) ? 612 : 590} y={y + 4} fontSize="12" fill={on ? '#065f46' : '#64748b'}>
+                            {String(n.node_name || '#' + n.node_id).slice(0, 16)} · {fmtBytes(n.total)}
                           </text>
                         </g>
                       );
