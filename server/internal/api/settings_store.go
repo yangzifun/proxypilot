@@ -12,6 +12,7 @@ import (
 // 可在后台“系统设置”里覆盖的键（未设置时回落环境变量）。
 const (
 	settingPublicBaseURL   = "site_public_base_url"
+	settingAgentAccessURL  = "agent_access_url"
 	settingAgentBinaryBase = "agent_binary_base_url"
 	settingComponentBase   = "component_base_url"
 	settingPasswordEnabled = "auth_password_enabled"
@@ -50,6 +51,7 @@ type settingDef struct {
 
 var settingDefs = []settingDef{
 	{Key: settingPublicBaseURL},
+	{Key: settingAgentAccessURL},
 	{Key: settingAgentBinaryBase},
 	{Key: settingComponentBase},
 	{Key: settingPasswordEnabled, Bool: true},
