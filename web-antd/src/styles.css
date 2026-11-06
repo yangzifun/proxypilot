@@ -3511,3 +3511,42 @@ body {
 .pp-servers-theme-dark .pp-ov-gauge text, .pp-servers-theme-neon .pp-ov-gauge text { fill: #cbd5e1 !important; }
 .pp-servers-theme-dark .ant-table-row:hover > td, .pp-servers-theme-neon .ant-table-row:hover > td { background: rgba(56,189,248,0.06) !important; }
 .pp-servers-theme-dark .pp-ov-chart svg polyline, .pp-servers-theme-neon .pp-ov-chart svg polyline { filter: drop-shadow(0 0 4px currentColor); }
+/* ================= 翠绿(emerald)主题 ================= */
+.pp-servers-theme-emerald {
+  padding: 12px;
+  border-radius: 14px;
+  background:
+    radial-gradient(60% 45% at 80% 0%, #d9f5e6 0%, rgba(217,245,230,0) 60%),
+    radial-gradient(50% 40% at 10% 10%, #e8f8ef 0%, rgba(232,248,239,0) 55%),
+    linear-gradient(180deg, #f2fbf6 0%, #ffffff 60%);
+}
+.pp-servers-theme-emerald .pp-card {
+  background: rgba(255, 255, 255, 0.72) !important;
+  border-color: rgba(16, 185, 129, 0.16) !important;
+  box-shadow: 0 10px 30px -22px rgba(5, 150, 105, 0.55);
+  backdrop-filter: blur(6px);
+}
+.pp-servers-theme-emerald .pp-ov-tile {
+  background: rgba(255, 255, 255, 0.7) !important;
+  border: 1px solid rgba(16, 185, 129, 0.12) !important;
+  border-radius: 12px !important;
+}
+.pp-servers-theme-emerald .pp-ov-tile:hover { background: #ffffff !important; }
+.pp-servers-theme-emerald .pp-ov-label { color: #4b7a66 !important; }
+.pp-servers-theme-emerald .pp-ov-value { color: #064e3b !important; }
+.pp-servers-theme-emerald .pp-ov-unit,
+.pp-servers-theme-emerald .pp-muted { color: #6b8f7f !important; }
+.pp-servers-theme-emerald .pp-ov-sec-head b { color: #065f46 !important; }
+.pp-servers-theme-emerald .ant-table-thead > tr > th {
+  background: rgba(236, 253, 245, 0.9) !important;
+  color: #065f46 !important;
+}
+.pp-servers-theme-emerald .ant-table-tbody > tr > td { border-color: rgba(16, 185, 129, 0.08) !important; }
+.pp-servers-theme-emerald .ant-table-row:hover > td { background: rgba(16, 185, 129, 0.05) !important; }
+.pp-servers-theme-emerald .ant-btn-primary {
+  background: #10b981 !important;
+  border-color: #10b981 !important;
+}
+.pp-servers-theme-emerald .ant-tag-green,
+.pp-servers-theme-emerald .ant-badge-status-success { color: #047857; }
+.pp-servers-theme-emerald .pp-ov-chart svg polyline { filter: drop-shadow(0 2px 4px rgba(16, 185, 129, 0.25)); }

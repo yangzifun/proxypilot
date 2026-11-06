@@ -347,6 +347,8 @@ export default function ServersUnified() {
   const [mapOpen, setMapOpen] = useState(false);
   const [status, setStatus] = useState('');
   const [auto, setAuto] = useState(true);
+  const [pageTheme, setPageTheme] = useState(() => localStorage.getItem('pp.servers.theme') || 'light');
+  const changeTheme = (v) => { setPageTheme(v); localStorage.setItem('pp.servers.theme', v); };
   const [sseStatus, setSseStatus] = useState({});
   const [selected, setSelected] = useState([]);
   const [detailId, setDetailId] = useState(null);
@@ -804,7 +806,7 @@ export default function ServersUnified() {
   ];
 
   return (
-    <div>
+    <div className={'pp-servers-theme-' + pageTheme}>
       <PageCard
         title={<span className="pp-section-title">服务器概览</span>}
         extra={<span className="pp-muted" style={{ fontSize: 12 }}>更新 {fmtTime(updatedAt, '').slice(11, 19) || '—'}</span>}
@@ -950,6 +952,12 @@ export default function ServersUnified() {
               </Checkbox>
               <div className="pp-toolbar-right">
                 <Space size={8} wrap>
+                  <Segmented
+                    size="small"
+                    value={pageTheme}
+                    onChange={changeTheme}
+                    options={[{ value: 'light', label: '默认' }, { value: 'emerald', label: '翠绿' }]}
+                  />
                   <Tooltip title="每 5 秒只刷新监控数据（资源 / 网络 / 连接），不重新拉取列表">
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
                       <Switch size="small" checked={auto} onChange={setAuto} />
