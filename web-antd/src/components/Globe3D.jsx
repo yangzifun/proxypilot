@@ -137,7 +137,7 @@ export default function Globe3D({ servers = [], onPick, height = 340 }) {
     }
     starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
     const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0x7dd3fc, size: 0.012, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending }));
-    scene.add(stars);
+    // 背景星点已按需求移除
 
     // ------ 旋转光环 ------
     const rings = [];
@@ -427,7 +427,7 @@ export default function Globe3D({ servers = [], onPick, height = 340 }) {
     <div
       ref={hostRef}
       className="pp-globe3d"
-      style={{ width: '100%', height, position: 'relative', borderRadius: 14, overflow: 'hidden', background: 'radial-gradient(60% 60% at 50% 45%, #0b2545 0%, #071528 60%, #050d18 100%)' }}
+      style={{ width: '100%', height, position: 'relative', borderRadius: 14, overflow: 'hidden', background: 'transparent' }}
     />
   );
 }
