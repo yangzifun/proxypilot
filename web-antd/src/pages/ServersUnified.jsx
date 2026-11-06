@@ -410,8 +410,8 @@ export default function ServersUnified() {
     }
     return () => { if (es) es.close(); };
   }, [auto]);
-  usePolling(() => refreshLive(), auto ? 10000 : 0);
-  usePolling(() => monitor.reload().catch(() => {}), auto ? 10000 : 0);
+  usePolling(() => refreshLive(), auto ? 2000 : 0);
+  usePolling(() => monitor.reload().catch(() => {}), auto ? 2000 : 0);
   usePolling(() => nodes.reload().catch(() => {}), auto ? 15000 : 0);
 
   const liveById = useMemo(() => {
