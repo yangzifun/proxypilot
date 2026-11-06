@@ -3460,3 +3460,54 @@ body {
   .pp-overview-grid .pp-ov-gauge { transform: scale(0.62) !important; transform-origin: top center !important; }
   .pp-overview-grid .pp-ov-disk { margin-top: -12px !important; }
 }
+
+/* ================= 服务器页主题 ================= */
+.pp-servers-theme-dark, .pp-servers-theme-neon { border-radius: 12px; padding: 8px; }
+
+/* 深色主题 */
+.pp-servers-theme-dark { background: #0b1220; }
+.pp-servers-theme-dark .pp-card { background: #111a2e !important; border-color: #1e2a44 !important; color: #cbd5e1; }
+.pp-servers-theme-dark .pp-section-title,
+.pp-servers-theme-dark .pp-ov-value,
+.pp-servers-theme-dark .ant-table-cell { color: #e2e8f0 !important; }
+.pp-servers-theme-dark .pp-ov-label,
+.pp-servers-theme-dark .pp-muted,
+.pp-servers-theme-dark .ant-table-thead > tr > th { color: #94a3b8 !important; }
+.pp-servers-theme-dark .pp-ov-tile { border-left-color: #1e2a44 !important; }
+.pp-servers-theme-dark .pp-ov-res,
+.pp-servers-theme-dark .pp-ov-map { border-left-color: #1e2a44 !important; }
+.pp-servers-theme-dark .ant-table,
+.pp-servers-theme-dark .ant-table-tbody > tr > td { background: #111a2e !important; border-color: #1e2a44 !important; }
+.pp-servers-theme-dark .ant-table-thead > tr > th { background: #0f172a !important; }
+.pp-servers-theme-dark .pp-ov-tile:hover { background: #16213a !important; }
+
+/* 霓虹主题 */
+.pp-servers-theme-neon { background: radial-gradient(60% 40% at 20% 0%, #0b1f33 0%, #050a14 60%); }
+.pp-servers-theme-neon .pp-card {
+  background: rgba(6, 18, 32, 0.9) !important;
+  border-color: rgba(56, 189, 248, 0.25) !important;
+  box-shadow: 0 0 24px rgba(56, 189, 248, 0.08);
+}
+.pp-servers-theme-neon .pp-section-title,
+.pp-servers-theme-neon .pp-ov-value,
+.pp-servers-theme-neon .ant-table-cell { color: #7dd3fc !important; text-shadow: 0 0 8px rgba(56, 189, 248, 0.35); }
+.pp-servers-theme-neon .pp-ov-label,
+.pp-servers-theme-neon .pp-muted,
+.pp-servers-theme-neon .ant-table-thead > tr > th { color: #38bdf8 !important; opacity: 0.8; }
+.pp-servers-theme-neon .pp-ov-tile,
+.pp-servers-theme-neon .pp-ov-res,
+.pp-servers-theme-neon .pp-ov-map { border-left-color: rgba(56, 189, 248, 0.25) !important; }
+.pp-servers-theme-neon .ant-table,
+.pp-servers-theme-neon .ant-table-tbody > tr > td { background: transparent !important; border-color: rgba(56, 189, 248, 0.12) !important; }
+.pp-servers-theme-neon .ant-table-thead > tr > th { background: rgba(8, 25, 45, 0.9) !important; }
+.pp-servers-theme-neon .pp-ov-tile:hover { background: rgba(56, 189, 248, 0.06) !important; }
+
+/* 主题：卡片底色与标题配色修正 */
+.pp-servers-theme-dark .pp-ov-tile,
+.pp-servers-theme-neon .pp-ov-tile { background: transparent !important; border-color: transparent !important; }
+.pp-servers-theme-dark .pp-ov-sec-head, .pp-servers-theme-dark .pp-ov-sec-head b,
+.pp-servers-theme-neon .pp-ov-sec-head, .pp-servers-theme-neon .pp-ov-sec-head b { color: #cbd5e1 !important; }
+.pp-servers-theme-neon .pp-ov-sec-head, .pp-servers-theme-neon .pp-ov-sec-head b { color: #7dd3fc !important; }
+.pp-servers-theme-dark .pp-ov-gauge text, .pp-servers-theme-neon .pp-ov-gauge text { fill: #cbd5e1 !important; }
+.pp-servers-theme-dark .ant-table-row:hover > td, .pp-servers-theme-neon .ant-table-row:hover > td { background: rgba(56,189,248,0.06) !important; }
+.pp-servers-theme-dark .pp-ov-chart svg polyline, .pp-servers-theme-neon .pp-ov-chart svg polyline { filter: drop-shadow(0 0 4px currentColor); }
