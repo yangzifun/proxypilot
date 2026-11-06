@@ -18,7 +18,6 @@ import TemplateHub from './pages/TemplateHub';
 import MtprotoPage from './pages/MtprotoPage';
 import MasquePage from './pages/MasquePage';
 import CdnPreferred from './pages/CdnPreferred';
-import TrafficLimits from './pages/TrafficLimits';
 import Logs from './pages/Logs';
 import System from './pages/System';
 import Security from './pages/Security';
@@ -38,7 +37,6 @@ const PAGES = {
   mtproto: MtprotoPage,
   masque: MasquePage,
   cdnpref: CdnPreferred,
-  tlimit: TrafficLimits,
   singbox: Nodes,
   status: ServersUnified,
   logs: Logs,

@@ -154,7 +154,7 @@ export const NAV_ORDER = ['dash', 'uuids', 'tpls', 'userst', 'servers', 'normal'
 
 export const NAV_GROUPS = [
   { group: '业务', keys: ['dash', 'uuids', 'tpls', 'userst'] },
-  { group: '服务器运维', keys: ['servers', 'tlimit'] },
+  { group: '服务器运维', keys: ['servers'] },
   { group: '节点运维', keys: ['bindings', 'tplhub', 'cdnpref', 'masque'] },
   { group: '系统', keys: ['logs', 'attachments', 'sys', 'backup', 'sec'] },
 ];

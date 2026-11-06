@@ -29,6 +29,7 @@ import {
   InputNumber,
   Modal,
   Popconfirm,
+  Select,
   Row,
   Space,
   Switch,
@@ -42,7 +43,7 @@ import { AreaChart, ChartLegend } from '../charts';
 import { CopyText, ErrorBlock, JsonView, StatCard, StatusPill } from '../components';
 import { watchBatch } from './JobCenter';
 import { chartPalette } from '../theme';
-import { fmtAgo, fmtTime, fmtUptime, levelColor, splitIps } from '../format';
+import { fmtAgo, fmtBytes, fmtTime, fmtUptime, levelColor, splitIps } from '../format';
 
 const SVC_TEXT = {
   online: ['online', '在线'],
@@ -66,6 +67,9 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
   const [execOpen, setExecOpen] = useState(false);
   const [tasksOpen, setTasksOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [traffic, setTraffic] = useState(null);
+  const [trafficOpen, setTrafficOpen] = useState(false);
+  const [trafficForm, setTrafficForm] = useState({});
 
   const load = useCallback(async () => {
     if (!serverId) return;
@@ -89,6 +93,64 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
     else setState({ data: null, metrics: [], configs: [], loading: false, error: null });
   }, [serverId, load]);
 
+  const loadTraffic = useCallback(async () => {
+    if (!serverId) { setTraffic(null); return; }
+    try {
+      const res = await api(`servers/${serverId}/traffic-limit`);
+      setTraffic(res || null);
+    } catch (e) {
+      setTraffic(null);
+    }
+  }, [serverId]);
+
+  useEffect(() => { loadTraffic(); }, [loadTraffic]);
+
+  const openTraffic = () => {
+    const l = (traffic && traffic.limit) || {};
+    setTrafficForm({
+      enabled: !!l.enabled,
+      mode: l.mode || 'both',
+      limit_gb: l.limit_bytes ? Number((l.limit_bytes / 1024 ** 3).toFixed(2)) : 100,
+      reset_day: l.reset_day || 1,
+      reset_hour: l.reset_hour || 0,
+      warn_percent: l.warn_percent || 80,
+    });
+    setTrafficOpen(true);
+  };
+
+  const saveTraffic = async () => {
+    try {
+      await api(`servers/${serverId}/traffic-limit`, {
+        method: 'PUT',
+        body: {
+          enabled: trafficForm.enabled ? 1 : 0,
+          mode: trafficForm.mode,
+          limit_bytes: Math.round((Number(trafficForm.limit_gb) || 0) * 1024 ** 3),
+          reset_day: Number(trafficForm.reset_day) || 1,
+          reset_hour: Number(trafficForm.reset_hour) || 0,
+          action: 'notify',
+          warn_percent: Number(trafficForm.warn_percent) || 80,
+        },
+      });
+      message.success('流量限制已保存');
+      setTrafficOpen(false);
+      loadTraffic();
+      if (onChanged) onChanged();
+    } catch (e) {
+      message.error(e.message || '保存失败');
+    }
+  };
+
+  const resetTraffic = async () => {
+    try {
+      await api(`servers/${serverId}/traffic-limit/reset`, { method: 'POST', body: {} });
+      message.success('已重置本周期');
+      setTrafficOpen(false);
+      loadTraffic();
+    } catch (e) {
+      message.error(e.message || '重置失败');
+    }
+  };
   /* 切换服务器时关掉上一台留下的弹窗 */
   useEffect(() => {
     setInstall(null);
@@ -344,6 +406,39 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
             </Col>
           </Row>
 
+          <div style={{ marginTop: 14, border: '1px solid #eef2f7', borderRadius: 12, padding: '10px 14px', background: '#fbfdff' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <b style={{ fontSize: 13 }}>流量限额</b>
+              {traffic && traffic.state === 'exceeded' ? <Tag color="error">已超限</Tag> : null}
+              {traffic && traffic.state === 'warning' ? <Tag color="warning">接近上限</Tag> : null}
+              <Button size="small" type="link" style={{ marginLeft: 'auto', padding: 0 }} onClick={openTraffic}>设置</Button>
+            </div>
+            {(() => {
+              const l = (traffic && traffic.limit) || {};
+              const enabled = !!l.enabled && Number(l.limit_bytes) > 0;
+              const rx = Number(traffic && traffic.rx_bytes) || 0;
+              const tx = Number(traffic && traffic.tx_bytes) || 0;
+              const used = l.mode === 'rx' ? rx : l.mode === 'tx' ? tx : rx + tx;
+              const limit = Number(l.limit_bytes) || 0;
+              const left = Math.max(0, limit - used);
+              return (
+                <div style={{ fontSize: 12.5, color: '#475569', lineHeight: 1.9 }}>
+                  <div>本周期：↑ {fmtBytes(rx)} / ↓ {fmtBytes(tx)}，合计 {fmtBytes(used)}</div>
+                  {enabled ? (
+                    <div>
+                      上限 {fmtBytes(limit)}，剩余 <b style={{ color: left / limit <= 0.1 ? '#f43f5e' : left / limit <= 0.2 ? '#f59e0b' : '#16a34a' }}>{fmtBytes(left)}（{((left / limit) * 100).toFixed(1)}%）</b>
+                    </div>
+                  ) : (
+                    <div className="pp-muted">未设置上限，点右上「设置」启用</div>
+                  )}
+                  <div className="pp-muted">
+                    每月 {l.reset_day || 1} 日 {String(l.reset_hour || 0).padStart(2, '0')}:00 重置
+                    {traffic && traffic.next_reset ? ' · 下次 ' + new Date(Number(traffic.next_reset)).toLocaleString() : ''}
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
           <Descriptions
             size="small"
             column={2}
@@ -630,7 +725,46 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
           />
         </>
       ) : null}
-    </Drawer>
+      <Modal
+        title="流量限额"
+        open={trafficOpen}
+        onCancel={() => setTrafficOpen(false)}
+        onOk={saveTraffic}
+        okText="保存"
+        destroyOnHidden
+        footer={(_, { OkBtn, CancelBtn }) => (
+          <Space>
+            <Button danger onClick={resetTraffic}>重置本周期</Button>
+            <CancelBtn />
+            <OkBtn />
+          </Space>
+        )}
+      >
+        <div style={{ display: 'grid', gap: 12 }}>
+          <div className="pp-muted" style={{ fontSize: 12 }}>
+            超限仅在管理后台提醒并发送邮件，不会影响用户订阅，也不会停止节点服务。
+          </div>
+          <div>启用上限：<Switch checked={!!trafficForm.enabled} onChange={(v) => setTrafficForm((f) => ({ ...f, enabled: v }))} /></div>
+          <div>
+            计费方向：
+            <Select value={trafficForm.mode} style={{ width: 160, marginLeft: 8 }} onChange={(v) => setTrafficForm((f) => ({ ...f, mode: v }))}
+              options={[{ value: 'both', label: '上行+下行' }, { value: 'rx', label: '仅上行' }, { value: 'tx', label: '仅下行' }]} />
+          </div>
+          <div>
+            流量上限：
+            <InputNumber min={0} value={trafficForm.limit_gb} style={{ width: 140, margin: '0 8px' }} onChange={(v) => setTrafficForm((f) => ({ ...f, limit_gb: v }))} /> GB
+          </div>
+          <div>
+            重置日期：
+            <InputNumber min={1} max={31} value={trafficForm.reset_day} style={{ width: 80, margin: '0 8px' }} onChange={(v) => setTrafficForm((f) => ({ ...f, reset_day: v }))} /> 日
+            <InputNumber min={0} max={23} value={trafficForm.reset_hour} style={{ width: 80, margin: '0 8px' }} onChange={(v) => setTrafficForm((f) => ({ ...f, reset_hour: v }))} /> 时
+          </div>
+          <div>
+            告警阈值：
+            <InputNumber min={1} max={100} value={trafficForm.warn_percent} style={{ width: 90, margin: '0 8px' }} onChange={(v) => setTrafficForm((f) => ({ ...f, warn_percent: v }))} /> %
+          </div>
+        </div>
+      </Modal>    </Drawer>
   );
 }
 
