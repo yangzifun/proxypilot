@@ -1,0 +1,12 @@
+﻿[Unit]
+Description=ProxyPilot 站点访问控制（仅组网 + Cloudflare 回源）
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/pp-web-guard.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
