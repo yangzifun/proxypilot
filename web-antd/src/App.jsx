@@ -22,6 +22,7 @@ import MasquePage from './pages/MasquePage';
 import CdnPreferred from './pages/CdnPreferred';
 import Logs from './pages/Logs';
 import System, { AdminUsersPage, SystemSettingsPage } from './pages/System';
+import LocalServer from './pages/LocalServer';
 import Security from './pages/Security';
 import Backup from './pages/Backup';
 import Attachments from './pages/Attachments';
@@ -43,6 +44,7 @@ const PAGES = {
   status: ServersUnified,
   logs: Logs,
   sys: AdminUsersPage,
+  local: LocalServer,
   sysusers: AdminUsersPage,
   syssettings: SystemSettingsPage,
   attachments: Attachments,

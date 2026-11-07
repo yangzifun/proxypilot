@@ -26,6 +26,7 @@ func (h *handlers) nodeBindingsList(w http.ResponseWriter, r *http.Request) {
 		   LEFT JOIN mihomo_templates mt ON mt.id = mh.template_id
 		   LEFT JOIN mtproto_nodes mp ON mp.server_id = s.id
 		   LEFT JOIN mtproto_templates pt ON pt.id = mp.template_id
+		  WHERE COALESCE(s.link_mode,'agent') <> 'local'
 		  ORDER BY s.id ASC`)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "查询节点绑定失败")

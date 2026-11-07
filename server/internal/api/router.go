@@ -194,6 +194,12 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 
 	// 服务器管理
 	mux.HandleFunc("GET /api/servers/traffic-limits", h.authed(authOpts{}, h.serverTrafficLimitsList))
+	mux.HandleFunc("GET /api/local/overview", h.authed(authOpts{superOnly: true}, h.localOverview))
+	mux.HandleFunc("GET /api/local/processes", h.authed(authOpts{superOnly: true}, h.localProcesses))
+	mux.HandleFunc("GET /api/local/ports", h.authed(authOpts{superOnly: true}, h.localPorts))
+	mux.HandleFunc("GET /api/local/files", h.authed(authOpts{superOnly: true}, h.localFiles))
+	mux.HandleFunc("POST /api/local/upload", h.authed(authOpts{superOnly: true}, h.localUpload))
+	mux.HandleFunc("DELETE /api/local/files/{name}", h.authed(authOpts{superOnly: true}, h.localFileDelete))
 	mux.HandleFunc("GET /api/servers/{id}/ssh-guard", h.authed(authOpts{}, h.serverSSHGuardStatus))
 	mux.HandleFunc("POST /api/servers/{id}/ssh-guard", h.authed(authOpts{superOnly: true}, h.serverSSHGuard))
 	mux.HandleFunc("GET /api/servers/{id}/traffic-limit", h.authed(authOpts{}, h.serverTrafficLimitGet))

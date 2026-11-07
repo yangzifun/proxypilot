@@ -455,6 +455,7 @@ export default function ServersUnified() {
   const rows = useMemo(() => {
     const listRows = (list.data && list.data.data) || [];
     return listRows
+      .filter((s) => String(s.link_mode || '') !== 'local')
       .map((s) => mergeServer(s, liveById.get(Number(s.id))))
       .map((r) => ({ ...r, ...(monitorById.get(Number(r.id)) || {}) }))
       .filter((r) => !status || r.status === status);

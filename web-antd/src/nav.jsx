@@ -123,6 +123,14 @@ export const PAGE_META = {
     group: '系统',
     accent: '#f97316',
   },
+  local: {
+    title: '本机服务器',
+    subtitle: '控制服务器：SSH 防护、隧道、端口、进程与文件',
+    icon: <CloudServerOutlined />,
+    group: '系统',
+    accent: '#0ea5e9',
+    superOnly: true,
+  },
   sysusers: {
     title: '用户管理',
     subtitle: '管理员账号、邮箱与双因素认证',
@@ -182,7 +190,7 @@ export const NAV_GROUPS = [
     key: 'ops',
     title: '运维与安全',
     icon: <ToolOutlined />,
-    keys: ['logs', 'attachments', 'backup', 'sec', 'sysusers', 'syssettings'],
+    keys: ['local', 'logs', 'attachments', 'backup', 'sec', 'sysusers', 'syssettings'],
   },
 ];
 
