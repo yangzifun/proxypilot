@@ -66,12 +66,6 @@ function syncGoAssets() {
     };
     writeCompressed('app.js', jsBuf);
     writeCompressed('app.css', cssBuf);
-    const globePath = path.join(distDir, 'globe3d-app.js');
-    if (fs.existsSync(globePath)) {
-      const globeBuf = fs.readFileSync(globePath);
-      fs.copyFileSync(globePath, path.join(goAssetsDir, 'globe3d-app.js'));
-      writeCompressed('globe3d-app.js', globeBuf);
-    }
     const xtermPath = path.join(distDir, 'xterm-app.js');
     if (fs.existsSync(xtermPath)) {
       const xtermBuf = fs.readFileSync(xtermPath);
@@ -132,31 +126,6 @@ async function runBuild() {
     charset: 'utf8',
     treeShaking: true,
     logLevel: 'warning',
-  });
-  // three.js 单独成包：仅服务器概览页按需加载
-  await build({
-    entryPoints: [path.join(webRoot, 'src/globe-entry.js')],
-    outfile: path.join(distDir, 'globe3d-app.js'),
-    bundle: true,
-    minify: true,
-    format: 'iife',
-    target: ['es2020'],
-    jsx: 'automatic',
-    define: { 'process.env.NODE_ENV': '"production"' },
-    legalComments: 'none',
-    charset: 'utf8',
-    treeShaking: true,
-    logLevel: 'warning',
-    plugins: [{
-      name: 'react-from-window',
-      setup(bb) {
-        bb.onResolve({ filter: /^react(-dom)?$/ }, () => ({ path: 'react', namespace: 'win' }));
-        bb.onLoad({ filter: /.*/, namespace: 'win' }, () => ({
-          contents: 'module.exports = window.__PP_REACT__;',
-          loader: 'js',
-        }));
-      },
-    }],
   });
   const { jsBuf, cssBuf } = syncGoAssets();
   if (report) reportBuild(jsBuf, cssBuf, result);

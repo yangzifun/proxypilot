@@ -3388,18 +3388,19 @@ body {
 .pp-overview-grid { max-width: 1400px; margin: 0 auto; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 14px; }
 .pp-overview-grid .pp-ov-tiles { grid-template-columns: 1fr; gap: 10px; }
 .pp-overview-grid .pp-ov-tile-wide { grid-column: auto; }
-.pp-overview-grid .pp-ov-map { height: 520px; min-height: 460px; max-height: 560px; }
-.pp-overview-grid .pp-ov-map-box { min-height: 400px; }
 @media (max-width: 1180px) {
   .pp-overview-grid { grid-template-columns: minmax(0, 1fr); }
-  .pp-overview-grid .pp-ov-map { min-height: 360px; }
-}
+  }
 /* ---- 概览重排：顶部指标一行，底部资源均值与地图同高 ---- */
 .pp-overview-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; padding: 16px; }
 .pp-ov-top { min-width: 0; }
 .pp-ov-top .pp-ov-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 .pp-ov-top .pp-ov-tile-wide { grid-column: span 2; }
-.pp-ov-bottom { display: grid; grid-template-columns: 340px minmax(320px, 720px); gap: 16px; align-items: stretch; justify-content: start; }
+/* 全球分布已移除：资源均值占据原地图位置（最右侧） */
+.pp-ov-bottom { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; align-items: stretch; justify-items: end; }
+.pp-ov-bottom .pp-ov-res { width: 100%; max-width: 760px; }
+.pp-ov-bottom .pp-ov-gauges { justify-content: flex-start; gap: 36px; }
+.pp-ov-bottom .pp-ov-disk { max-width: 520px; }
 .pp-ov-res { display: flex; flex-direction: column; min-width: 0; }
 .pp-ov-bottom .pp-ov-map { height: 320px; min-height: 0; }
 .pp-ov-bottom .pp-ov-map-box { height: 100%; min-height: 180px; }
@@ -3440,25 +3441,16 @@ body {
   }
   .pp-overview-grid .pp-ov-tile:first-of-type { border-left: 0 !important; padding-left: 0 !important; }
   .pp-overview-grid .pp-ov-res {
-    flex: 0 0 250px !important;
+    flex: 1 1 34% !important;
+    min-width: 320px !important;
     height: auto !important;
     background: transparent !important;
     border: 0 !important;
     border-left: 1px solid #eef2f7 !important;
     padding: 0 16px !important;
   }
-  .pp-overview-grid .pp-ov-map {
-    flex: 1 1 30% !important;
-    min-width: 320px !important;
-    height: auto !important;
-    min-height: 200px !important;
-    border-left: 1px solid #eef2f7 !important;
-    padding-left: 16px !important;
-  }
-  .pp-overview-grid .pp-ov-map-box { height: 100% !important; min-height: 180px !important; }
-  .pp-overview-grid .pp-ov-chart svg { max-width: 150px !important; }
-  .pp-overview-grid .pp-ov-gauge { transform: scale(0.62) !important; transform-origin: top center !important; }
-  .pp-overview-grid .pp-ov-disk { margin-top: -12px !important; }
+      .pp-overview-grid .pp-ov-chart svg { max-width: 150px !important; }
+  .pp-overview-grid .pp-ov-gauges { justify-content: flex-start !important; gap: 40px !important; }
 }
 
 /* ================= 服务器页主题 ================= */
@@ -3659,20 +3651,22 @@ body {
   grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   gap: 12px !important;
 }
-.pp-overview-grid .pp-ov-res { grid-column: 1 !important; grid-row: 2 !important; }
-.pp-overview-grid .pp-ov-foot { grid-column: 1 !important; grid-row: 3 !important; }
-.pp-overview-grid .pp-ov-map {
+.pp-overview-grid .pp-ov-res {
   grid-column: 2 !important;
   grid-row: 1 / span 2 !important;
-  height: 100% !important;
-  min-height: 430px !important;
+  align-self: stretch !important;
   border-left: 1px solid #eef2f7 !important;
-  padding-left: 16px !important;
+  padding-left: 18px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
 }
-.pp-overview-grid .pp-ov-map-box { height: 100% !important; min-height: 380px !important; }
+.pp-overview-grid .pp-ov-res .pp-ov-gauges { justify-content: flex-start !important; gap: 44px !important; }
+.pp-overview-grid .pp-ov-foot { grid-column: 1 !important; grid-row: 2 !important; }
 @media (max-width: 1100px) {
   .pp-overview-grid { grid-template-columns: minmax(0, 1fr) !important; }
-  .pp-overview-grid .pp-ov-map { grid-column: 1 !important; grid-row: 3 !important; border-left: 0 !important; padding-left: 0 !important; }
+  .pp-overview-grid .pp-ov-res { grid-column: 1 !important; grid-row: 3 !important; border-left: 0 !important; padding-left: 0 !important; }
+  .pp-overview-grid .pp-ov-foot { grid-column: 1 !important; grid-row: 2 !important; }
 }
 /* ---- 服务器页空状态（参考 emerald 插图风格） ---- */
 .pp-servers-theme-emerald .ant-empty,

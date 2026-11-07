@@ -31,15 +31,6 @@ var embeddedAppCSSBr []byte
 //go:embed assets_web/app.css.gz
 var embeddedAppCSSGz []byte
 
-//go:embed assets_web/globe3d-app.js
-var embeddedGlobeJS []byte
-
-//go:embed assets_web/globe3d-app.js.br
-var embeddedGlobeJSBr []byte
-
-//go:embed assets_web/globe3d-app.js.gz
-var embeddedGlobeJSGz []byte
-
 //go:embed assets_web/xterm-app.js
 var embeddedXtermJS []byte
 
@@ -250,12 +241,6 @@ func (h *handlers) worldSVG(w http.ResponseWriter, r *http.Request) {
 func (h *handlers) adminAppJS(w http.ResponseWriter, r *http.Request) {
 	serveEmbeddedCompressed(w, r, embeddedAppJS, embeddedAppJSBr, embeddedAppJSGz,
 		"application/javascript; charset=utf-8", `"app-`+h.assetVersion()+`-js"`)
-}
-
-// GET /globe3d-app.js：three.js 地球按需加载，不阻塞首屏。
-func (h *handlers) globeAppJS(w http.ResponseWriter, r *http.Request) {
-	serveEmbeddedCompressed(w, r, embeddedGlobeJS, embeddedGlobeJSBr, embeddedGlobeJSGz,
-		"application/javascript; charset=utf-8", `"globe-`+h.assetVersion()+`"`)
 }
 
 // GET /xterm-app.js：远程终端按需加载，不阻塞首屏。

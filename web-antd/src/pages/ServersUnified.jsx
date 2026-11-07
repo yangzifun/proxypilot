@@ -10,7 +10,6 @@ import {
   CloudDownloadOutlined,
   CloudServerOutlined,
   DisconnectOutlined,
-  FullscreenOutlined,
   PlusOutlined,
   PoweroffOutlined,
   QuestionCircleOutlined,
@@ -44,39 +43,7 @@ import { api, apiPost, getToken } from '../api';
 import { useAsync, usePolling, readForm } from '../hooks';
 import { CopyText, ErrorBlock, JsonView, PageCard, StatCard, StatusPill } from '../components';
 import { watchBatch } from '../components/JobCenter';
-import { WorldMap } from './Monitor';
-// three.js 单独成包（/globe3d-app.js），首屏不加载，进入本页时按需注入
-let globePromise = null;
-function loadGlobe3D() {
-  if (typeof window !== 'undefined' && window.__PP_GLOBE3D__) return Promise.resolve(window.__PP_GLOBE3D__);
-  if (!globePromise) {
-    globePromise = new Promise((resolve, reject) => {
-      const boot = (typeof window !== 'undefined' && window.__PP_BOOT__) || {};
-      const s = document.createElement('script');
-      s.src = '/globe3d-app.js' + (boot.assetVersion ? '?v=' + boot.assetVersion : '');
-      s.async = true;
-      s.onload = () => (window.__PP_GLOBE3D__ ? resolve(window.__PP_GLOBE3D__) : reject(new Error('地球组件初始化失败')));
-      s.onerror = () => reject(new Error('地球组件加载失败'));
-      document.head.appendChild(s);
-    });
-  }
-  return globePromise;
-}
 
-function LazyGlobe(props) {
-  const [Comp, setComp] = useState(null);
-  useEffect(() => {
-    let alive = true;
-    loadGlobe3D()
-      .then((C) => { if (alive) setComp(() => C); })
-      .catch(() => {});
-    return () => { alive = false; };
-  }, []);
-  if (!Comp) {
-    return <div className="pp-muted" style={{ height: '100%', minHeight: 200, display: 'grid', placeItems: 'center' }}>正在加载地球…</div>;
-  }
-  return <Comp {...props} />;
-}
 import ServerDrawer from '../components/ServerDrawer';
 import ServerUnlockModal from '../components/ServerUnlockModal';
 import { ServerCard as FullServerCard } from './Monitor';
@@ -385,7 +352,6 @@ export default function ServersUnified() {
   const { message } = AntdApp.useApp();
   const [view, setView] = useState(readView);
   const [q, setQ] = useState('');
-  const [mapOpen, setMapOpen] = useState(false);
   const [status, setStatus] = useState('');
   const [auto, setAuto] = useState(true);
   const [pageTheme, setPageTheme] = useState(() => getTheme());
@@ -920,54 +886,10 @@ export default function ServersUnified() {
               </div>
             </div>
 
-            <div className="pp-ov-map">
-              <div className="pp-ov-sec-head">
-                <b>全球分布</b>
-                <span className="pp-ov-map-extra">
-                  {[
-                    { label: '在线', color: '#10b981' },
-                    { label: '离线', color: '#f43f5e' },
-                    { label: '未知', color: '#cbd5e1' },
-                  ].map((it) => (
-                    <span key={it.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                      <i
-                        style={{
-                          display: 'inline-block',
-                          width: 8,
-                          height: 8,
-                          borderRadius: '50%',
-                          background: it.color,
-                          boxShadow: '0 0 0 1px rgba(15, 23, 42, 0.06)',
-                        }}
-                      />
-                      {it.label}
-                    </span>
-                  ))}
-                  <Button size="small" type="link" icon={<FullscreenOutlined />} onClick={() => setMapOpen(true)}>大屏</Button>
-                </span>
-              </div>
-              <div className="pp-ov-map-box">
-                <LazyGlobe servers={rows} onPick={(r) => setDetailId(r.id)} height="100%" />
-              </div>
-            </div>
           </div>
         </div>
       </PageCard>
 
-      <Modal
-        title="全球分布 · 大屏"
-        open={mapOpen}
-        onCancel={() => setMapOpen(false)}
-        footer={null}
-        width="96vw"
-        style={{ top: 16 }}
-        styles={{ body: { height: '84vh', padding: 8 } }}
-        destroyOnHidden
-      >
-        <div className="pp-ov-map-box" style={{ height: '100%' }}>
-          <WorldMap large zoomable servers={rows} onPick={(r) => { setMapOpen(false); setDetailId(r.id); }} />
-        </div>
-      </Modal>
 
 
       <div style={{ marginTop: 16 }}>
