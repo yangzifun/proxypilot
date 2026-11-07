@@ -158,11 +158,11 @@ function MiniRing({ value, label }) {
     <div className="pp-ov-ring">
       <Progress
         type="circle"
-        size={92}
+        size={74}
         percent={pct}
         strokeWidth={7}
         strokeColor={color}
-        format={() => <span style={{ fontSize: 14, fontWeight: 600 }}>{pct}%</span>}
+        format={() => <span style={{ fontSize: 12, fontWeight: 600 }}>{pct}%</span>}
       />
       <div className="pp-ov-ring-label">{label}</div>
     </div>
@@ -284,11 +284,11 @@ function RingGauge({ percent, label }) {
     <div className="pp-srv-ring">
       <Progress
         type="circle"
-        size={58}
+        size={46}
         percent={v}
         strokeWidth={7}
         strokeColor={has ? levelColor(v) : '#e2e8f0'}
-        format={() => <span style={{ fontSize: 13, fontWeight: 600 }}>{has ? `${v}%` : '—'}</span>}
+        format={() => <span style={{ fontSize: 11, fontWeight: 600 }}>{has ? `${v}%` : '—'}</span>}
       />
       <div className="pp-srv-ring-label">{label}</div>
     </div>

@@ -3888,3 +3888,56 @@ body.pp-site-theme-glass .ant-modal-content {
 
 /* 6. 拖动时不触发 hover 效果，减少无谓绘制 */
 .pp-dragging .pp-srv-card:hover { box-shadow: none !important; }
+
+
+/* ---- 紧凑密度（全站缩放 ~88%） ---- */
+/* 通过统一收缩内边距/字号，让信息密度更高、页面更"透气"而非拥挤 */
+.pp-card { border-radius: 10px !important; }
+.pp-card .ant-card-head { min-height: 42px; padding: 0 14px; }
+.pp-card .ant-card-body { padding: 14px; }
+.pp-card-tight .ant-card-body { padding: 10px 12px; }
+
+.pp-stat { gap: 10px; }
+.pp-stat-value { font-size: 19px; }
+.pp-stat-label { font-size: 12px; }
+.pp-kv-v { font-size: 16px; }
+.pp-donut-value { font-size: 17px; }
+.pp-gauge-value { font-size: 17px; }
+.pp-gauge-inner .pp-gauge-value { font-size: 16px; }
+
+/* 表格更紧凑 */
+.ant-table { font-size: 12.5px; }
+.ant-table-thead > tr > th { padding: 7px 10px !important; font-size: 12px !important; }
+.ant-table-tbody > tr > td { padding: 6px 10px !important; }
+.ant-table-cell .ant-tag { font-size: 11px; line-height: 17px; padding: 0 6px; }
+
+/* 表单与按钮 */
+.ant-form-item { margin-bottom: 14px; }
+.ant-btn { font-size: 13px; }
+.ant-btn-sm { font-size: 12px; }
+.ant-descriptions-item-label, .ant-descriptions-item-content { font-size: 12.5px; padding-bottom: 6px !important; }
+
+/* 页面主标题层级 */
+.pp-page-title, h1.pp-title { font-size: 17px; }
+h2 { font-size: 15px; }
+h3 { font-size: 14px; }
+
+/* 空间收敛 */
+.ant-space-gap-col-small { column-gap: 8px !important; }
+.ant-layout-header { height: 54px !important; line-height: 54px !important; }
+.pp-ov-chart { min-height: 0; }
+
+/* 抽屉 / 弹窗内边距 */
+.ant-drawer-body { padding: 16px; }
+.ant-modal-body { padding-top: 4px; }
+
+/* 侧边栏折叠区更紧凑 */
+.pp-sider .ant-menu-item { height: 32px; line-height: 32px; }
+.ant-menu-inline .ant-menu-item-group-title { padding-top: 10px; padding-bottom: 4px; font-size: 11px; }
+
+
+/* ---- 界面缩放补偿 ---- */
+/* html 上的 zoom 会让 100vh 同样被缩放，需要按比例放大回来 */
+.ant-layout { min-height: calc(100vh / var(--pp-zoom, 1)) !important; }
+.pp-sider.ant-layout-sider { height: calc(100vh / var(--pp-zoom, 1)) !important; }
+.ant-layout-sider-children { height: calc(100vh / var(--pp-zoom, 1)) !important; }

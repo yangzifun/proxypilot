@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Segmented, Tooltip } from 'antd';
 import { getTheme, setTheme, subscribeTheme, THEME_OPTIONS } from '../theme';
+import { SCALE_OPTIONS, useScale } from '../uiScale';
 import { Avatar, Badge, Dropdown, Layout, Menu, Tag } from 'antd';
 import { LogoutOutlined, SafetyCertificateOutlined, UserOutlined } from '@ant-design/icons';
 import { useAuth } from '../auth';
@@ -16,6 +17,7 @@ const boot = (typeof window !== 'undefined' && window.__PP_BOOT__) || {};
 export default function AppLayout({ activeKey, onNavigate, children }) {
   const [siteTheme, setSiteTheme] = useState(() => getTheme());
   useEffect(() => subscribeTheme((v) => setSiteTheme(v)), []);
+  const [uiScale, setUiScale] = useScale();
   const { user, isSuper, logout } = useAuth();
   const meta = PAGE_META[activeKey] || PAGE_META.dash;
 
@@ -85,6 +87,14 @@ export default function AppLayout({ activeKey, onNavigate, children }) {
           </div>
 
           <div className="pp-header-actions">
+            <Tooltip title="界面缩放比例">
+              <Segmented
+                size="small"
+                value={uiScale}
+                onChange={(v) => setUiScale(v)}
+                options={SCALE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+              />
+            </Tooltip>
             <Tooltip title="切换整站主题">
               <Segmented
                 size="small"
