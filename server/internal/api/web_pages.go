@@ -151,7 +151,7 @@ func (h *handlers) shellHTML(mode string) string {
     <div class="pp-boot-retry" id="pp-boot-retry" hidden>加载时间较长，<a href="" onclick="location.reload();return false;">刷新页面</a></div>
   </div>
 </div>
-<script>window.__PP_BOOT__=` + h.bootJSON(mode) + `;</script>
+<script data-cfasync="false">window.__PP_BOOT__=` + h.bootJSON(mode) + `;</script>
 <script>
 (function () {
   var retry = document.getElementById('pp-boot-retry');
@@ -164,7 +164,7 @@ func (h *handlers) shellHTML(mode string) string {
   window.addEventListener('error', function () { showRetry('资源加载失败'); }, true);
 })();
 </script>
-<script src="/admin-app.js?v=` + ver + `" defer fetchpriority="high"></script>
+<script data-cfasync="false" src="/admin-app.js?v=` + ver + `" defer fetchpriority="high"></script>
 <noscript><p style="font-family:system-ui;padding:24px">当前界面需要启用 JavaScript。</p></noscript>
 </body>
 </html>`
@@ -182,7 +182,7 @@ func (h *handlers) serveCustomIndex(w http.ResponseWriter, r *http.Request, mode
 	if err != nil {
 		return false
 	}
-	boot := `<script>window.__PP_BOOT__=` + h.bootJSON(mode) + `;</script>`
+	boot := `<script data-cfasync="false">window.__PP_BOOT__=` + h.bootJSON(mode) + `;</script>`
 	html := string(raw)
 	if bootScriptRe.MatchString(html) {
 		html = bootScriptRe.ReplaceAllString(html, boot)

@@ -243,8 +243,12 @@ func componentVersions(r Runner) map[string]string {
 		bin, key, arg string
 	}{
 		{"sing-box", "sing-box", "version"},
+		{"mihomo", "mihomo", "version"},
 		{"mtg-multi", "mtg", "version"},
+		{"mtg", "mtg", "version"},
 		{"cloudflared", "cloudflared", "--version"},
+		{"warp-cli", "warp-svc", "--version"},
+		{"proxypilot-agent", "proxypilot-agent", "--version"},
 	} {
 		text, _ := r(item.bin, item.arg)
 		if v := ParseVersionOutput(text); v != "" {

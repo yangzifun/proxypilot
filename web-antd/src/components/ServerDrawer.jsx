@@ -193,19 +193,20 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
 
   /* 只关注这几个服务的安装 / 运行状态，其余历史探针不再展示 */
   // 展示顺序：代理引擎 → 隧道 → 组网客户端
-  const MONITOR_SERVICES = ['sing-box', 'mihomo', 'mtg', 'cloudflared', 'warp-svc'];
-  const SERVICE_LABELS = { 'warp-svc': 'WARP', cloudflared: 'cloudflared' };
+  const MONITOR_SERVICES = ['sing-box', 'mihomo', 'mtg', 'cloudflared', 'warp-svc', 'proxypilot-agent'];
+  const SERVICE_LABELS = { 'warp-svc': 'WARP', 'proxypilot-agent': 'Agent', cloudflared: 'cloudflared' };
   const services = useMemo(() => {
     const map = m.services || {};
     const vers = m.versions || {};
     if (!Object.keys(map).length) return [];
-    return MONITOR_SERVICES.map((name) => ({
-      name,
-      label: SERVICE_LABELS[name] || name,
-      state: String(map[name] || 'not-installed'),
-      version: String(vers[name] || ''),
-    }));
-  }, [m.services, m.versions]);
+    return MONITOR_SERVICES.map((name) => {
+      const state = String(map[name] || 'not-installed');
+      // 版本：优先组件自报，其次用 Agent 心跳里的版本兜底
+      let version = String(vers[name] || '');
+      if (!version && name === 'proxypilot-agent') version = String((d && d.agent_version) || m.agent_version || '');
+      return { name, label: SERVICE_LABELS[name] || name, state, version };
+    });
+  }, [m.services, m.versions, m.agent_version, d && d.agent_version]);
 
   const chartRows = useMemo(
     () =>
@@ -531,25 +532,6 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
                 })(),
               },
               { key: 'geo', label: '地区', children: d.ip_country ? `${d.ip_country} ${d.ip_region || ''}` : '—' },
-              {
-                key: 'agent',
-                label: 'Agent',
-                children: (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    {d.agent_version ? <Tag color="blue" style={{ marginInlineEnd: 0 }}>{d.agent_version}</Tag> : '—'}
-                    {!local ? (
-                      <Popconfirm
-                        title={`向「${d.name}」推送 Agent 更新？`}
-                        description={d.agent_update && d.agent_latest ? `当前 ${d.agent_version || '未知'} → ${d.agent_latest}` : '会创建后台更新任务，进度见右上角「任务」。'}
-                        okText="推送"
-                        onConfirm={pushAgent}
-                      >
-                        <Button size="small" type="link" style={{ padding: 0 }} loading={busy === 'agent'}>更新</Button>
-                      </Popconfirm>
-                    ) : null}
-                  </span>
-                ),
-              },
               { key: 'seen', label: '最后心跳', children: d.agent_last_seen ? `${fmtAgo(d.agent_last_seen)}（${fmtTime(d.agent_last_seen)}）` : '—' },
               { key: 'poll', label: '轮询间隔', children: `${d.agent_next_poll_sec || '—'} 秒` },
               { key: 'host', label: '主机名', children: m.hostname || '—' },
@@ -589,7 +571,7 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
 
           <div style={{ margin: '20px 0 8px', display: 'flex', alignItems: 'center', gap: 8 }}>
             <b style={{ fontSize: 14 }}>服务状态</b>
-            <span className="pp-muted" style={{ fontSize: 12 }}>sing-box / mihomo / mtg / cloudflared / WARP / SSH 的启停与更新都在对应行右侧</span>
+            <span className="pp-muted" style={{ fontSize: 12 }}>sing-box / mihomo / mtg / cloudflared / WARP / Agent / SSH 的启停与更新都在对应行右侧</span>
           </div>
           {services.length ? (
             <Space orientation="vertical" style={{ width: '100%' }} size={8}>
@@ -616,6 +598,16 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
                       {meta[1]}
                     </Tag>
                     <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      {svc.name === 'proxypilot-agent' && !local && svc.state !== 'not-installed' ? (
+                        <Popconfirm
+                          title={`向「${d.name}」推送 Agent 更新？`}
+                          description={d.agent_update && d.agent_latest ? `当前 ${d.agent_version || '未知'} → ${d.agent_latest}` : '会创建后台更新任务，进度见右上角「任务」。'}
+                          okText="推送"
+                          onConfirm={pushAgent}
+                        >
+                          <Button size="small" type="link" style={{ padding: 0 }} loading={busy === 'agent'}>更新</Button>
+                        </Popconfirm>
+                      ) : null}
                       {svc.name === 'cloudflared' && svc.state !== 'not-installed' ? (
                         <Popconfirm
                           title="更新 cloudflared？"
