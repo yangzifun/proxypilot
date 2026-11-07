@@ -43,7 +43,7 @@ import (
 // 1.8.5：组件二进制改为「临时文件 + rename」写入，修复运行中覆盖导致的 text file busy
 // 1.8.6：解包改流式写盘，避免小内存节点在安装 78MB sing-box 时被 OOM kill
 // 1.8.7：新增 inspect 动作（只读检查配置文件，供 UUID 一致性巡检核对机器实际配置）
-const Version = "1.8.18"
+const Version = "1.8.19"
 
 // maxActionsPerRound 单轮执行任务数上限（服务端 AGENT_ACTIONS_PER_POLL = 5，这里留足余量）。
 const maxActionsPerRound = 20
@@ -512,9 +512,9 @@ func (a *Agent) wsOnce(ctx context.Context) error {
 		}
 	}()
 
-	// 实时监控：WS 连接期间每 5s 上报一次样本，面板无需等下一次 30s poll
+	// 实时监控：WS 连接期间每 2s 推送一次样本（长连接主通道），面板无需等 HTTP poll
 	go func() {
-		ticker := time.NewTicker(5 * time.Second)
+		ticker := time.NewTicker(2 * time.Second)
 		defer ticker.Stop()
 		for {
 			select {

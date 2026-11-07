@@ -384,7 +384,7 @@ func (h *handlers) agentUpdateSnapshot(ctx context.Context, srv *agentServer, m 
 	_, err := h.db.ExecContext(ctx, `UPDATE servers SET last_status = ?, last_error = ?, last_check_at = ?,
 	      last_metrics = ?, os_info = ?, link_mode = ?, agent_platform = ?, agent_version = ?,
 	      agent_last_seen = ?, agent_last_poll_at = IF(?, ?, agent_last_poll_at),
-	      agent_next_poll_sec = LEAST(agent_next_poll_sec, ?), agent_poll_count = IF(?, ?, agent_poll_count),
+	      agent_next_poll_sec = COALESCE(NULLIF(?, 0), agent_next_poll_sec), agent_poll_count = IF(?, ?, agent_poll_count),
 	      last_ip = COALESCE(NULLIF(?, ''), last_ip),
 	      last_ip4 = COALESCE(NULLIF(?, ''), last_ip4),
 	      last_ip6 = COALESCE(NULLIF(?, ''), last_ip6),
@@ -921,9 +921,15 @@ func isSystemExecPayload(p map[string]any) bool {
 func (h *handlers) ingestAgentWSMetrics(ctx context.Context, srv *agentServer, body map[string]any, ip string) {
 	m := parseAgentMetrics(body)
 	prev := h.agentPrevMetric(ctx, srv.ID)
-	const wsIntervalSec = int64(5)
-	m.CpuPercent = agentCpuPercentFromSample(prev, m, wsIntervalSec)
-	rates := agentThroughputFromSample(prev, m, wsIntervalSec)
+	// 按上一次样本的真实间隔计算 CPU/速率，避免 WS 推送频率变化后数值失真
+	intervalSec := int64(5)
+	if prev != nil && prev.CreatedAt > 0 {
+		if d := (nowMillis() - prev.CreatedAt) / 1000; d >= 1 && d <= 3600 {
+			intervalSec = d
+		}
+	}
+	m.CpuPercent = agentCpuPercentFromSample(prev, m, intervalSec)
+	rates := agentThroughputFromSample(prev, m, intervalSec)
 	version := firstNonEmpty(jsonStr(body["agent_version"]), jsonStr(body["agentVersion"]))
 	opts := struct {
 		NextPollSec    int64
@@ -931,7 +937,7 @@ func (h *handlers) ingestAgentWSMetrics(ctx context.Context, srv *agentServer, b
 		PollCount      int64
 		AgentVersion   string
 		IP, IP4, IP6   string
-	}{srv.NextPollSec, srv.NextPollSec, srv.AgentPollCount, version, ip, "", ""}
+	}{srv.NextPollSec, 0, srv.AgentPollCount, version, ip, "", ""}
 	if err := h.agentUpdateSnapshot(ctx, srv, m, false, opts, rates); err != nil {
 		h.log.Warn("WS 快照更新失败", "err", err)
 	}
