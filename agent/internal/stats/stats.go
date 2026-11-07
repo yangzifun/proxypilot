@@ -21,7 +21,7 @@ import (
 const DefaultSBPath = "/etc/sing-box/sb.json"
 
 // collectTimeout 单节点采集上限（两个控制面共享）。
-const collectTimeout = 5 * time.Second
+const collectTimeout = 12 * time.Second
 
 // Experimental 只取统计需要的两段（clash_api / v2ray_api）。
 type Experimental struct {

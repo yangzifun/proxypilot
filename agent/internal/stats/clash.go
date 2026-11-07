@@ -48,7 +48,7 @@ func clashSnapshot(ctx context.Context, addr, secret string) (clashTotals, []cli
 	if s := strings.TrimSpace(secret); s != "" {
 		req.Header.Set("Authorization", "Bearer "+s)
 	}
-	cl := &http.Client{Timeout: 4 * time.Second}
+	cl := &http.Client{Timeout: 8 * time.Second}
 	resp, err := cl.Do(req)
 	if err != nil {
 		return totals, nil, err
