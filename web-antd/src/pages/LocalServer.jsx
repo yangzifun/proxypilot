@@ -5,10 +5,12 @@ import {
   Button,
   Col,
   Empty,
+  InputNumber,
   Popconfirm,
   Progress,
   Row,
   Space,
+  Select,
   Switch,
   Table,
   Tag,
@@ -23,6 +25,7 @@ import {
   DeleteOutlined,
   FolderOpenOutlined,
   InboxOutlined,
+  PlusOutlined,
   ReloadOutlined,
   SafetyCertificateOutlined,
   ThunderboltOutlined,
@@ -75,6 +78,7 @@ export default function LocalServer() {
   const procs = useAsync(() => api('local/processes'), []);
   const ports = useAsync(() => api('local/ports'), []);
   const files = useAsync(() => api('local/files'), []);
+  const firewall = useAsync(() => api('local/firewall'), []);
 
   const m = (overview && overview.metrics) || {};
   const services = m.services || {};
@@ -109,6 +113,42 @@ export default function LocalServer() {
       message.error(e.message || '操作失败');
     } finally {
       setBusy('');
+    }
+  };
+
+  const [newPort, setNewPort] = useState(null);
+  const [newProto, setNewProto] = useState('tcp');
+  const fwRows = useMemo(
+    () => ((firewall.data && firewall.data.data) || []).map((x) => ({ key: String(x.id), ...x })),
+    [firewall.data]
+  );
+
+  const addRule = async (action) => {
+    const port = Number(newPort);
+    if (!port || port < 1 || port > 65535) {
+      message.warning('请输入 1-65535 的端口');
+      return;
+    }
+    setBusy('fw');
+    try {
+      const res = await apiPost('local/firewall', { port, protocol: newProto, action });
+      message.success((res && res.message) || '已提交');
+      setNewPort(null);
+      firewall.reload();
+    } catch (e) {
+      message.error(e.message || '操作失败');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const removeRule = async (id) => {
+    try {
+      await apiDelete('local/firewall/' + id);
+      message.success('已删除规则');
+      firewall.reload();
+    } catch (e) {
+      message.error(e.message || '删除失败');
     }
   };
 
@@ -238,23 +278,45 @@ export default function LocalServer() {
       <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
         <Col xs={24} lg={12}>
           <PageCard
-            title={<span className="pp-section-title">端口开放</span>}
-            extra={<span className="pp-muted" style={{ fontSize: 12 }}>{portRows.length} 个监听端口</span>}
+            title={<span className="pp-section-title">端口开放 / 关闭</span>}
+            extra={
+              <Space size={6}>
+                <InputNumber size="small" min={1} max={65535} placeholder="端口" style={{ width: 92 }} value={newPort} onChange={setNewPort} />
+                <Select size="small" value={newProto} onChange={setNewProto} style={{ width: 78 }}
+                  options={[{ value: 'tcp', label: 'TCP' }, { value: 'udp', label: 'UDP' }]} />
+                <Button size="small" type="primary" icon={<PlusOutlined />} loading={busy === 'fw'} onClick={() => addRule('open')}>开放</Button>
+                <Button size="small" danger loading={busy === 'fw'} onClick={() => addRule('close')}>关闭</Button>
+              </Space>
+            }
             bodyStyle={{ padding: 0 }}
           >
             <Table
               size="small"
               pagination={false}
               scroll={{ y: 260 }}
-              loading={ports.loading}
-              dataSource={portRows}
-              locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="未读取到监听端口" /> }}
+              loading={firewall.loading}
+              dataSource={fwRows}
+              locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有端口规则" /> }}
               columns={[
-                { title: '端口', dataIndex: 'port', width: 90, render: (v) => <span className="pp-mono">{v}</span> },
-                { title: '绑定地址', dataIndex: 'bind', render: (v) => <span className="pp-mono">{v || '*'}</span> },
-                { title: '进程', dataIndex: 'process', ellipsis: true },
+                { title: '端口', dataIndex: 'port', width: 82, render: (v, r) => <span className="pp-mono">{v}/{String(r.protocol).toUpperCase()}</span> },
+                {
+                  title: '规则', dataIndex: 'action', width: 86,
+                  render: (v) => <Tag color={v === 'close' ? 'red' : 'green'} style={{ marginInlineEnd: 0 }}>{v === 'close' ? '关闭' : '开放'}</Tag>,
+                },
+                { title: '备注', dataIndex: 'note', ellipsis: true, render: (v) => v || <span className="pp-muted">—</span> },
+                {
+                  title: '', width: 56,
+                  render: (_, r) => (
+                    <Popconfirm title={`删除 ${r.port}/${r.protocol} 规则？`} okText="删除" okButtonProps={{ danger: true }} onConfirm={() => removeRule(r.id)}>
+                      <Button size="small" type="link" danger icon={<DeleteOutlined />} />
+                    </Popconfirm>
+                  ),
+                },
               ]}
             />
+            <div className="pp-muted" style={{ fontSize: 11.5, padding: '8px 12px', borderTop: '1px solid #f1f5f9' }}>
+              规则落在独立链 PP_PORTS（INPUT 首条），已保存为开机自动恢复；关闭表示对该端口显式 DROP。
+            </div>
           </PageCard>
         </Col>
         <Col xs={24} lg={12}>
