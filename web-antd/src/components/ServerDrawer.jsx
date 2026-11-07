@@ -8,7 +8,7 @@ import {
   DeleteOutlined,
   DisconnectOutlined,
   EditOutlined,
-  BarsOutlined,
+  SendOutlined,
   KeyOutlined,
   PoweroffOutlined,
   ReloadOutlined,
@@ -374,7 +374,6 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
           <Tooltip title="实时终端（交互式）">
             <Button
               size="small"
-              type="text"
               icon={<CodeOutlined />}
               disabled={!d}
               onClick={() => {
@@ -387,8 +386,7 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
           <Tooltip title="队列命令（异步执行）">
             <Button
               size="small"
-              type="text"
-              icon={<BarsOutlined />}
+              icon={<SendOutlined />}
               disabled={!d}
               onClick={() => {
                 if (!d.allow_exec) message.warning('该服务器未开启「允许远程命令」');
