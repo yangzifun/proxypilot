@@ -19,6 +19,7 @@ import {
   ArrowDownOutlined,
   ArrowUpOutlined,
   DeleteOutlined,
+  NodeIndexOutlined,
   ReloadOutlined,
   SearchOutlined,
   TeamOutlined,
@@ -524,28 +525,6 @@ export default function UserTraffic() {
 
       </div>
 
-      <div style={{ marginTop: 16 }}>
-        <PageCard
-          title={<span className="pp-section-title">用户 → 服务器 流量流向</span>}
-          extra={
-            <span className="pp-muted" style={{ fontSize: 12 }}>
-              近 24 小时 · 线宽表示流量占比 · 光点表示活跃用户
-            </span>
-          }
-        >
-          {trafficFlow.loading && !(trafficFlow.data && trafficFlow.data.users) ? (
-            <div className="pp-muted" style={{ padding: 32, textAlign: 'center' }}>正在统计流向…</div>
-          ) : (
-            <FlowGraph
-              users={(trafficFlow.data && trafficFlow.data.users) || []}
-              nodes={(trafficFlow.data && trafficFlow.data.nodes) || []}
-              edges={(trafficFlow.data && trafficFlow.data.edges) || []}
-              height={440}
-              emptyText="当前没有活跃用户在产生流量"
-            />
-          )}
-        </PageCard>
-      </div>
 
       <div className="pp-pair-row">
       <PageCard
@@ -824,6 +803,32 @@ export default function UserTraffic() {
                       { title: '在线', dataIndex: 'online', width: 80, render: (v) => (v ? <Tag color="green">在线</Tag> : <Tag>离线</Tag>) },
                     ]}
                   />
+                </>
+              ),
+            },
+            {
+              key: 'flow',
+              label: (
+                <span>
+                  <NodeIndexOutlined /> 流量流向
+                </span>
+              ),
+              children: (
+                <>
+                  <div className="pp-muted" style={{ fontSize: 12, marginBottom: 10 }}>
+                    多用户 → 多服务器的流量方向；仅显示近 {Math.round(ONLINE_WINDOW_MS / 60000)} 分钟活跃的用户，线宽表示流量大小，可拖拽与缩放。
+                  </div>
+                  {trafficFlow.loading && !(trafficFlow.data && trafficFlow.data.users) ? (
+                    <div className="pp-muted" style={{ padding: 40, textAlign: 'center' }}>正在统计流向…</div>
+                  ) : (
+                    <FlowGraph
+                      users={(trafficFlow.data && trafficFlow.data.users) || []}
+                      nodes={(trafficFlow.data && trafficFlow.data.nodes) || []}
+                      edges={(trafficFlow.data && trafficFlow.data.edges) || []}
+                      height={520}
+                      emptyText="当前没有活跃用户在产生流量"
+                    />
+                  )}
                 </>
               ),
             },
