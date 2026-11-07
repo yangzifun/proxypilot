@@ -24,7 +24,7 @@ import (
 )
 
 // version 由构建脚本注入：-ldflags "-X main.version=v1.0.0"
-var version = "V24.4"
+var version = "V24.5"
 
 func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -151,6 +151,9 @@ func agentOnlyHandler(next http.Handler) http.Handler {
 		case strings.HasPrefix(p, "/api/agent/"):
 			return true
 		case strings.HasPrefix(p, "/agent-dist/"):
+			return true
+		case strings.HasPrefix(p, "/api/shell/agent/"):
+			// Agent 拨号建立实时终端隧道（仅 Agent 令牌可用）
 			return true
 		case p == "/install.sh", p == "/agent/install.sh":
 			return true
