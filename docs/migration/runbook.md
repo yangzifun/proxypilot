@@ -5,7 +5,7 @@
 
 ## 0. 先决条件
 
-- 目标机：Linux，MySQL **8.0.13+**（推荐 8.4），Docker 或直接 systemd 部署。
+- 目标机：Linux，MySQL **8.0.13+**（推荐 8.4），直接 systemd 部署（`deploy/install.sh`）。
 - 工具：`wrangler`（已登录）、`mysql` 客户端、Python 3。
 - 新服务 V15.0 二进制或镜像。
 - 旧 Worker 的敏感变量（必须原样带到新系统）：
@@ -46,9 +46,9 @@ UNION ALL SELECT 'admin_users', COUNT(*) FROM admin_users;
 cd server
 cp .env.example .env
 # 必改：PP_MYSQL_DSN、PP_JWT_SECRET、PP_AGENT_KEY_SECRET、PP_ADMIN_PASSWORD、PP_PUBLIC_BASE_URL
-docker compose up -d mysql
+systemctl start mysql
 # 先启动一次 Go，让它自动执行 0001–0005 迁移
-go run ./cmd/proxypilot   # 或 docker compose up -d server
+go run ./cmd/proxypilot
 ```
 
 迁移日志应显示 `0001_init` … `0006_alter_cmd_columns`。

@@ -127,7 +127,7 @@ API：`GET/PUT /api/settings`（仅超管 JWT）。
 cd agent && ./build.sh && cd ..
 
 # 服务镜像（内嵌前端，无需 npm）
-cd server && docker compose build
+cd server && ../deploy/install.sh --binary ../dist/proxypilot-linux-amd64
 ```
 
 ### 2. 数据迁移（D1 → MySQL）
@@ -162,7 +162,7 @@ cp server/.env.example server/.env
 
 ```bash
 cd server
-docker compose up -d --build      # mysql + server（server 启动时自动迁移）
+sudo ../deploy/install.sh --binary ../dist/proxypilot-linux-amd64
 curl -s http://127.0.0.1:8080/healthz
 ```
 
@@ -204,7 +204,10 @@ Agent 的 `/api/agent/ws` 与 `/api/shell/*` 都是 WebSocket 升级请求，反
 2. 观察 24h：`/healthz`、错误日志、Agent 心跳、订阅请求。
 3. 回滚：DNS 指回 Worker；MySQL 期间产生的数据需用反向脚本同步（建议切流窗口内只读或短时维护）。
 
-### 部署前必须实测（本仓库内无法完成）\n\n1. **MySQL 迁移**：`PP_TEST_DSN=... go test -tags integration ./internal/api -run TestIntegrationLoginAndSub`\n2. **Docker 构建**：本机无 Docker，`docker compose build` 需在部署机执行\n3. **真实 Agent**：keycheck → bootstrap → poll → deploy → ack\n4. **SMTP / OIDC / Turnstile**：需真实服务\n5. **反向代理 TLS**：`X-Forwarded-Proto/Host` 透传\n\n### 已知降级（切换前确认可接受）
+### 部署前必须实测（本仓库内无法完成）
+
+1. **MySQL 迁移**：`PP_TEST_DSN=... go test -tags integration ./internal/api -run TestIntegrationLoginAndSub`
+2. **安装脚本**：`sudo ../deploy/install.sh --binary ../dist/proxypilot-linux-amd64` 需在目标机验证
 
 - **WebSSH 已可用**：浏览器 ↔ Go ↔ Agent(WS) ↔ PTY；多实例部署需要按 server_id 粘性路由（会话在进程内存）。
 - **批量任务同步执行**：`apply-all`/`push` 在大批量时会占用请求，建议分批。
@@ -218,7 +221,7 @@ Agent 的 `/api/agent/ws` 与 `/api/shell/*` 都是 WebSocket 升级请求，反
 cd server
 
 # 1) 本地 MySQL 8（自动执行 migrations/0001_init.sql）
-docker compose up -d mysql
+systemctl start mysql
 
 # 2) 配置
 cp .env.example .env

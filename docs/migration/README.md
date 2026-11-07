@@ -217,7 +217,7 @@ gofmt / vet 无告警；DDL 的 84 条语句经 sqlglot（MySQL 方言）解析�
 ```bash
 cd server
 cp .env.example .env          # 填 DSN、JWT_SECRET
-docker compose up -d mysql    # 本地 MySQL 8
+systemctl start mysql            # 使用本机 MySQL 8
 set -a; . ./.env; set +a
 go run ./cmd/proxypilot
 curl -s localhost:8080/healthz

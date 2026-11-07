@@ -52,3 +52,7 @@ jobs:
             dist/proxypilot-linux-amd64
             dist/proxypilot-linux-arm64
             dist/SHA256SUMS.txt
+            deploy/install.sh
+            deploy/upgrade.sh
+            deploy/uninstall.sh
+            deploy/README.md

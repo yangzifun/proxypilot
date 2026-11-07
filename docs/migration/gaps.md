@@ -211,7 +211,7 @@
 
 - ✅ **内嵌生产 UI**：`workers/export_web_assets.mjs` 从 worker 导出 `app.js/app.css/world.svg`，
   Go 直接托管 `/admin-app.js`、`/admin-app.css`、`/assets/world.svg`，并按路径注入 admin/portal boot。
-- ✅ **部署产物**：`server/Dockerfile`、`docker compose`（mysql + server）、`.env.example`、README「生产部署（替换域名）」。
+- ✅ **部署产物**：`deploy/install.sh`、`deploy/upgrade.sh`、`deploy/uninstall.sh`（单机直接安装）、`.env.example`、README「生产部署（替换域名）」。容器化方案已移除。
 - ✅ **安全**：基础安全响应头；OIDC Cookie 按 `X-Forwarded-Proto` 设置 Secure；管理员邮箱绑定仅超管；
   `PP_LEGACY_BASE` 自环保护。
 - ✅ **本地分发**：Agent 二进制/manifest 走 `/agent-dist/*`，安装/升级 URL 全部指向本站。

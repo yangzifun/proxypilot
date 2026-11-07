@@ -16,7 +16,7 @@
 | 4 | `node_configs.install_versions` 列缺失 | sing-box/xray 模板选择的引擎版本无法随 deploy 下发，Agent 无法按版本安装/切换 | `0001_init.sql`、`singbox_apply.go` |
 | 5 | WebSocket 无保活/Origin 校验 | `keepAlive()` 已写但未启动；反代/空闲会断；缺少 Origin 校验存在跨站 WS 风险 | `ws.go`、`shell.go` |
 | 6 | 后台设置的 Secret 明文入库 | SMTP 密码、OIDC Secret、Turnstile Secret 存 `app_settings` 明文；DB 泄露即凭据泄露 | `settings_store.go` |
-| 7 | 未在真实 MySQL / Docker / Agent 上验证 | 全部 SQL、镜像构建、Agent 协议仅静态/单测验证 | — |
+| 7 | 未在真实 MySQL / 容器方案 / Agent 上验证 | 全部 SQL、镜像构建、Agent 协议仅静态/单测验证 | — |
 
 
 ### P0 修复状态（2026-11-01）
@@ -29,7 +29,7 @@
 | 4 | 新增迁移 `0002_node_config_install_versions.sql`；sing-box apply 写入 `install_versions`，deploy payload 携带，Agent 可安装指定版本 | `singboxInstallVersions` 单测 |
 | 5 | WebSocket 启动 ping 保活；浏览器端增加 Origin 校验（同源或 `PP_PUBLIC_BASE_URL` 同域） | 构建 |
 | 6 | 后台敏感设置（SMTP 密码 / OIDC Secret / Turnstile Secret）使用 AES-GCM 加密存储，读取自动解密 | `isSecretSetting` 单测 |
-| 7 | 真实 MySQL / Docker / Agent 回归 | ❌ 仍需部署机完成 |
+| 7 | 真实 MySQL / 容器方案 / Agent 回归 | ❌ 仍需部署机完成 |
 
 > 说明：已经以明文保存的旧 Secret 会在下次保存时自动转为密文；未重新保存前仍按明文读取。
 
@@ -45,7 +45,7 @@
 | 服务器 action 语义 | ✅ `test`/`monitor` 排队 `probe`；`exec` 修复 timeout 单位（ms→秒，2–60s）并返回 queued；`metrics` 支持 hours 过滤 | — |
 | WebSSH 运维能力 | 可交互；无审计、无空闲超时、无只读模式 | 会话录制（可选）、空闲断开、审计日志、权限细分 |
 | 多实例 | shellHub / waitHub 在进程内存；settings 缓存 30s | 共享会话（Redis/DB 租约）或强制按 `server_id` 粘性；设置变更广播 |
-| 前端构建链 | Docker 使用内嵌快照；`web-antd` 改动不会自动进镜像 | Dockerfile 增加可选 npm 构建阶段；CI 构建 AntD 产物并以 `PP_WEB_DIST` 挂载 |
+| 前端构建链 | 容器方案已移除；`web-antd` 产物由 `scripts/build.mjs` 嵌入 Go 二进制 | CI 构建 AntD 产物后再编译 Go，无需额外挂载 |
 | D1 → MySQL 迁移 | 工具存在但未对真实导出验证 | 用真实 D1 导出跑通，校验行数/字符集/JSON/时间戳 |
 | 设置覆盖面 | 登录/Turnstile/SMTP/OIDC/站点/Agent 基址可配 | 补：通知邮件、轮询间隔、日志保留、任务并发、WebSSH 开关等 |
 
@@ -114,7 +114,7 @@
 
 1. **MySQL**：`PP_TEST_DSN=... go test -tags integration ./internal/api -run TestIntegrationLoginAndSub`
 2. **D1 → MySQL**：真实导出导入 + 行数/内容对拍
-3. **Docker**：`docker compose build`（本机无 Docker）
+3. **安装脚本**：`deploy/install.sh`（在目标机验证 MySQL 初始化与 systemd 托管）
 4. **真实 Agent**：keycheck → bootstrap → poll/ws → deploy → ack → WebSSH
 5. **外部服务**：SMTP、OIDC（含 id_token 验签）、Turnstile
 6. **反向代理**：TLS + WebSocket Upgrade（`/api/agent/ws`、`/api/shell/*`）
@@ -167,7 +167,7 @@
 2. 补 `install_versions` 列并下发
 3. WS 保活 + Origin 校验
 4. 设置 Secret 加密存储
-5. 真实 MySQL + Docker + Agent 回归
+5. 真实 MySQL + 容器方案 + Agent 回归
 
 ### P1（上线后 1–2 周）
 1. 批量任务异步化 + 补 kind

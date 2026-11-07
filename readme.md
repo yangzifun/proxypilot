@@ -8,13 +8,13 @@
 
 - [架构总览](#架构总览)
 - [技术栈](#技术栈)
-- [快速开始](#快速开始go--mysql)
+- [快速开始](#快速开始单机直接安装不使用容器)
 - [目录结构](#目录结构)
 - [旧版代码](#旧版代码)
 - [功能总览](#功能总览)
 - [协议与端口](#协议与端口)
 - [权限模型](#权限模型)
-- [生产部署](#生产部署)
+- [生产部署](#生产部署单机直接安装)
 - [使用指南](#使用指南)
 - [Go Agent](#go-agent)
 - [API 概览](#api-概览)
@@ -64,23 +64,28 @@
 | 节点 Agent | Go（轮询 / WebSocket 唤醒 / PTY 终端 / 配置落盘） |
 | 存储 | 本地目录：对象桶 + Agent 二进制分发 |
 
-## 快速开始（Go + MySQL）
+## 快速开始（单机直接安装，不使用容器）
+
+ProxyPilot 只支持**直接安装在服务器上**：系统包管理器装 MySQL，主程序以二进制 + systemd 运行。
 
 ```bash
-# 1) 配置
-cp server/.env.example server/.env
-# 必改：PP_JWT_SECRET、PP_ADMIN_PASSWORD、MYSQL_ROOT_PASSWORD、PP_PUBLIC_BASE_URL
+# 1) 构建二进制（开发机 / CI）
+cd web-antd && node scripts/build.mjs && cd ..        # 前端产物嵌入 Go
+cd server && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+  go build -trimpath -ldflags "-s -w" -o ../dist/proxypilot-linux-amd64 ./cmd/proxypilot
 
-# 2) Agent 产物（可选，用于节点接入）
-cd agent && ./build.sh && cd ..
+# 2) 上传到服务器后一键安装（root）
+sudo ./deploy/install.sh --binary ./proxypilot-linux-amd64 --port 80
 
-# 3) 启动（MySQL + Go，自动迁移）
-cd server && docker compose up -d --build
-
-# 4) 打开后台
-# http://127.0.0.1:8080/admin  （admin / 你在 .env 里设置的口令）
-# 运行中配置：/admin/settings（登录方式 / Turnstile / SMTP / OIDC / 站点地址）
+# 3) 打开后台（脚本结束会打印地址与初始口令）
+# http://<服务器IP>/admin     账号 admin
 ```
+
+安装脚本会自动完成：装 MySQL → 建库建用户 → 生成 `.env` 与密钥 → 安装 systemd 单元 → 健康检查。
+
+- 升级：`sudo ./deploy/upgrade.sh --binary ./proxypilot-linux-amd64`（失败自动回滚）
+- 卸载：`sudo ./deploy/uninstall.sh`（`--purge` 连数据库一起删）
+- 详细说明见 [deploy/README.md](deploy/README.md)
 
 反向代理 + TLS + 切换域名：见 [server/README.md](server/README.md) 的「生产部署（替换域名）」。
 部署后冒烟：`server/tools/smoke.sh https://<域名>`。
@@ -97,10 +102,11 @@ proxypilot/
 │   ├── migrations/             # MySQL DDL（26+ 表）
 │   ├── testdata/               # Clash / sing-box / MTProto 黄金用例
 │   ├── internal/api/assets_web/# 内嵌前端快照（免构建兜底）
-│   └── Dockerfile / docker-compose.yml / .env.example / Makefile
+│   └── .env.example / Makefile
 ├── web-antd/                   # 前端源码：React 18 + Ant Design 6
 │   ├── src/                    # 管理后台 + 用户中心 + 图表/样式
 │   └── dist/                   # 构建产物（PP_WEB_DIST 指向这里）
+├── deploy/                     # 单机安装 / 升级 / 卸载脚本与站点加固
 ├── agent/                      # Go Agent + install.sh + build.sh + dist/
 ├── rule/                       # Clash / Mihomo 模板与规则
 ├── docs/                       # 架构与迁移文档
@@ -202,17 +208,43 @@ proxypilot/
 
 ---
 
-## 生产部署
+## 生产部署（单机直接安装）
 
-目标：把域名直接指向 Go 服务，功能与 Worker 对齐。完整步骤见
-[`server/README.md`](server/README.md) 的「生产部署（替换域名）」。
+ProxyPilot **只支持直接安装在服务器上**，不提供容器方案。完整说明见
+[`deploy/README.md`](deploy/README.md)。
 
-1. **数据**：D1 导出后用 `server/tools/d1_to_mysql.py` 导入 MySQL；或空库启动自动建表。
-2. **配置**：`server/.env`；`PP_JWT_SECRET`、`PP_AGENT_KEY_SECRET` 必须与旧 Worker 相同。
-3. **启动**：`cd server && docker compose up -d --build`（MySQL + Go，自动迁移）。
-4. **反代**：Caddy/Nginx 终止 TLS，转发 `Host` / `X-Forwarded-Proto`，并允许 WebSocket Upgrade。
-5. **验收**：`server/tools/smoke.sh https://<域名>`；后台登录、订阅、Agent、WebSSH 各跑一遍。
-6. **切流/回滚**：DNS 指向新服务；旧系统可短期保留，必要时回滚 DNS。
+```bash
+# 1) 构建（开发机 / CI）
+cd web-antd && node scripts/build.mjs && cd ..
+cd server && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+  go build -trimpath -ldflags "-s -w" -o ../dist/proxypilot-linux-amd64 ./cmd/proxypilot
+
+# 2) 上传 proxypilot-linux-amd64 与 deploy/ 到服务器，然后（root）
+sudo ./deploy/install.sh --binary ./proxypilot-linux-amd64 --port 80 --agent-dist ./agent-dist
+
+# 3) 升级（自动备份 / 健康检查 / 失败回滚）
+sudo ./deploy/upgrade.sh --binary ./proxypilot-linux-amd64
+
+# 4) 卸载（--purge 连数据库一起删）
+sudo ./deploy/uninstall.sh
+```
+
+安装脚本做的事：
+
+| 步骤 | 说明 |
+|---|---|
+| 系统识别 | Debian 12/13、Ubuntu 22.04+、Rocky/Alma 9 |
+| MySQL | 系统包管理器安装并建库建用户（已有则复用，或 `--dsn` 指向外部） |
+| 目录 | `/opt/proxypilot`（data/bucket、agent-dist、uploads），专属系统用户 |
+| 配置 | 生成 `.env`，自动生成 JWT 密钥与管理员口令 |
+| 托管 | 写入 `proxypilot.service`（systemd，开机自启，崩溃重启） |
+| 验收 | 轮询 `/healthz` 直到就绪，打印后台地址与初始口令 |
+
+部署后建议：
+
+1. **反代**：Nginx/Caddy 终止 TLS，转发 `Host` / `X-Forwarded-Proto`，允许 WebSocket Upgrade。
+2. **验收**：`server/tools/smoke.sh https://<域名>`；后台登录、订阅、Agent、WebSSH 各跑一遍。
+3. **加固**：用 `deploy/web-guard/` 限制 80/443 仅允许组网与 Cloudflare 回源。
 
 ### Cloudflare Tunnel 部署（80 端口仅回环）
 
@@ -644,8 +676,8 @@ npm run check      # build + render-check + e2e
 - **WebSSH**：Go WebSocket 中继替代 Durable Object；Agent WS 唤醒 + 真实长轮询。
 - **后台设置**：登录方式、Turnstile、SMTP / Cloudflare Email Sending、OIDC、站点/Agent 地址、离线通知与保留期。
 - **Worker 能力补齐**：7 类批量任务、Cron（离线通知/清理/巡检）、管理员 OIDC、UUID 一致性修复。
-- **部署**：本地对象存储与 Agent 分发、Dockerfile / docker-compose / smoke.sh / 生产部署文档。
-- **质量**：108 个单测（Clash / sing-box / MTProto 黄金用例）；MySQL、Docker、真实 Agent 回归仍需在部署机完成。
+- **部署**：本地对象存储与 Agent 分发、单机安装脚本（install/upgrade/uninstall）、smoke.sh、生产部署文档。
+- **质量**：108 个单测（Clash / sing-box / MTProto 黄金用例）；MySQL、真实 Agent 回归仍需在部署机完成（安装脚本已覆盖 MySQL 初始化）。
 
 ### V14.2（2026-10-30）
 
