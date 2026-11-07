@@ -284,20 +284,15 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
     }
   };
 
-  const toggleSsh = async () => {
-    if (!ssh) return;
-    const enable = !!ssh.toggleToEnable;
+  const sshGuardOn = !!(d && Number(d.ssh_guard) === 1);
+
+  const toggleSshGuard = async () => {
+    if (!d) return;
+    const enable = !sshGuardOn;
     setBusy('ssh');
     try {
-      const res = await apiPost('jobs', {
-        kind: 'ssh.toggle',
-        params: { server_ids: [serverId], enable },
-      });
-      if (watchBatch(res)) {
-        message.success(`已创建后台任务 #${res.job_id}（${enable ? '启用' : '停用'} SSH）`);
-      } else {
-        message.success((res && res.message) || `已下发${enable ? '启用' : '停用'} SSH`);
-      }
+      const res = await apiPost(`servers/${serverId}/ssh-guard`, { enabled: enable });
+      message.success((res && res.message) || `已下发${enable ? '开启' : '关闭'} SSH 安全防护`);
       setTimeout(() => {
         load().catch(() => {});
         onChanged && onChanged();
@@ -569,7 +564,7 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
 
           <div style={{ margin: '20px 0 8px', display: 'flex', alignItems: 'center', gap: 8 }}>
             <b style={{ fontSize: 14 }}>服务状态</b>
-            <span className="pp-muted" style={{ fontSize: 12 }}>sing-box / mihomo / mtg / cloudflared / WARP / Agent / SSH 的启停与更新都在对应行右侧</span>
+            <span className="pp-muted" style={{ fontSize: 12 }}>sing-box / mihomo / mtg / cloudflared / WARP / Agent 的启停与更新在对应行右侧；SSH 安全防护限制来源网段</span>
           </div>
           {services.length ? (
             <Space orientation="vertical" style={{ width: '100%' }} size={8}>
@@ -643,23 +638,24 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
                   background: '#fbfcfe',
                 }}
               >
-                <i className={`pp-dot ${ssh && String(ssh.text).startsWith('已启用') ? 'online' : ssh ? 'warn' : 'unknown'}`} />
-                <span style={{ fontWeight: 500 }}>SSH</span>
-                <Tag color={ssh ? ssh.color : 'default'} style={{ marginInlineEnd: 0 }}>
-                  {ssh ? ssh.text : '未上报'}
+                <i className={`pp-dot ${sshGuardOn ? 'online' : 'warn'}`} />
+                <span style={{ fontWeight: 500 }}>SSH 安全防护</span>
+                <Tag color={sshGuardOn ? 'green' : 'orange'} style={{ marginInlineEnd: 0 }}>
+                  {sshGuardOn ? '仅组网网段可访问' : '允许所有 IP'}
                 </Tag>
-                <span style={{ marginLeft: 'auto' }}>
+                <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                   <Popconfirm
-                    title={ssh ? (ssh.toggleToEnable ? '启用 SSH？' : '停用 SSH？') : 'Agent 尚未上报 SSH 状态'}
-                    description={!ssh ? undefined : ssh.toggleToEnable ? '确认 Agent 在线；启用后可从 WebSSH 登录。' : '停用后只能从面板再启用。'}
-                    okText={ssh && ssh.toggleToEnable ? '启用' : '停用'}
-                    okButtonProps={ssh && ssh.toggleToEnable ? undefined : { danger: true }}
-                    disabled={!ssh}
-                    onConfirm={toggleSsh}
+                    title={sshGuardOn ? '关闭 SSH 安全防护？' : '开启 SSH 安全防护？'}
+                    description={
+                      sshGuardOn
+                        ? '关闭后所有 IP 均可尝试 SSH 登录，仅保留密码/密钥强度防护。'
+                        : '开启后仅允许 100.96.0.0/12 与 2606:4700:cf1:1000::/64 访问 SSH，其他来源会被丢弃。'
+                    }
+                    okText={sshGuardOn ? '关闭' : '开启'}
+                    okButtonProps={sshGuardOn ? { danger: true } : undefined}
+                    onConfirm={toggleSshGuard}
                   >
-                    <Button size="small" type="link" loading={busy === 'ssh'} disabled={!ssh}>
-                      {ssh ? (ssh.toggleToEnable ? '启用' : '停用') : '—'}
-                    </Button>
+                    <Switch size="small" checked={sshGuardOn} loading={busy === 'ssh'} />
                   </Popconfirm>
                 </span>
               </div>

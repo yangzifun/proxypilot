@@ -112,6 +112,12 @@ func (r *Runner) Run(ctx context.Context, a client.Action) client.Result {
 		exitCode, output = 0, r.probe()
 	case "inspect":
 		exitCode, output = 0, r.inspectConfig(a.Path)
+	case "ssh_guard":
+		if a.Enable {
+			exitCode, output = applySSHGuard()
+		} else {
+			exitCode, output = clearSSHGuard()
+		}
 	default:
 		exitCode, output = 1, "未知任务类型："+a.Type
 	}

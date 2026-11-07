@@ -160,6 +160,8 @@ type Action struct {
 	Version     int
 	Command     string
 	Timeout     int
+	// Enable 用于开关类动作（如 ssh_guard）
+	Enable bool
 	// V13.7：模板要求的引擎版本，如 {"sing-box":"1.15.0-alpha.13"}；空 = 用内置默认
 	InstallVersions map[string]string
 	// DecodeErr 任一 base64 文本字段解码失败（deploy 必须因此失败，绝不能写入空文件）

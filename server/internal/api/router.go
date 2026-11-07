@@ -194,6 +194,8 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 
 	// 服务器管理
 	mux.HandleFunc("GET /api/servers/traffic-limits", h.authed(authOpts{}, h.serverTrafficLimitsList))
+	mux.HandleFunc("GET /api/servers/{id}/ssh-guard", h.authed(authOpts{}, h.serverSSHGuardStatus))
+	mux.HandleFunc("POST /api/servers/{id}/ssh-guard", h.authed(authOpts{superOnly: true}, h.serverSSHGuard))
 	mux.HandleFunc("GET /api/servers/{id}/traffic-limit", h.authed(authOpts{}, h.serverTrafficLimitGet))
 	mux.HandleFunc("PUT /api/servers/{id}/traffic-limit", h.authed(authOpts{superOnly: true}, h.serverTrafficLimitSet))
 	mux.HandleFunc("POST /api/servers/{id}/traffic-limit/reset", h.authed(authOpts{superOnly: true}, h.serverTrafficLimitReset))
