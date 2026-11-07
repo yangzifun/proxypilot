@@ -192,13 +192,16 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
   const local = !!d && d.link_mode === 'local';
 
   /* 只关注这几个服务的安装 / 运行状态，其余历史探针不再展示 */
-  const MONITOR_SERVICES = ['sing-box', 'mtg', 'cloudflared'];
+  // 展示顺序：代理引擎 → 隧道 → 组网客户端
+  const MONITOR_SERVICES = ['sing-box', 'mihomo', 'mtg', 'cloudflared', 'warp-svc'];
+  const SERVICE_LABELS = { 'warp-svc': 'WARP', cloudflared: 'cloudflared' };
   const services = useMemo(() => {
     const map = m.services || {};
     const vers = m.versions || {};
     if (!Object.keys(map).length) return [];
     return MONITOR_SERVICES.map((name) => ({
       name,
+      label: SERVICE_LABELS[name] || name,
       state: String(map[name] || 'not-installed'),
       version: String(vers[name] || ''),
     }));
@@ -586,7 +589,7 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
 
           <div style={{ margin: '20px 0 8px', display: 'flex', alignItems: 'center', gap: 8 }}>
             <b style={{ fontSize: 14 }}>服务状态</b>
-            <span className="pp-muted" style={{ fontSize: 12 }}>sing-box / mtg / cloudflared / SSH 的启停与更新都在对应行右侧</span>
+            <span className="pp-muted" style={{ fontSize: 12 }}>sing-box / mihomo / mtg / cloudflared / WARP / SSH 的启停与更新都在对应行右侧</span>
           </div>
           {services.length ? (
             <Space orientation="vertical" style={{ width: '100%' }} size={8}>
@@ -607,7 +610,7 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
                     }}
                   >
                     <i className={`pp-dot ${meta[0]}`} />
-                    <span style={{ fontWeight: 500 }}>{svc.name}</span>
+                    <span style={{ fontWeight: 500 }}>{svc.label || svc.name}</span>
                     {svc.version ? <span className="pp-mono pp-muted" style={{ fontSize: 12 }}>v{svc.version}</span> : null}
                     <Tag color={meta[0] === 'online' ? 'success' : meta[0] === 'offline' ? 'error' : 'default'} style={{ marginInlineEnd: 0 }}>
                       {meta[1]}

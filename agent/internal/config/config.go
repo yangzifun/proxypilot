@@ -28,7 +28,8 @@ const (
 )
 
 // DefaultServices 默认探测的 systemd 服务（V15.6 起不再探测 xray）。
-var DefaultServices = []string{"sing-box", "mtg", "cloudflared"}
+// cloudflared: Cloudflare Tunnel；warp-svc: Cloudflare WARP 客户端 systemd 单元
+var DefaultServices = []string{"sing-box", "mihomo", "mtg", "cloudflared", "warp-svc"}
 
 // Config 是 Agent 的全部运行参数。
 type Config struct {
