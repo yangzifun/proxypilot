@@ -3989,3 +3989,59 @@ h3 { font-size: 14px; }
   }
   .pp-overview-grid .pp-ov-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
 }
+
+/* ================= 侧边栏：分组 + 激活强调 + 底部瘦身 ================= */
+.pp-nav .ant-menu-submenu-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  color: #64748b !important;
+  height: 30px !important;
+  line-height: 30px !important;
+  margin: 6px 0 2px !important;
+  padding-left: 10px !important;
+}
+.pp-nav .ant-menu-submenu-title:hover { color: #cbd5e1 !important; }
+.pp-nav .ant-menu-submenu .ant-menu-sub .ant-menu-item { padding-left: 34px !important; }
+
+/* 当前项：左侧主色强调条，提升扫视锚点感 */
+.pp-nav .ant-menu-item { position: relative; }
+.pp-nav .ant-menu-item-selected::before {
+  content: '';
+  position: absolute;
+  left: -8px;
+  top: 7px;
+  bottom: 7px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: #818cf8;
+}
+.pp-nav .ant-menu-item-selected {
+  background: rgba(99, 102, 241, 0.26) !important;
+  color: #e0e7ff !important;
+  font-weight: 600;
+}
+
+/* 置顶项（系统概览）与分组之间留白 */
+.pp-nav > .ant-menu-item:first-child { margin-bottom: 6px; }
+
+/* 底部版本胶囊：单行小标，悬浮看详情 */
+.pp-sider-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 12px 12px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.08);
+  cursor: default;
+}
+.pp-sider-foot-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #818cf8;
+  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.16);
+  flex: 0 0 auto;
+}
+.pp-sider-foot-text { font-size: 11px; color: #94a3b8; letter-spacing: 0.2px; }

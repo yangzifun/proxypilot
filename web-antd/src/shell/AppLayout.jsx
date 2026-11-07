@@ -5,7 +5,7 @@ import { SCALE_OPTIONS, useScale } from '../uiScale';
 import { Avatar, Badge, Dropdown, Layout, Menu, Tag } from 'antd';
 import { LogoutOutlined, SafetyCertificateOutlined, UserOutlined } from '@ant-design/icons';
 import { useAuth } from '../auth';
-import { menuItems, PAGE_META } from '../nav';
+import { menuItems, PAGE_META, NAV_GROUPS, groupOf } from '../nav';
 import { LOGO_URL } from '../theme';
 import JobCenter from '../components/JobCenter';
 
@@ -22,6 +22,35 @@ export default function AppLayout({ activeKey, onNavigate, children }) {
   const meta = PAGE_META[activeKey] || PAGE_META.dash;
 
   const items = useMemo(() => menuItems(isSuper), [isSuper]);
+
+  // 侧边栏折叠（窄屏自动折叠）
+  const [collapsed, setCollapsed] = useState(false);
+  useEffect(() => {
+    const apply = () => setCollapsed(window.innerWidth < 1100);
+    apply();
+    window.addEventListener('resize', apply);
+    return () => window.removeEventListener('resize', apply);
+  }, []);
+
+  // 展开的分组：记住用户选择，并始终包含当前页面所在分组
+  const OPEN_KEY = 'pp.nav.openGroups';
+  const [openKeys, setOpenKeys] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(OPEN_KEY) || 'null');
+      if (Array.isArray(saved)) return saved;
+    } catch (e) { /* ignore */ }
+    return NAV_GROUPS.map((g) => g.key);
+  });
+  useEffect(() => {
+    const g = groupOf(activeKey);
+    if (g) setOpenKeys((prev) => (prev.includes(g) ? prev : [...prev, g]));
+  }, [activeKey]);
+  const onOpenChange = (keys) => {
+    setOpenKeys(keys);
+    try {
+      localStorage.setItem(OPEN_KEY, JSON.stringify(keys));
+    } catch (e) { /* ignore */ }
+  };
 
   const userMenu = {
     items: [
@@ -56,27 +85,28 @@ export default function AppLayout({ activeKey, onNavigate, children }) {
         </div>
         <div className="pp-sider-divider" />
         <Menu
+          className="pp-nav"
           mode="inline"
           theme="dark"
           items={items}
           selectedKeys={[activeKey]}
-          onClick={({ key }) => onNavigate(key)}
+          inlineCollapsed={collapsed}
+          openKeys={collapsed ? undefined : openKeys}
+          onOpenChange={collapsed ? undefined : onOpenChange}
+          onClick={({ key }) => {
+            if (!groupOf(key)) onNavigate(key);
+          }}
           style={{ borderInlineEnd: 'none', padding: '0 8px', background: 'transparent' }}
         />
-        <div
-          style={{
-            padding: '12px 18px 16px',
-            borderTop: '1px solid rgba(148,163,184,0.12)',
-            color: '#64748b',
-            fontSize: 11.5,
-            lineHeight: 1.7,
-          }}
+        <Tooltip
+          title={`ProxyPilot ${boot.version || 'V15.0'} · React 18 · Ant Design 6`}
+          placement="right"
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Badge status="processing" color="#818cf8" />
-            <span style={{ color: '#94a3b8' }}>{boot.version || 'V15.0'} · AntD 6</span>
+          <div className="pp-sider-foot">
+            <span className="pp-sider-foot-dot" />
+            {collapsed ? null : <span className="pp-sider-foot-text">{boot.version || 'V15.0'}</span>}
           </div>
-        </div>
+        </Tooltip>
       </Sider>
 
       <Layout>

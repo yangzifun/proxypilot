@@ -3,21 +3,25 @@
  * ================================================================= */
 import React from 'react';
 import {
-  ApartmentOutlined,
-  CloudDownloadOutlined,
+  AppstoreOutlined,
   CloudServerOutlined,
   CloudSyncOutlined,
   DashboardOutlined,
+  DatabaseOutlined,
+  DeploymentUnitOutlined,
   FileSearchOutlined,
   FileTextOutlined,
   FolderOpenOutlined,
+  GlobalOutlined,
   LineChartOutlined,
   NodeIndexOutlined,
-  ReadOutlined,
   PartitionOutlined,
-  SendOutlined,
+  ProfileOutlined,
   SafetyCertificateOutlined,
+  SendOutlined,
   SettingOutlined,
+  TeamOutlined,
+  ToolOutlined,
 } from '@ant-design/icons';
 
 export const PAGE_META = {
@@ -31,7 +35,7 @@ export const PAGE_META = {
   uuids: {
     title: '用户管理',
     subtitle: '按用户管理节点配置、授权与状态',
-    icon: <ApartmentOutlined />,
+    icon: <TeamOutlined />,
     group: '业务',
     accent: '#06b6d4',
   },
@@ -59,14 +63,14 @@ export const PAGE_META = {
   bindings: {
     title: '节点绑定',
     subtitle: '一台服务器同时绑定 sing-box / mihomo / MTProto',
-    icon: <ApartmentOutlined />,
+    icon: <DeploymentUnitOutlined />,
     group: '节点运维',
     accent: '#0ea5e9',
   },
   tplhub: {
     title: '协议模板',
     subtitle: 'sing-box / mihomo / MTProto 模板配置',
-    icon: <ReadOutlined />,
+    icon: <ProfileOutlined />,
     group: '节点运维',
     accent: '#8b5cf6',
   },
@@ -101,14 +105,14 @@ export const PAGE_META = {
   cdnpref: {
     title: 'CDN 优选',
     subtitle: 'CDN 节点优选地址池与订阅替换',
-    icon: <CloudDownloadOutlined />,
+    icon: <GlobalOutlined />,
     group: '节点运维',
     accent: '#0ea5e9',
   },
   tlimit: {
     title: '流量限额',
     subtitle: '按服务器设置上行/下行流量上限与按月重置',
-    icon: <CloudDownloadOutlined />,
+    icon: <ToolOutlined />,
     group: '服务器运维',
     accent: '#0ea5e9',
   },
@@ -137,7 +141,7 @@ export const PAGE_META = {
   backup: {
     title: '备份管理',
     subtitle: '数据库 / 桶文件 / Agent 分发导出与导入',
-    icon: <CloudDownloadOutlined />,
+    icon: <DatabaseOutlined />,
     group: '系统',
     accent: '#16a34a',
   },
@@ -150,23 +154,54 @@ export const PAGE_META = {
   },
 };
 
-export const NAV_ORDER = ['dash', 'uuids', 'tpls', 'userst', 'servers', 'normal', 'mtproto', 'masque', 'logs', 'attachments', 'sys', 'backup', 'sec'];
+export const NAV_ORDER = ['dash', 'uuids', 'userst', 'tpls', 'tplhub', 'servers', 'bindings', 'cdnpref', 'masque', 'logs', 'attachments', 'backup', 'sec', 'sys'];
 
+/** 侧边栏结构：置顶单页 + 3 个可折叠分组，按日常使用频率排序 */
 export const NAV_GROUPS = [
-  { group: '业务', keys: ['dash', 'uuids', 'tpls', 'userst'] },
-  { group: '服务器运维', keys: ['servers'] },
-  { group: '节点运维', keys: ['bindings', 'tplhub', 'cdnpref', 'masque'] },
-  { group: '系统', keys: ['logs', 'attachments', 'sys', 'backup', 'sec'] },
+  {
+    key: 'biz',
+    title: '用户与业务',
+    icon: <TeamOutlined />,
+    keys: ['uuids', 'userst', 'tpls', 'tplhub'],
+  },
+  {
+    key: 'net',
+    title: '节点与网络',
+    icon: <DeploymentUnitOutlined />,
+    keys: ['servers', 'bindings', 'cdnpref', 'masque'],
+  },
+  {
+    key: 'ops',
+    title: '运维与安全',
+    icon: <ToolOutlined />,
+    keys: ['logs', 'attachments', 'backup', 'sec', 'sys'],
+  },
 ];
 
-export function menuItems(isSuper) {
-  const items = [];
+/** 不属于任何分组、直接置顶展示的页面 */
+export const NAV_TOP = ['dash'];
+
+/** 当前页面所属分组 key */
+export function groupOf(activeKey) {
+  const hit = NAV_GROUPS.find((g) => g.keys.includes(activeKey));
+  return hit ? hit.key : null;
+}
+
+export function menuItems(isSuper, collapsed = false) {
+  const visible = (k) => PAGE_META[k] && (!PAGE_META[k].superOnly || isSuper);
+  const leaf = (k) => ({ key: k, icon: PAGE_META[k].icon, label: PAGE_META[k].title });
+
+  const items = NAV_TOP.filter(visible).map(leaf);
   for (const g of NAV_GROUPS) {
-    const children = g.keys
-      .filter((k) => PAGE_META[k])
-      .filter((k) => !PAGE_META[k].superOnly || isSuper)
-      .map((k) => ({ key: k, icon: PAGE_META[k].icon, label: PAGE_META[k].title }));
-    items.push(...children);
+    const children = g.keys.filter(visible).map(leaf);
+    if (!children.length) continue;
+    items.push({
+      key: g.key,
+      icon: g.icon,
+      label: g.title,
+      // 折叠状态下分组标题不可见，改用分组图标 + 弹出子菜单
+      children,
+    });
   }
   return items;
 }
