@@ -304,6 +304,7 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /api/stats/traffic/users", h.authed(authOpts{}, h.statsTrafficUsers))
 	mux.HandleFunc("GET /api/traffic/nodes", h.authed(authOpts{}, h.trafficNodes))
 	mux.HandleFunc("GET /api/stats/traffic/users/{uuid}", h.authed(authOpts{}, h.statsTrafficUserDetail))
+	mux.HandleFunc("GET /api/stats/traffic/flow", h.authed(authOpts{}, h.statsTrafficFlow))
 	mux.HandleFunc("GET /api/stats/traffic/nodes", h.authed(authOpts{}, h.statsTrafficNodes))
 	mux.HandleFunc("POST /api/stats/traffic/clear", h.authed(authOpts{}, h.statsTrafficClear))
 	mux.HandleFunc("GET /api/nodes/{id}/connections", h.authed(authOpts{}, h.nodeConnections))

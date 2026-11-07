@@ -43,6 +43,84 @@ const ONLINE_WINDOW_MS = 2 * 60 * 1000;
  * 业务 · 用户流量：以「用户」为主视角，展示在线状态与各时间口径的用量。
  * 数据来自 /api/stats/traffic/users（sg 节点统计聚合）。
  */
+
+/* ---------------- 用户 → 服务器 流量流向总览 ---------------- */
+function FlowOverview({ data, loading }) {
+  const users = (data && data.users) || [];
+  const nodes = (data && data.nodes) || [];
+  const edges = (data && data.edges) || [];
+
+  if (loading && !users.length) {
+    return <div className="pp-muted" style={{ padding: 24, textAlign: 'center' }}>正在统计流向…</div>;
+  }
+  if (!users.length || !nodes.length) {
+    return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="近 24 小时还没有可统计的用户流量" />;
+  }
+
+  const rowH = 46;
+  const topY = 36;
+  const lastY = topY + (Math.max(users.length, nodes.length) - 1) * rowH;
+  const h = lastY + 60;
+  const maxTotal = Math.max(...edges.map((e) => Number(e.total) || 0), 1);
+  const grand = users.reduce((a, u) => a + (Number(u.total) || 0), 0) || 1;
+
+  const userY = new Map(users.map((u, i) => [u.uuid, topY + i * rowH]));
+  const nodeY = new Map(nodes.map((n, i) => [String(n.node_id), topY + i * rowH]));
+
+  return (
+    <svg className="pp-flow-svg" viewBox={'0 0 900 ' + h} style={{ width: '100%', height: 'auto', display: 'block' }}>
+      <defs>
+        <linearGradient id="ppFlowOvGrad" x1="0" x2="1">
+          <stop offset="0%" stopColor="#818cf8" stopOpacity="0.25" />
+          <stop offset="100%" stopColor="#22d3ee" stopOpacity="0.85" />
+        </linearGradient>
+      </defs>
+
+      {users.map((u) => {
+        const y = userY.get(u.uuid);
+        const pct = ((Number(u.total) || 0) / grand) * 100;
+        return (
+          <g key={u.uuid}>
+            <circle cx="46" cy={y} r="12" fill={u.active ? '#10b981' : '#cbd5e1'} opacity="0.9" />
+            <text x="66" y={y + 2} fontSize="12" fill="#0f172a">{String(u.label || u.uuid).slice(0, 10)}</text>
+            <text x="66" y={y + 17} fontSize="10.5" fill="#94a3b8">{fmtBytes(u.total)} · {pct.toFixed(0)}%</text>
+          </g>
+        );
+      })}
+
+      {edges.map((e) => {
+        const uy = userY.get(e.uuid);
+        const ny = nodeY.get(String(e.node_id));
+        if (uy === undefined || ny === undefined) return null;
+        const w = 1 + (Number(e.total) / maxTotal) * 5;
+        const d = 'M62 ' + uy + ' C 300 ' + uy + ', 340 ' + ny + ', 600 ' + ny;
+        return (
+          <g key={e.uuid + '-' + e.node_id}>
+            <path d={d} fill="none" stroke={e.active ? 'url(#ppFlowOvGrad)' : '#e2e8f0'}
+              strokeWidth={w} strokeLinecap="round" opacity={e.active ? 0.9 : 0.6} />
+            {e.active ? (
+              <circle r="3.2" fill="#22d3ee">
+                <animateMotion dur={(2 + (1 - Number(e.total) / maxTotal) * 2).toFixed(2) + 's'} repeatCount="indefinite" path={d} />
+              </circle>
+            ) : null}
+          </g>
+        );
+      })}
+
+      {nodes.map((n) => {
+        const y = nodeY.get(String(n.node_id));
+        return (
+          <g key={n.node_id}>
+            <circle cx="612" cy={y} r="9" fill="#0ea5e9" opacity="0.85" />
+            <text x="628" y={y + 2} fontSize="12" fill="#0f172a">{String(n.label || ('#' + n.node_id)).slice(0, 18)}</text>
+            <text x="628" y={y + 17} fontSize="10.5" fill="#94a3b8">{fmtBytes(n.total)}</text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
 export default function UserTraffic() {
   const { message, modal } = AntdApp.useApp();
   const [range, setRange] = useState('7d');
@@ -81,6 +159,7 @@ export default function UserTraffic() {
   const rate = useAsync(() => api(`stats/traffic/rate?minutes=${rateMinutes}`), [rateMinutes]);
   const growth = useAsync(() => api('stats/users/growth?days=30'), []);
   const protocols = useAsync(() => api('stats/protocols'), []);
+  const trafficFlow = useAsync(() => api('stats/traffic/flow?hours=24'), []);
   useEffect(() => {
     const id = setInterval(() => { rate.reload(); }, 10000);
     return () => clearInterval(id);
@@ -442,6 +521,19 @@ export default function UserTraffic() {
         })()}
       </PageCard>
 
+      </div>
+
+      <div style={{ marginTop: 16 }}>
+        <PageCard
+          title={<span className="pp-section-title">用户 → 服务器 流量流向</span>}
+          extra={
+            <span className="pp-muted" style={{ fontSize: 12 }}>
+              近 24 小时 · 线宽表示流量占比 · 光点表示活跃用户
+            </span>
+          }
+        >
+          <FlowOverview data={trafficFlow.data} loading={trafficFlow.loading} />
+        </PageCard>
       </div>
 
       <div className="pp-pair-row">
