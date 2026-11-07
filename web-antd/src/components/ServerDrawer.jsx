@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CloudDownloadOutlined,
   CloudServerOutlined,
@@ -8,6 +8,7 @@ import {
   DeleteOutlined,
   DisconnectOutlined,
   EditOutlined,
+  BarsOutlined,
   KeyOutlined,
   PoweroffOutlined,
   ReloadOutlined,
@@ -42,6 +43,7 @@ import { readForm } from '../hooks';
 import { AreaChart, ChartLegend } from '../charts';
 import { CopyText, ErrorBlock, JsonView, StatCard, StatusPill } from '../components';
 import { watchBatch } from './JobCenter';
+import RemoteShell from './RemoteShell';
 import { chartPalette } from '../theme';
 import { fmtAgo, fmtBytes, fmtTime, fmtUptime, levelColor, splitIps } from '../format';
 
@@ -65,6 +67,7 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
   const [busy, setBusy] = useState('');
   const [install, setInstall] = useState(null);
   const [execOpen, setExecOpen] = useState(false);
+  const [remoteOpen, setRemoteOpen] = useState(false);
   const [tasksOpen, setTasksOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [traffic, setTraffic] = useState(null);
@@ -357,16 +360,30 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
               <Button size="small" icon={<KeyOutlined />} loading={busy === 'key'} disabled={!d || local} aria-label="安装或轮换密钥" />
             </Tooltip>
           </Popconfirm>
-          <Tooltip title="命令执行">
+          <Tooltip title="实时终端（交互式）">
             <Button
               size="small"
+              type="text"
               icon={<CodeOutlined />}
+              disabled={!d}
+              onClick={() => {
+                if (!d.allow_exec) message.warning('该服务器未开启「允许远程命令」');
+                else setRemoteOpen(true);
+              }}
+              aria-label="实时终端"
+            />
+          </Tooltip>
+          <Tooltip title="队列命令（异步执行）">
+            <Button
+              size="small"
+              type="text"
+              icon={<BarsOutlined />}
               disabled={!d}
               onClick={() => {
                 if (!d.allow_exec) message.warning('该服务器未开启「允许远程命令」');
                 else setExecOpen(true);
               }}
-              aria-label="命令执行"
+              aria-label="队列命令"
             />
           </Tooltip>
           <Tooltip title="任务队列">
@@ -675,7 +692,9 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
           />
 
           {/* 安装命令 / 密钥 */}
-          <Modal
+          <RemoteShell server={d} open={remoteOpen} onClose={() => setRemoteOpen(false)} />
+
+      <Modal
             open={!!install}
             title={install && install.title}
             onCancel={() => setInstall(null)}
@@ -869,8 +888,15 @@ function ServerEditModal({ row, onClose, onSaved }) {
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
 
+  const initIdRef = useRef(null);
   useEffect(() => {
-    if (!row) return;
+    if (!row) {
+      initIdRef.current = null;
+      return;
+    }
+    // 同一个服务器再次刷新数据时不要重置表单，否则用户的开关改动会被覆盖
+    if (initIdRef.current === row.id) return;
+    initIdRef.current = row.id;
     form.setFieldsValue({
       name: row.name,
       host: row.host || '',
