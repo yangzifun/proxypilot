@@ -165,7 +165,9 @@ func (h *handlers) shellBrowser(w http.ResponseWriter, r *http.Request) {
 	shellHub.Unlock()
 
 	_ = ws.WriteText(`{"type":"waiting"}`)
-	// 唤醒已通过 WebSocket 挂起的 Agent；没有 WS 的旧 Agent 会在下次 poll 领到 session
+	// 先通过常驻 WS 把会话直接推给 Agent（长连接模式下即时接入）
+	_ = pushAgentText(serverID, `{"type":"shell","session":"`+session+`"}`)
+	// 再唤醒等待中的 Agent；没有 WS 的旧 Agent 会在下次 poll 领到 session
 	wakeAgent(serverID)
 
 	state.timer = time.AfterFunc(60*time.Second, func() {
@@ -315,6 +317,17 @@ var agentWSHub = struct {
 	sync.Mutex
 	conns map[int64]*wsConn
 }{conns: map[int64]*wsConn{}}
+
+// pushAgentText 通过 Agent 常驻 WebSocket 推送一条文本消息（未连接则忽略）。
+func pushAgentText(serverID int64, text string) bool {
+	agentWSHub.Lock()
+	ws := agentWSHub.conns[serverID]
+	agentWSHub.Unlock()
+	if ws == nil {
+		return false
+	}
+	return ws.WriteText(text) == nil
+}
 
 func wakeAgent(serverID int64) {
 	wakeWaiters(serverID)

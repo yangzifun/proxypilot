@@ -43,7 +43,7 @@ import (
 // 1.8.5：组件二进制改为「临时文件 + rename」写入，修复运行中覆盖导致的 text file busy
 // 1.8.6：解包改流式写盘，避免小内存节点在安装 78MB sing-box 时被 OOM kill
 // 1.8.7：新增 inspect 动作（只读检查配置文件，供 UUID 一致性巡检核对机器实际配置）
-const Version = "1.8.16"
+const Version = "1.8.17"
 
 // maxActionsPerRound 单轮执行任务数上限（服务端 AGENT_ACTIONS_PER_POLL = 5，这里留足余量）。
 const maxActionsPerRound = 20
@@ -65,6 +65,10 @@ type Agent struct {
 	mu   sync.Mutex
 	// activeShell 当前正在跑的实时终端 session（同一时间只保留一个）
 	activeShell string
+	// lastServerID 最近一次 poll 拿到的服务器 ID（WS 推送 shell 时复用）
+	lastServerID int
+	// pendingShellPush 由常驻 WS 推送的 shell 会话（长连接模式下无需等 poll）
+	pendingShellPush string
 	// lastStats 上一轮采集好的统计快照（随本轮 poll 上报）
 	lastStats []client.NodeStats
 	// wake WebSocket 收到消息后唤醒主循环立即 poll；wsConnected 为真时不再走长轮询
@@ -166,6 +170,9 @@ func (a *Agent) Once(ctx context.Context) error {
 		}
 		a.opts.Runner.ComponentBase = base
 	}
+	a.mu.Lock()
+	a.lastServerID = resp.ServerID
+	a.mu.Unlock()
 	a.opts.Log("poll 成功：服务器=%s 下一轮=%ds 任务=%d", nameOr(resp.ServerName, fmt.Sprintf("#%d", resp.ServerID)), next, len(client.ParseWire(resp.Wire)))
 
 	/* 后台打开了实时终端 → 拨号接入（goroutine 里跑，不阻塞心跳） */
@@ -191,6 +198,15 @@ func (a *Agent) Once(ctx context.Context) error {
 	// V15.6：采下一轮要上报的统计（连接明细 / 用户流量）；失败不影响心跳
 	a.collectStats(resp.StatsTargets)
 	return nil
+}
+
+// takeShellPush 取走 WS 推送的 shell 会话。
+func (a *Agent) takeShellPush() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	sid := a.pendingShellPush
+	a.pendingShellPush = ""
+	return sid
 }
 
 // takeStats 取走上一轮采集的统计快照（本轮 poll 上报一次）。
@@ -248,6 +264,48 @@ func (a *Agent) sampleRequest() client.PollRequest {
 }
 
 // maybeStartShell 收到 shell hint 时起一个实时终端 goroutine（同一时间只允许一个）。
+// startShellBySession 用指定 session 起实时终端（同一时间只保留一个）。
+func (a *Agent) startShellBySession(ctx context.Context, sid string) {
+	if sid == "" {
+		return
+	}
+	a.mu.Lock()
+	if a.activeShell != "" {
+		a.mu.Unlock()
+		return
+	}
+	serverID := a.lastServerID
+	if serverID <= 0 {
+		a.mu.Unlock()
+		return
+	}
+	a.activeShell = sid
+	a.mu.Unlock()
+
+	go func() {
+		defer func() {
+			a.mu.Lock()
+			a.activeShell = ""
+			a.mu.Unlock()
+		}()
+		a.opts.Log("实时终端：WS 推送接入会话 %s", sid)
+		err := shell.Serve(ctx, shell.Options{
+			Origin:   a.opts.Config.Origin,
+			Key:      a.opts.Config.Key,
+			ServerID: serverID,
+			Session:  sid,
+			Insecure: a.opts.Config.Insecure,
+			Log:      a.opts.Log,
+			Version:  Version,
+		})
+		if err != nil {
+			a.opts.Log("实时终端结束：%v", err)
+			return
+		}
+		a.opts.Log("实时终端已结束")
+	}()
+}
+
 func (a *Agent) maybeStartShell(ctx context.Context, resp *client.PollResponse) {
 	if resp == nil || resp.Shell == nil || resp.Shell.Session == "" {
 		return
@@ -473,8 +531,23 @@ func (a *Agent) wsOnce(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		if string(data) == "wake" {
+		msg := strings.TrimSpace(string(data))
+		if msg == "wake" {
 			a.signalWake()
+			continue
+		}
+		if strings.HasPrefix(msg, "{") {
+			var frame struct {
+				Type    string `json:"type"`
+				Session string `json:"session"`
+			}
+			if json.Unmarshal([]byte(msg), &frame) == nil && frame.Type == "shell" && frame.Session != "" {
+				a.mu.Lock()
+				a.pendingShellPush = frame.Session
+				a.mu.Unlock()
+				a.signalWake()
+				continue
+			}
 		}
 	}
 }
