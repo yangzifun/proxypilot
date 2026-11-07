@@ -23,12 +23,13 @@ export default function Globe3D({ servers = [], onPick, height = 320 }) {
 
     let renderer;
     try {
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true, powerPreference: 'high-performance' });
     } catch (e) {
       host.innerHTML = '<div style="color:#94a3b8;font-size:12px;padding:16px">当前浏览器不支持 WebGL</div>';
       return undefined;
     }
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    // 高 DPI 下 2 倍分辨率会让像素量翻 4 倍，是卡顿主因；1.5 倍视觉几乎无差别
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     renderer.setSize(host.clientWidth, host.clientHeight);
     host.appendChild(renderer.domElement);
 
@@ -46,11 +47,11 @@ export default function Globe3D({ servers = [], onPick, height = 320 }) {
 
     // 球体
     const sphereMat = new THREE.MeshPhongMaterial({ color: 0x0b2a4a, shininess: 8, specular: 0x1e3a5f });
-    const sphere = new THREE.Mesh(new THREE.SphereGeometry(1, 96, 64), sphereMat);
+    const sphere = new THREE.Mesh(new THREE.SphereGeometry(1, 64, 44), sphereMat);
     group.add(sphere);
 
     // 点阵球面（参考 emerald 主题的粒子地球）
-    const dotCount = 3600;
+    const dotCount = 2000;
     const dotPositions = new Float32Array(dotCount * 3);
     for (let i = 0; i < dotCount; i += 1) {
       const u = Math.random() * 2 - 1;
@@ -71,14 +72,72 @@ export default function Globe3D({ servers = [], onPick, height = 320 }) {
 
     // 贴图重着色
     const canvas = document.createElement('canvas');
-    canvas.width = 2048;
-    canvas.height = 1024;
+    canvas.width = 1440;
+    canvas.height = 720;
     const cctx = canvas.getContext('2d');
     cctx.fillStyle = '#04121f';
     cctx.fillRect(0, 0, canvas.width, canvas.height);
     const img = new Image();
+    // 把矢量图按给定经纬范围铺到任意画布上（支持经度环绕）
+    const paintMap = (ctx, w, h, topLat, botLat, lonOff) => {
+      ctx.fillStyle = '#04121f';
+      ctx.fillRect(0, 0, w, h);
+      const y0 = ((90 - topLat) / 180) * h;
+      const y1 = ((90 - botLat) / 180) * h;
+      const shift = (lonOff / 360) * w;
+      ctx.drawImage(img, shift, y0, w, y1 - y0);
+      if (shift > 0) ctx.drawImage(img, shift - w, y0, w, y1 - y0);
+      if (shift < 0) ctx.drawImage(img, shift + w, y0, w, y1 - y0);
+    };
+
+    /**
+     * 自动校准：world.svg 并非标准等距圆柱投影，直接铺满会让大陆与经纬度错位。
+     * 做法是把已知服务器的经纬度投到贴图上，统计"落在陆地上的点数"，
+     * 在一组候选参数里选出命中率最高的投影范围。
+     */
+    const calibrate = () => {
+      const list = (serversRef.current || []).filter(
+        (s) => Number.isFinite(Number(s.ip_lat)) && Number.isFinite(Number(s.ip_lon)),
+      );
+      if (!list.length) return { topLat: 84, botLat: -72, lonOff: 0 };
+
+      const W = 360;
+      const H = 180;
+      const probe = document.createElement('canvas');
+      probe.width = W;
+      probe.height = H;
+      const pctx = probe.getContext('2d', { willReadFrequently: true });
+
+      let best = { topLat: 84, botLat: -72, lonOff: 0, score: -1 };
+      for (const lonOff of [-40, -30, -20, -10, 0, 10, 20, 30, 40]) {
+        for (const topLat of [90, 86, 82, 78, 74]) {
+          for (const botLat of [-90, -82, -74, -66, -58]) {
+            paintMap(pctx, W, H, topLat, botLat, lonOff);
+            const d = pctx.getImageData(0, 0, W, H).data;
+            let score = 0;
+            for (const s of list) {
+              const lat = Number(s.ip_lat);
+              const lon = Number(s.ip_lon);
+              const u = (lon + 180 + lonOff + 540) % 360 - 180;
+              const x = Math.round(((((lon + 180 + lonOff) % 360) + 360) % 360) / 360 * (W - 1));
+              const y = Math.round(((90 - lat) / 180) * (H - 1));
+              if (x < 0 || x >= W || y < 0 || y >= H) continue;
+              const i = (y * W + x) * 4;
+              const lum = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) / 255;
+              if (lum < 0.86) score += 1;   // 深色即陆地
+            }
+            if (score > best.score) best = { topLat, botLat, lonOff, score };
+          }
+        }
+      }
+      return best;
+    };
+
     img.onload = () => {
-      cctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      // 贴图已是标准等距圆柱投影，直接满幅铺设即可精确对齐
+      let params = { topLat: 90, botLat: -90, lonOff: 0 };
+      // 无需校准：world.svg 由 Natural Earth 按等距圆柱生成
+      paintMap(cctx, canvas.width, canvas.height, params.topLat, params.botLat, params.lonOff);
       const data = cctx.getImageData(0, 0, canvas.width, canvas.height);
       const px = data.data;
       for (let i = 0; i < px.length; i += 4) {
@@ -95,6 +154,7 @@ export default function Globe3D({ servers = [], onPick, height = 320 }) {
       sphereMat.map = tex;
       sphereMat.color = new THREE.Color(0xffffff);
       sphereMat.needsUpdate = true;
+      apiRef.current.mapParams = params;
     };
     img.src = '/assets/world.svg';
 
@@ -123,7 +183,7 @@ export default function Globe3D({ servers = [], onPick, height = 320 }) {
 
     // 大气
     const atmo = new THREE.Mesh(
-      new THREE.SphereGeometry(1.12, 64, 48),
+      new THREE.SphereGeometry(1.12, 40, 28),
       new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.1, side: THREE.BackSide, blending: THREE.AdditiveBlending }),
     );
     scene.add(atmo);
@@ -132,7 +192,7 @@ export default function Globe3D({ servers = [], onPick, height = 320 }) {
     const rings = [];
     [[1.28, 0.0022, 0.3], [1.4, 0.0016, -0.45]].forEach(([r, speed]) => {
       const ring = new THREE.Mesh(
-        new THREE.TorusGeometry(r, 0.003, 8, 128),
+        new THREE.TorusGeometry(r, 0.003, 6, 96),
         new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending }),
       );
       ring.rotation.x = Math.PI / 2 + 0.3;
@@ -143,7 +203,7 @@ export default function Globe3D({ servers = [], onPick, height = 320 }) {
 
     // 扫描带
     const scan = new THREE.Mesh(
-      new THREE.TorusGeometry(1, 0.005, 8, 128),
+      new THREE.TorusGeometry(1, 0.005, 6, 96),
       new THREE.MeshBasicMaterial({ color: 0x67e8f9, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending }),
     );
     scan.rotation.x = Math.PI / 2;
@@ -172,7 +232,7 @@ export default function Globe3D({ servers = [], onPick, height = 320 }) {
         if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
         const phi = ((90 - lat) * Math.PI) / 180;
         const theta = ((lon + 180) * Math.PI) / 180;
-        const r = 1.03;
+        const r = 1.012;
         positions.push(-r * Math.sin(phi) * Math.cos(theta), r * Math.cos(phi), r * Math.sin(phi) * Math.sin(theta));
         const online = s.last_status === 'online' || s.status === 'online';
         const c = new THREE.Color(online ? 0x22c55e : 0xf43f5e);
@@ -189,17 +249,18 @@ export default function Globe3D({ servers = [], onPick, height = 320 }) {
       geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
       geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
       const mat = new THREE.PointsMaterial({
-        size: 12,
+        size: 13,
         sizeAttenuation: false,
         vertexColors: true,
         map: dotTex,
         transparent: true,
-        depthTest: false,
+        // 关键修复：开启深度测试，否则背面光点会透过地球显示，看起来"位置不准"
+        depthTest: true,
         depthWrite: false,
-        alphaTest: 0.01,
+        alphaTest: 0.02,
       });
       points = new THREE.Points(geo, mat);
-      points.renderOrder = 999;
+      points.renderOrder = 10;
       group.add(points);
     };
     rebuildPoints();
@@ -249,13 +310,18 @@ export default function Globe3D({ servers = [], onPick, height = 320 }) {
     ro.observe(host);
 
     let raf = 0;
+    let visible = true;
+    const io = new IntersectionObserver((entries) => {
+      visible = entries[0] ? entries[0].isIntersecting : true;
+    }, { threshold: 0.01 });
+    io.observe(host);
     const clock = new THREE.Clock();
     // 交互性能：限到 ~30fps，页面不可见时彻底停渲染，避免与页面重渲染抢主线程
     const FRAME_MS = 33;
     let lastDraw = 0;
     const loop = (now) => {
       raf = requestAnimationFrame(loop);
-      if (document.hidden) return;
+      if (document.hidden || !visible) return;
       if (now - lastDraw < FRAME_MS) return;
       lastDraw = now;
       const t = clock.getElapsedTime();
@@ -271,6 +337,7 @@ export default function Globe3D({ servers = [], onPick, height = 320 }) {
 
     return () => {
       cancelAnimationFrame(raf);
+      io.disconnect();
       ro.disconnect();
       el.removeEventListener('pointerdown', onDown);
       el.removeEventListener('pointermove', onMove);
