@@ -350,7 +350,7 @@ function ServerCard({ row, node, checked, onCheck, onOpen }) {
 /* ---------------- 页面 ---------------- */
 
 export default function ServersUnified() {
-  const { message } = AntdApp.useApp();
+  const { message, notification } = AntdApp.useApp();
   const [view, setView] = useState(readView);
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('');
@@ -453,6 +453,7 @@ export default function ServersUnified() {
     return map;
   }, [nodes.data]);
 
+
   const rows = useMemo(() => {
     const listRows = (list.data && list.data.data) || [];
     return listRows
@@ -461,6 +462,61 @@ export default function ServersUnified() {
       .map((r) => ({ ...r, ...(monitorById.get(Number(r.id)) || {}) }))
       .filter((r) => !status || r.status === status);
   }, [list.data, liveById, status]);
+
+  /* 服务异常清单：服务器名 + 异常服务名（与卡片「服务异常」口径一致） */
+  const anomalies = useMemo(() => {
+    const OK_STATES = ['active', 'running', 'inactive', 'not-installed'];
+    const out = [];
+    for (const r of rows || []) {
+      const svc = (r.metrics && r.metrics.services) || r.services || {};
+      const bad = Object.entries(svc)
+        .filter(([, v]) => !OK_STATES.includes(String(v || '').toLowerCase()))
+        .map(([k, v]) => k + (v && v !== 'failed' ? '(' + v + ')' : ''));
+      if (bad.length) out.push({ id: Number(r.id), name: r.name || ('#' + r.id), services: bad });
+    }
+    return out;
+  }, [rows]);
+
+  /* 状态变化通知：服务器下线、服务异常（仅在状态发生变化时提示一次） */
+  const ppNotifyRef = useRef({ status: null, bad: null });
+  useEffect(() => {
+    if (!rows || !rows.length) return;
+    const curStatus = new Map();
+    const curBad = new Map();
+    for (const r of rows) {
+      curStatus.set(Number(r.id), String(r.status || 'unknown'));
+      const a = anomalies.find((x) => x.id === Number(r.id));
+      curBad.set(Number(r.id), a ? a.services.join(',') : '');
+    }
+    const prev = ppNotifyRef.current;
+    if (prev.status && prev.bad) {
+      for (const r of rows) {
+        const id = Number(r.id);
+        const was = prev.status.get(id);
+        const now = curStatus.get(id);
+        if (was && was !== 'offline' && now === 'offline') {
+          notification.error({
+            message: '服务器离线',
+            description: `${r.name || '#' + id} 已离线，最后心跳 ${fmtAgo(r.agent_last_seen) || '未知'}`,
+            placement: 'topRight',
+            key: 'offline-' + id,
+          });
+        }
+        const badWas = prev.bad.get(id) || '';
+        const badNow = curBad.get(id) || '';
+        if (badNow && badNow !== badWas) {
+          const a = anomalies.find((x) => x.id === id);
+          notification.warning({
+            message: '服务异常',
+            description: `${r.name || '#' + id}：${(a && a.services.join('、')) || badNow}`,
+            placement: 'topRight',
+            key: 'svc-' + id,
+          });
+        }
+      }
+    }
+    ppNotifyRef.current = { status: curStatus, bad: curBad };
+  }, [rows, anomalies, notification]);
 
   /* 服务器被删除 / 被筛选掉后，清掉失效的选中项 */
   useEffect(() => {
@@ -844,7 +900,17 @@ export default function ServersUnified() {
                 {[
                   { label: '在线', value: fmtNum(counts.online), hint: rows.length ? `在线率 ${((counts.online / rows.length) * 100).toFixed(0)}% · 共 ${rows.length} 台` : '—', chart: 'online' },
                   { label: '离线', value: fmtNum(counts.offline), chart: 'offline' },
-                  { label: '未接入', value: fmtNum(counts.unknown), hint: 'Agent 未上报心跳', chart: 'unknown' },
+                  {
+                    label: '服务异常',
+                    value: fmtNum(anomalies.length),
+                    hint: anomalies.length
+                      ? anomalies
+                          .slice(0, 2)
+                          .map((a) => a.name + '：' + a.services.join('、'))
+                          .join('；') + (anomalies.length > 2 ? ` 等 ${anomalies.length} 台` : '')
+                      : '所有服务运行正常',
+                    chart: anomalies.length ? 'offline' : 'online',
+                  },
                   { label: '实时下行', value: fmtBytes(summary.rx_rate || 0), unit: '/s', chart: 'rx' },
                   { label: '实时上行', value: fmtBytes(summary.tx_rate || 0), unit: '/s', chart: 'tx' },
                   { label: '集群总流量', value: fmtBytes((summary.rx_rate || 0) + (summary.tx_rate || 0)), unit: '/s', hint: `下行 + 上行 · ${rows.length} 台服务器`, chart: 'sum' },
@@ -868,7 +934,12 @@ export default function ServersUnified() {
               </div>
   
               <div className="pp-ov-foot">
-                服务异常 <b>{fmtNum(summary.failed_services || 0)}</b> · 未安装 {fmtNum(summary.not_installed || 0)} 项
+                未接入 <b>{fmtNum(counts.unknown)}</b> · 未安装 {fmtNum(summary.not_installed || 0)} 项
+                {anomalies.length ? (
+                  <span style={{ marginInlineStart: 8, color: '#f59e0b' }}>
+                    服务异常 {anomalies.map((a) => a.name + ':' + a.services.join('/')).join('，')}
+                  </span>
+                ) : null}
               </div>
           </div>
 
