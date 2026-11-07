@@ -286,6 +286,23 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
 
   const sshGuardOn = !!(d && Number(d.ssh_guard) === 1);
 
+  const updateWarp = async () => {
+    setBusy('warp');
+    try {
+      const res = await apiPost('jobs', { kind: 'warp.update', params: { server_id: serverId } });
+      if (res && res.job_id) {
+        message.success(`已创建 WARP 更新任务 #${res.job_id}，进度见右上角「任务」`);
+      } else {
+        message.success((res && res.message) || '已下发 WARP 更新');
+      }
+      setTimeout(() => load().catch(() => {}), 3000);
+    } catch (e) {
+      message.error(e.message || '操作失败');
+    } finally {
+      setBusy('');
+    }
+  };
+
   const toggleSshGuard = async () => {
     if (!d) return;
     const enable = !sshGuardOn;
@@ -599,6 +616,18 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
                           onConfirm={pushAgent}
                         >
                           <Button size="small" type="link" style={{ padding: 0 }} loading={busy === 'agent'}>更新</Button>
+                        </Popconfirm>
+                      ) : null}
+                      {svc.name === 'warp-svc' && svc.state !== 'not-installed' ? (
+                        <Popconfirm
+                          title="更新 WARP 客户端？"
+                          description="通过系统包管理器升级 cloudflare-warp 并重启 warp-svc；组网连接会短暂中断后自动恢复。"
+                          okText="更新"
+                          onConfirm={updateWarp}
+                        >
+                          <Button size="small" type="link" icon={<CloudDownloadOutlined />} loading={busy === 'warp'}>
+                            更新
+                          </Button>
                         </Popconfirm>
                       ) : null}
                       {svc.name === 'cloudflared' && svc.state !== 'not-installed' ? (

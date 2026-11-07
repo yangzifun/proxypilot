@@ -305,6 +305,108 @@ func init() {
 			return false, "等待 Agent 回执超时"
 		},
 	}
+	batchKinds["warp.update"] = jobKind{
+		Title: func(_ map[string]any, n int) string {
+			return "更新 WARP 客户端（" + strconv.Itoa(n) + " 台）"
+		},
+		EmptyHint: "没有可更新的服务器",
+		Items: func(h *handlers, ctx context.Context, params map[string]any) ([]jobItem, error) {
+			if sid := jsonInt(params["server_id"]); sid > 0 {
+				var name string
+				if err := h.db.QueryRowContext(ctx, `SELECT COALESCE(name,'') FROM servers WHERE id = ?`, sid).Scan(&name); err != nil {
+					return nil, nil
+				}
+				return []jobItem{{Target: "server", TargetID: sid, Label: name}}, nil
+			}
+			rows, err := queryRowsAsMaps(ctx, h.db, `SELECT id, COALESCE(name,'') AS name FROM servers WHERE enabled = 1 ORDER BY id ASC`)
+			if err != nil {
+				return nil, nil
+			}
+			out := make([]jobItem, 0, len(rows))
+			for _, r := range rows {
+				out = append(out, jobItem{Target: "server", TargetID: mapInt(r, "id", 0), Label: mapStr(r, "name", "")})
+			}
+			return out, nil
+		},
+		Run: func(h *handlers, ctx context.Context, _ map[string]any, item jobItem, actor string) (bool, string) {
+			srv, err := h.fetchAgentServer(ctx, item.TargetID)
+			if err != nil {
+				return false, "服务器不存在"
+			}
+			taskID, _, msg := h.agentQueueTask(ctx, srv, "exec", 0,
+				map[string]any{"command": warpUpdateCommand(), "timeout": 300, "system_action": "warp_update"}, actor)
+			if msg != "" {
+				return false, msg
+			}
+			deadline := time.Now().Add(5 * time.Minute)
+			for time.Now().Before(deadline) {
+				var status, output string
+				_ = h.db.QueryRowContext(ctx, `SELECT status, COALESCE(output,'') FROM agent_tasks WHERE id = ?`, taskID).Scan(&status, &output)
+				switch status {
+				case "done":
+					return true, summarizeWarpOutput(output)
+				case "failed", "skipped":
+					return false, tailCloudflaredOutput(output)
+				}
+				select {
+				case <-ctx.Done():
+					return false, "任务已取消"
+				case <-time.After(3 * time.Second):
+				}
+			}
+			return false, "等待 Agent 回执超时"
+		},
+	}
+}
+
+// warpUpdateCommand 升级 Cloudflare WARP 客户端（cloudflare-warp 包）。
+func warpUpdateCommand() string {
+	return `set -e
+old=""
+if command -v warp-cli >/dev/null 2>&1; then old=$(warp-cli --version 2>&1 | head -1 || true); fi
+echo "OLD=$old"
+if command -v apt-get >/dev/null 2>&1; then
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update -qq >/dev/null 2>&1 || true
+  apt-get install -y --only-upgrade cloudflare-warp 2>&1 | tail -8
+elif command -v dnf >/dev/null 2>&1; then
+  dnf upgrade -y cloudflare-warp 2>&1 | tail -8
+elif command -v yum >/dev/null 2>&1; then
+  yum update -y cloudflare-warp 2>&1 | tail -8
+else
+  echo "未识别的包管理器，无法自动升级 WARP"; exit 1
+fi
+systemctl restart warp-svc 2>/dev/null || true
+sleep 2
+new=""
+if command -v warp-cli >/dev/null 2>&1; then new=$(warp-cli --version 2>&1 | head -1 || true); fi
+echo "NEW=$new"
+echo "ACTIVE=$(systemctl is-active warp-svc 2>/dev/null || true)"`
+}
+
+
+// summarizeWarpOutput 从脚本输出里摘出 WARP 版本变化。
+func summarizeWarpOutput(out string) string {
+	old, newv, active := "", "", ""
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(line, "OLD="):
+			old = strings.TrimPrefix(line, "OLD=")
+		case strings.HasPrefix(line, "NEW="):
+			newv = strings.TrimPrefix(line, "NEW=")
+		case strings.HasPrefix(line, "ACTIVE="):
+			active = strings.TrimPrefix(line, "ACTIVE=")
+		}
+	}
+	if old != "" && old == newv {
+		return "已是最新版本：" + old
+	}
+	msg := "WARP 已更新：" + old + " → " + newv
+	if active != "" {
+		msg += "（服务 " + active + "）"
+	}
+	return msg
 }
 
 // summarizeCloudflaredOutput 从脚本输出里摘出版本变化。

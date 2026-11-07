@@ -110,6 +110,7 @@ func localComponentVersions() map[string]string {
 		{"sing-box", "sing-box", "version"},
 		{"mtg-multi", "mtg", "version"},
 		{"cloudflared", "cloudflared", "--version"},
+		{"warp-cli", "warp-svc", "--version"},
 	} {
 		ctx, cancel := context.WithTimeout(context.Background(), 2500*time.Millisecond)
 		b, err := exec.CommandContext(ctx, item.bin, item.arg).Output()
@@ -259,7 +260,7 @@ func collectLocal() localSample {
 	ip, ip4, ip6 := localIPs()
 	out.ip, out.ip4, out.ip6 = ip, ip4, ip6
 	// 服务状态（常见服务）
-	for _, svc := range []string{"sshd", "ssh", "sing-box", "cloudflared", "mihomo", "clash", "nginx", "caddy"} {
+	for _, svc := range []string{"sshd", "ssh", "sing-box", "cloudflared", "mihomo", "clash", "nginx", "caddy", "warp-svc", "proxypilot-agent"} {
 		if _, err := exec.LookPath("systemctl"); err != nil {
 			break
 		}

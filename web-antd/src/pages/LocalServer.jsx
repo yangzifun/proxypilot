@@ -85,6 +85,8 @@ export default function LocalServer() {
   const versions = m.versions || {};
   const guardOn = !!(overview && Number(overview.ssh_guard) === 1);
   const cfState = String(services.cloudflared || 'not-installed');
+  const warpState = String(services['warp-svc'] || 'not-installed');
+  const warpVersion = String(versions['warp-svc'] || versions['warp'] || '');
   const cfVersion = String(versions.cloudflared || '');
 
   const toggleGuard = async () => {
@@ -95,6 +97,20 @@ export default function LocalServer() {
       const res = await apiPost(`servers/${overview.id}/ssh-guard`, { enabled: enable });
       message.success((res && res.message) || `已下发${enable ? '开启' : '关闭'} SSH 安全防护`);
       setTimeout(() => load().catch(() => {}), 1500);
+    } catch (e) {
+      message.error(e.message || '操作失败');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const updateWarp = async () => {
+    if (!overview) return;
+    setBusy('warp');
+    try {
+      const res = await apiPost('jobs', { kind: 'warp.update', params: { server_id: overview.id } });
+      message.success((res && res.message) || '已下发 WARP 更新，进度见右上角「任务」');
+      setTimeout(() => load().catch(() => {}), 3000);
     } catch (e) {
       message.error(e.message || '操作失败');
     } finally {
@@ -254,6 +270,28 @@ export default function LocalServer() {
                       onConfirm={updateCloudflared}
                     >
                       <Button size="small" type="link" loading={busy === 'cf'} disabled={cfState === 'not-installed'}>
+                        更新
+                      </Button>
+                    </Popconfirm>
+                  </span>
+                </div>
+              </Col>
+              <Col xs={24} md={12}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', border: '1px solid #eef2f7', borderRadius: 10, background: '#fbfcfe' }}>
+                  <i className={`pp-dot ${warpState === 'active' ? 'online' : warpState === 'not-installed' ? 'unknown' : 'warn'}`} />
+                  <span style={{ fontWeight: 500 }}>WARP 客户端</span>
+                  {warpVersion ? <span className="pp-mono pp-muted" style={{ fontSize: 12 }}>v{warpVersion}</span> : null}
+                  <Tag color={warpState === 'active' ? 'success' : warpState === 'not-installed' ? 'default' : 'warning'} style={{ marginInlineEnd: 0 }}>
+                    {warpState === 'active' ? '运行' : warpState === 'not-installed' ? '未安装' : warpState}
+                  </Tag>
+                  <span style={{ marginLeft: 'auto' }}>
+                    <Popconfirm
+                      title="更新 WARP 客户端？"
+                      description="通过包管理器升级 cloudflare-warp 并重启 warp-svc；组网连接会短暂中断。"
+                      okText="更新"
+                      onConfirm={updateWarp}
+                    >
+                      <Button size="small" type="link" loading={busy === 'warp'} disabled={warpState === 'not-installed'}>
                         更新
                       </Button>
                     </Popconfirm>
