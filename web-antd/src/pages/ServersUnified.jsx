@@ -12,6 +12,7 @@ import {
   DisconnectOutlined,
   PlusOutlined,
   PoweroffOutlined,
+  SafetyCertificateOutlined,
   QuestionCircleOutlined,
   ReloadOutlined,
   AppstoreOutlined,
@@ -560,23 +561,28 @@ export default function ServersUnified() {
     }
   };
 
-  const batchSsh = async (enable) => {
+  // 批量开关 SSH 安全防护：逐台下发（成功/失败分别统计）
+  const batchSshGuard = async (enable) => {
     if (!selected.length) return;
-    try {
-      const res = await apiPost('jobs', {
-        kind: 'ssh.toggle',
-        params: { server_ids: selected, enable: !!enable },
-      });
-      if (watchBatch(res)) {
-        message.success(`已创建后台任务 #${res.job_id}（${selected.length} 台，${enable ? '启用' : '停用'} SSH）`);
-      } else {
-        message.success((res && res.message) || `已下发 ${enable ? '启用' : '停用'} SSH`);
+    let ok = 0;
+    let fail = 0;
+    for (const id of selected) {
+      try {
+        await apiPost(`servers/${id}/ssh-guard`, { enabled: !!enable });
+        ok += 1;
+      } catch (e) {
+        fail += 1;
       }
-      setSelected([]);
-      setTimeout(() => refreshLive(), 1500);
-    } catch (e) {
-      message.error(e.message || '操作失败');
     }
+    if (ok && !fail) {
+      message.success(`已对 ${ok} 台下发「${enable ? '开启' : '关闭'} SSH 安全防护」，约 1 分钟后生效`);
+    } else if (ok && fail) {
+      message.warning(`${ok} 台已下发，${fail} 台失败`);
+    } else {
+      message.error(`下发失败（${fail} 台）`);
+    }
+    setSelected([]);
+    setTimeout(() => refreshLive(), 2000);
   };
 
   const batchReboot = async () => {
@@ -984,17 +990,22 @@ export default function ServersUnified() {
                     更新 Agent
                   </Button>
                 </Popconfirm>
-                <Popconfirm title={`启用选中 ${selected.length} 台的 SSH？`} onConfirm={() => batchSsh(true)}>
-                  <Button>启用 SSH</Button>
+                <Popconfirm
+                  title={`开启选中 ${selected.length} 台的 SSH 安全防护？`}
+                  description="开启后仅允许 100.96.0.0/12 与 2606:4700:cf1:1000::/64 访问 SSH，其他来源会被丢弃。"
+                  okText="开启"
+                  onConfirm={() => batchSshGuard(true)}
+                >
+                  <Button icon={<SafetyCertificateOutlined />}>开启 SSH 防护</Button>
                 </Popconfirm>
                 <Popconfirm
-                  title={`停用选中 ${selected.length} 台的 SSH？`}
-                  description="确认 Agent 在线；停用后只能从面板再启用"
-                  okText="停用"
+                  title={`关闭选中 ${selected.length} 台的 SSH 安全防护？`}
+                  description="关闭后所有 IP 均可尝试 SSH 登录。"
+                  okText="关闭"
                   okButtonProps={{ danger: true }}
-                  onConfirm={() => batchSsh(false)}
+                  onConfirm={() => batchSshGuard(false)}
                 >
-                  <Button danger>停用 SSH</Button>
+                  <Button danger icon={<SafetyCertificateOutlined />}>关闭 SSH 防护</Button>
                 </Popconfirm>
                 <Popconfirm
                   title={`重启选中的 ${selected.length} 台服务器？`}
