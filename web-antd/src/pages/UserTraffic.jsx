@@ -37,7 +37,7 @@ const SORTS = [
   { value: 'active', label: '最近活跃' },
 ];
 
-const ONLINE_WINDOW_MS = 5 * 60 * 1000;
+const ONLINE_WINDOW_MS = 2 * 60 * 1000;
 
 /**
  * 业务 · 用户流量：以「用户」为主视角，展示在线状态与各时间口径的用量。
@@ -302,7 +302,7 @@ export default function UserTraffic() {
             icon={<ThunderboltOutlined />}
             label="活跃用户"
             value={summary.online}
-            hint="近 3 分钟有流量"
+            hint="近 2 分钟有流量"
             accent="#10b981"
           />
         </Col>
@@ -409,7 +409,7 @@ export default function UserTraffic() {
 
       <PageCard
         title={<span className="pp-section-title">用户在线分布</span>}
-        extra={<span className="pp-muted" style={{ fontSize: 12 }}>近 5 分钟有流量视为活跃</span>}
+        extra={<span className="pp-muted" style={{ fontSize: 12 }}>近 2 分钟有流量视为活跃</span>}
         style={{ marginBottom: 16 }}
       >
         {(() => {
@@ -839,7 +839,7 @@ export default function UserTraffic() {
               return (
                 <div style={{ marginTop: 8, marginBottom: 0 }}>
                   <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>
-                    用户流向（绿=近 3 分钟活跃，动态光点表示实时流量）
+                    用户流向（绿=近 2 分钟活跃，动态光点表示实时流量）
                   </div>
                   <svg className="pp-flow-svg" viewBox={'0 0 720 ' + h} style={{ width: '100%', height: 'auto', display: 'block' }}>
                     <defs>

@@ -20,10 +20,10 @@ import (
 //      → 本文件差分入库（user_traffic / user_traffic_hourly / node_connections）
 // =====================================================================
 
-// statsActiveWindowMs 「活跃」判定窗口：5 分钟（采集间隔约 36s，容忍抖动）
+// statsActiveWindowMs 「活跃」判定窗口：2 分钟（采集间隔约 30s，容忍一次抖动）
 var inboundUUIDRe = regexp.MustCompile(`[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`)
 
-const statsActiveWindowMs int64 = 300_000
+const statsActiveWindowMs int64 = 120_000
 
 var regexpUUID = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
@@ -149,20 +149,21 @@ func (h *handlers) ingestUserCounters(ctx context.Context, nodeID int64, users [
 			h.log.Warn("写入用户计数基线失败", "err", err, "uuid", uuid)
 			continue
 		}
-		// 只要该用户仍出现在节点统计里就刷新在线时间（即使本次无流量增量）
 		if dUp < 0 {
 			dUp = 0
 		}
 		if dDown < 0 {
 			dDown = 0
 		}
+		// 关键：本次采样没有任何流量增量 → 用户在该节点上处于空闲，不刷新活跃时间。
+		// （历史实现每次采样都刷新，导致长期不用的用户也一直显示「活跃中」）
+		if dUp == 0 && dDown == 0 {
+			continue
+		}
 		_, _ = h.db.ExecContext(ctx, `INSERT INTO user_node_recent (uuid, node_id, last_ts, up, down)
 		      VALUES (?, ?, ?, ?, ?)
 		      ON DUPLICATE KEY UPDATE last_ts = VALUES(last_ts), up = up + VALUES(up), down = down + VALUES(down)`,
 			uuid, nodeID, now, dUp, dDown)
-		if dUp == 0 && dDown == 0 {
-			continue
-		}
 		if _, err := h.db.ExecContext(ctx, `INSERT INTO user_traffic_hourly
 		      (uuid, node_id, hour_ts, up, down) VALUES (?, ?, ?, ?, ?)
 		      ON DUPLICATE KEY UPDATE up = up + VALUES(up), down = down + VALUES(down)`,
