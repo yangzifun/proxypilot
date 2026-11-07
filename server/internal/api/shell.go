@@ -375,8 +375,9 @@ func (h *handlers) agentWS(w http.ResponseWriter, r *http.Request) {
 	// 端点信息：连接建立时下发，并每 30 秒复读一次设置，便于在线修改后立即生效
 	sendEndpoint := func() {
 		inner := strings.TrimSpace(h.settingValue(r.Context(), settingAgentInternalURL))
-		outer := strings.TrimSpace(h.settingValue(r.Context(), settingAgentAccessURL))
-		if inner == "" && outer == "" {
+		// 已移除公网 TLS 通道：external 与 internal 同源，保留字段仅为兼容旧 Agent
+		outer := inner
+		if inner == "" {
 			return
 		}
 		_ = ws.WriteText(fmt.Sprintf(`{"type":"endpoint","internal":%q,"external":%q}`, inner, outer))

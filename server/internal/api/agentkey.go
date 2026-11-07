@@ -126,7 +126,7 @@ func decryptAgentToken(secret, enc string) string {
 // agentInstallCommand 复刻 Worker：优先对象存储脚本，否则用本站 /api/agent/install.sh。
 func (h *handlers) agentInstallCommand(ctx context.Context, origin, token string) string {
 	// 节点直连地址优先（系统管理 → Agent 访问地址），留空回落到请求来源
-	if v := strings.TrimSpace(h.settingValue(ctx, settingAgentAccessURL)); v != "" {
+	if v := strings.TrimSpace(h.settingValue(ctx, settingAgentInternalURL)); v != "" {
 		origin = v
 	}
 	base := strings.TrimRight(strings.TrimSpace(h.cfg.AgentInstallBase), "/")

@@ -18,9 +18,8 @@ type Config struct {
 	// Addr HTTP 监听地址，例如 ":8080"。
 	Addr string
 	// AgentInternalAddr 内网 Agent 专用监听地址（明文，仅 Agent 接口），例如 100.96.0.18:8080。
+	// 留空表示不额外监听：Agent 直接使用主监听（:80）经由组网访问。
 	AgentInternalAddr string
-	// AgentTLSAddr 公网 Agent 兜底监听地址（TLS），留空用 ":443"。
-	AgentTLSAddr string
 	// MySQLDSN 形如 user:pass@tcp(127.0.0.1:3306)/proxypilot?parseTime=false&loc=UTC
 	MySQLDSN string
 	// JWTSecret 与 Worker 共用；沿用同一密钥即可让旧 token 继续有效。
@@ -97,7 +96,6 @@ func Load() (Config, error) {
 	c := Config{
 		Addr:                env("PP_ADDR", ":8080"),
 		AgentInternalAddr:   strings.TrimSpace(os.Getenv("PP_AGENT_INTERNAL_ADDR")),
-		AgentTLSAddr:        strings.TrimSpace(os.Getenv("PP_AGENT_TLS_ADDR")),
 		MySQLDSN:            strings.TrimSpace(os.Getenv("PP_MYSQL_DSN")),
 		JWTSecret:           os.Getenv("PP_JWT_SECRET"),
 		SuperAdmin:          env("PP_SUPER_ADMIN", "admin"),

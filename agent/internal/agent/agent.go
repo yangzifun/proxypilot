@@ -419,6 +419,7 @@ func (a *Agent) watchInternal(ctx context.Context) {
 			a.opts.Log("切换到内网通道：%s", inner)
 			a.dropWS()
 			a.signalWake()
+		// 内网不可用时不回落公网：Agent 与面板只走组网通道，等待内网恢复
 		case !okInner && inner != "" && cur == inner && outer != "":
 			a.opts.Client.SetOrigin(outer)
 			a.opts.Log("内网不可用，回落公网通道：%s", outer)

@@ -365,21 +365,12 @@ export default function Settings({ embedded = false }) {
                   </Form.Item>
 
                   <Form.Item
-                    name="agent_access_url"
-                    label="Agent 访问地址"
-                    extra="节点直连地址（绕过 CDN），用于安装命令与升级任务；留空回落到对外访问地址"
-                    rules={[{ type: 'url', message: '请输入合法 URL' }]}
-                  >
-                    <Input placeholder="https://agent.example.com" allowClear />
-                  </Form.Item>
-
-                  <Form.Item
                     name="agent_internal_url"
-                    label="Agent 内网地址"
-                    extra="节点经内网直连的地址（优先使用）；不可达时自动回退到上方公网地址。例如 http://100.96.0.18:8080"
+                    label="Agent 访问地址（组网内网）"
+                    extra="Agent 只通过组网内网访问面板，例如 http://100.96.0.18:80；不再提供公网 TLS 兜底"
                     rules={[{ type: 'url', message: '请输入合法 URL' }]}
                   >
-                    <Input placeholder="http://100.96.0.18:8080" allowClear />
+                    <Input placeholder="http://100.96.0.18:80" allowClear />
                   </Form.Item>
                   <Form.Item
                     name="component_base_url"

@@ -24,7 +24,7 @@ import (
 )
 
 // version 由构建脚本注入：-ldflags "-X main.version=v1.0.0"
-var version = "V29.9"
+var version = "V30.1"
 
 func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -107,28 +107,6 @@ func run(log *slog.Logger) error {
 				log.Error("Agent 内网监听失败", "addr", a, "err", err)
 			}
 		}(addr, innerSrv)
-	}
-
-	tlsAddr := strings.TrimSpace(cfg.AgentTLSAddr)
-	if tlsAddr == "" {
-		tlsAddr = ":443"
-	}
-	// 节点直连通道：存在证书时额外监听 TLS 端口（公网兜底）
-	if certFile, keyFile := "/etc/proxypilot/tls/agent.crt", "/etc/proxypilot/tls/agent.key"; fileExists(certFile) && fileExists(keyFile) {
-		tlsSrv := &http.Server{
-			Addr:              tlsAddr,
-			Handler:           agentOnlyHandler(securityHeaders(api.New(cfg, pool, log))),
-			ReadHeaderTimeout: 10 * time.Second,
-			ReadTimeout:       60 * time.Second,
-			WriteTimeout:      180 * time.Second,
-			IdleTimeout:       120 * time.Second,
-		}
-		go func() {
-			log.Info("HTTPS(Agent 直连) 已启动", "addr", tlsAddr)
-			if err := tlsSrv.ListenAndServeTLS(certFile, keyFile); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				log.Error("HTTPS 启动失败", "err", err)
-			}
-		}()
 	}
 
 	select {
