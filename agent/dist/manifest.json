@@ -1,8 +1,1 @@
-{
-  "version": "v1.8.7",
-  "released_at": "2026-11-03T02:42:53Z",
-  "files": {
-    "linux-amd64": { "file": "proxypilot-agent-linux-amd64", "size": 7942304, "sha256": "8fd57698c2fa0fd0657a411a845d0adbd86e53469469b6d0ae1c5b5db1ad0d56" },
-    "linux-arm64": { "file": "proxypilot-agent-linux-arm64", "size": 7405728, "sha256": "62e5759a64f0abf4c93a07a6b313e70a1b4f457c2e0ff288e68d86509143f4ae" }
-  }
-}
+﻿{"version":"1.10.7","built_at":"2026-11-07T23:07:46Z","files":{"linux-amd64":{"name":"proxypilot-agent-linux-amd64","sha256":"9bb1e0d2e3ce66cb4e6e728599ee847dd2d1f8bc034bff470641b0aab4cd9947"},"linux-arm64":{"name":"proxypilot-agent-linux-arm64","sha256":"2afe1c39e91473a96f8c699bce0c5c65d7deb5434c44bdc8657f54bb5c036735"}}}

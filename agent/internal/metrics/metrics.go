@@ -103,57 +103,6 @@ func DefaultRunner(name string, args ...string) (string, error) {
 	return defaultRunner(name, args...)
 }
 
-// ServiceStates 逐个执行 systemctl is-active。
-// 与 shell agent 一致：命令不存在或返回空 → "unknown"；inactive/failed 等状态照样上报。
-func ServiceStates(r Runner, names []string) map[string]string {
-	out := map[string]string{}
-	for _, name := range names {
-		if !validServiceName(name) {
-			continue
-		}
-		// 先看 LoadState：not-found 表示这台机器没装这个服务，
-		// 上报成 not-installed，后台就能区分「没装」和「装了但没启动」
-		if load, _ := r("systemctl", "show", "-p", "LoadState", "--value", name); strings.TrimSpace(load) == "not-found" {
-			out[name] = "not-installed"
-			continue
-		}
-		text, _ := r("systemctl", "is-active", name)
-		state := strings.TrimSpace(text)
-		if state == "" {
-			state = "unknown"
-		}
-		if len(state) > 32 {
-			state = state[:32]
-		}
-		out[name] = state
-	}
-	// sshd 可能叫 ssh（Debian/Ubuntu）——两者都探测，并保证 "sshd" 键存在（服务端会单独取用）
-	if _, ok := out["sshd"]; !ok {
-		if _, ok := out["ssh"]; !ok {
-			if text, _ := r("systemctl", "is-active", "sshd"); strings.TrimSpace(text) != "" {
-				out["sshd"] = strings.TrimSpace(text)
-			} else {
-				out["sshd"] = "unknown"
-			}
-		} else {
-			out["sshd"] = out["ssh"]
-		}
-	}
-	if len(out) > 40 {
-		trimmed := map[string]string{}
-		n := 0
-		for k, v := range out {
-			trimmed[k] = v
-			n++
-			if n >= 40 {
-				break
-			}
-		}
-		return trimmed
-	}
-	return out
-}
-
 func validServiceName(v string) bool {
 	if v == "" || len(v) > 64 {
 		return false

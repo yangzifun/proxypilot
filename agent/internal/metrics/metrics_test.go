@@ -113,17 +113,41 @@ func TestParseProcNetAddrIPv6(t *testing.T) {
 	}
 }
 
-func TestServiceStates(t *testing.T) {
-	run := func(name string, args ...string) (string, error) {
-		svc := args[len(args)-1]
-		switch svc {
-		case "xray", "sshd":
-			return "active\n", nil
-		case "nginx":
-			return "inactive\n", errors.New("exit status 3")
+// mockSystemctl 模拟批量 `systemctl show -p Id -p LoadState -p ActiveState ...`
+// 以及逐服务 `systemctl is-active` 两种调用。
+func mockSystemctl(active map[string]string, missing map[string]bool) Runner {
+	return func(name string, args ...string) (string, error) {
+		if len(args) > 0 && args[0] == "show" && len(args) > 1 && args[1] == "-p" {
+			var b strings.Builder
+			for _, a := range args {
+				if strings.HasPrefix(a, "-") || a == "Id" || a == "LoadState" || a == "ActiveState" {
+					continue
+				}
+				load := "loaded"
+				if missing[a] {
+					load = "not-found"
+				}
+				st := active[a]
+				if st == "" {
+					st = "inactive"
+				}
+				b.WriteString("Id=" + a + ".service\n")
+				b.WriteString("LoadState=" + load + "\n")
+				b.WriteString("ActiveState=" + st + "\n")
+			}
+			return b.String(), nil
 		}
-		return "unknown\n", errors.New("exit status 4")
+		svc := args[len(args)-1]
+		if st, ok := active[svc]; ok {
+			return st + "\n", nil
+		}
+		return "inactive\n", errors.New("exit status 3")
 	}
+}
+
+func TestServiceStates(t *testing.T) {
+	resetSvcCache()
+	run := mockSystemctl(map[string]string{"xray": "active", "sshd": "active", "nginx": "inactive"}, nil)
 	got := ServiceStates(run, []string{"xray", "nginx"})
 	if got["xray"] != "active" || got["nginx"] != "inactive" || got["sshd"] != "active" {
 		t.Fatalf("services=%v", got)
@@ -132,6 +156,7 @@ func TestServiceStates(t *testing.T) {
 		t.Fatalf("非法服务名应被过滤：%v", got)
 	}
 	// 命令缺失（空输出 + 错误）→ unknown
+	resetSvcCache()
 	empty := ServiceStates(func(string, ...string) (string, error) { return "", errors.New("not found") }, []string{"xray"})
 	if empty["xray"] != "unknown" || empty["sshd"] != "unknown" {
 		t.Fatalf("应回落 unknown：%v", empty)
@@ -161,19 +186,11 @@ func TestCollectNeverPanics(t *testing.T) {
 }
 
 func TestServiceStatesNotInstalled(t *testing.T) {
-	run := func(name string, args ...string) (string, error) {
-		svc := args[len(args)-1]
-		if len(args) > 0 && args[0] == "show" {
-			if svc == "clash" || svc == "xray" {
-				return "not-found\n", nil
-			}
-			return "loaded\n", nil
-		}
-		if svc == "sing-box" || svc == "sshd" || svc == "ssh" {
-			return "active\n", nil
-		}
-		return "inactive\n", nil
-	}
+	resetSvcCache()
+	run := mockSystemctl(
+		map[string]string{"sing-box": "active"},
+		map[string]bool{"clash": true, "xray": true},
+	)
 	got := ServiceStates(run, []string{"clash", "xray", "sing-box"})
 	if got["clash"] != "not-installed" || got["xray"] != "not-installed" {
 		t.Fatalf("未安装应上报 not-installed：%v", got)
