@@ -816,7 +816,7 @@ export default function UserTraffic() {
               children: (
                 <>
                   <div className="pp-muted" style={{ fontSize: 12, marginBottom: 10 }}>
-                    多用户 → 多服务器的流量方向；仅显示近 {Math.round(ONLINE_WINDOW_MS / 60000)} 分钟活跃的用户，线宽表示流量大小，可拖拽与缩放。
+                    多用户 → 多服务器的流量方向；仅显示近 {Math.round(ONLINE_WINDOW_MS / 60000)} 分钟活跃的用户，线宽表示流量大小，视图固定自动适配。
                   </div>
                   {trafficFlow.loading && !(trafficFlow.data && trafficFlow.data.users) ? (
                     <div className="pp-muted" style={{ padding: 40, textAlign: 'center' }}>正在统计流向…</div>
