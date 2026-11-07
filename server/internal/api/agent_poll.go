@@ -353,6 +353,7 @@ func (h *handlers) agentUpdateSnapshot(ctx context.Context, srv *agentServer, m 
 		AgentVersion   string
 		IP, IP4, IP6   string
 		PrivateIP      string
+		MeshIP4, MeshIP6 string
 	}, rates agentRates) error {
 	now := nowMillis()
 	summary := m.summary(rates, opts.AgentVersion)
@@ -390,12 +391,14 @@ func (h *handlers) agentUpdateSnapshot(ctx context.Context, srv *agentServer, m 
 	      last_ip4 = COALESCE(NULLIF(?, ''), last_ip4),
 	      last_ip6 = COALESCE(NULLIF(?, ''), last_ip6),
       last_ip_private = COALESCE(NULLIF(?, ''), last_ip_private),
+      last_mesh_ip4 = COALESCE(NULLIF(?, ''), last_mesh_ip4),
+      last_mesh_ip6 = COALESCE(NULLIF(?, ''), last_mesh_ip6),
 	      agent_key_used_at = COALESCE(NULLIF(agent_key_used_at, 0), ?),
 	      updated_at = ?
 	    WHERE id = ?`,
 		"online", "", now, string(summaryJSON), osInfo, "agent", platform, version,
 		now, pollFlag, now, opts.PersistPollSec, pollFlag, opts.PollCount,
-		opts.IP, opts.IP4, opts.IP6, opts.PrivateIP, now, now, srv.ID)
+		opts.IP, opts.IP4, opts.IP6, opts.PrivateIP, opts.MeshIP4, opts.MeshIP6, now, now, srv.ID)
 	if err == nil && srv.LastStatus == "offline" {
 		go h.notifyStatus(context.Background(), "服务器恢复", []serverStatusNotice{{ID: srv.ID, Detail: "Agent 心跳恢复"}})
 	}
@@ -687,6 +690,20 @@ func (h *handlers) agentPoll(w http.ResponseWriter, r *http.Request) {
 	if agentPrivateIP == "" {
 		agentPrivateIP = strings.TrimSpace(jsonStr(body["ip"]))
 	}
+	// 组网地址（Cloudflare WARP）：Agent 直接从组网网卡读取，v4/v6 各一
+	meshIP4 := ""
+	meshIP6 := ""
+	{
+		v4 := strings.TrimSpace(jsonStr(body["mesh_ip4"]))
+		if regexpIPv4.MatchString(v4) {
+			meshIP4 = truncateRunes(v4, 64)
+		}
+		v6 := strings.TrimSpace(jsonStr(body["mesh_ip6"]))
+		if strings.Contains(v6, ":") && regexpIP.MatchString(v6) {
+			meshIP6 = truncateRunes(v6, 64)
+		}
+	}
+
 	// 内网地址：优先 Agent 上报的本机内网 IP，其次连接来源（WARP / 内网）
 	privateIP := ""
 	if agentPrivateIP != "" && isPrivateIP(agentPrivateIP) && regexpIP.MatchString(agentPrivateIP) {
@@ -732,6 +749,12 @@ func (h *handlers) agentPoll(w http.ResponseWriter, r *http.Request) {
 	if privateIP == "" {
 		privateIP = strings.TrimSpace(srv.LastIPPrivate)
 	}
+	if meshIP4 == "" {
+		meshIP4 = strings.TrimSpace(srv.LastMeshIP4)
+	}
+	if meshIP6 == "" {
+		meshIP6 = strings.TrimSpace(srv.LastMeshIP6)
+	}
 
 	rates := agentThroughputFromSample(prev, m, nextPollSec)
 	agentVersion := firstNonEmpty(jsonStr(body["agent_version"]), jsonStr(body["agentVersion"]))
@@ -742,7 +765,8 @@ func (h *handlers) agentPoll(w http.ResponseWriter, r *http.Request) {
 		AgentVersion   string
 		IP, IP4, IP6   string
 		PrivateIP      string
-	}{nextPollSec, configured, pollCount, agentVersion, ip, ip4, ip6, privateIP}, rates); err != nil {
+		MeshIP4, MeshIP6 string
+	}{nextPollSec, configured, pollCount, agentVersion, ip, ip4, ip6, privateIP, meshIP4, meshIP6}, rates); err != nil {
 		h.log.Error("更新 Agent 快照失败", "err", err)
 	}
 
@@ -970,7 +994,8 @@ func (h *handlers) ingestAgentWSMetrics(ctx context.Context, srv *agentServer, b
 		AgentVersion   string
 		IP, IP4, IP6   string
 		PrivateIP      string
-	}{srv.NextPollSec, 0, srv.AgentPollCount, version, ip, srv.LastIP4, srv.LastIP6, srv.LastIPPrivate}
+		MeshIP4, MeshIP6 string
+	}{srv.NextPollSec, 0, srv.AgentPollCount, version, ip, srv.LastIP4, srv.LastIP6, srv.LastIPPrivate, srv.LastMeshIP4, srv.LastMeshIP6}
 	if err := h.agentUpdateSnapshot(ctx, srv, m, false, opts, rates); err != nil {
 		h.log.Warn("WS 快照更新失败", "err", err)
 	}

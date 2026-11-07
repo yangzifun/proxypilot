@@ -142,3 +142,92 @@ func (a *Agent) currentPrivateIP() string {
 	}
 	return agentPrivateIP.get()
 }
+
+// meshIfaceHints 组网网卡的常见名称（Cloudflare WARP / wgcf / tailscale 等）
+var meshIfaceHints = []string{"cloudflarewarp", "warp", "wgcf", "tailscale", "wg0"}
+
+// detectMeshIPs 返回组网网卡上的 IPv4 / IPv6（Cloudflare WARP 同时会分配两者）。
+func detectMeshIPs() (string, string) {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return "", ""
+	}
+	for _, it := range ifaces {
+		if it.Flags&net.FlagUp == 0 {
+			continue
+		}
+		name := strings.ToLower(it.Name)
+		matched := false
+		for _, hint := range meshIfaceHints {
+			if strings.Contains(name, hint) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			continue
+		}
+		addrs, err := it.Addrs()
+		if err != nil {
+			continue
+		}
+		var v4, v6 string
+		for _, a := range addrs {
+			ipnet, ok := a.(*net.IPNet)
+			if !ok {
+				continue
+			}
+			ip := ipnet.IP
+			if ip4 := ip.To4(); ip4 != nil {
+				if v4 == "" && !ip4.IsLoopback() && !ip4.IsLinkLocalUnicast() {
+					v4 = ip4.String()
+				}
+				continue
+			}
+			if ip.To16() != nil && !ip.IsLoopback() && !ip.IsLinkLocalUnicast() {
+				if v6 == "" {
+					v6 = ip.String()
+				}
+			}
+		}
+		if v4 != "" || v6 != "" {
+			return v4, v6
+		}
+	}
+	return "", ""
+}
+
+var (
+	mesh4Cache = &ipCache{ttl: 15 * time.Second}
+	mesh6Cache = &ipCache{ttl: 15 * time.Second}
+)
+
+// currentMeshIPs 返回组网 IPv4（带缓存）。
+func (a *Agent) currentMeshIPs() string {
+	if mesh4Cache.fresh() {
+		return mesh4Cache.get()
+	}
+	v4, v6 := detectMeshIPs()
+	if v4 != "" {
+		mesh4Cache.set(v4)
+	}
+	if v6 != "" {
+		mesh6Cache.set(v6)
+	}
+	return v4
+}
+
+// currentMeshIP6 返回组网 IPv6（带缓存）。
+func (a *Agent) currentMeshIP6() string {
+	if mesh6Cache.fresh() {
+		return mesh6Cache.get()
+	}
+	v4, v6 := detectMeshIPs()
+	if v4 != "" {
+		mesh4Cache.set(v4)
+	}
+	if v6 != "" {
+		mesh6Cache.set(v6)
+	}
+	return v6
+}

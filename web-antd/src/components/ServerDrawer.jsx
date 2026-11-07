@@ -502,12 +502,30 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
               },
               {
                 key: 'ip_private',
-                label: '内网 IP',
-                children: (
-                  <span className="pp-mono">
-                    {String(d.last_ip_private || '').trim() || '—'}
-                  </span>
-                ),
+                label: '内网 / 组网 IP',
+                children: (() => {
+                  const lan = String(d.last_ip_private || '').trim();
+                  const m4 = String(d.last_mesh_ip4 || '').trim();
+                  const m6 = String(d.last_mesh_ip6 || '').trim();
+                  if (!lan && !m4 && !m6) return <span className="pp-mono">—</span>;
+                  return (
+                    <span className="pp-mono">
+                      {lan ? <span>{lan}</span> : null}
+                      {m4 ? (
+                        <span>
+                          {lan ? <br /> : null}
+                          <span className="pp-muted">WARP </span>IPv4 {m4}
+                        </span>
+                      ) : null}
+                      {m6 ? (
+                        <span>
+                          {lan || m4 ? <br /> : null}
+                          <span className="pp-muted">WARP </span>IPv6 {m6}
+                        </span>
+                      ) : null}
+                    </span>
+                  );
+                })(),
               },
               { key: 'geo', label: '地区', children: d.ip_country ? `${d.ip_country} ${d.ip_region || ''}` : '—' },
               {

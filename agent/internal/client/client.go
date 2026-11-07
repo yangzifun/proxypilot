@@ -61,6 +61,8 @@ type PollRequest struct {
 	IP           string            `json:"ip"`
 	PublicIP     string            `json:"public_ip,omitempty"`
 	PrivateIP    string            `json:"private_ip,omitempty"`
+	MeshIP4      string            `json:"mesh_ip4,omitempty"`
+	MeshIP6      string            `json:"mesh_ip6,omitempty"`
 	IPv6         string            `json:"ipv6,omitempty"`
 
 	// V11.0 服务器监控字段（之前采了但没随 poll 上报，导致后台「连接 / 进程 / 网络 / 磁盘 IO / 温度」恒为 0）
