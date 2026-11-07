@@ -123,9 +123,17 @@ export const PAGE_META = {
     group: '系统',
     accent: '#f97316',
   },
-  sys: {
-    title: '系统管理',
-    subtitle: '管理员账号、API 密钥与系统设置',
+  sysusers: {
+    title: '用户管理',
+    subtitle: '管理员账号、邮箱与双因素认证',
+    icon: <TeamOutlined />,
+    group: '系统',
+    accent: '#6366f1',
+    superOnly: true,
+  },
+  syssettings: {
+    title: '系统设置',
+    subtitle: '站点、订阅、Agent 与通知等全局配置',
     icon: <SettingOutlined />,
     group: '系统',
     accent: '#f43f5e',
@@ -154,7 +162,7 @@ export const PAGE_META = {
   },
 };
 
-export const NAV_ORDER = ['dash', 'uuids', 'userst', 'tpls', 'tplhub', 'servers', 'bindings', 'cdnpref', 'masque', 'logs', 'attachments', 'backup', 'sec', 'sys'];
+export const NAV_ORDER = ['dash', 'uuids', 'userst', 'tpls', 'tplhub', 'servers', 'bindings', 'cdnpref', 'masque', 'logs', 'attachments', 'backup', 'sec', 'sysusers', 'syssettings'];
 
 /** 侧边栏结构：置顶单页 + 3 个可折叠分组，按日常使用频率排序 */
 export const NAV_GROUPS = [
@@ -174,7 +182,7 @@ export const NAV_GROUPS = [
     key: 'ops',
     title: '运维与安全',
     icon: <ToolOutlined />,
-    keys: ['logs', 'attachments', 'backup', 'sec', 'sys'],
+    keys: ['logs', 'attachments', 'backup', 'sec', 'sysusers', 'syssettings'],
   },
 ];
 

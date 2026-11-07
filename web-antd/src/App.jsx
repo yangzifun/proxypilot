@@ -21,7 +21,7 @@ import MtprotoPage from './pages/MtprotoPage';
 import MasquePage from './pages/MasquePage';
 import CdnPreferred from './pages/CdnPreferred';
 import Logs from './pages/Logs';
-import System from './pages/System';
+import System, { AdminUsersPage, SystemSettingsPage } from './pages/System';
 import Security from './pages/Security';
 import Backup from './pages/Backup';
 import Attachments from './pages/Attachments';
@@ -42,7 +42,9 @@ const PAGES = {
   singbox: Nodes,
   status: ServersUnified,
   logs: Logs,
-  sys: System,
+  sys: AdminUsersPage,
+  sysusers: AdminUsersPage,
+  syssettings: SystemSettingsPage,
   attachments: Attachments,
   backup: Backup,
   sec: Security,
@@ -62,7 +64,7 @@ export default function App() {
   if (!token) return <Login />;
 
   const legacySettings = route === 'settings';
-  const normalized = route === 'singbox' ? 'normal' : route === 'status' ? 'servers' : legacySettings ? 'sys' : route;
+  const normalized = route === 'singbox' ? 'normal' : route === 'status' ? 'servers' : legacySettings ? 'syssettings' : route;
   const key = PAGE_META[normalized] ? normalized : 'dash';
   const meta = PAGE_META[key];
   const PageComp = PAGES[key] || Dashboard;
