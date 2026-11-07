@@ -865,28 +865,34 @@ export default function ServersUnified() {
               </div>
           </div>
 
-          <div className="pp-ov-bottom">
-            <div className="pp-ov-res">
-              <div className="pp-ov-sec-head">
-                <b>资源均值</b>
-                <span>仅在线节点</span>
-              </div>
-              <div className="pp-ov-avg">
-                <div className="pp-ov-gauges">
-                  <div className="pp-ov-gauge"><MiniRing value={avg.cpu} label="CPU" /></div>
-                  <div className="pp-ov-gauge"><MiniRing value={avg.mem} label="内存" /></div>
-                </div>
-                <div className="pp-ov-disk">
-                  <div className="pp-ov-disk-head">
-                    <span>磁盘均值</span>
-                    <b style={{ color: levelColor(avg.disk) }}>{Number(avg.disk || 0).toFixed(0)}%</b>
-                  </div>
-                  <Progress percent={Math.round(Number(avg.disk || 0))} showInfo={false} strokeColor={levelColor(avg.disk)} />
-                </div>
+          <div className="pp-ov-res-col">
+            <div className="pp-ov-res-head">
+              <b>资源面板</b>
+              <span>仅在线节点</span>
+            </div>
+            <div className="pp-ov-rescard">
+              <MiniRing value={avg.cpu} label="CPU" />
+              <div className="pp-ov-rescard-meta">
+                <div className="pp-ov-rescard-title">CPU 均值</div>
+                <div className="pp-ov-rescard-sub">处理器占用</div>
               </div>
             </div>
-
+            <div className="pp-ov-rescard">
+              <MiniRing value={avg.mem} label="内存" />
+              <div className="pp-ov-rescard-meta">
+                <div className="pp-ov-rescard-title">内存均值</div>
+                <div className="pp-ov-rescard-sub">已用内存占比</div>
+              </div>
+            </div>
+            <div className="pp-ov-rescard">
+              <MiniRing value={avg.disk} label="磁盘" />
+              <div className="pp-ov-rescard-meta">
+                <div className="pp-ov-rescard-title">磁盘均值</div>
+                <div className="pp-ov-rescard-sub">根分区使用率</div>
+              </div>
+            </div>
           </div>
+
         </div>
       </PageCard>
 
