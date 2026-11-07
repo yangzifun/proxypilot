@@ -36,7 +36,10 @@ type agentMetrics struct {
 	MemPercent                    float64
 	DiskPercent                   float64
 	CpuTicks                      int64
+	CpuIdleTicks                  int64
+	CpuStealTicks                 int64
 	CpuPercent                    float64
+	CpuStealPercent               float64
 	Cores                         int64
 	OS, Kernel, Hostname          string
 	Platform, Arch, Sshd          string
@@ -134,6 +137,8 @@ func parseAgentMetrics(body map[string]any) *agentMetrics {
 	m.MemTotalMb = jsonInt(body["mem_total_mb"])
 	m.DiskPercent = jsonNum(body["disk_percent"])
 	m.CpuTicks = jsonInt(body["cpu_ticks"])
+	m.CpuIdleTicks = jsonInt(body["cpu_idle_ticks"])
+	m.CpuStealTicks = jsonInt(body["cpu_steal_ticks"])
 	m.CpuPercent = jsonNum(body["cpu_percent"])
 	m.Cores = jsonInt(body["cores"])
 	if m.Cores < 1 {
@@ -254,22 +259,63 @@ func agentCpuPercentFromSample(prev *prevSample, m *agentMetrics, intervalSec in
 		return 0
 	}
 	prevTicks := int64(jsonNum(prev.Raw["cpuTicks"]))
-	if prevTicks > 0 && m.CpuTicks > prevTicks {
-		seconds := float64(time.Now().UnixMilli()-prev.CreatedAt) / 1000
-		if seconds < 1 {
-			seconds = float64(intervalSec)
-		}
-		if seconds < 1 {
-			seconds = 60
-		}
-		cores := m.Cores
-		if cores < 1 {
-			cores = 1
-		}
-		pct := (float64(m.CpuTicks-prevTicks) / (float64(cores) * seconds * 100)) * 1000
-		return math.Min(100, math.Round(pct)/10)
+	if prevTicks <= 0 || m.CpuTicks <= prevTicks {
+		return 0
 	}
-	return 0
+	seconds := float64(time.Now().UnixMilli()-prev.CreatedAt) / 1000
+	if seconds < 1 {
+		seconds = float64(intervalSec)
+	}
+	if seconds < 1 {
+		seconds = 60
+	}
+	cores := m.Cores
+	if cores < 1 {
+		cores = 1
+	}
+
+	dBusy := float64(m.CpuTicks - prevTicks)
+	prevIdle := int64(jsonNum(prev.Raw["cpuIdleTicks"]))
+
+	// 新版本 Agent 会同时上报 idle 与 steal：
+	// 云主机 steal 很高时，总时间几乎都不是 idle，直接用 busy/总时间 会长期报 100%。
+	// 用 busy/(busy+idle) 才是「这台机器自己用掉的比例」。
+	if m.CpuIdleTicks > 0 || m.CpuStealTicks > 0 {
+		dIdle := float64(m.CpuIdleTicks - prevIdle)
+		if dIdle < 0 {
+			dIdle = 0
+		}
+		denom := dBusy + dIdle
+		if denom > 0 {
+			return math.Min(100, math.Round(dBusy/denom*1000)/10)
+		}
+		return 0
+	}
+
+	// 老版本 Agent（无 idle/steal）：沿用按核数×时间折算
+	pct := (dBusy / (float64(cores) * seconds * 100)) * 1000
+	return math.Min(100, math.Round(pct)/10)
+}
+
+// agentStealPercentFromSample 计算宿主机抢占比例（用于界面提示）。
+func agentStealPercentFromSample(prev *prevSample, m *agentMetrics) float64 {
+	if prev == nil || prev.Raw == nil || m.CpuStealTicks <= 0 {
+		return 0
+	}
+	prevBusy := int64(jsonNum(prev.Raw["cpuTicks"]))
+	prevIdle := int64(jsonNum(prev.Raw["cpuIdleTicks"]))
+	prevSteal := int64(jsonNum(prev.Raw["cpuStealTicks"]))
+	dBusy := float64(m.CpuTicks - prevBusy)
+	dIdle := float64(m.CpuIdleTicks - prevIdle)
+	dSteal := float64(m.CpuStealTicks - prevSteal)
+	if dBusy < 0 || dIdle < 0 || dSteal <= 0 {
+		return 0
+	}
+	total := dBusy + dIdle + dSteal
+	if total <= 0 {
+		return 0
+	}
+	return math.Min(100, math.Round(dSteal/total*1000)/10)
 }
 
 func minFloat(a, b float64) float64 {
@@ -317,7 +363,7 @@ func (m *agentMetrics) summary(rates agentRates, agentVersion string) map[string
 	return map[string]any{
 		"status": "online", "latencyMs": 0,
 		"load1": m.Load1, "load5": m.Load5, "load15": m.Load15,
-		"cpuPercent": m.CpuPercent, "memPercent": m.MemPercent, "diskPercent": m.DiskPercent,
+		"cpuPercent": m.CpuPercent, "cpuStealPercent": m.CpuStealPercent, "memPercent": m.MemPercent, "diskPercent": m.DiskPercent,
 		"uptimeSec": m.UptimeSec, "hostname": m.Hostname, "kernel": m.Kernel, "os": m.OS,
 		"platform": m.Platform, "services": m.Services, "versions": m.Versions,
 		"ssh": m.SSH, "sshd": m.Sshd, "checkedAt": time.Now().UnixMilli(),
@@ -673,6 +719,7 @@ func (h *handlers) agentPoll(w http.ResponseWriter, r *http.Request) {
 	m := parseAgentMetrics(body)
 	prev := h.agentPrevMetric(r.Context(), srv.ID)
 	m.CpuPercent = agentCpuPercentFromSample(prev, m, nextPollSec)
+	m.CpuStealPercent = agentStealPercentFromSample(prev, m)
 
 	shouldSample := pollCount%metricsEvery == 0 || srv.LastStatus != "online"
 
@@ -985,6 +1032,7 @@ func (h *handlers) ingestAgentWSMetrics(ctx context.Context, srv *agentServer, b
 		}
 	}
 	m.CpuPercent = agentCpuPercentFromSample(prev, m, intervalSec)
+	m.CpuStealPercent = agentStealPercentFromSample(prev, m)
 	rates := agentThroughputFromSample(prev, m, intervalSec)
 	version := firstNonEmpty(jsonStr(body["agent_version"]), jsonStr(body["agentVersion"]))
 	opts := struct {

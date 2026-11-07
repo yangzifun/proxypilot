@@ -119,6 +119,31 @@ func TestAgentCpuAndThroughput(t *testing.T) {
 	}
 }
 
+// 云主机 steal 高时不能用 busy/总时间，否则长期报 100%
+func TestAgentCpuExcludesSteal(t *testing.T) {
+	prev := &prevSample{
+		Raw: map[string]any{
+			"cpuTicks": float64(1000), "cpuIdleTicks": float64(5000), "cpuStealTicks": float64(90000),
+		},
+		CreatedAt: time.Now().Add(-2 * time.Second).UnixMilli(),
+	}
+	// 2 秒内：自己忙 12 ticks、空闲 88 ticks、被宿主机抢 900 ticks
+	m := &agentMetrics{
+		CpuTicks:      1012,
+		CpuIdleTicks:  5088,
+		CpuStealTicks: 90900,
+		Cores:         1,
+	}
+	pct := agentCpuPercentFromSample(prev, m, 2)
+	if pct != 12 {
+		t.Fatalf("cpu = %v，期望 12（应排除 steal）", pct)
+	}
+	steal := agentStealPercentFromSample(prev, m)
+	if steal != 90 {
+		t.Fatalf("steal = %v，期望 90", steal)
+	}
+}
+
 func TestClashUnsupportedReasonSupported(t *testing.T) {
 	for _, p := range []string{"vmess", "vless", "trojan", "shadowsocks", "hysteria2", "tuic", "anytls"} {
 		if got := clashUnsupportedReason("x", p); got != "" {

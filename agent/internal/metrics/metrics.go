@@ -29,6 +29,8 @@ type Metrics struct {
 	MemTotalMB  int64             `json:"mem_total_mb"`
 	DiskPercent float64           `json:"disk_percent"`
 	CPUTicks    int64             `json:"cpu_ticks"`
+	CPUIdle     int64             `json:"cpu_idle_ticks"`
+	CPUSteal    int64             `json:"cpu_steal_ticks"`
 	Services    map[string]string `json:"services"`
 	SSH         SSHState          `json:"ssh"`      // V14.2：SSH 服务是否启用（监控页只读展示）
 	Versions    map[string]string `json:"versions"` // V13.5：sing-box / xray / mtg-multi 的版本（5 分钟缓存）
@@ -73,7 +75,10 @@ func Collect(opts Options) Metrics {
 	m.UptimeSec = ParseUptime(readFile("/proc/uptime"))
 	m.Load = ParseLoadAvg(readFile("/proc/loadavg"))
 	m.MemUsedMB, m.MemTotalMB = ParseMeminfo(readFile("/proc/meminfo"))
-	m.CPUTicks = ParseCPUStat(readFile("/proc/stat"))
+	cpuStat := ParseCPUStatFull(readFile("/proc/stat"))
+	m.CPUTicks = cpuStat.Busy
+	m.CPUIdle = cpuStat.Idle
+	m.CPUSteal = cpuStat.Steal
 	m.DiskPercent = DiskPercent("/")
 	names := opts.Services
 	if len(names) == 0 {
