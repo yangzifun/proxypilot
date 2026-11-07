@@ -520,8 +520,12 @@ func (h *handlers) statsTrafficNodes(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "查询节点统计失败")
 		return
 	}
+	nowMs := nowMillis()
 	data := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
+		sampledAt := mapInt(row, "sampled_at", 0)
+		// 超过 5 分钟没上报视为失联，避免展示过期的错误信息
+		stale := sampledAt == 0 || nowMs-sampledAt > 300_000
 		data = append(data, map[string]any{
 			"node_id": mapInt(row, "node_id", 0), "node_name": mapStr(row, "node_name", ""),
 			"server_id":     mapInt(row, "server_id", 0),
@@ -531,7 +535,7 @@ func (h *handlers) statsTrafficNodes(w http.ResponseWriter, r *http.Request) {
 			"conn_count":    mapInt(row, "conn_count", 0),
 			"up_total":      mapInt(row, "up_total", 0), "down_total": mapInt(row, "down_total", 0),
 			"up_rate": mapInt(row, "up_rate", 0), "down_rate": mapInt(row, "down_rate", 0),
-			"error": mapStr(row, "stats_error", ""),
+			"error": mapStr(row, "stats_error", ""), "stale": stale,
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"success": true, "total": len(data), "data": data})

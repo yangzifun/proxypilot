@@ -182,9 +182,17 @@ function Heartbeat({ row }) {
 
 function NodeConn({ node }) {
   if (!node) return <span className="pp-muted">—</span>;
+  if (node.stale) {
+    return (
+      <span className="pp-nowrap">
+        <span className="pp-muted">—</span>
+        <Tag style={{ marginInlineStart: 6 }}>未上报</Tag>
+      </span>
+    );
+  }
   return (
     <span className="pp-nowrap">
-      {fmtNum(node.conn)}
+      {fmtNum(node.conn_count)}
       {node.error ? <Tag color="orange" style={{ marginInlineStart: 6 }}>采集异常</Tag> : null}
     </span>
   );
@@ -438,13 +446,14 @@ export default function ServersUnified() {
     ((nodes.data && nodes.data.data) || []).forEach((n) => {
       const sid = Number(n.server_id) || 0;
       if (!sid) return;
-      const cur = map.get(sid) || { conn_count: 0, down_rate: 0, up_rate: 0, down_total: 0, up_total: 0, error: false };
+      const cur = map.get(sid) || { conn_count: 0, down_rate: 0, up_rate: 0, down_total: 0, up_total: 0, error: false, stale: true };
       cur.conn_count += Number(n.conn_count) || 0;
       cur.down_rate += Number(n.down_rate) || 0;
       cur.up_rate += Number(n.up_rate) || 0;
       cur.down_total += Number(n.down_total) || 0;
       cur.up_total += Number(n.up_total) || 0;
       if (n.error) cur.error = true;
+      if (n.stale === false) cur.stale = false;
       map.set(sid, cur);
     });
     return map;

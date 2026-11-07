@@ -43,7 +43,7 @@ import (
 // 1.8.5：组件二进制改为「临时文件 + rename」写入，修复运行中覆盖导致的 text file busy
 // 1.8.6：解包改流式写盘，避免小内存节点在安装 78MB sing-box 时被 OOM kill
 // 1.8.7：新增 inspect 动作（只读检查配置文件，供 UUID 一致性巡检核对机器实际配置）
-const Version = "1.8.17"
+const Version = "1.8.18"
 
 // maxActionsPerRound 单轮执行任务数上限（服务端 AGENT_ACTIONS_PER_POLL = 5，这里留足余量）。
 const maxActionsPerRound = 20
@@ -140,12 +140,16 @@ func (a *Agent) Once(ctx context.Context) error {
 		Conns:        m.Conns,
 		Procs:        m.Procs,
 		Applied:      a.opts.Store.Applied(),
-		Stats:        a.takeStats(),
+		Stats:        a.peekStats(),
 	}
 	resp, err := a.opts.Client.Poll(ctx, req)
 	if err != nil {
+		// 统计快照保留到下一次成功上报，避免丢数据
 		a.opts.Log("poll 失败：%v", err)
 		return err
+	}
+	if len(req.Stats) > 0 {
+		a.clearStats()
 	}
 	// 服务端下发直连地址且允许迁移时，先探测再改写配置并重启
 	if resp.AgentAccessURL != "" && a.opts.Config.AllowURLMigration {
@@ -209,13 +213,19 @@ func (a *Agent) takeShellPush() string {
 	return sid
 }
 
-// takeStats 取走上一轮采集的统计快照（本轮 poll 上报一次）。
-func (a *Agent) takeStats() []client.NodeStats {
+// peekStats 读取上一轮采集的统计快照（不清空）。
+// 只有 poll 成功后才清空，避免请求失败导致统计丢失、面板一直显示旧数据。
+func (a *Agent) peekStats() []client.NodeStats {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	out := a.lastStats
+	return a.lastStats
+}
+
+// clearStats 清空已成功上报的统计快照。
+func (a *Agent) clearStats() {
+	a.mu.Lock()
 	a.lastStats = nil
-	return out
+	a.mu.Unlock()
 }
 
 // collectStats 采集服务端下发的统计目标（串行，单节点失败不影响其它节点）。
@@ -392,7 +402,7 @@ func (a *Agent) Daemon(ctx context.Context) error {
 					return nil
 				case <-a.wake:
 					timer.Stop()
-					delay = 300 * time.Millisecond
+					delay = time.Second
 				case <-timer.C:
 					delay = 0
 				}
