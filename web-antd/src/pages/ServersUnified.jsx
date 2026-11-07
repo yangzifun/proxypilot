@@ -81,7 +81,7 @@ import ServerDrawer from '../components/ServerDrawer';
 import ServerUnlockModal from '../components/ServerUnlockModal';
 import { ServerCard as FullServerCard } from './Monitor';
 import { fmtAgo, fmtBytes, fmtNum, fmtTime, fmtUptime, levelColor, splitIps } from '../format';
-import { chartPalette, getTheme, setTheme, subscribeTheme, THEME_OPTIONS } from '../theme';
+import { chartPalette, getTheme, subscribeTheme } from '../theme';
 
 const VIEW_KEY = 'pp.servers.view';
 
@@ -390,7 +390,6 @@ export default function ServersUnified() {
   const [auto, setAuto] = useState(true);
   const [pageTheme, setPageTheme] = useState(() => getTheme());
   useEffect(() => subscribeTheme((t) => setPageTheme(t)), []);
-  const changeTheme = (v) => { setTheme(v); };
   const [sseStatus, setSseStatus] = useState({});
   // 注意：不要在这里做每秒 setState——会触发整棵组件树重渲染（大表格 + 图表 + 地球）。
   // 需要"每秒刷新"的相对时间请用 <RelativeTime> 局部组件。
@@ -1005,12 +1004,6 @@ export default function ServersUnified() {
               </Checkbox>
               <div className="pp-toolbar-right">
                 <Space size={8} wrap>
-                  <Segmented
-                    size="small"
-                    value={pageTheme}
-                    onChange={changeTheme}
-                    options={THEME_OPTIONS}
-                  />
                   <Tooltip title="每 5 秒只刷新监控数据（资源 / 网络 / 连接），不重新拉取列表">
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
                       <Switch size="small" checked={auto} onChange={setAuto} />
