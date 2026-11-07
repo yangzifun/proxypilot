@@ -1,4 +1,4 @@
-﻿/* =================================================================
+/* =================================================================
  *  服务器实时终端（WebSocket + Durable Object + Agent PTY）
  *  · 打开即连 wss://<本站>/api/shell/browser/<id>?token=<JWT>
  *  · 服务端保存会话；Agent 下一次 poll 拿到 session 后主动拨号，
@@ -130,6 +130,48 @@ export default function RemoteShell({ server, open, onClose }) {
     setStatus('checking');
     setMessage('');
 
+    // ---- 终端写入批处理 ----
+    // top/ls -R 这类高频输出如果逐条 write，每帧会触发多次重排；合并到一帧只写一次
+    let pendingChunks = [];
+    let flushRaf = 0;
+    const flushPending = () => {
+      flushRaf = 0;
+      if (!pendingChunks.length) return;
+      const chunks = pendingChunks;
+      pendingChunks = [];
+      const term = termRef.current;
+      if (term) {
+        if (chunks.length === 1) {
+          term.write(chunks[0]);
+        } else {
+          // 合并成单个 Uint8Array 一次性写入
+          let len = 0;
+          for (const c of chunks) len += c.byteLength !== undefined ? c.byteLength : c.length;
+          const buf = new Uint8Array(len);
+          let off = 0;
+          for (const c of chunks) {
+            const arr = c.byteLength !== undefined ? c : new TextEncoder().encode(c);
+            buf.set(arr, off);
+            off += arr.length;
+          }
+          term.write(buf);
+        }
+      } else if (preRef.current) {
+        preRef.current.textContent += chunks.map((c) => (typeof c === 'string' ? c : decodeUtf8(c))).join('');
+        preRef.current.scrollTop = preRef.current.scrollHeight;
+      }
+    };
+    const queueWrite = (chunk) => {
+      pendingChunks.push(chunk);
+      // 数据量过大时立即冲刷，避免内存膨胀
+      if (pendingChunks.length > 512) { flushPending(); return; }
+      if (!flushRaf) flushRaf = requestAnimationFrame(flushPending);
+    };
+    const cancelQueue = () => {
+      if (flushRaf) { cancelAnimationFrame(flushRaf); flushRaf = 0; }
+      pendingChunks = [];
+    };
+
     const appendPlain = (text) => {
       if (!preRef.current) return;
       preRef.current.textContent += stripAnsi(text);
@@ -210,11 +252,7 @@ export default function RemoteShell({ server, open, onClose }) {
             ? new Uint8Array(data)
             : null;
         if (!bytes) return;
-        if (termRef.current) {
-          termRef.current.write(bytes);
-        } else {
-          appendPlain(decodeUtf8(bytes));
-        }
+        queueWrite(bytes);
       };
       ws.onerror = () => {
         if (!aliveRef.current) return;
@@ -250,21 +288,35 @@ export default function RemoteShell({ server, open, onClose }) {
           connect();
         } else {
           loadXterm()
-            .then(({ Terminal, FitAddon }) => {
+            .then(({ Terminal, FitAddon, WebglAddon }) => {
               if (!aliveRef.current || !preRef.current) return;
               try {
                 const term = new Terminal({
                   cursorBlink: true,
+                  cursorStyle: 'bar',
                   fontSize: 13,
                   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
                   lineHeight: 1.2,
-                  scrollback: 3000,
+                  scrollback: 1500,
                   theme: THEME,
                   convertEol: true,
+                  smoothScrollDuration: 0,
+                  fastScrollModifier: 'alt',
+                  allowTransparency: false,
                 });
                 const fit = new FitAddon();
                 term.loadAddon(fit);
                 term.open(preRef.current);
+                // GPU 渲染：DOM 渲染器在大量输出时是主要卡顿来源
+                try {
+                  const webgl = new WebglAddon();
+                  webgl.onContextLoss(() => {
+                    try { webgl.dispose(); } catch (e) { /* ignore */ }
+                  });
+                  term.loadAddon(webgl);
+                } catch (e) {
+                  /* 无 WebGL 时保持 DOM 渲染器 */
+                }
                 fit.fit();
                 term.onData((d) => {
                   const sock = wsRef.current;
@@ -305,6 +357,7 @@ export default function RemoteShell({ server, open, onClose }) {
 
     return () => {
       window.removeEventListener('resize', onResize);
+      cancelQueue();
       teardown();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -317,6 +370,7 @@ export default function RemoteShell({ server, open, onClose }) {
   };
 
   const clearScreen = () => {
+    flushPending();
     if (termRef.current) termRef.current.clear();
     if (preRef.current) preRef.current.textContent = '';
   };
