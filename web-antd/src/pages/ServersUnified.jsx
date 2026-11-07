@@ -45,7 +45,38 @@ import { useAsync, usePolling, readForm } from '../hooks';
 import { CopyText, ErrorBlock, JsonView, PageCard, StatCard, StatusPill } from '../components';
 import { watchBatch } from '../components/JobCenter';
 import { WorldMap } from './Monitor';
-import Globe3D from '../components/Globe3D';
+// three.js 单独成包（/globe3d-app.js），首屏不加载，进入本页时按需注入
+let globePromise = null;
+function loadGlobe3D() {
+  if (typeof window !== 'undefined' && window.__PP_GLOBE3D__) return Promise.resolve(window.__PP_GLOBE3D__);
+  if (!globePromise) {
+    globePromise = new Promise((resolve, reject) => {
+      const boot = (typeof window !== 'undefined' && window.__PP_BOOT__) || {};
+      const s = document.createElement('script');
+      s.src = '/globe3d-app.js' + (boot.assetVersion ? '?v=' + boot.assetVersion : '');
+      s.async = true;
+      s.onload = () => (window.__PP_GLOBE3D__ ? resolve(window.__PP_GLOBE3D__) : reject(new Error('地球组件初始化失败')));
+      s.onerror = () => reject(new Error('地球组件加载失败'));
+      document.head.appendChild(s);
+    });
+  }
+  return globePromise;
+}
+
+function LazyGlobe(props) {
+  const [Comp, setComp] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    loadGlobe3D()
+      .then((C) => { if (alive) setComp(() => C); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  if (!Comp) {
+    return <div className="pp-muted" style={{ height: '100%', minHeight: 200, display: 'grid', placeItems: 'center' }}>正在加载地球…</div>;
+  }
+  return <Comp {...props} />;
+}
 import ServerDrawer from '../components/ServerDrawer';
 import ServerUnlockModal from '../components/ServerUnlockModal';
 import { ServerCard as FullServerCard } from './Monitor';
@@ -361,11 +392,8 @@ export default function ServersUnified() {
   useEffect(() => subscribeTheme((t) => setPageTheme(t)), []);
   const changeTheme = (v) => { setTheme(v); };
   const [sseStatus, setSseStatus] = useState({});
-  const [, forceTick] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => forceTick((n) => n + 1), 1000);
-    return () => clearInterval(id);
-  }, []);
+  // 注意：不要在这里做每秒 setState——会触发整棵组件树重渲染（大表格 + 图表 + 地球）。
+  // 需要"每秒刷新"的相对时间请用 <RelativeTime> 局部组件。
   const [selected, setSelected] = useState([]);
   const [detailId, setDetailId] = useState(null);
   const [compose, setCompose] = useState(false);
@@ -920,7 +948,7 @@ export default function ServersUnified() {
                 </span>
               </div>
               <div className="pp-ov-map-box">
-                <Globe3D servers={rows} onPick={(r) => setDetailId(r.id)} height="100%" />
+                <LazyGlobe servers={rows} onPick={(r) => setDetailId(r.id)} height="100%" />
               </div>
             </div>
           </div>

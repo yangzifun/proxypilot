@@ -250,8 +250,14 @@ export default function Globe3D({ servers = [], onPick, height = 320 }) {
 
     let raf = 0;
     const clock = new THREE.Clock();
-    const loop = () => {
+    // 交互性能：限到 ~30fps，页面不可见时彻底停渲染，避免与页面重渲染抢主线程
+    const FRAME_MS = 33;
+    let lastDraw = 0;
+    const loop = (now) => {
       raf = requestAnimationFrame(loop);
+      if (document.hidden) return;
+      if (now - lastDraw < FRAME_MS) return;
+      lastDraw = now;
       const t = clock.getElapsedTime();
       if (spin && !dragging) group.rotation.y += 0.0015;
       rings.forEach((r) => { r.rotation.z += r.userData.speed; });

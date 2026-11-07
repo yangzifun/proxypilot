@@ -3858,3 +3858,33 @@ body.pp-site-theme-glass .pp-portal-card {
 .pp-flow-svg { display:block; }
 .pp-flow-dash { animation: ppFlowDash 1.2s linear infinite; }
 @keyframes ppFlowDash { to { stroke-dashoffset: -28; } }
+
+/* ---- 交互性能优化 ---- */
+/* 1. 状态点呼吸动画：box-shadow 每帧重绘 → 改为 transform/opacity（GPU 合成） */
+.pp-dot.online, .pp-dot.offline { animation: none !important; box-shadow: none !important; }
+.pp-dot.online { outline: 3px solid rgba(16,185,129,0.18); outline-offset: 0; }
+.pp-dot.offline { outline: 3px solid rgba(244,63,94,0.16); }
+.pp-dot.unknown { outline: 3px solid rgba(148,163,184,0.16); }
+.pp-dot.warn { outline: 3px solid rgba(245,158,11,0.18); }
+
+/* 2. 卡片悬停位移会触发整行重排 → 只做轻量变化 */
+.pp-srv-card:hover { transform: none !important; }
+.pp-srv-card { transition: border-color .15s ease, background-color .15s ease !important; }
+
+/* 3. 毛玻璃：backdrop-filter 在拖动/滚动时开销极大，降低模糊半径并限制范围 */
+body.pp-site-theme-glass .pp-card,
+body.pp-site-theme-glass .ant-modal-content {
+  backdrop-filter: blur(6px) !important;
+  -webkit-backdrop-filter: blur(6px) !important;
+}
+
+/* 4. 表格行独立合成层，避免整表重绘 */
+.ant-table-tbody > tr > td { contain: layout paint; }
+.ant-table-tbody > tr { contain: layout paint style; }
+
+/* 5. 图表过渡缩小到必要属性 */
+.pp-ov-chart svg polyline { transition: stroke-dashoffset .2s linear !important; }
+.pp-ov-value { transition: none !important; }
+
+/* 6. 拖动时不触发 hover 效果，减少无谓绘制 */
+.pp-dragging .pp-srv-card:hover { box-shadow: none !important; }

@@ -373,6 +373,7 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /agent-dist/", h.agentDistFile)
 	mux.HandleFunc("GET /admin-app.js", h.adminAppJS)
 	mux.HandleFunc("GET /xterm-app.js", h.xtermAppJS)
+	mux.HandleFunc("GET /globe3d-app.js", h.globeAppJS)
 	mux.HandleFunc("GET /admin-app.css", h.adminAppCSS)
 	mux.HandleFunc("GET /assets/world.svg", h.worldSVG)
 	mux.HandleFunc("GET /api/flag/{cc}", h.flagImage)

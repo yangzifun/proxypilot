@@ -8,6 +8,9 @@ import 'dayjs/locale/zh-cn';
 import { themeConfig } from './theme';
 import { AuthProvider } from './auth';
 import App from './App';
+
+// three.js 单独包复用主包的 React，避免重复打包
+window.__PP_REACT__ = React;
 import { applyTheme, getTheme } from './theme';
 
 applyTheme(getTheme());
