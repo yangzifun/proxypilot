@@ -43,7 +43,7 @@ import (
 // 1.8.5：组件二进制改为「临时文件 + rename」写入，修复运行中覆盖导致的 text file busy
 // 1.8.6：解包改流式写盘，避免小内存节点在安装 78MB sing-box 时被 OOM kill
 // 1.8.7：新增 inspect 动作（只读检查配置文件，供 UUID 一致性巡检核对机器实际配置）
-const Version = "1.8.19"
+const Version = "1.9.3"
 
 // maxActionsPerRound 单轮执行任务数上限（服务端 AGENT_ACTIONS_PER_POLL = 5，这里留足余量）。
 const maxActionsPerRound = 20
@@ -67,6 +67,8 @@ type Agent struct {
 	activeShell string
 	// lastServerID 最近一次 poll 拿到的服务器 ID（WS 推送 shell 时复用）
 	lastServerID int
+	wsMu          sync.Mutex
+	curWS         *websocket.Conn
 	// pendingShellPush 由常驻 WS 推送的 shell 会话（长连接模式下无需等 poll）
 	pendingShellPush string
 	// lastStats 上一轮采集好的统计快照（随本轮 poll 上报）
@@ -378,8 +380,90 @@ func (a *Agent) ack(ctx context.Context, results []client.Result) error {
 }
 
 // Daemon 常驻循环：成功先 poll，再用长轮询等任务（入队即唤醒）；失败按指数退避（上限 300s）。
+// pickInternalOrigin 探测内网地址是否可用，可用则切换 Client 基址。
+func (a *Agent) pickInternalOrigin(ctx context.Context) bool {
+	inner := strings.TrimRight(strings.TrimSpace(a.opts.Config.InternalURL), "/")
+	if inner == "" || inner == a.opts.Client.Origin {
+		return false
+	}
+	cl := &http.Client{Timeout: 2 * time.Second}
+	resp, err := cl.Get(inner + "/healthz")
+	if err != nil {
+		return false
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		return false
+	}
+	a.opts.Client.SetOrigin(inner)
+	a.opts.Log("已切换到内网通道：%s", inner)
+	return true
+}
+
+// watchInternal 周期复检内网：可用则切回，不可用且正走内网时回落公网。
+// 每轮重新读取配置，避免配置后置下发时提前退出。
+func (a *Agent) watchInternal(ctx context.Context) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+
+		a.mu.Lock()
+		inner := strings.TrimRight(strings.TrimSpace(a.opts.Config.InternalURL), "/")
+		outer := strings.TrimRight(strings.TrimSpace(a.opts.Config.Origin), "/")
+		a.mu.Unlock()
+
+		cur := a.opts.Client.Origin
+		okInner := false
+		if inner != "" {
+			cl := &http.Client{Timeout: 2 * time.Second}
+			if resp, err := cl.Get(inner + "/healthz"); err == nil {
+				_ = resp.Body.Close()
+				okInner = resp.StatusCode/100 == 2
+			}
+		}
+		switch {
+		case okInner && cur != inner:
+			a.opts.Client.SetOrigin(inner)
+			a.opts.Log("切换到内网通道：%s", inner)
+			a.dropWS()
+			a.signalWake()
+		case !okInner && inner != "" && cur == inner && outer != "":
+			a.opts.Client.SetOrigin(outer)
+			a.opts.Log("内网不可用，回落公网通道：%s", outer)
+			a.dropWS()
+			a.signalWake()
+		case !okInner && cur != outer && outer != "" && (cur == inner || strings.HasPrefix(cur, "http://")):
+			// 当前地址不可用（例如旧内网端口已下线）→ 回落到公网
+			a.opts.Client.SetOrigin(outer)
+			a.opts.Log("当前地址不可用，回落公网通道：%s", outer)
+			a.dropWS()
+			a.signalWake()
+		}
+	}
+}
+
+// dropWS 关闭当前 WS，触发按新基址重连。
+func (a *Agent) dropWS() {
+	a.wsMu.Lock()
+	ws := a.curWS
+	a.curWS = nil
+	a.wsMu.Unlock()
+	if ws != nil {
+		_ = ws.Close(websocket.StatusNormalClosure, "origin switched")
+	}
+}
+
 func (a *Agent) Daemon(ctx context.Context) error {
 	failures := 0
+	consecutiveFails := 0
+	// 内网优先：先探测一次，再启动常驻复检
+	a.pickInternalOrigin(ctx)
+	go a.watchInternal(ctx)
 	go a.wsLoop(ctx)
 	for {
 		lastPoll := time.Now()
@@ -387,11 +471,21 @@ func (a *Agent) Daemon(ctx context.Context) error {
 		delay := time.Duration(a.interval()) * time.Second
 		if err != nil {
 			failures++
+			consecutiveFails++
+			if consecutiveFails >= 3 {
+				outer := strings.TrimRight(strings.TrimSpace(a.opts.Config.Origin), "/")
+				if outer != "" && a.opts.Client.Origin != outer && strings.HasPrefix(a.opts.Client.Origin, "http://") {
+					a.opts.Client.SetOrigin(outer)
+					a.opts.Log("内网连续失败，强制回落公网：%s", outer)
+					consecutiveFails = 0
+				}
+			}
 			backoff := math.Min(float64(time.Duration(a.interval())*time.Second)*math.Pow(2, float64(failures)), float64(300*time.Second))
 			delay = time.Duration(backoff)
 			a.opts.Log("本轮失败（连续 %d 次），%s 后重试", failures, delay)
 		} else {
 			failures = 0
+			consecutiveFails = 0
 			if a.wsConnected.Load() {
 				// WebSocket 已连上：等一个心跳周期，或收到 wake 后立即 poll；
 				// 不再发 /api/agent/wait，DO 空闲可休眠
@@ -486,8 +580,18 @@ func (a *Agent) wsOnce(ctx context.Context) error {
 		return err
 	}
 	defer ws.Close(websocket.StatusNormalClosure, "bye")
+	defer func() {
+		a.wsMu.Lock()
+		if a.curWS == ws {
+			a.curWS = nil
+		}
+		a.wsMu.Unlock()
+	}()
 
 	a.wsConnected.Store(true)
+	a.wsMu.Lock()
+	a.curWS = ws
+	a.wsMu.Unlock()
 	a.signalWake()
 
 	// 心跳：防止 NAT / 中间设备把空闲连接掐掉；失败则关闭连接交给重连
@@ -514,7 +618,11 @@ func (a *Agent) wsOnce(ctx context.Context) error {
 
 	// 实时监控：WS 连接期间每 2s 推送一次样本（长连接主通道），面板无需等 HTTP poll
 	go func() {
-		ticker := time.NewTicker(2 * time.Second)
+		interval := 2 * time.Second
+	if ms := a.opts.Config.MetricMS; ms > 0 && strings.HasPrefix(a.opts.Client.Origin, "http://") {
+		interval = time.Duration(ms) * time.Millisecond
+	}
+	ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
 			select {
@@ -548,15 +656,30 @@ func (a *Agent) wsOnce(ctx context.Context) error {
 		}
 		if strings.HasPrefix(msg, "{") {
 			var frame struct {
-				Type    string `json:"type"`
-				Session string `json:"session"`
+				Type     string `json:"type"`
+				Session  string `json:"session"`
+				Internal string `json:"internal"`
+				External string `json:"external"`
 			}
-			if json.Unmarshal([]byte(msg), &frame) == nil && frame.Type == "shell" && frame.Session != "" {
-				a.mu.Lock()
-				a.pendingShellPush = frame.Session
-				a.mu.Unlock()
-				a.signalWake()
-				continue
+			if json.Unmarshal([]byte(msg), &frame) == nil {
+				switch frame.Type {
+				case "shell":
+					if frame.Session != "" {
+						a.mu.Lock()
+						a.pendingShellPush = frame.Session
+						a.mu.Unlock()
+						a.signalWake()
+						continue
+					}
+				case "endpoint":
+					// 服务端下发内网/公网地址：更新内网地址后立即尝试择优
+					if in := strings.TrimRight(strings.TrimSpace(frame.Internal), "/"); in != "" {
+						a.mu.Lock()
+						a.opts.Config.InternalURL = in
+						a.mu.Unlock()
+						go a.pickInternalOrigin(ctx)
+					}
+				}
 			}
 		}
 	}

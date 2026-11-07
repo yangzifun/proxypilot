@@ -207,6 +207,11 @@ type Client struct {
 }
 
 // New 构造客户端；insecure 为真时跳过 TLS 证书校验（仅排查用）。
+// SetOrigin 切换基址（内网/公网切换时复用同一 Client）。
+func (c *Client) SetOrigin(origin string) {
+	c.Origin = strings.TrimRight(strings.TrimSpace(origin), "/")
+}
+
 func New(origin, key, version string, insecure bool) *Client {
 	transport := &http.Transport{
 		Proxy:               http.ProxyFromEnvironment,

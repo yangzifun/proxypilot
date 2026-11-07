@@ -372,6 +372,15 @@ export default function Settings({ embedded = false }) {
                   >
                     <Input placeholder="https://agent.example.com" allowClear />
                   </Form.Item>
+
+                  <Form.Item
+                    name="agent_internal_url"
+                    label="Agent 内网地址"
+                    extra="节点经内网直连的地址（优先使用）；不可达时自动回退到上方公网地址。例如 http://100.96.0.18:8080"
+                    rules={[{ type: 'url', message: '请输入合法 URL' }]}
+                  >
+                    <Input placeholder="http://100.96.0.18:8080" allowClear />
+                  </Form.Item>
                   <Form.Item
                     name="component_base_url"
                     label="sing-box 分发基址"

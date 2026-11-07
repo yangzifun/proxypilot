@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -361,6 +362,28 @@ func (h *handlers) agentWS(w http.ResponseWriter, r *http.Request) {
 	agentWSHub.Unlock()
 
 	_ = ws.WriteText("wake")
+	// 端点信息：连接建立时下发，并每 30 秒复读一次设置，便于在线修改后立即生效
+	sendEndpoint := func() {
+		inner := strings.TrimSpace(h.settingValue(r.Context(), settingAgentInternalURL))
+		outer := strings.TrimSpace(h.settingValue(r.Context(), settingAgentAccessURL))
+		if inner == "" && outer == "" {
+			return
+		}
+		_ = ws.WriteText(fmt.Sprintf(`{"type":"endpoint","internal":%q,"external":%q}`, inner, outer))
+	}
+	sendEndpoint()
+	endpointTicker := time.NewTicker(30 * time.Second)
+	defer endpointTicker.Stop()
+	go func() {
+		for {
+			select {
+			case <-stopPing:
+				return
+			case <-endpointTicker.C:
+				sendEndpoint()
+			}
+		}
+	}()
 	defer func() {
 		agentWSHub.Lock()
 		if agentWSHub.conns[srv.ID] == ws {

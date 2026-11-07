@@ -32,7 +32,9 @@ var DefaultServices = []string{"sing-box", "mtg", "cloudflared"}
 
 // Config 是 Agent 的全部运行参数。
 type Config struct {
-	Origin   string   // Worker 地址，如 https://pp.example.com
+	Origin   string   // 兜底地址（公网），如 https://pp.example.com
+	InternalURL string // 内网地址（优先），如 http://100.96.0.18:8080
+	MetricMS    int    // 内网采样间隔（毫秒）
 	Key      string   // 接入密钥（ag_ 开头）
 	Interval int      // 兜底轮询间隔（秒）
 	StateDir string   // 状态目录
@@ -45,6 +47,7 @@ type Config struct {
 func Defaults() Config {
 	return Config{
 		Interval: DefaultInterval,
+		MetricMS: 200,
 		StateDir: DefaultStateDir,
 		Services: append([]string(nil), DefaultServices...),
 		AllowURLMigration: true,
@@ -70,6 +73,12 @@ func Parse(text string) Config {
 		switch key {
 		case "PROXYPILOT_URL", "ORIGIN", "URL":
 			c.Origin = strings.TrimRight(val, "/")
+		case "PROXYPILOT_INTERNAL_URL", "INTERNAL_URL":
+			c.InternalURL = strings.TrimRight(val, "/")
+		case "PROXYPILOT_METRIC_MS", "METRIC_MS":
+			if n, err := strconv.Atoi(val); err == nil && n > 0 {
+				c.MetricMS = n
+			}
 		case "PROXYPILOT_TOKEN", "TOKEN", "KEY":
 			c.Key = val
 		case "PROXYPILOT_INTERVAL", "INTERVAL":

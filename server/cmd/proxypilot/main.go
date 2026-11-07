@@ -24,7 +24,7 @@ import (
 )
 
 // version 由构建脚本注入：-ldflags "-X main.version=v1.0.0"
-var version = "V24.9"
+var version = "V25.4"
 
 func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -86,10 +86,37 @@ func run(log *slog.Logger) error {
 		errCh <- srv.ListenAndServe()
 	}()
 
-	// 节点直连通道：存在证书时额外监听 :443（走 agent.yangzifun.org，绕过 CDN）
+	// Agent 内网监听：绑定 WARP 内网 IP，明文（隧道已加密），仅 Agent 接口
+	// 支持多个内网监听地址（逗号分隔），便于切换端口时保留旧入口
+	for _, addr := range strings.Split(cfg.AgentInternalAddr, ",") {
+		addr = strings.TrimSpace(addr)
+		if addr == "" {
+			continue
+		}
+		innerSrv := &http.Server{
+			Addr:              addr,
+			Handler:           agentOnlyHandler(api.New(cfg, pool, log)),
+			ReadHeaderTimeout: 10 * time.Second,
+			ReadTimeout:       60 * time.Second,
+			WriteTimeout:      180 * time.Second,
+			IdleTimeout:       120 * time.Second,
+		}
+		go func(a string, s *http.Server) {
+			log.Info("Agent 内网监听已启动", "addr", a)
+			if err := s.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				log.Error("Agent 内网监听失败", "addr", a, "err", err)
+			}
+		}(addr, innerSrv)
+	}
+
+	tlsAddr := strings.TrimSpace(cfg.AgentTLSAddr)
+	if tlsAddr == "" {
+		tlsAddr = ":443"
+	}
+	// 节点直连通道：存在证书时额外监听 TLS 端口（公网兜底）
 	if certFile, keyFile := "/etc/proxypilot/tls/agent.crt", "/etc/proxypilot/tls/agent.key"; fileExists(certFile) && fileExists(keyFile) {
 		tlsSrv := &http.Server{
-			Addr:              ":443",
+			Addr:              tlsAddr,
 			Handler:           agentOnlyHandler(securityHeaders(api.New(cfg, pool, log))),
 			ReadHeaderTimeout: 10 * time.Second,
 			ReadTimeout:       60 * time.Second,
@@ -97,7 +124,7 @@ func run(log *slog.Logger) error {
 			IdleTimeout:       120 * time.Second,
 		}
 		go func() {
-			log.Info("HTTPS(Agent 直连) 已启动", "addr", ":443")
+			log.Info("HTTPS(Agent 直连) 已启动", "addr", tlsAddr)
 			if err := tlsSrv.ListenAndServeTLS(certFile, keyFile); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				log.Error("HTTPS 启动失败", "err", err)
 			}
