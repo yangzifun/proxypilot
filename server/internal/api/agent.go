@@ -46,6 +46,7 @@ type agentServer struct {
 	LastIP          string
 	LastIP4         string
 	LastIP6         string
+	LastIPPrivate   string
 	IPCountry       string
 	IPRegion        string
 	LastMetrics     string
@@ -83,13 +84,13 @@ func (h *handlers) agentAuthenticate(r *http.Request, body map[string]any) (*age
 	      COALESCE(agent_poll_count,0), COALESCE(agent_last_seen,0), COALESCE(last_status,'unknown'),
 	      COALESCE(metrics_every,1), COALESCE(allow_exec,0), COALESCE(os_info,''), COALESCE(tags,''),
 	      COALESCE(username,''), COALESCE(host,''), COALESCE(port,22), COALESCE(last_ip,''),
-	      COALESCE(last_ip4,''), COALESCE(last_ip6,''), COALESCE(ip_country,''), COALESCE(ip_region,''),
+	      COALESCE(last_ip4,''), COALESCE(last_ip6,''), COALESCE(last_ip_private,''), COALESCE(ip_country,''), COALESCE(ip_region,''),
 	      COALESCE(last_metrics,''), COALESCE(agent_key_used_at,0)
 	    FROM servers WHERE agent_token_hash = ? LIMIT 1`, sha256Hex(raw)).
 		Scan(&s.ID, &s.Name, &s.LinkMode, &s.Enabled, &s.NextPollSec, &s.AgentVersion,
 			&s.AgentPlatform, &s.AgentTokenEnc, &s.AgentLastPollAt, &s.AgentPollCount, &s.AgentLastSeen,
 			&s.LastStatus, &s.MetricsEvery, &s.AllowExec, &s.OSInfo, &s.Tags,
-			&s.Username, &s.Host, &s.Port, &s.LastIP, &s.LastIP4, &s.LastIP6,
+			&s.Username, &s.Host, &s.Port, &s.LastIP, &s.LastIP4, &s.LastIP6, &s.LastIPPrivate,
 			&s.IPCountry, &s.IPRegion, &s.LastMetrics, &s.AgentKeyUsedAt)
 	if err == sql.ErrNoRows {
 		return nil, http.StatusUnauthorized, "接入令牌无效或已轮换"

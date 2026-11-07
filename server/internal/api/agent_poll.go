@@ -352,6 +352,7 @@ func (h *handlers) agentUpdateSnapshot(ctx context.Context, srv *agentServer, m 
 		PollCount      int64
 		AgentVersion   string
 		IP, IP4, IP6   string
+		PrivateIP      string
 	}, rates agentRates) error {
 	now := nowMillis()
 	summary := m.summary(rates, opts.AgentVersion)
@@ -388,12 +389,13 @@ func (h *handlers) agentUpdateSnapshot(ctx context.Context, srv *agentServer, m 
 	      last_ip = COALESCE(NULLIF(?, ''), last_ip),
 	      last_ip4 = COALESCE(NULLIF(?, ''), last_ip4),
 	      last_ip6 = COALESCE(NULLIF(?, ''), last_ip6),
+      last_ip_private = COALESCE(NULLIF(?, ''), last_ip_private),
 	      agent_key_used_at = COALESCE(NULLIF(agent_key_used_at, 0), ?),
 	      updated_at = ?
 	    WHERE id = ?`,
 		"online", "", now, string(summaryJSON), osInfo, "agent", platform, version,
 		now, pollFlag, now, opts.PersistPollSec, pollFlag, opts.PollCount,
-		opts.IP, opts.IP4, opts.IP6, now, now, srv.ID)
+		opts.IP, opts.IP4, opts.IP6, opts.PrivateIP, now, now, srv.ID)
 	if err == nil && srv.LastStatus == "offline" {
 		go h.notifyStatus(context.Background(), "服务器恢复", []serverStatusNotice{{ID: srv.ID, Detail: "Agent 心跳恢复"}})
 	}
@@ -678,29 +680,57 @@ func (h *handlers) agentPoll(w http.ResponseWriter, r *http.Request) {
 			ip = truncateRunes(mine, 64)
 		}
 	}
-	ip4 := ""
-	{
+	// Agent 主动上报的出口公网 IP：走内网通道时，连接来源是 100.64/10 等内网地址，
+	// 必须靠这个字段才能拿到真正的公网 IP。
+	agentPublicIP := strings.TrimSpace(jsonStr(body["public_ip"]))
+	agentPrivateIP := strings.TrimSpace(jsonStr(body["private_ip"]))
+	if agentPrivateIP == "" {
+		agentPrivateIP = strings.TrimSpace(jsonStr(body["ip"]))
+	}
+	// 内网地址：优先 Agent 上报的本机内网 IP，其次连接来源（WARP / 内网）
+	privateIP := ""
+	if agentPrivateIP != "" && isPrivateIP(agentPrivateIP) && regexpIP.MatchString(agentPrivateIP) {
+		privateIP = truncateRunes(agentPrivateIP, 64)
+	} else if ip != "" && isPrivateIP(ip) && regexpIP.MatchString(ip) {
+		privateIP = truncateRunes(ip, 64)
+	}
+	// 公网 IPv4：Agent 主动探测 > 连接来源；都拿不到时留空，保留库里已有的公网 IP
+	ip4 := firstNonEmpty(publicIPv4(agentPublicIP), publicIPv4(ip))
+	agentPublicV6 := ""
+	if ip4 == "" && agentPublicIP != "" && strings.Contains(agentPublicIP, ":") &&
+		regexpIP.MatchString(agentPublicIP) && !isPrivateIP(agentPublicIP) {
+		agentPublicV6 = agentPublicIP
+	}
+	if ip4 == "" {
 		mine := strings.TrimSpace(jsonStr(body["ipv4"]))
 		if mine == "" {
 			mine = strings.TrimSpace(jsonStr(body["ip"]))
 		}
-		if regexpIPv4.MatchString(mine) && !strings.HasPrefix(mine, "0.") &&
-			!strings.HasPrefix(mine, "127.") && !strings.HasPrefix(mine, "169.254.") {
+		if regexpIPv4.MatchString(mine) && !isPrivateIP(mine) &&
+			!strings.HasPrefix(mine, "0.") && !strings.HasPrefix(mine, "127.") &&
+			!strings.HasPrefix(mine, "169.254.") {
 			ip4 = mine
 		}
-		// NAT 机器上报的是内网 IPv4：用 Agent 实际连接来源的公网 IPv4 覆盖。
-		if ip4 != "" && isPrivateIP(ip4) {
-			if pub := publicIPv4(ip); pub != "" {
-				ip4 = pub
-			}
-		}
 	}
-	ip6 := ""
-	{
+	ip6 := agentPublicV6
+	if ip6 == "" {
 		mine := strings.TrimSpace(jsonStr(body["ipv6"]))
-		if strings.Contains(mine, ":") && regexpIP.MatchString(mine) {
+		if strings.Contains(mine, ":") && regexpIP.MatchString(mine) && !isPrivateIP(mine) {
 			ip6 = mine
 		}
+	}
+
+	// 最终落库值：拿不到新公网 IP 时保留旧的公网 IP；若旧值是内网地址则清空（修复历史脏数据）
+	if ip4 == "" {
+		if !isPrivateIP(srv.LastIP4) {
+			ip4 = strings.TrimSpace(srv.LastIP4)
+		}
+	}
+	if ip6 == "" && !isPrivateIP(srv.LastIP6) {
+		ip6 = strings.TrimSpace(srv.LastIP6)
+	}
+	if privateIP == "" {
+		privateIP = strings.TrimSpace(srv.LastIPPrivate)
 	}
 
 	rates := agentThroughputFromSample(prev, m, nextPollSec)
@@ -711,7 +741,8 @@ func (h *handlers) agentPoll(w http.ResponseWriter, r *http.Request) {
 		PollCount      int64
 		AgentVersion   string
 		IP, IP4, IP6   string
-	}{nextPollSec, configured, pollCount, agentVersion, ip, ip4, ip6}, rates); err != nil {
+		PrivateIP      string
+	}{nextPollSec, configured, pollCount, agentVersion, ip, ip4, ip6, privateIP}, rates); err != nil {
 		h.log.Error("更新 Agent 快照失败", "err", err)
 	}
 
@@ -938,7 +969,8 @@ func (h *handlers) ingestAgentWSMetrics(ctx context.Context, srv *agentServer, b
 		PollCount      int64
 		AgentVersion   string
 		IP, IP4, IP6   string
-	}{srv.NextPollSec, 0, srv.AgentPollCount, version, ip, "", ""}
+		PrivateIP      string
+	}{srv.NextPollSec, 0, srv.AgentPollCount, version, ip, srv.LastIP4, srv.LastIP6, srv.LastIPPrivate}
 	if err := h.agentUpdateSnapshot(ctx, srv, m, false, opts, rates); err != nil {
 		h.log.Warn("WS 快照更新失败", "err", err)
 	}

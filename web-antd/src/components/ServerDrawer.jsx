@@ -480,7 +480,7 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
               },
               {
                 key: 'ip',
-                label: '地址',
+                label: '公网 IP',
                 children: (() => {
                   const { v4, v6 } = splitIps(d);
                   if (!v4 && !v6) return <span className="pp-mono">{d.host || '—'}</span>;
@@ -492,6 +492,15 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
                     </span>
                   );
                 })(),
+              },
+              {
+                key: 'ip_private',
+                label: '内网 IP',
+                children: (
+                  <span className="pp-mono">
+                    {String(d.last_ip_private || '').trim() || '—'}
+                  </span>
+                ),
               },
               { key: 'geo', label: '地区', children: d.ip_country ? `${d.ip_country} ${d.ip_region || ''}` : '—' },
               {

@@ -30,6 +30,7 @@ type serverRow struct {
 	LastIP            string          `json:"last_ip"`
 	LastIP4           string          `json:"last_ip4"`
 	LastIP6           string          `json:"last_ip6"`
+	LastIPPrivate     string          `json:"last_ip_private"`
 	Host              string          `json:"host"`
 	IPCountry         string          `json:"ip_country"`
 	IPRegion          string          `json:"ip_region"`
@@ -59,7 +60,7 @@ const serversSelectColumns = `SELECT id, COALESCE(name,''), COALESCE(port,22),
   COALESCE(agent_version,''), COALESCE(agent_last_seen,0), COALESCE(agent_platform,''),
   COALESCE(agent_key_created_at,0), COALESCE(agent_key_used_at,0), COALESCE(agent_next_poll_sec,2),
   COALESCE(agent_poll_count,0), COALESCE(metrics_every,1), COALESCE(allow_exec,0),
-  COALESCE(last_ip,''), COALESCE(last_ip4,''), COALESCE(last_ip6,''), COALESCE(host,''),
+  COALESCE(last_ip,''), COALESCE(last_ip4,''), COALESCE(last_ip6,''), COALESCE(last_ip_private,''), COALESCE(host,''),
   COALESCE(ip_country,''), COALESCE(ip_region,''), ip_lat, ip_lon,
   COALESCE(tags,''), COALESCE(remark,''), COALESCE(enabled,0),
   COALESCE(last_status,'unknown'), COALESCE(last_latency_ms,0), COALESCE(last_error,''),
@@ -88,7 +89,7 @@ func scanServerRow(rows *sql.Rows) (serverRow, error) {
 		&s.AgentVersion, &s.AgentLastSeen, &s.AgentPlatform,
 		&s.AgentKeyCreatedAt, &s.AgentKeyUsedAt, &s.AgentNextPollSec,
 		&s.AgentPollCount, &s.MetricsEvery, &allowExec,
-		&s.LastIP, &s.LastIP4, &s.LastIP6, &s.Host,
+		&s.LastIP, &s.LastIP4, &s.LastIP6, &s.LastIPPrivate, &s.Host,
 		&s.IPCountry, &s.IPRegion, &lat, &lon,
 		&s.Tags, &s.Remark, &enabled,
 		&lastStatus, &s.LastLatencyMs, &s.LastError,
@@ -108,6 +109,10 @@ func scanServerRow(rows *sql.Rows) (serverRow, error) {
 		s.LastIP = ""
 	}
 	s.LastIP4 = publicDisplayIPv4(s.LastIP4, s.LastIP)
+	// 内网地址单独字段，避免把 10.x / 100.64.x 当成公网展示
+	if s.LastIPPrivate == "" && isPrivateIP(s.LastIP) && s.LastIP != s.LastIP4 {
+		s.LastIPPrivate = s.LastIP
+	}
 	s.AgentNextPollSec = clampInt(s.AgentNextPollSec, 2, 900)
 	s.LastStatus = agentOnlineStatus(s.AgentLastSeen, lastStatus, s.AgentNextPollSec)
 	s.IPLat = floatPtr(lat)
@@ -186,6 +191,7 @@ type serverStatusItem struct {
 	Enabled        bool            `json:"enabled"`
 	LastIP4        string          `json:"last_ip4"`
 	LastIP6        string          `json:"last_ip6"`
+	LastIPPrivate  string          `json:"last_ip_private"`
 	LinkMode       string          `json:"link_mode"`
 	AllowExec      bool            `json:"allow_exec"`
 	Status         string          `json:"status"`
@@ -207,7 +213,7 @@ func (h *handlers) serversStatus(w http.ResponseWriter, r *http.Request) {
 	  COALESCE(last_latency_ms,0), COALESCE(last_error,''), COALESCE(last_check_at,0), last_metrics,
 	  COALESCE(agent_version,''), COALESCE(agent_platform,''), COALESCE(agent_last_seen,0),
 	  COALESCE(agent_token_hint,''), COALESCE(agent_next_poll_sec,2),
-	  COALESCE(last_ip,''), COALESCE(last_ip4,''), COALESCE(last_ip6,'')
+	  COALESCE(last_ip,''), COALESCE(last_ip4,''), COALESCE(last_ip6,''), COALESCE(last_ip_private,'')
 	FROM servers ORDER BY id ASC`
 
 	rows, err := h.db.QueryContext(r.Context(), q)
@@ -233,7 +239,7 @@ func (h *handlers) serversStatus(w http.ResponseWriter, r *http.Request) {
 			&it.LatencyMs, &it.Error, &it.CheckedAt, &metrics,
 			&it.AgentVersion, &it.AgentPlatform, &it.AgentLastSeen,
 			&it.AgentTokenHint, &it.NextPollSec,
-			&it.LastIP, &it.LastIP4, &it.LastIP6,
+			&it.LastIP, &it.LastIP4, &it.LastIP6, &it.LastIPPrivate,
 		); err != nil {
 			h.log.Error("扫描服务器状态失败", "err", err)
 			writeError(w, http.StatusInternalServerError, "解析服务器状态失败")
