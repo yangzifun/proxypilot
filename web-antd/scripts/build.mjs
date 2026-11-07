@@ -66,6 +66,12 @@ function syncGoAssets() {
     };
     writeCompressed('app.js', jsBuf);
     writeCompressed('app.css', cssBuf);
+    const g6Path = path.join(distDir, 'g6-app.js');
+    if (fs.existsSync(g6Path)) {
+      const g6Buf = fs.readFileSync(g6Path);
+      fs.copyFileSync(g6Path, path.join(goAssetsDir, 'g6-app.js'));
+      writeCompressed('g6-app.js', g6Buf);
+    }
     const xtermPath = path.join(distDir, 'xterm-app.js');
     if (fs.existsSync(xtermPath)) {
       const xtermBuf = fs.readFileSync(xtermPath);
@@ -125,6 +131,19 @@ async function runBuild() {
     legalComments: 'none',
     charset: 'utf8',
     treeShaking: true,
+    logLevel: 'warning',
+  });
+  // AntV G6 仅在流量流向图使用：单独成包，按需加载
+  await build({
+    entryPoints: [path.join(webRoot, 'src/g6-entry.js')],
+    outfile: path.join(distDir, 'g6-app.js'),
+    bundle: true,
+    minify: true,
+    format: 'iife',
+    target: ['es2020'],
+    define: { 'process.env.NODE_ENV': '"production"' },
+    legalComments: 'none',
+    charset: 'utf8',
     logLevel: 'warning',
   });
   const { jsBuf, cssBuf } = syncGoAssets();

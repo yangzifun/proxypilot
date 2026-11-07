@@ -14,6 +14,8 @@ func (h *handlers) statsTrafficFlow(w http.ResponseWriter, r *http.Request) {
 	if hours <= 0 || hours > 24*30 {
 		hours = 24
 	}
+	// 默认只统计当前活跃用户（only_active=0 可关闭）
+	onlyActive := strings.TrimSpace(r.URL.Query().Get("only_active")) != "0"
 	since := (nowMillis()/3600000 - hours + 1) * 3600000
 
 	rows, err := queryRowsAsMaps(r.Context(), h.db, `
@@ -75,6 +77,9 @@ func (h *handlers) statsTrafficFlow(w http.ResponseWriter, r *http.Request) {
 		down := mapInt(row, "down", 0)
 		total := up + down
 		if uuid == "" || total <= 0 {
+			continue
+		}
+		if onlyActive && !active[uuid] {
 			continue
 		}
 		uKey := uuid
@@ -169,10 +174,11 @@ func (h *handlers) statsTrafficFlow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"success": true,
-		"hours":   hours,
-		"users":   userOut,
-		"nodes":   nodeOut,
-		"edges":   outEdges,
+		"success":     true,
+		"hours":       hours,
+		"only_active": onlyActive,
+		"users":       userOut,
+		"nodes":       nodeOut,
+		"edges":       outEdges,
 	})
 }

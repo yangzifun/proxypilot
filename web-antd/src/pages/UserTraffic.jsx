@@ -28,6 +28,7 @@ import { api } from '../api';
 import { useAsync } from '../hooks';
 import { ErrorBlock, PageCard, StatCard } from '../components';
 import { AreaChart } from '../charts';
+import FlowGraph from '../components/FlowGraph';
 import { fmtAgo, fmtBytes, fmtTime } from '../format';
 
 const SORTS = [
@@ -532,7 +533,17 @@ export default function UserTraffic() {
             </span>
           }
         >
-          <FlowOverview data={trafficFlow.data} loading={trafficFlow.loading} />
+          {trafficFlow.loading && !(trafficFlow.data && trafficFlow.data.users) ? (
+            <div className="pp-muted" style={{ padding: 32, textAlign: 'center' }}>正在统计流向…</div>
+          ) : (
+            <FlowGraph
+              users={(trafficFlow.data && trafficFlow.data.users) || []}
+              nodes={(trafficFlow.data && trafficFlow.data.nodes) || []}
+              edges={(trafficFlow.data && trafficFlow.data.edges) || []}
+              height={440}
+              emptyText="当前没有活跃用户在产生流量"
+            />
+          )}
         </PageCard>
       </div>
 
@@ -921,6 +932,22 @@ export default function UserTraffic() {
                 return '';
               };
               const shown = nodes.slice(0, 12);
+              // G6 流向图数据（单个用户 → 多个节点）
+              const flowUsers = [{
+                uuid: String(detail.data.uuid),
+                label: String(detail.data.owner || detail.data.email || detail.data.uuid).slice(0, 12),
+                total: shown.reduce((a, n) => a + (Number(n.total) || 0), 0),
+              }];
+              const flowNodes = shown.map((n) => ({
+                node_id: n.node_id,
+                label: String(n.node_name || ('#' + n.node_id)),
+                total: n.total,
+              }));
+              const flowEdges = shown.map((n) => ({
+                uuid: String(detail.data.uuid),
+                node_id: n.node_id,
+                total: Number(n.total) || 0,
+              }));
               const rowH = 44;
               const topY = 34;
               const lastY = topY + Math.max(0, shown.length - 1) * rowH;
@@ -933,42 +960,8 @@ export default function UserTraffic() {
                   <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>
                     用户流向（绿=近 2 分钟活跃，动态光点表示实时流量）
                   </div>
-                  <svg className="pp-flow-svg" viewBox={'0 0 720 ' + h} style={{ width: '100%', height: 'auto', display: 'block' }}>
-                    <defs>
-                      <linearGradient id="ppFlowGrad" x1="0" x2="1">
-                        <stop offset="0%" stopColor="#10b981" stopOpacity="0.15" />
-                        <stop offset="100%" stopColor="#22d3ee" stopOpacity="0.9" />
-                      </linearGradient>
-                    </defs>
-                    <circle cx="80" cy={midY} r="34" fill="#ecfdf5" stroke="#10b981" strokeWidth="2" />
-                    <text x="80" y={midY + 5} textAnchor="middle" fontSize="13" fontWeight="600" fill="#065f46">{short}</text>
-                    {shown.map((n, i) => {
-                      const y = 34 + i * rowH;
-                      const on = recent.has(n.node_id);
-                      const d = 'M114 ' + midY + ' C 320 ' + midY + ', 380 ' + y + ', 560 ' + y;
-                      return (
-                        <g key={n.node_id}>
-                          <path d={d} fill="none" stroke={on ? 'url(#ppFlowGrad)' : '#e2e8f0'} strokeWidth={on ? 2.5 : 1.5} strokeDasharray={on ? '6 8' : '4 8'} className={on ? 'pp-flow-dash' : ''} />
-                          {on ? (
-                            <circle r="3.5" fill="#22d3ee">
-                              <animateMotion dur="2.2s" repeatCount="indefinite" path={d} />
-                            </circle>
-                          ) : null}
-                          <circle cx="572" cy={y} r="9" fill={on ? '#10b981' : '#cbd5e1'} />
-                          {ccOf(n.node_name) ? (
-                            <image
-                              href={'/api/flag/' + ccOf(n.node_name)}
-                              x="590" y={y - 6} width="16" height="12"
-                              preserveAspectRatio="none"
-                            />
-                          ) : null}
-                          <text x={ccOf(n.node_name) ? 612 : 590} y={y + 4} fontSize="12" fill={on ? '#065f46' : '#64748b'}>
-                            {String(n.node_name || '#' + n.node_id).slice(0, 16)} · {fmtBytes(n.total)}
-                          </text>
-                        </g>
-                      );
-                    })}
-                  </svg>
+                  <FlowGraph users={flowUsers} nodes={flowNodes} edges={flowEdges} height={Math.max(220, shown.length * 46 + 80)} emptyText="该用户近期没有节点流量" />
+
                 </div>
               );
             })()}

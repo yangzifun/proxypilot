@@ -31,6 +31,15 @@ var embeddedAppCSSBr []byte
 //go:embed assets_web/app.css.gz
 var embeddedAppCSSGz []byte
 
+//go:embed assets_web/g6-app.js
+var embeddedG6JS []byte
+
+//go:embed assets_web/g6-app.js.br
+var embeddedG6JSBr []byte
+
+//go:embed assets_web/g6-app.js.gz
+var embeddedG6JSGz []byte
+
 //go:embed assets_web/xterm-app.js
 var embeddedXtermJS []byte
 
@@ -241,6 +250,12 @@ func (h *handlers) worldSVG(w http.ResponseWriter, r *http.Request) {
 func (h *handlers) adminAppJS(w http.ResponseWriter, r *http.Request) {
 	serveEmbeddedCompressed(w, r, embeddedAppJS, embeddedAppJSBr, embeddedAppJSGz,
 		"application/javascript; charset=utf-8", `"app-`+h.assetVersion()+`-js"`)
+}
+
+// GET /g6-app.js：AntV G6 流量流向图按需加载。
+func (h *handlers) g6AppJS(w http.ResponseWriter, r *http.Request) {
+	serveEmbeddedCompressed(w, r, embeddedG6JS, embeddedG6JSBr, embeddedG6JSGz,
+		"application/javascript; charset=utf-8", `"g6-`+h.assetVersion()+`"`)
 }
 
 // GET /xterm-app.js：远程终端按需加载，不阻塞首屏。

@@ -381,6 +381,7 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /manage/", h.pageIndex)
 	mux.HandleFunc("GET /agent-dist/", h.agentDistFile)
 	mux.HandleFunc("GET /admin-app.js", h.adminAppJS)
+	mux.HandleFunc("GET /g6-app.js", h.g6AppJS)
 	mux.HandleFunc("GET /xterm-app.js", h.xtermAppJS)
 	mux.HandleFunc("GET /admin-app.css", h.adminAppCSS)
 	mux.HandleFunc("GET /assets/world.svg", h.worldSVG)
