@@ -44,6 +44,18 @@ const STATUS_TEXT = {
 const TAG_COLOR = { online: 'success', offline: 'error', unknown: 'default' };
 const SERVER_STATUS = { online: '在线', offline: '离线', unknown: '未知' };
 
+/** 终端标题的状态：优先 status，其次 last_status，最后按心跳时间推断 */
+function serverStatusOf(srv) {
+  if (!srv) return 'unknown';
+  const direct = srv.status || srv.last_status;
+  if (direct === 'online' || direct === 'offline') return direct;
+  const seen = Number(srv.agent_last_seen) || 0;
+  if (seen > 0) {
+    return Date.now() - seen < 180000 ? 'online' : 'offline';
+  }
+  return 'unknown';
+}
+
 const THEME = {
   background: '#0b1220',
   foreground: '#dbe4f0',
@@ -403,8 +415,8 @@ export default function RemoteShell({ server, open, onClose }) {
         <span className="pp-shell-title">
           <CodeOutlined /> 远程终端 · {(server && server.name) || ''}
           {server ? (
-            <Tag color={TAG_COLOR[server.status] || 'default'} style={{ marginLeft: 10 }}>
-              {SERVER_STATUS[server.status] || '未知'}
+            <Tag color={TAG_COLOR[serverStatusOf(server)] || 'default'} style={{ marginLeft: 10 }}>
+              {SERVER_STATUS[serverStatusOf(server)] || '未知'}
             </Tag>
           ) : null}
           {server && server.agent_version ? (
