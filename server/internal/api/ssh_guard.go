@@ -77,7 +77,15 @@ rm -f /etc/systemd/system/pp-ssh-guard.service /usr/local/sbin/pp-ssh-guard.sh
 systemctl daemon-reload 2>/dev/null
 for BIN in iptables ip6tables; do
   command -v $BIN >/dev/null 2>&1 || continue
-  for P in $PORTS; do
+  # 先移除所有指向该链的 INPUT 跳转（含历史遗留端口），否则 -X 无法删除链
+  i=0
+  while [ $i -lt 40 ] && $BIN -S INPUT 2>/dev/null | grep -q -- "-j $CHAIN"; do
+    RULE=$($BIN -S INPUT 2>/dev/null | grep -- "-j $CHAIN" | head -1 | sed 's/^-A //')
+    [ -z "$RULE" ] && break
+    $BIN -D $RULE 2>/dev/null || break
+    i=$((i+1))
+  done
+  for P in $PORTS 22 2222 22222; do
     i=0
     while [ $i -lt 8 ] && $BIN -C INPUT -p tcp --dport $P -j $CHAIN 2>/dev/null; do
       $BIN -D INPUT -p tcp --dport $P -j $CHAIN; i=$((i+1))

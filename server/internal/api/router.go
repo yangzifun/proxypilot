@@ -199,6 +199,8 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /api/local/ports", h.authed(authOpts{superOnly: true}, h.localPorts))
 	mux.HandleFunc("GET /api/local/firewall", h.authed(authOpts{superOnly: true}, h.localFirewallList))
 	mux.HandleFunc("POST /api/local/firewall", h.authed(authOpts{superOnly: true}, h.localFirewallCreate))
+	mux.HandleFunc("POST /api/local/firewall/sync", h.authed(authOpts{superOnly: true}, h.localFirewallSync))
+	mux.HandleFunc("PUT /api/local/firewall/{id}", h.authed(authOpts{superOnly: true}, h.localFirewallUpdate))
 	mux.HandleFunc("DELETE /api/local/firewall/{id}", h.authed(authOpts{superOnly: true}, h.localFirewallDelete))
 	mux.HandleFunc("GET /api/local/files", h.authed(authOpts{superOnly: true}, h.localFiles))
 	mux.HandleFunc("POST /api/local/upload", h.authed(authOpts{superOnly: true}, h.localUpload))

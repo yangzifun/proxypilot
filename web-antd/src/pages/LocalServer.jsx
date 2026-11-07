@@ -5,6 +5,8 @@ import {
   Button,
   Col,
   Empty,
+  Modal,
+  Input,
   InputNumber,
   Popconfirm,
   Progress,
@@ -23,6 +25,7 @@ import {
   CloudServerOutlined,
   CodeOutlined,
   DeleteOutlined,
+  EditOutlined,
   FolderOpenOutlined,
   InboxOutlined,
   PlusOutlined,
@@ -134,25 +137,61 @@ export default function LocalServer() {
 
   const [newPort, setNewPort] = useState(null);
   const [newProto, setNewProto] = useState('tcp');
+  const [newSrc, setNewSrc] = useState('');
+  const [editRule, setEditRule] = useState(null);
   const fwRows = useMemo(
     () => ((firewall.data && firewall.data.data) || []).map((x) => ({ key: String(x.id), ...x })),
     [firewall.data]
   );
 
   const addRule = async (action) => {
-    const port = Number(newPort);
-    if (!port || port < 1 || port > 65535) {
-      message.warning('请输入 1-65535 的端口');
+    const spec = String(newPort || '').trim();
+    if (!/^\d{1,5}(-\d{1,5})?$/.test(spec)) {
+      message.warning('端口格式：8080 或 8000-8100');
       return;
     }
     setBusy('fw');
     try {
-      const res = await apiPost('local/firewall', { port, protocol: newProto, action });
+      const res = await apiPost('local/firewall', {
+        port_spec: spec,
+        protocol: newProto,
+        action,
+        src_cidr: String(newSrc || '').trim(),
+      });
       message.success((res && res.message) || '已提交');
       setNewPort(null);
+      setNewSrc('');
       firewall.reload();
     } catch (e) {
       message.error(e.message || '操作失败');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const saveEdit = async (values) => {
+    if (!editRule) return;
+    setBusy('fw');
+    try {
+      const res = await apiPut('local/firewall/' + editRule.id, values);
+      message.success((res && res.message) || '规则已更新');
+      setEditRule(null);
+      firewall.reload();
+    } catch (e) {
+      message.error(e.message || '更新失败');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const syncPorts = async () => {
+    setBusy('fwsync');
+    try {
+      const res = await apiPost('local/firewall/sync', {});
+      message.success((res && res.message) || '已同步监听端口');
+      firewall.reload();
+    } catch (e) {
+      message.error(e.message || '同步失败');
     } finally {
       setBusy('');
     }
@@ -314,50 +353,131 @@ export default function LocalServer() {
       </div>
 
       <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
-        <Col xs={24} lg={12}>
+        <Col xs={24}>
           <PageCard
             title={<span className="pp-section-title">端口开放 / 关闭</span>}
-            extra={
-              <Space size={6}>
-                <InputNumber size="small" min={1} max={65535} placeholder="端口" style={{ width: 92 }} value={newPort} onChange={setNewPort} />
-                <Select size="small" value={newProto} onChange={setNewProto} style={{ width: 78 }}
-                  options={[{ value: 'tcp', label: 'TCP' }, { value: 'udp', label: 'UDP' }]} />
-                <Button size="small" type="primary" icon={<PlusOutlined />} loading={busy === 'fw'} onClick={() => addRule('open')}>开放</Button>
-                <Button size="small" danger loading={busy === 'fw'} onClick={() => addRule('close')}>关闭</Button>
-              </Space>
-            }
             bodyStyle={{ padding: 0 }}
           >
+            {/* 单独一排的操作区，避免挤在标题栏里换行 */}
+            <div
+              className="pp-fw-toolbar"
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                gap: 8,
+                padding: '10px 12px',
+                borderBottom: '1px solid #f1f5f9',
+                background: '#fbfcfe',
+              }}
+            >
+              <Input
+                placeholder="目的端口：8080 或 8000-8100"
+                style={{ width: 210 }}
+                value={newPort}
+                onChange={(e) => setNewPort(e.target.value)}
+                onPressEnter={() => addRule('internal')}
+              />
+              <Select
+                value={newProto}
+                onChange={setNewProto}
+                style={{ width: 88 }}
+                options={[
+                  { value: 'tcp', label: 'TCP' },
+                  { value: 'udp', label: 'UDP' },
+                ]}
+              />
+              <Input
+                placeholder="来源 IP/CIDR（留空 = 任意）"
+                style={{ width: 220 }}
+                value={newSrc}
+                onChange={(e) => setNewSrc(e.target.value)}
+                onPressEnter={() => addRule('internal')}
+              />
+              <span style={{ width: 1, height: 22, background: '#e2e8f0', margin: '0 2px' }} />
+              <Button type="primary" icon={<PlusOutlined />} loading={busy === 'fw'} onClick={() => addRule('open')}>
+                对外开放
+              </Button>
+              <Button loading={busy === 'fw'} onClick={() => addRule('internal')}>
+                仅内网
+              </Button>
+              <Button loading={busy === 'fw'} onClick={() => addRule('loopback')}>
+                仅本机
+              </Button>
+              <Button danger loading={busy === 'fw'} onClick={() => addRule('close')}>
+                关闭
+              </Button>
+              <Button icon={<ReloadOutlined />} loading={busy === 'fwsync'} onClick={syncPorts}>
+                同步监听
+              </Button>
+            </div>
             <Table
               size="small"
               pagination={false}
-              scroll={{ y: 260 }}
+              scroll={{ y: 300 }}
               loading={firewall.loading}
               dataSource={fwRows}
               locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有端口规则" /> }}
               columns={[
-                { title: '端口', dataIndex: 'port', width: 82, render: (v, r) => <span className="pp-mono">{v}/{String(r.protocol).toUpperCase()}</span> },
                 {
-                  title: '规则', dataIndex: 'action', width: 86,
-                  render: (v) => <Tag color={v === 'close' ? 'red' : 'green'} style={{ marginInlineEnd: 0 }}>{v === 'close' ? '关闭' : '开放'}</Tag>,
+                  title: '目的端口',
+                  dataIndex: 'port',
+                  width: 118,
+                  render: (v, r) => (
+                    <span className="pp-mono">
+                      {r.port_end > r.port ? v + '-' + r.port_end : v}/{String(r.protocol).toUpperCase()}
+                    </span>
+                  ),
+                },
+                {
+                  title: '来源',
+                  dataIndex: 'src_cidr',
+                  width: 168,
+                  render: (v) => (v ? <span className="pp-mono" style={{ fontSize: 12 }}>{v}</span> : <span className="pp-muted">任意</span>),
+                },
+                {
+                  title: '对外',
+                  dataIndex: 'action',
+                  width: 96,
+                  render: (v) => {
+                    if (v === 'close') return <Tag color="red" style={{ marginInlineEnd: 0 }}>已关闭</Tag>;
+                    if (v === 'loopback') return <Tag color="purple" style={{ marginInlineEnd: 0 }}>仅本机</Tag>;
+                    if (v === 'internal') return <Tag color="orange" style={{ marginInlineEnd: 0 }}>仅内网</Tag>;
+                    return <Tag color="green" style={{ marginInlineEnd: 0 }}>公网开放</Tag>;
+                  },
+                },
+                {
+                  title: '监听',
+                  dataIndex: 'listening',
+                  width: 72,
+                  render: (v) =>
+                    v ? (
+                      <Tag color="blue" style={{ marginInlineEnd: 0 }}>监听中</Tag>
+                    ) : (
+                      <span className="pp-muted" style={{ fontSize: 12 }}>未监听</span>
+                    ),
                 },
                 { title: '备注', dataIndex: 'note', ellipsis: true, render: (v) => v || <span className="pp-muted">—</span> },
                 {
-                  title: '', width: 56,
+                  title: '',
+                  width: 92,
                   render: (_, r) => (
-                    <Popconfirm title={`删除 ${r.port}/${r.protocol} 规则？`} okText="删除" okButtonProps={{ danger: true }} onConfirm={() => removeRule(r.id)}>
-                      <Button size="small" type="link" danger icon={<DeleteOutlined />} />
-                    </Popconfirm>
+                    <Space size={2}>
+                      <Button size="small" type="link" icon={<EditOutlined />} onClick={() => setEditRule(r)} />
+                      <Popconfirm title={`删除 ${r.port}/${r.protocol} 规则？`} okText="删除" okButtonProps={{ danger: true }} onConfirm={() => removeRule(r.id)}>
+                        <Button size="small" type="link" danger icon={<DeleteOutlined />} />
+                      </Popconfirm>
+                    </Space>
                   ),
                 },
               ]}
             />
             <div className="pp-muted" style={{ fontSize: 11.5, padding: '8px 12px', borderTop: '1px solid #f1f5f9' }}>
-              规则落在独立链 PP_PORTS（INPUT 首条），已保存为开机自动恢复；关闭表示对该端口显式 DROP。
+              「同步监听」把 ss 探测到的端口导入，默认「仅内网」（组网 100.96.0.0/12 + 回环可访问）；「对外开放」才允许公网直连；「关闭」显式 DROP。规则落在独立链 PP_PORTS，开机自动恢复。
             </div>
           </PageCard>
         </Col>
-        <Col xs={24} lg={12}>
+        <Col xs={24}>
           <PageCard
             title={<span className="pp-section-title">运行程序（Top 20）</span>}
             extra={<Button size="small" icon={<ReloadOutlined />} onClick={() => procs.reload()} />}
@@ -453,6 +573,44 @@ export default function LocalServer() {
           />
         </PageCard>
       </div>
+
+      <Modal
+        open={!!editRule}
+        title="编辑端口规则"
+        onCancel={() => setEditRule(null)}
+        onOk={() => {
+          const form = document.getElementById('pp-rule-edit');
+          if (!form) return;
+          const val = (n) => (form.querySelector('[name="' + n + '"]') || {}).value || '';
+          saveEdit({
+            port_spec: val('port_spec'),
+            protocol: val('protocol'),
+            action: val('action'),
+            src_cidr: val('src_cidr'),
+            note: val('note'),
+          });
+        }}
+        okText="保存"
+        confirmLoading={busy === 'fw'}
+        destroyOnClose
+      >
+        <div id="pp-rule-edit">
+          <Space direction="vertical" size={10} style={{ width: '100%' }}>
+            <Input name="port_spec" defaultValue={editRule ? (editRule.port_end > editRule.port ? editRule.port + '-' + editRule.port_end : String(editRule.port)) : ''} addonBefore="目的端口" />
+            <Select name="protocol" defaultValue={(editRule && editRule.protocol) || 'tcp'} style={{ width: '100%' }}
+              options={[{ value: 'tcp', label: 'TCP' }, { value: 'udp', label: 'UDP' }]} />
+            <Select name="action" defaultValue={(editRule && editRule.action) || 'internal'} style={{ width: '100%' }}
+              options={[
+                { value: 'open', label: '对外开放（任意来源）' },
+                { value: 'internal', label: '仅内网（组网 100.96.0.0/12 + 本机）' },
+                { value: 'loopback', label: '仅本机（127.0.0.1）' },
+                { value: 'close', label: '关闭（DROP）' },
+              ]} />
+            <Input name="src_cidr" defaultValue={(editRule && editRule.src_cidr) || ''} placeholder="来源 CIDR（留空=任意）" addonBefore="来源" />
+            <Input name="note" defaultValue={(editRule && editRule.note) || ''} placeholder="备注" addonBefore="备注" />
+          </Space>
+        </div>
+      </Modal>
 
       {overview ? (
         <RemoteShell
