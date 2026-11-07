@@ -165,11 +165,16 @@ func (h *handlers) shellBrowser(w http.ResponseWriter, r *http.Request) {
 	shellHub.byServer[serverID] = session
 	shellHub.Unlock()
 
-	_ = ws.WriteText(`{"type":"waiting"}`)
 	// 先通过常驻 WS 把会话直接推给 Agent（长连接模式下即时接入）
-	_ = pushAgentText(serverID, `{"type":"shell","session":"`+session+`"}`)
+	pushed := pushAgentText(serverID, `{"type":"shell","session":"`+session+`"}`)
 	// 再唤醒等待中的 Agent；没有 WS 的旧 Agent 会在下次 poll 领到 session
 	wakeAgent(serverID)
+	if pushed {
+		// Agent 长连接在线，已直接下发，无需等待轮询
+		_ = ws.WriteText(`{"type":"pushed"}`)
+	} else {
+		_ = ws.WriteText(`{"type":"waiting"}`)
+	}
 
 	state.timer = time.AfterFunc(60*time.Second, func() {
 		shellHub.Lock()

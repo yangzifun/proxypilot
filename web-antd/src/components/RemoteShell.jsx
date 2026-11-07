@@ -1,5 +1,5 @@
 /* =================================================================
- *  服务器实时终端（WebSocket + Durable Object + Agent PTY）
+ *  服务器实时终端（WebSocket + Agent 常驻长连接隧道 + PTY）
  *  · 打开即连 wss://<本站>/api/shell/browser/<id>?token=<JWT>
  *  · 服务端保存会话；Agent 下一次 poll 拿到 session 后主动拨号，
  *    两端在 DO 里配对，输入输出按字节双向转发（真正的交互式 shell）
@@ -35,7 +35,7 @@ const STATUS_TEXT = {
   checking: '检查服务端支持…',
   unsupported: '服务端未开启实时终端',
   connecting: '正在连接…',
-  waiting: '等待 Agent 接入（下一次轮询，≤30 秒）…',
+  waiting: '正在通过 Agent 长连接建立隧道…',
   ready: '已连接',
   closed: '连接已断开',
   error: '连接失败',
@@ -238,6 +238,8 @@ export default function RemoteShell({ server, open, onClose }) {
             if (t) sendResize(t.cols, t.rows);
           } else if (msg && msg.type === 'waiting') {
             setStatus('waiting');
+          } else if (msg && msg.type === 'pushed') {
+            setStatus('waiting');
           } else if (msg && msg.type === 'error') {
             setStatus('error');
             setMessage(msg.message || '连接失败');
@@ -257,7 +259,7 @@ export default function RemoteShell({ server, open, onClose }) {
       ws.onerror = () => {
         if (!aliveRef.current) return;
         setStatus('error');
-        setMessage('WebSocket 连接失败：请检查服务端是否配置了 Durable Object 绑定 SHELL');
+        setMessage('终端隧道连接失败：请确认面板在线且节点 Agent 已连接');
       };
       ws.onclose = (ev) => {
         if (!aliveRef.current) return;
@@ -273,7 +275,7 @@ export default function RemoteShell({ server, open, onClose }) {
         if (!r || !r.durable) {
           setStatus('unsupported');
           setMessage(
-            '服务端没有配置 Durable Object 绑定 SHELL，实时终端不可用。\n在 wrangler.toml 增加 [[durable_objects.bindings]] 与 migrations 后重新部署即可（见 README「实时终端」）。'
+            '当前节点未启用远程命令或 Agent 版本过低，实时终端不可用。'
           );
           return;
         }
@@ -429,11 +431,15 @@ export default function RemoteShell({ server, open, onClose }) {
       ) : null}
       {status === 'waiting' ? (
         <Alert
-          type="info"
+          type={waitSlow ? 'warning' : 'info'}
           showIcon
           style={{ marginBottom: 10 }}
-          message="等待 Agent 接入"
-          description="当前会话已登记，Agent 会在下一次轮询（≤30 秒）时拨号接入；若长时间无响应，请确认 Agent 版本 ≥ 1.3.0。"
+          message={waitSlow ? 'Agent 尚未响应' : '正在建立终端隧道'}
+          description={
+            waitSlow
+              ? '已通过长连接推送会话，但 Agent 未在 2 秒内接入。请检查该节点是否在线、Agent 版本是否 ≥ 1.9.0。'
+              : '正在通过 Agent 常驻长连接下发会话，通常 1 秒内完成。'
+          }
         />
       ) : null}
 
@@ -442,7 +448,7 @@ export default function RemoteShell({ server, open, onClose }) {
       </div>
 
       <div className="pp-shell-foot">
-        会话由 Durable Object 中转，Agent 主动出站连接；关闭窗口即结束远端 shell。
+        终端经 Agent 常驻长连接隧道转发（内网优先），关闭窗口即结束远端 shell。
       </div>
     </Modal>
   );

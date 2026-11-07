@@ -68,6 +68,10 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
   const [install, setInstall] = useState(null);
   const [execOpen, setExecOpen] = useState(false);
   const [remoteOpen, setRemoteOpen] = useState(false);
+  // 终端打开期间暂停服务器状态轮询：优先保证终端链路，关闭后补一次刷新
+  const pausedRef = useRef(false);
+  const remoteOpenRef = useRef(false);
+  remoteOpenRef.current = remoteOpen;
   const [tasksOpen, setTasksOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [traffic, setTraffic] = useState(null);
@@ -93,7 +97,10 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
 
   useEffect(() => {
     if (!serverId) return undefined;
-    const timer = setInterval(() => { load().catch(() => {}); }, 3000);
+    const timer = setInterval(() => {
+      if (remoteOpenRef.current) return; // 终端打开时不刷新状态
+      load().catch(() => {});
+    }, 3000);
     return () => clearInterval(timer);
   }, [serverId, load]);
   useEffect(() => {
@@ -701,7 +708,14 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
           />
 
           {/* 安装命令 / 密钥 */}
-          <RemoteShell server={d} open={remoteOpen} onClose={() => setRemoteOpen(false)} />
+          <RemoteShell
+        server={d}
+        open={remoteOpen}
+        onClose={() => {
+          setRemoteOpen(false);
+          load().catch(() => {});
+        }}
+      />
 
       <Modal
             open={!!install}

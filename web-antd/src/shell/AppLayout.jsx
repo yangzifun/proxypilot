@@ -94,7 +94,9 @@ export default function AppLayout({ activeKey, onNavigate, children }) {
           openKeys={collapsed ? undefined : openKeys}
           onOpenChange={collapsed ? undefined : onOpenChange}
           onClick={({ key }) => {
-            if (!groupOf(key)) onNavigate(key);
+            // 只有分组标题自身不导航；分组内的叶子项（用户管理 / 服务器…）正常跳转
+            if (NAV_GROUPS.some((g) => g.key === key)) return;
+            onNavigate(key);
           }}
           style={{ borderInlineEnd: 'none', padding: '0 8px', background: 'transparent' }}
         />
