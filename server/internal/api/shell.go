@@ -249,9 +249,14 @@ func (h *handlers) shellAgent(w http.ResponseWriter, r *http.Request) {
 	}
 	var dbSession string
 	if err := h.db.QueryRowContext(r.Context(),
-		`SELECT session FROM shell_sessions WHERE server_id = ? LIMIT 1`, serverID).Scan(&dbSession); err != nil || dbSession != session {
+		`SELECT session FROM shell_sessions WHERE server_id = ? LIMIT 1`, serverID).Scan(&dbSession); err != nil || dbSession == "" {
 		writeError(w, http.StatusGone, "会话不存在或已过期")
 		return
+	}
+	if dbSession != session {
+		// 会话号已更新（用户重新打开终端）：以数据库当前会话为准，不拒绝 Agent
+		h.log.Info("shell 会话号已更新，按当前会话接入", "server", serverID, "agent", session, "current", dbSession)
+		session = dbSession
 	}
 	shellHub.Lock()
 	state := shellHub.sessions[session]

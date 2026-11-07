@@ -93,6 +93,16 @@ export default function RemoteShell({ server, open, onClose }) {
   const [status, setStatus] = useState('checking');
   const [message, setMessage] = useState('');
   const [nonce, setNonce] = useState(0);
+  // 长连接推送后若 2 秒仍未接入，再提示排查（正常情况下不会出现）
+  const [waitSlow, setWaitSlow] = useState(false);
+  useEffect(() => {
+    if (status !== 'waiting') {
+      setWaitSlow(false);
+      return undefined;
+    }
+    const id = setTimeout(() => setWaitSlow(true), 2000);
+    return () => clearTimeout(id);
+  }, [status]);
   const termRef = useRef(null);
   const fitRef = useRef(null);
   const wsRef = useRef(null);
@@ -268,6 +278,9 @@ export default function RemoteShell({ server, open, onClose }) {
       };
     };
 
+    // 并行预取 xterm 分片（约 72KB gzip），与 shell/status 同时进行
+    const xtermReady = loadXterm().catch(() => null);
+
     /* 先确认服务端支持，再初始化终端 */
     api('shell/status')
       .then((r) => {
@@ -289,8 +302,10 @@ export default function RemoteShell({ server, open, onClose }) {
         if (!canvasOk || !preRef.current) {
           connect();
         } else {
-          loadXterm()
-            .then(({ Terminal, FitAddon, WebglAddon }) => {
+          xtermReady
+            .then((mod) => {
+              if (!mod) throw new Error('xterm 资源加载失败');
+              const { Terminal, FitAddon, WebglAddon } = mod;
               if (!aliveRef.current || !preRef.current) return;
               try {
                 const term = new Terminal({

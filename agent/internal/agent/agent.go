@@ -43,7 +43,7 @@ import (
 // 1.8.5：组件二进制改为「临时文件 + rename」写入，修复运行中覆盖导致的 text file busy
 // 1.8.6：解包改流式写盘，避免小内存节点在安装 78MB sing-box 时被 OOM kill
 // 1.8.7：新增 inspect 动作（只读检查配置文件，供 UUID 一致性巡检核对机器实际配置）
-const Version = "1.10.0"
+const Version = "1.10.2"
 
 // maxActionsPerRound 单轮执行任务数上限（服务端 AGENT_ACTIONS_PER_POLL = 5，这里留足余量）。
 const maxActionsPerRound = 20
@@ -65,6 +65,8 @@ type Agent struct {
 	mu   sync.Mutex
 	// activeShell 当前正在跑的实时终端 session（同一时间只保留一个）
 	activeShell string
+	shellCancel context.CancelFunc
+	shellSince  time.Time
 	// lastServerID 最近一次 poll 拿到的服务器 ID（WS 推送 shell 时复用）
 	lastServerID int
 	wsMu          sync.Mutex
@@ -284,26 +286,36 @@ func (a *Agent) startShellBySession(ctx context.Context, sid string) {
 		return
 	}
 	a.mu.Lock()
-	if a.activeShell != "" {
-		a.mu.Unlock()
-		return
-	}
 	serverID := a.lastServerID
 	if serverID <= 0 {
 		a.mu.Unlock()
 		return
 	}
+	// 已有终端占用：用户重新打开终端时以新会话为准，先终止旧会话
+	if a.activeShell != "" {
+		if a.shellCancel != nil {
+			a.shellCancel()
+		}
+		a.opts.Log("实时终端：终止旧会话 %s，切换到 %s", a.activeShell, sid)
+	}
+	shellCtx, cancel := context.WithCancel(ctx)
 	a.activeShell = sid
+	a.shellCancel = cancel
+	a.shellSince = time.Now()
 	a.mu.Unlock()
 
 	go func() {
 		defer func() {
+			cancel()
 			a.mu.Lock()
-			a.activeShell = ""
+			if a.activeShell == sid {
+				a.activeShell = ""
+				a.shellCancel = nil
+			}
 			a.mu.Unlock()
 		}()
 		a.opts.Log("实时终端：WS 推送接入会话 %s", sid)
-		err := shell.Serve(ctx, shell.Options{
+		err := shell.Serve(shellCtx, shell.Options{
 			Origin:   a.opts.Config.Origin,
 			Key:      a.opts.Config.Key,
 			ServerID: serverID,
@@ -324,37 +336,8 @@ func (a *Agent) maybeStartShell(ctx context.Context, resp *client.PollResponse) 
 	if resp == nil || resp.Shell == nil || resp.Shell.Session == "" {
 		return
 	}
-	sid := resp.Shell.Session
-	a.mu.Lock()
-	if a.activeShell != "" {
-		a.mu.Unlock()
-		return
-	}
-	a.activeShell = sid
-	a.mu.Unlock()
-
-	go func() {
-		defer func() {
-			a.mu.Lock()
-			a.activeShell = ""
-			a.mu.Unlock()
-		}()
-		a.opts.Log("实时终端：接入会话 %s", sid)
-		err := shell.Serve(ctx, shell.Options{
-			Origin:   a.opts.Config.Origin,
-			Key:      a.opts.Config.Key,
-			ServerID: resp.ServerID,
-			Session:  sid,
-			Insecure: a.opts.Config.Insecure,
-			Log:      a.opts.Log,
-			Version:  Version,
-		})
-		if err != nil {
-			a.opts.Log("实时终端结束：%v", err)
-			return
-		}
-		a.opts.Log("实时终端已结束")
-	}()
+	// 统一走 startShellBySession（含旧会话终止逻辑）
+	a.startShellBySession(ctx, resp.Shell.Session)
 }
 
 // ack 回执（最多 3 次尝试，退避 2s/5s；服务端对重复 ack 幂等）。
@@ -670,6 +653,8 @@ func (a *Agent) wsOnce(ctx context.Context) error {
 						a.mu.Lock()
 						a.pendingShellPush = frame.Session
 						a.mu.Unlock()
+						// 立即起终端（不再依赖主循环轮询消费）
+						go a.startShellBySession(ctx, frame.Session)
 						a.signalWake()
 						continue
 					}
