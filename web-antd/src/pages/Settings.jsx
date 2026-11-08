@@ -363,6 +363,21 @@ export default function Settings({ embedded = false }) {
                   <Form.Item name="agent_binary_base_url" label="Agent 分发基址" extra="留空使用本站 /agent-dist">
                     <Input placeholder="https://cdn.example.com/agent-dist" allowClear />
                   </Form.Item>
+                  <Divider orientation="left">Agent 内网通信（自建组网）</Divider>
+                  <Form.Item name="agent_mesh_enabled" label="启用节点自建组网" valuePropName="checked">
+                    <Switch checkedChildren="开" unCheckedChildren="关" />
+                  </Form.Item>
+                  <Form.Item name="agent_mesh_center" label="组网中心域名" extra="节点通过该域名与中心服务器建立自建组网">
+                    <Input placeholder="vpncenter.yzfn.top" allowClear />
+                  </Form.Item>
+                  <Form.Item
+                    name="agent_mesh_sync"
+                    label="允许 Agent 通过组网内网同步数据"
+                    extra="开启后 Agent 优先使用组网内网地址上报数据；组网不可用时按系统设置的回退策略"
+                    valuePropName="checked"
+                  >
+                    <Switch checkedChildren="开" unCheckedChildren="关" />
+                  </Form.Item>
 
                   <Form.Item
                     name="agent_internal_url"

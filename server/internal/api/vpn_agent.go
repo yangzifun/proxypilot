@@ -70,21 +70,11 @@ func (h *handlers) vpnAgentHeartbeat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	node, err := h.vpnStore().GetNodeByServer(r.Context(), srv.ID)
-	if err != nil {
-		writeError(w, http.StatusNotFound, "节点未注册")
-		return
-	}
 	version := strings.TrimSpace(jsonStr(body["version"]))
-	if err := h.vpnStore().TouchNode(r.Context(), node.ID, version); err != nil {
-		writeError(w, http.StatusInternalServerError, "心跳写入失败")
-		return
-	}
-
 	settings, _ := h.vpnStore().LoadSettings(r.Context())
 	transport := strings.TrimSpace(jsonStr(body["transport"]))
 	if transport == "" {
-		transport = string(settings.ManagementTransport)
+		transport = "masque"
 	}
 	state := strings.TrimSpace(jsonStr(body["state"]))
 	if state == "" {
@@ -94,17 +84,40 @@ func (h *handlers) vpnAgentHeartbeat(w http.ResponseWriter, r *http.Request) {
 	if v, ok := body["rtt_ms"].(float64); ok {
 		rtt = int64(v)
 	}
-	_, _ = h.db.ExecContext(r.Context(),
-		`INSERT INTO vpn_node_links (node_id, transport, state, rtt_ms, last_seen)
-		 VALUES (?, ?, ?, ?, ?)
-		 ON DUPLICATE KEY UPDATE transport = VALUES(transport), state = VALUES(state),
-		   rtt_ms = VALUES(rtt_ms), last_seen = VALUES(last_seen)`,
-		node.ID, transport, state, rtt, time.Now().UnixMilli())
+
+	// 自建组网成员：所有 Agent 都可以上报，不要求绑定 VPN 节点。
+	meshIP := strings.TrimSpace(jsonStr(body["mesh_ip4"]))
+	meshDomain := strings.TrimSpace(jsonStr(body["mesh_domain"]))
+	if meshDomain == "" {
+		meshDomain = settings.ServerMeshDomain
+	}
+	if meshIP != "" {
+		now := time.Now().UnixMilli()
+		_, _ = h.db.ExecContext(r.Context(),
+			`INSERT INTO vpn_mesh_nodes (server_id, mesh_ip4, domain, state, transport, rtt_ms, last_seen, updated_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+			 ON DUPLICATE KEY UPDATE mesh_ip4 = VALUES(mesh_ip4), domain = VALUES(domain),
+			   state = VALUES(state), transport = VALUES(transport), rtt_ms = VALUES(rtt_ms),
+			   last_seen = VALUES(last_seen), updated_at = VALUES(updated_at)`,
+			srv.ID, meshIP, meshDomain, state, transport, rtt, now, now)
+	}
+
+	if node, err := h.vpnStore().GetNodeByServer(r.Context(), srv.ID); err == nil {
+		_ = h.vpnStore().TouchNode(r.Context(), node.ID, version)
+		_, _ = h.db.ExecContext(r.Context(),
+			`INSERT INTO vpn_node_links (node_id, transport, state, rtt_ms, last_seen)
+			 VALUES (?, ?, ?, ?, ?)
+			 ON DUPLICATE KEY UPDATE transport = VALUES(transport), state = VALUES(state),
+			   rtt_ms = VALUES(rtt_ms), last_seen = VALUES(last_seen)`,
+			node.ID, transport, state, rtt, time.Now().UnixMilli())
+	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":                   true,
 		"management_transport": settings.ManagementTransport,
 		"masque_fallback":      settings.MasqueFallback,
+		"mesh_domain":          settings.ServerMeshDomain,
+		"mesh_cidr4":           settings.MeshCIDR4,
 	})
 }
 

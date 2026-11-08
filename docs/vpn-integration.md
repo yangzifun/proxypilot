@@ -298,3 +298,17 @@ DNS 探测成功：收到 89 字节响应（1.1.1.1:53）
 
 说明：客户端 ↔ 节点（quic-go 0.55 ↔ 0.42）HTTP/3 与 DATAGRAM 互操作正常；
 平台 connect API、JWT、节点鉴权、TUN/NAT 数据面全链路已打通。
+## 自建组网（V32.7）
+
+- 组网页只展示**自建组网**（节点通过 `vpncenter.yzfn.top` 与中心服务器组网），不展示 WARP；
+- 新表 `vpn_mesh_nodes(server_id, mesh_ip4, domain, state, transport, rtt_ms, last_seen)`，
+  与 VPN 绑定解耦：所有服务器都可加入组网，未绑定 VPN 的服务器也可用组网内网服务；
+- `POST /api/agent/vpn/heartbeat` 现在接受并上报 `mesh_ip4 / mesh_domain / state / transport`，
+  即使未绑定 VPN 节点也会写入组网成员表；
+- 组网页设置：中心域名、中心组网 IP、组网网段；
+- 系统设置 → 高级设置新增：
+  - `agent_mesh_enabled`：启用节点自建组网；
+  - `agent_mesh_center`：组网中心域名（默认 `vpncenter.yzfn.top`）；
+  - `agent_mesh_sync`：允许 Agent 通过组网内网同步数据。
+- 说明：Agent 目前尚未实现自建组网客户端，`vpn_mesh_nodes` 会在 Agent 上报
+  `mesh_ip4` 后出现成员；组网数据面（隧道/内网路由）待实现。

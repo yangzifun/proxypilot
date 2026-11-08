@@ -5,10 +5,10 @@ import (
 	"time"
 )
 
-// GET /api/admin/vpn/mesh — 全部服务器的组网状态（服务端 ↔ 节点端）。
+// GET /api/admin/vpn/mesh — 自建组网状态（节点通过 vpncenter.yzfn.top 与中心组网）。
 //
-// 组网与 VPN 绑定解耦：所有服务器都应上报组网/Agent 状态，只有绑定了
-// VPN 节点的服务器才会显示节点域名与链路详情。
+// 只展示已加入自建组网的服务器；WARP 等外部组网不在此展示。
+// 组网与 VPN 绑定解耦：服务器可不绑定 VPN 节点，但仍可加入组网用于内网服务。
 func (h *handlers) vpnAdminMesh(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -21,16 +21,10 @@ func (h *handlers) vpnAdminMesh(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := h.db.QueryContext(r.Context(),
-		`SELECT s.id, s.name,
-		        COALESCE(s.last_mesh_ip4, ''),
-		        COALESCE(s.last_status, ''),
-		        COALESCE(s.agent_version, ''),
-		        COALESCE(s.agent_last_seen, 0),
-		        COALESCE(n.id, 0), COALESCE(n.domain, ''), COALESCE(n.state, ''),
-		        COALESCE(l.transport, ''), COALESCE(l.state, ''), COALESCE(l.rtt_ms, 0), COALESCE(l.last_seen, 0)
-		   FROM servers s
-		   LEFT JOIN vpn_nodes n ON n.server_id = s.id
-		   LEFT JOIN vpn_node_links l ON l.node_id = n.id
+		`SELECT s.id, s.name, m.mesh_ip4, m.domain, m.state, m.transport, m.rtt_ms, m.last_seen,
+		        COALESCE(s.agent_version, ''), COALESCE(s.agent_last_seen, 0)
+		   FROM vpn_mesh_nodes m
+		   JOIN servers s ON s.id = m.server_id
 		  ORDER BY s.id`)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "查询组网状态失败")
@@ -38,46 +32,38 @@ func (h *handlers) vpnAdminMesh(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	type row struct {
+	type member struct {
 		ID            int64  `json:"id"`
 		Name          string `json:"name"`
 		MeshIPv4      string `json:"mesh_ip4"`
-		AgentStatus   string `json:"agent_status"`
-		AgentVersion  string `json:"agent_version"`
-		AgentLastSeen int64  `json:"agent_last_seen"`
-		VPNNodeID     int64  `json:"vpn_node_id"`
-		VPNDomain     string `json:"vpn_domain"`
-		VPNState      string `json:"vpn_state"`
+		Domain        string `json:"domain"`
+		State         string `json:"state"`
 		Transport     string `json:"transport"`
-		LinkState     string `json:"link_state"`
 		RTTms         int    `json:"rtt_ms"`
 		LastSeen      int64  `json:"last_seen"`
+		AgentVersion  string `json:"agent_version"`
+		AgentLastSeen int64  `json:"agent_last_seen"`
 	}
 
 	now := time.Now().UnixMilli()
-	out := make([]row, 0, 32)
+	out := make([]member, 0, 32)
 	for rows.Next() {
-		var v row
-		if err := rows.Scan(&v.ID, &v.Name, &v.MeshIPv4, &v.AgentStatus, &v.AgentVersion,
-			&v.AgentLastSeen, &v.VPNNodeID, &v.VPNDomain, &v.VPNState,
-			&v.Transport, &v.LinkState, &v.RTTms, &v.LastSeen); err != nil {
+		var m member
+		if err := rows.Scan(&m.ID, &m.Name, &m.MeshIPv4, &m.Domain, &m.State, &m.Transport,
+			&m.RTTms, &m.LastSeen, &m.AgentVersion, &m.AgentLastSeen); err != nil {
 			continue
 		}
-		if v.Transport == "" {
-			v.Transport = string(settings.ManagementTransport)
+		if m.LastSeen == 0 || now-m.LastSeen > 120000 {
+			m.State = "down"
 		}
-		if v.LinkState == "" {
-			v.LinkState = "down"
+		if m.State == "" {
+			m.State = "down"
 		}
-		// Agent 2 分钟内有心跳即认为组网在线（WARP 或自建通道由 Agent 侧决定）。
-		if v.AgentLastSeen > 0 && now-v.AgentLastSeen < 120000 {
-			v.LinkState = "up"
-			if v.LastSeen == 0 {
-				v.LastSeen = v.AgentLastSeen
-			}
-		}
-		out = append(out, v)
+		out = append(out, m)
 	}
+
+	var total int
+	_ = h.db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM servers`).Scan(&total)
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"server": map[string]any{
@@ -88,6 +74,8 @@ func (h *handlers) vpnAdminMesh(w http.ResponseWriter, r *http.Request) {
 			"fallback":    settings.MasqueFallback,
 			"enabled":     settings.Enabled,
 		},
-		"nodes": out,
+		"total_servers": total,
+		"joined":        len(out),
+		"nodes":         out,
 	})
 }
