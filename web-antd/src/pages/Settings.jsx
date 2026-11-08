@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import {
   ApiOutlined,
   CloudOutlined,
@@ -429,8 +429,8 @@ export default function Settings({ embedded = false }) {
                   </Form.Item>
 
                   <Form.Item
-                    label="Agent 访问地址（按优先级）"
-                    extra="可添加多个地址，列表顺序即优先级：第一个优先使用，失败时按顺序回退"
+                    label="数据同步地址（按优先级）"
+                    extra="仅用于 Agent 内部数据同步，不包含组网；可添加多个地址，列表顺序即优先级，失败时按顺序回退"
                   >
                     <Form.List name="agent_access_urls">
                       {(fields, { add, remove, move }) => (
@@ -487,3 +487,4 @@ export default function Settings({ embedded = false }) {
     </PageCard>
   );
 }
+
