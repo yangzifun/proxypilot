@@ -1,4 +1,4 @@
-﻿// ProxyPilot VPN 客户端 1.0（联调用 CLI）
+// ProxyPilot VPN 客户端 1.0（联调用 CLI）
 //
 // 流程：门户令牌 → 已绑定节点 → /api/portal/vpn/connect 换取连接 JWT →
 // HTTP/3 鉴权 → QUIC DATAGRAM 发送 DNS 探测包，验证节点数据面。
@@ -66,6 +66,7 @@ func main() {
 	meshTun := flag.String("mesh-tun", "ppmesh0", "组网 TUN 名称")
 	meshEndpoint := flag.String("mesh-endpoint", "vpncenter.yzfn.top:443", "组网中心地址")
 	meshSNI := flag.String("mesh-sni", "vpncenter.yzfn.top", "组网中心 SNI")
+	meshAPI := flag.String("mesh-api", "https://proxypilot.yangzifun.org", "组网心跳 API 地址")
 	timeout := flag.Duration("timeout", 20*time.Second, "整体超时")
 	flag.Parse()
 	log.Printf("ProxyPilot VPN Client %s", Version)
@@ -76,7 +77,7 @@ func main() {
 		}
 		mctx, mcancel := context.WithCancel(context.Background())
 		defer mcancel()
-		if err := runMesh(mctx, *meshToken, *meshIP, *meshCIDR, *meshTun, *meshEndpoint, *meshSNI, *insecure); err != nil {
+		if err := runMesh(mctx, *meshToken, *meshIP, *meshCIDR, *meshTun, *meshEndpoint, *meshSNI, *meshAPI, *insecure); err != nil {
 			log.Fatalf("组网失败：%v", err)
 		}
 		return
@@ -170,7 +171,7 @@ func connect(ctx context.Context, api, token string, deviceID, nodeID int64) (*p
 	return &p, nil
 }
 
-func runMesh(ctx context.Context, token, ip, cidr, tunName, endpoint, sni string, insecure bool) error {
+func runMesh(ctx context.Context, token, ip, cidr, tunName, endpoint, sni, apiBase string, insecure bool) error {
 	dev, err := water.New(water.Config{
 		DeviceType:             water.TUN,
 		PlatformSpecificParams: water.PlatformSpecificParams{Name: tunName},
@@ -190,6 +191,7 @@ func runMesh(ctx context.Context, token, ip, cidr, tunName, endpoint, sni string
 		return fmt.Errorf("HTTP/3 鉴权: %w", err)
 	}
 	log.Printf("组网鉴权成功：节点分配 %s（本地 %s）", assigned, ip)
+	go meshHeartbeat(ctx, apiBase, token)
 
 	go func() {
 		buf := make([]byte, 2048)
@@ -212,6 +214,26 @@ func runMesh(ctx context.Context, token, ip, cidr, tunName, endpoint, sni string
 		}
 		if _, err := dev.Write(pkt); err != nil {
 			return err
+		}
+	}
+}
+
+func meshHeartbeat(ctx context.Context, apiBase, token string) {
+	apiBase = strings.TrimRight(apiBase, "/")
+	for {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiBase+"/api/vpn/mesh/heartbeat", strings.NewReader("{}"))
+		if err == nil {
+			req.Header.Set("Authorization", "Bearer "+token)
+			req.Header.Set("Content-Type", "application/json")
+			if resp, derr := http.DefaultClient.Do(req); derr == nil {
+				_, _ = io.Copy(io.Discard, resp.Body)
+				_ = resp.Body.Close()
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(20 * time.Second):
 		}
 	}
 }

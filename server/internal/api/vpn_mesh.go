@@ -48,7 +48,7 @@ func (h *handlers) vpnAdminMesh(w http.ResponseWriter, r *http.Request) {
 			&m.RTTms, &m.LastSeen, &m.AgentVersion, &m.AgentLastSeen); err != nil {
 			continue
 		}
-		if m.AgentLastSeen == 0 || now-m.AgentLastSeen > 300000 {
+		if m.LastSeen == 0 || now-m.LastSeen > 60000 {
 			m.State = "down"
 		} else {
 			m.State = "up"
@@ -57,7 +57,7 @@ func (h *handlers) vpnAdminMesh(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var total int
-	_ = h.db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM servers`).Scan(&total)
+	_ = h.db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM servers WHERE link_mode <> 'local'`).Scan(&total)
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"server": map[string]any{
@@ -73,5 +73,7 @@ func (h *handlers) vpnAdminMesh(w http.ResponseWriter, r *http.Request) {
 		"nodes":         out,
 	})
 }
+
+
 
 
