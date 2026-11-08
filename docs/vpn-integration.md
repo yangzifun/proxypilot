@@ -254,3 +254,14 @@ GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w -X main.Version=0.1.0
 - 部署前需给 Agent 的 systemd 单元加 `CAP_NET_ADMIN/CAP_NET_RAW/CAP_NET_BIND_SERVICE`。
 - 台北节点域名验证：`taipei-node.yzfn.top` → `82.152.91.4`，
   证书 `CN=taipei-node.yzfn.top`、`SAN=DNS:taipei-node.yzfn.top`，服务 active、UDP 443 监听。
+### 台北节点已切换为 Agent 内嵌模式（2026-11-08）
+
+- Agent 2.0.0（内嵌 VPN，9.98MB）已安装到 `/usr/local/bin/proxypilot-agent`，
+  旧版本备份为 `/usr/local/bin/proxypilot-agent.bak`；
+- 节点配置：`/etc/proxypilot/agent/vpn.json`（node_id=3，taipei-node.yzfn.top 证书，
+  client_cidr=10.88.1.0/24，TUN=ppvpn0，configure=true）；
+- 原独立服务 `proxypilot-masque` 已停止并 disable，UDP 443 由 Agent 进程持有；
+- 验证：
+  - `proxypilot-agent` active，`agent_version=2.0.0`；
+  - `vpn_node_links`：node 3，transport=warp，state=up；
+  - 节点 `last_seen` 持续更新，Agent 日志无错误。
