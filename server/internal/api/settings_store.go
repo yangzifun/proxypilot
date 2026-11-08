@@ -15,6 +15,9 @@ const (
 	settingAgentAccessURL  = "agent_access_url"
 	settingAgentInternalURL = "agent_internal_url"
 	settingAgentAccessURLs = "agent_access_urls"
+	settingAgentMeshEnabled = "agent_mesh_enabled"
+	settingAgentMeshCenter = "agent_mesh_center"
+	settingAgentMeshSync = "agent_mesh_sync"
 	settingAgentBinaryBase = "agent_binary_base_url"
 	settingComponentBase   = "component_base_url"
 	settingPasswordEnabled = "auth_password_enabled"
@@ -56,6 +59,9 @@ var settingDefs = []settingDef{
 	{Key: settingAgentAccessURL},
 	{Key: settingAgentInternalURL},
 	{Key: settingAgentAccessURLs},
+	{Key: settingAgentMeshEnabled, Bool: true},
+	{Key: settingAgentMeshCenter},
+	{Key: settingAgentMeshSync, Bool: true},
 	{Key: settingAgentBinaryBase},
 	{Key: settingComponentBase},
 	{Key: settingPasswordEnabled, Bool: true},

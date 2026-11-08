@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ApiOutlined,
   CloudOutlined,
@@ -58,6 +58,8 @@ export default function Settings({ embedded = false }) {
     form.setFieldsValue({
       ...v,
       auth_password_enabled: v.auth_password_enabled === '1',
+      agent_mesh_enabled: v.agent_mesh_enabled === '1',
+      agent_mesh_sync: v.agent_mesh_sync === '1',
       auth_email_code_enabled: v.auth_email_code_enabled === '1',
       auth_oidc_enabled: v.auth_oidc_enabled === '1',
       monitor_notify_enabled: v.monitor_notify_enabled === '1',
