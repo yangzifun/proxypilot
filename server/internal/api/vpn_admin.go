@@ -477,3 +477,47 @@ func normalizeNodeDomain(s string) (string, error) {
 	}
 	return d, nil
 }
+// GET /api/admin/vpn/users/{uuid}/grants — 用户可用于连接的 VPN 节点及授权状态。
+func (h *handlers) vpnAdminUserGrants(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	uuid := strings.TrimSpace(r.PathValue("uuid"))
+	if uuid == "" {
+		writeError(w, http.StatusBadRequest, "uuid 必填")
+		return
+	}
+	rows, err := h.db.QueryContext(r.Context(),
+		`SELECT n.id, n.name, COALESCE(n.domain, ''), COALESCE(n.state, ''),
+		        COALESCE(g.id, 0), COALESCE(g.enabled, 0), COALESCE(g.expires_at, 0), COALESCE(g.max_devices, 0)
+		   FROM vpn_nodes n
+		   LEFT JOIN vpn_node_grants g
+		     ON g.node_id = n.id AND g.subject_type = 'user' AND g.subject_id = ?
+		  ORDER BY n.id`, uuid)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "查询 VPN 授权失败")
+		return
+	}
+	defer rows.Close()
+	type item struct {
+		ID         int64  `json:"id"`
+		Name       string `json:"name"`
+		Domain     string `json:"domain"`
+		State      string `json:"state"`
+		GrantID    int64  `json:"grant_id"`
+		Granted    bool   `json:"granted"`
+		ExpiresAt  int64  `json:"expires_at"`
+		MaxDevices int    `json:"max_devices"`
+	}
+	out := make([]item, 0, 8)
+	for rows.Next() {
+		var it item
+		var enabled int
+		if err := rows.Scan(&it.ID, &it.Name, &it.Domain, &it.State, &it.GrantID, &enabled, &it.ExpiresAt, &it.MaxDevices); err == nil {
+			it.Granted = enabled == 1
+			out = append(out, it)
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"nodes": out})
+}

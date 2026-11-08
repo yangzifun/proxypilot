@@ -11,7 +11,7 @@ import (
 )
 
 // Version 由 main 通过 ldflags 注入。
-var Version = "V32.8"
+var Version = "V32.9"
 
 // New 构造 HTTP 处理器。已迁移的路由走真实实现，其余转发给旧 Worker 或返回 501。
 func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
@@ -62,6 +62,7 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("POST /api/admin/vpn/nodes/{id}/grants", h.authed(authOpts{superOnly: true}, h.vpnAdminGrants))
 	mux.HandleFunc("DELETE /api/admin/vpn/grants/{id}", h.authed(authOpts{superOnly: true}, h.vpnAdminGrantItem))
 	mux.HandleFunc("GET /api/admin/vpn/users/{uuid}/access", h.authed(authOpts{superOnly: true}, h.vpnAdminUserAccess))
+	mux.HandleFunc("GET /api/admin/vpn/users/{uuid}/grants", h.authed(authOpts{superOnly: true}, h.vpnAdminUserGrants))
 	mux.HandleFunc("PUT /api/admin/vpn/users/{uuid}/access", h.authed(authOpts{superOnly: true}, h.vpnAdminUserAccess))
 
 	// 用户中心（邮箱验证码登录）
@@ -457,6 +458,8 @@ func (h *handlers) health(w http.ResponseWriter, r *http.Request) {
 		"db":      status,
 	})
 }
+
+
 
 
 

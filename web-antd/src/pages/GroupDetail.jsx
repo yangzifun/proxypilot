@@ -17,6 +17,7 @@ import {
   App as AntdApp,
   Button,
   Descriptions,
+  Divider,
   Drawer,
   Form,
   Input,
@@ -439,6 +440,91 @@ function Configs({ uuid, onChanged }) {
   );
 }
 
+/* ---------------- VPN 节点授权 ---------------- */
+function AuthorizeVPN({ uuid }) {
+  const { message } = AntdApp.useApp();
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState(0);
+
+  const load = useCallback(async () => {
+    if (!uuid) return;
+    setLoading(true);
+    try {
+      const res = await api(`admin/vpn/users/${uuid}/grants`);
+      setRows((res && res.nodes) || []);
+    } catch (e) {
+      message.error(e.message || '加载 VPN 授权失败');
+    } finally {
+      setLoading(false);
+    }
+  }, [uuid, message]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const toggle = async (row, on) => {
+    setBusy(row.id);
+    try {
+      if (on) {
+        await api(`admin/vpn/nodes/${row.id}/grants`, {
+          method: 'POST',
+          body: { subject_id: uuid, expires_at: 0, max_devices: 1, quota_bytes: 0 },
+        });
+      } else {
+        await api(`admin/vpn/grants/${row.grant_id}`, { method: 'DELETE' });
+      }
+      message.success(on ? '已授权该用户连接此节点' : '已取消该节点的 VPN 授权');
+      load();
+    } catch (e) {
+      message.error(e.message || '操作失败');
+    } finally {
+      setBusy(0);
+    }
+  };
+
+  const columns = [
+    { title: 'VPN 节点', dataIndex: 'name' },
+    { title: '域名', dataIndex: 'domain', render: (v) => v || '—' },
+    {
+      title: '状态', dataIndex: 'state', width: 100,
+      render: (v) => <Tag color={v === 'active' ? 'green' : 'default'}>{v === 'active' ? '已启用' : '未启用'}</Tag>,
+    },
+    {
+      title: '授权', dataIndex: 'granted', width: 110,
+      render: (v, row) => (
+        <Switch
+          checked={!!v}
+          loading={busy === row.id}
+          onChange={(on) => toggle(row, on)}
+        />
+      ),
+    },
+  ];
+
+  return (
+    <div>
+      <Alert
+        type="warning"
+        showIcon
+        style={{ borderRadius: 10, marginBottom: 12 }}
+        message="只有已授权的 VPN 节点才会出现在客户端节点列表"
+        description="未授权（或已撤销）的节点，用户无法连接；授权即时生效。"
+      />
+      <Table
+        rowKey="id"
+        size="small"
+        loading={loading}
+        columns={columns}
+        dataSource={rows}
+        pagination={false}
+        locale={{ emptyText: '还没有 VPN 节点，请先在「节点绑定」中创建' }}
+      />
+    </div>
+  );
+}
+
 /* ---------------- 授权服务 ---------------- */
 function AuthorizeNodes({ uuid, onChanged }) {
   const { message } = AntdApp.useApp();
@@ -607,6 +693,8 @@ function AuthorizeNodes({ uuid, onChanged }) {
         }}
         locale={{ emptyText: '暂无 sing-box / mihomo / MTProto 服务' }}
       />
+      <Divider orientation="left">VPN 授权</Divider>
+      <AuthorizeVPN uuid={uuid} />
     </div>
   );
 }
