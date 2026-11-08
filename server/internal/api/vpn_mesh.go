@@ -1,6 +1,7 @@
 package api
 
 import (
+	"net"
 	"net/http"
 	"time"
 )
@@ -45,7 +46,6 @@ func (h *handlers) vpnAdminMesh(w http.ResponseWriter, r *http.Request) {
 		AgentLastSeen int64  `json:"agent_last_seen"`
 	}
 
-	now := time.Now().UnixMilli()
 	out := make([]member, 0, 32)
 	for rows.Next() {
 		var m member
@@ -53,13 +53,43 @@ func (h *handlers) vpnAdminMesh(w http.ResponseWriter, r *http.Request) {
 			&m.RTTms, &m.LastSeen, &m.AgentVersion, &m.AgentLastSeen); err != nil {
 			continue
 		}
-		if m.LastSeen == 0 || now-m.LastSeen > 120000 {
-			m.State = "down"
-		}
-		if m.State == "" {
-			m.State = "down"
-		}
 		out = append(out, m)
+	}
+
+	// 从中心对组网 IP 做 TCP 探活（SSH 端口），实时更新状态/心跳。
+	type probe struct {
+		idx int
+		ok  bool
+		rtt int
+	}
+	ch := make(chan probe, len(out))
+	for i := range out {
+		go func(i int) {
+			start := time.Now()
+			conn, err := net.DialTimeout("tcp", net.JoinHostPort(out[i].MeshIPv4, "22"), 1200*time.Millisecond)
+			if err == nil {
+				_ = conn.Close()
+			}
+			ch <- probe{i, err == nil, int(time.Since(start).Milliseconds())}
+		}(i)
+	}
+	nowMs := time.Now().UnixMilli()
+	for range out {
+		p := <-ch
+		if p.ok {
+			out[p.idx].State = "up"
+			out[p.idx].RTTms = p.rtt
+			out[p.idx].LastSeen = nowMs
+			_, _ = h.db.ExecContext(r.Context(),
+				`UPDATE vpn_mesh_nodes SET state = 'up', rtt_ms = ?, last_seen = ?, updated_at = ? WHERE server_id = ?`,
+				p.rtt, nowMs, nowMs, out[p.idx].ID)
+		} else {
+			out[p.idx].State = "down"
+			out[p.idx].RTTms = 0
+			_, _ = h.db.ExecContext(r.Context(),
+				`UPDATE vpn_mesh_nodes SET state = 'down', rtt_ms = 0, updated_at = ? WHERE server_id = ?`,
+				nowMs, out[p.idx].ID)
+		}
 	}
 
 	var total int
