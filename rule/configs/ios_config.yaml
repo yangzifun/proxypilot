@@ -1,12 +1,13 @@
-# 更新时间: 2026-10-26
-# 模板类型: IOS 专用模板 - 内存优化版 (50MB 限制)
-# 模板链接：https://s3.proxypilot.yangzifun.org/rule/configs/ios_config.yaml
+# ==========================================================
+# 更新时间: 2026-11-08
+# 模板类型: IOS 专用模板 - 内存优化版 (已修复核心报错)
 # 作者: YZFN
 # 说明:
 # 1) 精简策略组与规则集，减少内存占用
 # 2) 关闭嗅探，降低协议识别开销
 # 3) 合并规则提供者，优先保障常用场景可用性
 # 4) 策略组不再保留固定地区组，业务策略组通过 include-all + exclude-filter 直接引用节点自动选路
+# ==========================================================
 
 # ==========================================================
 # 节点信息
@@ -27,7 +28,6 @@ unified-delay: true
 tcp-concurrent: false
 log-level: warning
 find-process-mode: 'off'
-global-client-fingerprint: chrome
 disable-keep-alive: true
 profile:
   store-selected: true
@@ -47,7 +47,6 @@ tun:
   stack: system
   dns-hijack: ["any:53"]
   auto-route: true
-  auto-redirect: true
   auto-detect-interface: true
 
 # ==========================================================
@@ -60,7 +59,8 @@ dns:
   enhanced-mode: fake-ip
   fake-ip-range: 198.18.0.1/16
   fake-ip-filter:
-    - "rule-set:private_domain,cn_domain"
+    - "rule-set:private_domain"
+    - "rule-set:cn_domain"
     - "+.msftconnecttest.com"
     - "+.msftncsi.com"
   default-nameserver:
@@ -87,28 +87,24 @@ rule-anchor:
 # ==========================================================
 # 出站策略 (Proxy Groups)
 # ==========================================================
-# 策略组说明:
-#   1. 不再保留固定地区组（港澳/日本/美国/新加坡/台湾等），业务组直接用 include-all + exclude-filter 引用节点自动选路。
-#   2. 所有 url-test 组统一排除大陆节点，AI / Google / TikTok / 微软 / Steam 另排除港澳节点。
-#   3. iOS 内存优化：测速间隔放宽到 600 秒，减少测速负载；TikTok 域名规则直接走「⚡ 自动选择」。
-#   4. select 组不自动测速，用户可在客户端手动选择其 proxies 列表中的策略或节点。
 proxy-groups:
-  # --- 自动选优出口 (降低频率，降低内存和CPU压力) ---
+  # --- 自动选优出口 ---
   - {name: ⚡ 自动选择, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 600, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH"}
   - {name: 🌐 全部节点, type: select, include-all: true}
 
-  # --- 业务策略组 (精简，直接引用节点) ---
+  # --- 业务策略组 ---
   - {name: 🚀 默认代理, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 600, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH"}
   - {name: 🤖 AI 服务, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 600, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH|香港|澳门|澳門|HK|MO"}
   - {name: 🌍 社交办公, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 600, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH"}
   - {name: 🎬 国际影视, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 600, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH"}
-  - {name: 🎮 游戏平台, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 600, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH|香港|澳门|澳門|HK|MO"}
+  - {name: 🎵 TikTok, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 600, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH|香港|澳门|澳門|HK|MO"}
+  - {name: 🎮 游戏平台, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, exclude-filter: "(?i)直連|上海|北京|廣州|深圳|杭州|徐州|江蘇|浙江|南京|中國|國內|回國|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH|香港|澳门|澳門|HK|MO"}
   - {name: 🔍 Google, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 600, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH|香港|澳门|澳門|HK|MO"}
   - {name: 🟦 Microsoft, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 600, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH|香港|澳门|澳門|HK|MO"}
   - {name: 🍎 Apple, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 600, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH"}
   - {name: 🚀 Speedtest, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 600, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH"}
   - {name: 💳 PayPal, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 50, interval: 600, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH"}
-  - {name: 东南亚自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)新加坡|狮城|马来西亚|吉隆坡|马六甲|槟城|印尼|雅加达|巴厘岛|菲律宾|马尼拉|越南|胡志明市|河内|泰国|曼谷|清迈|孟买", proxies: [🚀 默认代理]}
+  - {name: 东南亚自动, type: url-test, url: 'https://www.gstatic.com/generate_204', include-all: true, tolerance: 20, interval: 300, filter: "(?i)新加坡|狮城|马来西亚|吉隆坡|马六甲|槟城|印尼|雅加达|巴厘岛|菲律宾|马尼拉|越南|胡志明市|河内|泰国|曼谷|清迈|孟买"}
   - {name: 🚫 广告拦截, type: select, proxies: [REJECT, DIRECT]}
   - {name: 🐟 漏网之鱼, type: select, proxies: [🚀 默认代理, ⚡ 自动选择, DIRECT]}
 
@@ -136,7 +132,7 @@ rules:
   - RULE-SET,social_domain,🌍 社交办公
   - RULE-SET,github_domain,🌍 社交办公
   - RULE-SET,media_domain,🎬 国际影视
-  - RULE-SET,tiktok_domain,⚡ 自动选择
+  - RULE-SET,tiktok_domain,🎵 TikTok
   - RULE-SET,google_domain,🔍 Google
   - RULE-SET,microsoft_domain,🟦 Microsoft
   - RULE-SET,apple_domain,🍎 Apple
@@ -144,10 +140,6 @@ rules:
   - RULE-SET,speedtest_domain,🚀 Speedtest
   - RULE-SET,paypal_domain,💳 PayPal
   
-  
-
-
-
   # 5. 兜底
   - RULE-SET,gfw_domain,🚀 默认代理
   - MATCH,🐟 漏网之鱼
