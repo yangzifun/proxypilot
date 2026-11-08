@@ -536,3 +536,27 @@ func (s *Store) ListVisibleNodes(ctx context.Context, userUUID string, now time.
 
 
 
+
+// CloseDeviceSessions 关闭该设备在指定节点上仍然「未结束」的会话。
+// 客户端异常退出（进程被杀、断网）时不会调用 disconnect，旧会话会一直占着
+// 并发名额，导致同一设备再也连不上——重连前先把它收掉。
+func (s *Store) CloseDeviceSessions(ctx context.Context, deviceID, nodeID int64, reason string) error {
+	now := time.Now().UnixMilli()
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE vpn_sessions SET ended_at = ?, close_reason = ?
+		  WHERE device_id = ? AND node_id = ? AND ended_at = 0`,
+		now, reason, deviceID, nodeID)
+	return err
+}
+
+// ReapStaleSessions 把超过 ttl 仍未结束的会话标记为超时结束，避免并发名额被永久占用。
+func (s *Store) ReapStaleSessions(ctx context.Context, ttl time.Duration) (int64, error) {
+	cutoff := time.Now().Add(-ttl).UnixMilli()
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE vpn_sessions SET ended_at = ?, close_reason = 'stale'
+		  WHERE ended_at = 0 AND started_at < ?`, time.Now().UnixMilli(), cutoff)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}

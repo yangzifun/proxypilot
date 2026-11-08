@@ -1,4 +1,4 @@
-﻿package api
+package api
 
 import (
 	"net/http"
@@ -50,7 +50,9 @@ func (h *handlers) vpnAdminMesh(w http.ResponseWriter, r *http.Request) {
 		}
 		if m.LastSeen == 0 || now-m.LastSeen > 60000 {
 			m.State = "down"
-		} else {
+		} else if m.State != "down" {
+			// 心跳新鲜：客户端自报数据面正常才置 up；自报 down（长连接断了）时保留 down，
+			// 面板上表现为"最近心跳在更新但状态是 down"，一眼能看出是数据面故障。
 			m.State = "up"
 		}
 		out = append(out, m)

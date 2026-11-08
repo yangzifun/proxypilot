@@ -48,6 +48,17 @@ func (h *handlers) vpnAdminMeshBatch(w http.ResponseWriter, r *http.Request) {
 				res.State = "pending"
 			}
 		}
+		if action == "redeploy" {
+			// 重新下发：按服务端登记的固定组网 IP 重写单元并重启客户端。
+			srv, err := h.fetchAgentServer(r.Context(), id)
+			if err != nil || srv == nil {
+				res.Error = "服务器 Agent 不存在"
+			} else {
+				h.autoMeshTaskForce(r.Context(), srv, true)
+				res.Queued = true
+				res.State = "pending"
+			}
+		}
 		out = append(out, res)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "action": action, "results": out})

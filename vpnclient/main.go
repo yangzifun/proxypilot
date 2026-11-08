@@ -1,4 +1,4 @@
-﻿// ProxyPilot VPN 客户端 1.0（联调用 CLI）
+// ProxyPilot VPN 客户端 1.0（联调用 CLI）
 //
 // 流程：门户令牌 → 已绑定节点 → /api/portal/vpn/connect 换取连接 JWT →
 // HTTP/3 鉴权 → QUIC DATAGRAM 发送 DNS 探测包，验证节点数据面。
@@ -19,7 +19,11 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
+	"strconv"
 	"strings"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/quic-go/quic-go"
@@ -28,7 +32,7 @@ import (
 )
 
 // Version 是 VPN 客户端版本（V1.x）。
-const Version = "1.0.0"
+const Version = "V35.0"
 
 var caPEM []byte
 
@@ -57,7 +61,7 @@ type profile struct {
 	} `json:"tls"`
 }
 
-func main() {
+func runCLI() {
 	apiBase := flag.String("api", "https://proxypilot.yangzifun.org", "面板地址")
 	token := flag.String("token", "", "门户登录令牌（Bearer）")
 	deviceID := flag.Int64("device", 0, "设备 ID")
@@ -69,9 +73,15 @@ func main() {
 	meshIP := flag.String("mesh-ip", "", "组网 IP，例如 10.99.0.11")
 	meshCIDR := flag.String("mesh-cidr", "10.99.0.0/16", "组网网段")
 	meshTun := flag.String("mesh-tun", "ppmesh0", "组网 TUN 名称")
-	meshEndpoint := flag.String("mesh-endpoint", "vpncenter.yzfn.top:443", "组网中心地址")
+	meshEndpoint := flag.String("mesh-endpoint", "vpncenter.yzfn.top:443", "组网中心地址（可用逗号分隔多个候选，按序回退）")
 	meshSNI := flag.String("mesh-sni", "vpncenter.yzfn.top", "组网中心 SNI")
 	meshAPI := flag.String("mesh-api", "https://proxypilot.yangzifun.org", "组网心跳 API 地址")
+	meshHeartbeat := flag.Duration("mesh-heartbeat", 20*time.Second, "组网心跳间隔")
+	uiMode := flag.Bool("ui", false, "启动本地控制台界面（127.0.0.1）")
+	uiAddr := flag.String("ui-addr", "127.0.0.1:8899", "控制台监听地址")
+	uiOpen := flag.Bool("ui-open", true, "启动后自动打开浏览器")
+	uiDemo := flag.Bool("ui-demo", false, "控制台使用演示数据（不发起真实连接）")
+	cfgPath := flag.String("config", "", "配置文件路径（默认用系统配置目录）")
 	timeout := flag.Duration("timeout", 20*time.Second, "整体超时")
 	flag.Parse()
 	if *caPath != "" {
@@ -83,13 +93,33 @@ func main() {
 	}
 	log.Printf("ProxyPilot VPN Client %s", Version)
 
+	if *cfgPath != "" {
+		configPathOverride = *cfgPath
+	}
+	if *uiMode {
+		uctx, ustop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer ustop()
+		defaults := uiSettings{
+			API:      strings.TrimRight(*apiBase, "/"),
+			Token:    *token,
+			Insecure: *insecure,
+			DNSAddr:  *dnsAddr,
+			NodeID:   *nodeID,
+		}
+		if err := runUI(uctx, *uiAddr, defaults, *uiOpen, *uiDemo); err != nil {
+			log.Fatalf("控制台启动失败：%v", err)
+		}
+		return
+	}
+
 	if *meshToken != "" {
 		if *meshIP == "" {
 			log.Fatal("组网模式需要 -mesh-ip")
 		}
-		mctx, mcancel := context.WithCancel(context.Background())
-		defer mcancel()
-		if err := runMesh(mctx, *meshToken, *meshIP, *meshCIDR, *meshTun, *meshEndpoint, *meshSNI, *meshAPI, *insecure); err != nil {
+		mctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		eps := splitEndpoints(*meshEndpoint)
+		if err := runMesh(mctx, *meshToken, *meshIP, *meshCIDR, *meshTun, eps, *meshSNI, *meshAPI, *meshHeartbeat, *insecure); err != nil {
 			log.Fatalf("组网失败：%v", err)
 		}
 		return
@@ -183,69 +213,249 @@ func connect(ctx context.Context, api, token string, deviceID, nodeID int64) (*p
 	return &p, nil
 }
 
-func runMesh(ctx context.Context, token, ip, cidr, tunName, endpoint, sni, apiBase string, insecure bool) error {
-	dev, err := water.New(water.Config{
-		DeviceType:             water.TUN,
-		PlatformSpecificParams: water.PlatformSpecificParams{Name: tunName},
-	})
+// meshState 保存数据面状态；RTT 取自 QUIC 长连接（真实链路时延），心跳只负责上报。
+type meshState struct {
+	mu       sync.Mutex
+	conn     *quic.Conn
+	endpoint string
+	dataOK   bool
+	lastErr  string
+	rttMs    int
+}
+
+type meshReport struct {
+	RTTms     int    `json:"rtt_ms"`
+	Transport string `json:"transport"`
+	State     string `json:"state"`
+	Endpoint  string `json:"endpoint,omitempty"`
+	LastError string `json:"last_error,omitempty"`
+}
+
+func (s *meshState) setConn(conn *quic.Conn, endpoint string, handshake time.Duration) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.conn = conn
+	s.endpoint = endpoint
+	s.dataOK = conn != nil
+	if conn != nil {
+		s.lastErr = ""
+	}
+	if handshake > 0 {
+		s.rttMs = int(handshake.Milliseconds())
+	}
+}
+
+func (s *meshState) setDown(err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.conn = nil
+	s.dataOK = false
+	if err != nil {
+		s.lastErr = err.Error()
+	}
+}
+
+func (s *meshState) report() meshReport {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.conn != nil {
+		if stats := s.conn.ConnectionStats(); stats.SmoothedRTT > 0 {
+			s.rttMs = int(stats.SmoothedRTT.Milliseconds())
+		}
+	}
+	state := "down"
+	if s.dataOK {
+		state = "up"
+	}
+	lastErr := s.lastErr
+	if len(lastErr) > 180 {
+		lastErr = lastErr[:180]
+	}
+	return meshReport{
+		RTTms:     s.rttMs,
+		Transport: "quic",
+		State:     state,
+		Endpoint:  s.endpoint,
+		LastError: lastErr,
+	}
+}
+
+func splitEndpoints(raw string) []string {
+	out := make([]string, 0, 2)
+	for _, item := range strings.Split(raw, ",") {
+		if ep := strings.TrimSpace(item); ep != "" {
+			out = append(out, ep)
+		}
+	}
+	if len(out) == 0 {
+		out = append(out, "vpncenter.yzfn.top:443")
+	}
+	return out
+}
+
+// setupMeshTUN 幂等地准备组网网卡：重启不会因为地址已存在而失败。
+func setupMeshTUN(ip, cidr, tunName string) (*water.Interface, error) {
+	dev, err := openTUN(tunName)
+	if err != nil {
+		return nil, err
+	}
+	bits := "16"
+	if _, network, perr := net.ParseCIDR(cidr); perr == nil {
+		if ones, _ := network.Mask.Size(); ones > 0 {
+			bits = strconv.Itoa(ones)
+		}
+	}
+	addr := ip + "/" + bits
+	if out, err := exec.Command("ip", "addr", "replace", addr, "dev", dev.Name()).CombinedOutput(); err != nil {
+		log.Printf("配置组网地址失败：%v %s", err, strings.TrimSpace(string(out)))
+	}
+	if out, err := exec.Command("ip", "link", "set", "dev", dev.Name(), "mtu", "1280", "up").CombinedOutput(); err != nil {
+		log.Printf("启用组网网卡失败：%v %s", err, strings.TrimSpace(string(out)))
+	}
+	return dev, nil
+}
+
+func runMesh(ctx context.Context, token, ip, cidr, tunName string, endpoints []string, sni, apiBase string, hbInterval time.Duration, insecure bool) error {
+	dev, err := setupMeshTUN(ip, cidr, tunName)
 	if err != nil {
 		return fmt.Errorf("创建 TUN: %w", err)
 	}
 	defer dev.Close()
-	if err := exec.Command("ip", "addr", "add", ip+"/"+strings.Split(cidr, "/")[1], "dev", dev.Name()).Run(); err != nil {
-		return fmt.Errorf("配置地址: %w", err)
-	}
-	if err := exec.Command("ip", "link", "set", "dev", dev.Name(), "mtu", "1280", "up").Run(); err != nil {
-		return fmt.Errorf("启用 TUN: %w", err)
-	}
-	assigned, conn, err := authHTTP3(ctx, endpoint, sni, token, insecure)
-	if err != nil {
-		return fmt.Errorf("HTTP/3 鉴权: %w", err)
-	}
-	log.Printf("组网鉴权成功：节点分配 %s（本地 %s）", assigned, ip)
-	go meshHeartbeat(ctx, apiBase, token)
 
-	go func() {
-		buf := make([]byte, 2048)
-		for {
-			n, err := dev.Read(buf)
-			if err != nil {
-				return
-			}
-			_ = conn.SendDatagram(buf[:n])
-		}
-	}()
+	st := &meshState{}
+	// 心跳先起：即使数据面暂时不通，面板也能看到"在线但 down"，而不是彻底失联。
+	go meshHeartbeat(ctx, apiBase, token, hbInterval, st)
+
+	backoff := 2 * time.Second
 	for {
-		data, err := conn.ReceiveDatagram(ctx)
-		if err != nil {
-			return err
+		if ctx.Err() != nil {
+			return nil
 		}
-		pkt, _, _, err := strip(data)
-		if err != nil {
-			continue
+		started := time.Now()
+		err := meshDataPlane(ctx, dev, endpoints, sni, token, ip, insecure, st)
+		if ctx.Err() != nil {
+			return nil
 		}
-		if _, err := dev.Write(pkt); err != nil {
-			return err
+		st.setDown(err)
+		if time.Since(started) > 30*time.Second {
+			backoff = 2 * time.Second
+		}
+		log.Printf("组网数据面断开：%v；%s 后重连", err, backoff)
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(backoff):
+		}
+		if backoff < 30*time.Second {
+			backoff *= 2
 		}
 	}
 }
 
-func meshHeartbeat(ctx context.Context, apiBase, token string) {
-	apiBase = strings.TrimRight(apiBase, "/")
-	for {
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiBase+"/api/vpn/mesh/heartbeat", strings.NewReader("{}"))
-		if err == nil {
-			req.Header.Set("Authorization", "Bearer "+token)
-			req.Header.Set("Content-Type", "application/json")
-			if resp, derr := http.DefaultClient.Do(req); derr == nil {
-				_, _ = io.Copy(io.Discard, resp.Body)
-				_ = resp.Body.Close()
-			}
+// meshDataPlane 维持一条到中心的长连接；失败按候选端点回退，不退出进程。
+func meshDataPlane(ctx context.Context, dev *water.Interface, endpoints []string, sni, token, localIP string, insecure bool, st *meshState) error {
+	var lastErr error
+	for _, ep := range endpoints {
+		if ctx.Err() != nil {
+			return nil
 		}
+		start := time.Now()
+		assigned, conn, err := authHTTP3(ctx, ep, sni, token, insecure)
+		if err != nil {
+			lastErr = fmt.Errorf("%s: %w", ep, err)
+			log.Printf("组网鉴权失败（%s）：%v", ep, err)
+			continue
+		}
+		st.setConn(conn, ep, time.Since(start))
+		log.Printf("组网鉴权成功：节点分配 %s（本地 %s，端点 %s，握手 %s）",
+			assigned, localIP, ep, time.Since(start).Round(time.Millisecond))
+
+		pumpCtx, stopPump := context.WithCancel(ctx)
+		go func() {
+			buf := make([]byte, 2048)
+			for {
+				select {
+				case <-pumpCtx.Done():
+					return
+				default:
+				}
+				n, err := dev.Read(buf)
+				if err != nil {
+					return
+				}
+				if err := conn.SendDatagram(buf[:n]); err != nil {
+					return
+				}
+			}
+		}()
+
+		err = func() error {
+			for {
+				data, err := conn.ReceiveDatagram(ctx)
+				if err != nil {
+					return err
+				}
+				pkt, _, _, err := strip(data)
+				if err != nil {
+					continue
+				}
+				if _, err := dev.Write(pkt); err != nil {
+					return err
+				}
+			}
+		}()
+		stopPump()
+		_ = conn.CloseWithError(0, "reconnect")
+		return err
+	}
+	return lastErr
+}
+
+// meshHeartbeat 独立于数据面运行：上报存活、RTT 与数据面状态。
+func meshHeartbeat(ctx context.Context, apiBase, token string, interval time.Duration, st *meshState) {
+	if interval <= 0 {
+		interval = 20 * time.Second
+	}
+	apiBase = strings.TrimRight(apiBase, "/")
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			Proxy:                 http.ProxyFromEnvironment,
+			MaxIdleConns:          4,
+			MaxIdleConnsPerHost:   2,
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: time.Second,
+		},
+	}
+	send := func() {
+		body, _ := json.Marshal(st.report())
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiBase+"/api/vpn/mesh/heartbeat", bytes.NewReader(body))
+		if err != nil {
+			return
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Printf("组网心跳失败：%v", err)
+			return
+		}
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			log.Printf("组网心跳被拒：HTTP %d", resp.StatusCode)
+		}
+	}
+	send()
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(20 * time.Second):
+		case <-ticker.C:
+			send()
 		}
 	}
 }

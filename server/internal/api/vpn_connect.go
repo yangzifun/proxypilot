@@ -74,6 +74,18 @@ func (h *handlers) vpnPortalConnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 同设备重连时先收掉它自己在旧连接里残留的会话（客户端崩溃不会调用 disconnect）。
+	_ = h.vpnStore().CloseDeviceSessions(r.Context(), dev.ID, node.ID, "reconnect")
+	// 超过 2 倍的令牌 TTL 仍未结束的会话一律视为僵尸会话，释放并发名额。
+	if settings, serr := h.vpnStore().LoadSettings(r.Context()); serr == nil {
+		ttl := time.Duration(settings.TokenTTLSeconds) * 2 * time.Second
+		if ttl <= 0 {
+			ttl = 20 * time.Minute
+		}
+		if n, rerr := h.vpnStore().ReapStaleSessions(r.Context(), ttl); rerr == nil && n > 0 {
+			h.log.Warn("回收僵尸 VPN 会话", "count", n)
+		}
+	}
 	userDevices, _ := h.vpnStore().CountUserDevices(r.Context(), uuid)
 	nodeSessions, _ := h.vpnStore().ActiveSessionCount(r.Context(), node.ID, uuid)
 

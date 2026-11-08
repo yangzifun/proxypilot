@@ -1,9 +1,18 @@
 # ProxyPilot
 
-![Go](https://img.shields.io/badge/Go-1.24+-00ADD8?logo=go&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white) ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black) ![Ant Design](https://img.shields.io/badge/Ant%20Design-6-1677FF?logo=antdesign&logoColor=white) ![Agent](https://img.shields.io/badge/Agent-Go-00ADD8?logo=go&logoColor=white) ![Version](https://img.shields.io/badge/Version-V32.0-blue.svg) ![License](https://img.shields.io/badge/License-MIT-green.svg)
+![Go](https://img.shields.io/badge/Go-1.24+-00ADD8?logo=go&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white) ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black) ![Ant Design](https://img.shields.io/badge/Ant%20Design-6-1677FF?logo=antdesign&logoColor=white) ![Agent](https://img.shields.io/badge/Agent-Go-00ADD8?logo=go&logoColor=white) ![Version](https://img.shields.io/badge/Version-V35.0-blue.svg) ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
 ---
 
+## V35.0 更新（2026-11）
+
+- **桌面客户端**：新增 Wails v3（WebView2）原生窗口版 `ProxyPilot.exe`，界面与网页控制台一致，按用户安装（`install.cmd`，免管理员），图标取自站点 favicon。
+- **客户端网页登录**：客户端点「使用浏览器登录」→ 浏览器完成邮箱验证并授权 → 客户端自动拿到令牌，无需手工粘贴。
+- **自建组网修复**：组网中心改双栈监听（UDP `:443`，兼容 8443）；服务端统一分配并固定组网 IP；客户端心跳与数据面解耦、断线指数退避重连；中心接管同 IP 旧会话，修复"一直 409 / 重连不上"。
+- **组网状态可视化**：面板显示 RTT（取自 QUIC `SmoothedRTT`）与传输方式；"心跳在跳但状态 down"直接标识数据面故障。
+- **证书管理（V35.0 新增）**：用 Cloudflare DNS-01 申请 `*.yzfn.top` 通配证书，管理后台一键签发 + 统一下发到组网中心与各节点 VPN（`/admin/certs`）。
+- **会话治理**：连接前回收同设备僵尸会话、定期清理超过 2×TTL 的残留会话，修复"该节点并发设备数超过上限"导致的无法连接。
+- **版本号**：服务端 V35.0 / Agent 2.0.0 / 客户端 V35.0。
 ## 目录
 
 - [架构总览](#架构总览)
@@ -123,7 +132,7 @@ proxypilot/
 - `workers/`、`wrangler.toml` 与依赖 Worker 的测试脚本已从本分支删除。
 - 历史迁移方案、D1 导入工具仍保留在 `docs/migration/` 与 `server/tools/`，仅用于迁移旧数据。
 - `PP_LEGACY_BASE` 配置项保留，作为迁移期可选兜底；新部署无需配置。
-- 当前版本：V32.0（Go 1.24+ / MySQL 8 / React 18 + Ant Design 6 / Go Agent 1.10.8）。
+- 当前版本：V35.0（Go 1.24+ / MySQL 8 / React 18 + Ant Design 6 / Go Agent 2.0.0 / Wails v3 桌面客户端）。
 
 ## 功能总览
 

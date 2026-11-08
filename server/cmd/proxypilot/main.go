@@ -1,4 +1,4 @@
-﻿// ProxyPilot Go 服务（迁移自 Cloudflare Worker）
+// ProxyPilot Go 服务（迁移自 Cloudflare Worker）
 //
 // 用法：
 //
@@ -24,7 +24,7 @@ import (
 )
 
 // version 由构建脚本注入：-ldflags "-X main.version=v1.0.0"
-var version = "V34.6"
+var version = "V35.0"
 
 func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))

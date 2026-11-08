@@ -207,8 +207,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) register(sess *session) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.sessions[sess.ip.String()]; ok {
-		return false
+	if cur, ok := s.sessions[sess.ip.String()]; ok {
+		// 同一地址只允许一个活会话；客户端重启后旧会话往往来不及清理（对端进程被杀），
+		// 这里直接接管，否则会一直 409，节点永远连不回来。
+		s.log.Warn("接管组网会话", "ip", sess.ip.String(), "old_device", cur.device,
+			"old_duration", time.Since(cur.started).Round(time.Second))
+		if cur.conn != nil {
+			_ = cur.conn.CloseWithError(0, "session replaced")
+		}
 	}
 	s.sessions[sess.ip.String()] = sess
 	return true

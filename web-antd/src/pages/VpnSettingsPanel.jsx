@@ -16,7 +16,7 @@ export default function VpnSettingsPanel() {
     setLoading(true);
     try {
       const res = await api('admin/vpn/settings');
-      const d = res && res.data ? res.data : {};
+      const d = res && res.data ? res.data : (res || {});
       setSettings(d);
       form.setFieldsValue({
         enabled: !!d.enabled,
