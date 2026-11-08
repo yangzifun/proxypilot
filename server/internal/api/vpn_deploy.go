@@ -90,6 +90,15 @@ func (h *handlers) vpnAdminNodeDeploy(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "节点未填写域名，无法生成证书")
 		return
 	}
+	certPEM, keyPEM := "", ""
+	if strings.EqualFold(node.CertMode, "internal_ca") {
+		c, k, cerr := h.vpnIssueNodeCert(r.Context(), host)
+		if cerr != nil {
+			writeError(w, http.StatusInternalServerError, "内部 CA 签发失败："+cerr.Error())
+			return
+		}
+		certPEM, keyPEM = string(c), string(k)
+	}
 	cfg := vpnNodeConfig{
 		Listen:      fmt.Sprintf("0.0.0.0:%d", node.ListenPort),
 		CertFile:    "/etc/proxypilot/masque/tls/cert.pem",
@@ -117,7 +126,7 @@ func (h *handlers) vpnAdminNodeDeploy(w http.ResponseWriter, r *http.Request) {
 	if binaryURL == "" {
 		binaryURL = strings.TrimRight(requestOrigin(r), "/") + "/agent-dist/pp-masque-node-linux-amd64"
 	}
-	script := buildVPNDeployScript(host, binaryURL, string(cfgJSON), node.ListenPort)
+	script := buildVPNDeployScript(host, binaryURL, string(cfgJSON), node.ListenPort, certPEM, keyPEM)
 
 	payload := map[string]any{
 		"command":       script,
@@ -136,7 +145,21 @@ func (h *handlers) vpnAdminNodeDeploy(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func buildVPNDeployScript(host, binaryURL, cfgJSON string, port int) string {
+func buildVPNDeployScript(host, binaryURL, cfgJSON string, port int, certPEM, keyPEM string) string {
+	certBlock := `if [ ! -s "$DIR/tls/cert.pem" ] || [ ! -s "$DIR/tls/key.pem" ]; then
+  openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 90 \
+    -subj "/CN=` + strings.ReplaceAll(host, `"`, ``) + `" \
+    -addext "subjectAltName=DNS:` + strings.ReplaceAll(host, `"`, ``) + `" \
+    -keyout "$DIR/tls/key.pem" -out "$DIR/tls/cert.pem" >/dev/null 2>&1
+  chmod 600 "$DIR/tls/key.pem"
+fi`
+	if certPEM != "" && keyPEM != "" {
+		certBlock = `cat > "$DIR/tls/cert.pem" <<'PPCERT'
+` + certPEM + `PPCERT
+cat > "$DIR/tls/key.pem" <<'PPKEY'
+` + keyPEM + `PPKEY
+chmod 600 "$DIR/tls/key.pem"`
+	}
 	unit := `[Unit]
 Description=ProxyPilot MASQUE Node
 After=network-online.target
@@ -167,13 +190,7 @@ fi
 chmod +x "$BIN.new"
 mv "$BIN.new" "$BIN"
 
-if [ ! -s "$DIR/tls/cert.pem" ] || [ ! -s "$DIR/tls/key.pem" ]; then
-  openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 90 \
-    -subj "/CN=` + strings.ReplaceAll(host, `"`, ``) + `" \
-    -addext "subjectAltName=DNS:` + strings.ReplaceAll(host, `"`, ``) + `" \
-    -keyout "$DIR/tls/key.pem" -out "$DIR/tls/cert.pem" >/dev/null 2>&1
-  chmod 600 "$DIR/tls/key.pem"
-fi
+` + certBlock + `
 
 cat > "$DIR/config.json" <<'PPVPNCFG'
 ` + cfgJSON + `

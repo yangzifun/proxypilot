@@ -1,4 +1,4 @@
-package vpn
+﻿package vpn
 
 import (
 	"crypto/aes"
@@ -71,4 +71,49 @@ func OpenPrivateKey(secret, enc string) (ed25519.PrivateKey, error) {
 		return nil, fmt.Errorf("vpn: 私钥长度 %d 非法", len(plain))
 	}
 	return ed25519.PrivateKey(plain), nil
+}
+// SealBytes 用 AES-256-GCM 加密任意字节（如 CA 私钥）。
+func SealBytes(secret string, plain []byte) (string, error) {
+	if strings.TrimSpace(secret) == "" {
+		return "", errors.New("vpn: 加密密钥不能为空")
+	}
+	key := secretKey(secret)
+	block, err := aes.NewCipher(key[:])
+	if err != nil {
+		return "", err
+	}
+	aead, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", err
+	}
+	nonce := make([]byte, aead.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return "", err
+	}
+	raw := append(nonce, aead.Seal(nil, nonce, plain, nil)...)
+	return secretPrefix + base64.StdEncoding.EncodeToString(raw), nil
+}
+
+// OpenBytes 解密 SealBytes 的输出。
+func OpenBytes(secret, enc string) ([]byte, error) {
+	if !strings.HasPrefix(enc, secretPrefix) {
+		return nil, fmt.Errorf("vpn: 不支持的密钥格式")
+	}
+	raw, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(enc, secretPrefix))
+	if err != nil {
+		return nil, err
+	}
+	key := secretKey(secret)
+	block, err := aes.NewCipher(key[:])
+	if err != nil {
+		return nil, err
+	}
+	aead, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) < aead.NonceSize() {
+		return nil, errors.New("vpn: 密文过短")
+	}
+	return aead.Open(nil, raw[:aead.NonceSize()], raw[aead.NonceSize():], nil)
 }

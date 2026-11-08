@@ -11,7 +11,7 @@ import (
 )
 
 // Version 由 main 通过 ldflags 注入。
-var Version = "V33.6"
+var Version = "V33.7"
 
 // New 构造 HTTP 处理器。已迁移的路由走真实实现，其余转发给旧 Worker 或返回 501。
 func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
@@ -50,6 +50,7 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	// VPN 管理（节点 / 绑定 / 用户资格 / 设置）
 	mux.HandleFunc("GET /api/admin/vpn/settings", h.authed(authOpts{superOnly: true}, h.vpnAdminSettings))
 	mux.HandleFunc("PUT /api/admin/vpn/settings", h.authed(authOpts{superOnly: true}, h.vpnAdminSettings))
+	mux.HandleFunc("GET /api/vpn/ca.crt", h.vpnPublicCACert)
 	mux.HandleFunc("GET /api/admin/vpn/mesh", h.authed(authOpts{superOnly: true}, h.vpnAdminMesh))
 	mux.HandleFunc("GET /api/admin/vpn/nodes", h.authed(authOpts{superOnly: true}, h.vpnAdminNodes))
 	mux.HandleFunc("POST /api/admin/vpn/nodes", h.authed(authOpts{superOnly: true}, h.vpnAdminNodes))
@@ -458,6 +459,8 @@ func (h *handlers) health(w http.ResponseWriter, r *http.Request) {
 		"db":      status,
 	})
 }
+
+
 
 
 

@@ -1,0 +1,7 @@
+-- 0037: 平台内部 CA（节点证书签发）
+CREATE TABLE IF NOT EXISTS vpn_ca (
+  id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
+  cert_pem TEXT NOT NULL,
+  key_enc TEXT NOT NULL,
+  created_at BIGINT NOT NULL
+);
