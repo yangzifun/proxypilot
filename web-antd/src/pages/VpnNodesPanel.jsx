@@ -191,11 +191,10 @@ export default function VpnNodesPanel() {
     { title: 'ID', dataIndex: 'id', width: 60 },
     { title: '名称', dataIndex: 'name', width: 140 },
     { title: '服务器', dataIndex: 'server_id', width: 90 },
-    { title: '接入地址', dataIndex: 'endpoint', width: 180, render: (v) => v || '—' },
-    { title: '组网 IP', dataIndex: 'mesh_ip4', width: 120, render: (v) => v || '—' },
+    { title: '域名', dataIndex: 'domain', width: 220, render: (v) => v || '—' },
+    { title: '接入地址', dataIndex: 'endpoint', width: 200, render: (v) => v || '—' },
     { title: '客户端子网', dataIndex: 'client_cidr4', width: 130, render: (v) => v || '—' },
     { title: '状态', dataIndex: 'state', width: 90, render: stateTag },
-    { title: '心跳', dataIndex: 'last_seen', width: 160, render: fmtTime },
     {
       title: '操作',
       key: 'op',

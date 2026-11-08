@@ -265,3 +265,17 @@ GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w -X main.Version=0.1.0
   - `proxypilot-agent` active，`agent_version=2.0.0`；
   - `vpn_node_links`：node 3，transport=warp，state=up；
   - 节点 `last_seen` 持续更新，Agent 日志无错误。
+## 组网与 VPN 解耦（V32.6）
+
+- **组网**：所有服务器 ↔ 服务端，不要求绑定 VPN；组网页展示全部服务器
+  （组网 IP、Agent 版本/状态、通道、链路、RTT、心跳、已绑定的 VPN 域名）；
+  组网设置（中心域名 `vpncenter.yzfn.top`、中心组网 IP、组网网段、同步通道、
+  WARP 回落）直接放在「组网」页；
+- **VPN 节点绑定**：在「节点绑定」页，仅保留 VPN 相关字段（域名、接入地址、
+  客户端子网、状态、部署/授权），组网 IP 与心跳不再在此展示；
+- **VPN 设置**：在「协议管理 → VPN」，仅保留协议参数（启用、MTU、令牌 TTL、
+  用户端地址池）；
+- 新增迁移 `0034_vpn_mesh_domain`（`vpn_settings.server_mesh_domain`），默认
+  `vpncenter.yzfn.top`；
+- `GET /api/admin/vpn/mesh` 改为返回全部服务器（LEFT JOIN vpn_nodes / vpn_node_links），
+  Agent 2 分钟内有心跳即标记链路 up。

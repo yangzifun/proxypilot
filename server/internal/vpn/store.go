@@ -41,14 +41,14 @@ func fromMS(v int64) time.Time {
 func (s *Store) LoadSettings(ctx context.Context) (Settings, error) {
 	def := DefaultSettings()
 	var enabled, fallback int
-	var transport, serverMesh, meshCIDR, clientCIDR string
+	var transport, serverMesh, serverDomain, meshCIDR, clientCIDR string
 	var mtu, ttl int
 	var updated int64
 	err := s.db.QueryRowContext(ctx,
 		`SELECT enabled, management_transport, masque_fallback, server_mesh_ip4,
-		        mesh_cidr4, client_cidr4, mtu, token_ttl_seconds, updated_at
+		        server_mesh_domain, mesh_cidr4, client_cidr4, mtu, token_ttl_seconds, updated_at
 		   FROM vpn_settings WHERE id = 1`).
-		Scan(&enabled, &transport, &fallback, &serverMesh, &meshCIDR, &clientCIDR, &mtu, &ttl, &updated)
+		Scan(&enabled, &transport, &fallback, &serverMesh, &serverDomain, &meshCIDR, &clientCIDR, &mtu, &ttl, &updated)
 	if errors.Is(err, sql.ErrNoRows) {
 		return def, nil
 	}
@@ -60,6 +60,7 @@ func (s *Store) LoadSettings(ctx context.Context) (Settings, error) {
 		ManagementTransport: Transport(transport),
 		MasqueFallback:      fallback == 1,
 		ServerMeshIPv4:      serverMesh,
+		ServerMeshDomain:    serverDomain,
 		MeshCIDR4:           meshCIDR,
 		ClientCIDR4:         clientCIDR,
 		MTU:                 mtu,
@@ -88,20 +89,21 @@ func (s *Store) SaveSettings(ctx context.Context, in Settings) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO vpn_settings
 		   (id, enabled, management_transport, masque_fallback, server_mesh_ip4,
-		    mesh_cidr4, client_cidr4, mtu, token_ttl_seconds, updated_at)
-		 VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		    server_mesh_domain, mesh_cidr4, client_cidr4, mtu, token_ttl_seconds, updated_at)
+		 VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON DUPLICATE KEY UPDATE
 		   enabled = VALUES(enabled),
 		   management_transport = VALUES(management_transport),
 		   masque_fallback = VALUES(masque_fallback),
 		   server_mesh_ip4 = VALUES(server_mesh_ip4),
+		   server_mesh_domain = VALUES(server_mesh_domain),
 		   mesh_cidr4 = VALUES(mesh_cidr4),
 		   client_cidr4 = VALUES(client_cidr4),
 		   mtu = VALUES(mtu),
 		   token_ttl_seconds = VALUES(token_ttl_seconds),
 		   updated_at = VALUES(updated_at)`,
 		enabled, string(in.ManagementTransport), fallback, in.ServerMeshIPv4,
-		in.MeshCIDR4, in.ClientCIDR4, in.MTU, in.TokenTTLSeconds, time.Now().UnixMilli())
+		in.ServerMeshDomain, in.MeshCIDR4, in.ClientCIDR4, in.MTU, in.TokenTTLSeconds, time.Now().UnixMilli())
 	if err != nil {
 		return fmt.Errorf("写入 vpn_settings: %w", err)
 	}

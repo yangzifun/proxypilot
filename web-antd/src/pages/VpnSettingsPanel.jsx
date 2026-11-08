@@ -23,8 +23,6 @@ export default function VpnSettingsPanel() {
         mtu: d.mtu || 1280,
         token_ttl_seconds: d.token_ttl_seconds || 600,
         client_cidr4: d.client_cidr4 || '10.88.0.0/16',
-        mesh_cidr4: d.mesh_cidr4 || '10.99.0.0/16',
-        server_mesh_ip4: d.server_mesh_ip4 || '10.99.0.1',
       });
     } catch (e) {
       message.error(e.message || '加载 VPN 配置失败');
@@ -70,14 +68,9 @@ export default function VpnSettingsPanel() {
         <Form.Item name="client_cidr4" label="用户端地址池" extra="每个节点从中分配 /24 子网">
           <Input placeholder="10.88.0.0/16" />
         </Form.Item>
-        <Form.Item name="mesh_cidr4" label="组网网段" extra="服务端与节点端自建管理网，用户端不可达">
-          <Input placeholder="10.99.0.0/16" />
-        </Form.Item>
-        <Form.Item name="server_mesh_ip4" label="服务端组网 IP" extra="中心域名 vpncenter.yzfn.top">
-          <Input placeholder="10.99.0.1" />
-        </Form.Item>
         <Button type="primary" icon={<SaveOutlined />} onClick={save}>保存</Button>
       </Form>
     </PageCard>
   );
 }
+

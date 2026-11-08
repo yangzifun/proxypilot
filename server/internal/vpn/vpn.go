@@ -43,6 +43,7 @@ type Settings struct {
 	ManagementTransport Transport     `json:"management_transport"`
 	MasqueFallback      bool          `json:"masque_fallback"`
 	ServerMeshIPv4      string        `json:"server_mesh_ip4"`
+	ServerMeshDomain    string        `json:"server_mesh_domain"`
 	MeshCIDR4           string        `json:"mesh_cidr4"`
 	ClientCIDR4         string        `json:"client_cidr4"`
 	MTU                 int           `json:"mtu"`
@@ -57,6 +58,7 @@ func DefaultSettings() Settings {
 		ManagementTransport: TransportWarp,
 		MasqueFallback:      true,
 		ServerMeshIPv4:      "10.99.0.1",
+		ServerMeshDomain:    "vpncenter.yzfn.top",
 		MeshCIDR4:           "10.99.0.0/16",
 		ClientCIDR4:         "10.88.0.0/16",
 		MTU:                 1280,
@@ -73,6 +75,9 @@ func (s *Settings) Normalize() error {
 	}
 	if s.ServerMeshIPv4 == "" {
 		s.ServerMeshIPv4 = def.ServerMeshIPv4
+	}
+	if s.ServerMeshDomain == "" {
+		s.ServerMeshDomain = def.ServerMeshDomain
 	}
 	if s.MeshCIDR4 == "" {
 		s.MeshCIDR4 = def.MeshCIDR4
