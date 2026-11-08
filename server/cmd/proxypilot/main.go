@@ -24,7 +24,7 @@ import (
 )
 
 // version 由构建脚本注入：-ldflags "-X main.version=v1.0.0"
-var version = "V34.3"
+var version = "V34.4"
 
 func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -173,6 +173,7 @@ func agentOnlyHandler(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
+
 
 
 

@@ -48,7 +48,7 @@ func (h *handlers) vpnAdminMesh(w http.ResponseWriter, r *http.Request) {
 			&m.RTTms, &m.LastSeen, &m.AgentVersion, &m.AgentLastSeen); err != nil {
 			continue
 		}
-		if m.LastSeen == 0 || now-m.LastSeen > 120000 {
+		if m.AgentLastSeen == 0 || now-m.AgentLastSeen > 300000 {
 			m.State = "down"
 		} else {
 			m.State = "up"
@@ -73,4 +73,5 @@ func (h *handlers) vpnAdminMesh(w http.ResponseWriter, r *http.Request) {
 		"nodes":         out,
 	})
 }
+
 
