@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"context"
@@ -81,13 +81,13 @@ func (h *handlers) bootJSON(mode string) string {
 	var boot map[string]any
 	if mode == "portal" {
 		boot = map[string]any{
-			"mode": "portal", "version": meta.Version, "builtAt": meta.BuiltAt,
+			"mode": "portal", "version": webVersion(meta.Version), "builtAt": meta.BuiltAt,
 			"turnstile": turnstile,
 		}
 	} else {
 		boot = map[string]any{
 			"mode": "admin", "superAdmin": h.cfg.SuperAdmin,
-			"version": meta.Version, "builtAt": meta.BuiltAt, "flavor": "antd",
+			"version": webVersion(meta.Version), "builtAt": meta.BuiltAt, "flavor": "antd",
 			"turnstile":         turnstile,
 			"turnstileRequired": strings.TrimSpace(h.cfg.TurnstileSecret) != "",
 			"emailLogin":        h.emailCodeLoginEnabled(context.Background()) && h.effectiveMail(context.Background()).Ready(),
@@ -318,4 +318,11 @@ func (h *handlers) pageAssets(w http.ResponseWriter, r *http.Request) {
 // GET /favicon.svg、/favicon.ico
 func (h *handlers) favicon(w http.ResponseWriter, r *http.Request) {
 	serveEmbeddedAsset(w, r, embeddedFaviconSVG, "image/svg+xml; charset=utf-8", `"favicon-`+h.assetVersion()+`"`)
+}
+// webVersion 优先使用服务端真实版本（main.version），避免前端 meta 版本过期。
+func webVersion(fallback string) string {
+	if v := strings.TrimSpace(Version); v != "" {
+		return v
+	}
+	return fallback
 }
