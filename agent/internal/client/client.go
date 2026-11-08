@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 	"net/http"
 	"proxypilot-agent/internal/metrics"
 	"strconv"
@@ -86,6 +87,7 @@ type PollResponse struct {
 	MetricsEvery       int        `json:"metrics_every"`
 	ServerTime         int64      `json:"server_time"`
 	AgentAccessURL     string     `json:"agent_access_url"`
+	AgentAccessURLs    []string   `json:"agent_access_urls"`
 	AgentScriptVersion string     `json:"agent_script_version"`
 	Wire               string     `json:"wire"`
 	Shell              *ShellHint `json:"shell,omitempty"`
@@ -207,6 +209,9 @@ func (e *StatusError) Error() string {
 // Client 是与 Worker 通信的 HTTP 客户端。
 type Client struct {
 	Origin  string
+	Origins []string
+	idx     int
+	mu      sync.Mutex
 	Key     string
 	Version string
 	HTTP    *http.Client
@@ -229,15 +234,78 @@ func New(origin, key, version string, insecure bool) *Client {
 	}
 	return &Client{
 		Origin:  strings.TrimRight(origin, "/"),
+		Origins: []string{strings.TrimRight(origin, "/")},
 		Key:     key,
 		Version: version,
 		HTTP:    &http.Client{Transport: transport},
 	}
 }
 
+// NewMulti 构造多地址客户端：按列表顺序优先，连接失败自动故障转移。
+func NewMulti(origins []string, key, version string, insecure bool) *Client {
+	c := New("", key, version, insecure)
+	c.SetOrigins(origins)
+	return c
+}
+
+// SetOrigins 更新地址列表（去重、保持顺序）。
+func (c *Client) SetOrigins(origins []string) {
+	clean := make([]string, 0, len(origins))
+	seen := map[string]bool{}
+	for _, o := range origins {
+		o = strings.TrimRight(strings.TrimSpace(o), "/")
+		if o == "" || seen[o] {
+			continue
+		}
+		seen[o] = true
+		clean = append(clean, o)
+	}
+	if len(clean) == 0 {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	cur := c.Origin
+	c.Origins = clean
+	if cur == "" {
+		c.idx = 0
+		c.Origin = clean[0]
+		return
+	}
+	for i, o := range clean {
+		if o == cur {
+			c.idx = i
+			return
+		}
+	}
+	c.idx = 0
+	c.Origin = clean[0]
+}
+
+// snapshot 返回当前地址与完整列表（优先地址在首位）。
+func (c *Client) snapshot() (string, []string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.Origins) == 0 {
+		return c.Origin, []string{c.Origin}
+	}
+	return c.Origin, append([]string(nil), c.Origins...)
+}
+
+// rotate 切到下一个地址，返回新地址。
+func (c *Client) rotate() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.Origins) <= 1 {
+		return c.Origin
+	}
+	c.idx = (c.idx + 1) % len(c.Origins)
+	c.Origin = c.Origins[c.idx]
+	return c.Origin
+}
+
 // Poll 上报心跳/指标并领取任务。
-func (c *Client) Poll(ctx context.Context, req PollRequest) (PollResponse, error) {
-	var resp PollResponse
+func (c *Client) Poll(ctx context.Context, req PollRequest) (PollResponse, error) {	var resp PollResponse
 	body, err := c.post(ctx, "/api/agent/poll", req, &resp)
 	if err != nil {
 		return resp, err
@@ -251,29 +319,37 @@ func (c *Client) Wait(ctx context.Context, timeoutSec int) (bool, error) {
 	if timeoutSec <= 0 {
 		timeoutSec = 20
 	}
-	url := fmt.Sprintf("%s/api/agent/wait?timeout=%d", c.Origin, timeoutSec)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return false, fmt.Errorf("构造长轮询请求失败：%v", err)
+	_, origins := c.snapshot()
+	var lastErr error
+	for attempt := 0; attempt < len(origins); attempt++ {
+		origin, _ := c.snapshot()
+		url := fmt.Sprintf("%s/api/agent/wait?timeout=%d", origin, timeoutSec)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return false, fmt.Errorf("构造长轮询请求失败：%v", err)
+		}
+		req.Header.Set("X-Agent-Token", c.Key)
+		req.Header.Set("User-Agent", "ProxyPilot-Agent/"+c.Version)
+		resp, err := c.HTTP.Do(req)
+		if err != nil {
+			lastErr = fmt.Errorf("长轮询请求失败：%v", err)
+			c.rotate()
+			continue
+		}
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1024))
+		_ = resp.Body.Close()
+		switch resp.StatusCode {
+		case http.StatusOK:
+			return true, nil
+		case http.StatusNoContent:
+			return false, nil
+		case http.StatusNotFound:
+			return false, ErrWaitUnsupported
+		default:
+			return false, fmt.Errorf("长轮询返回 HTTP %d", resp.StatusCode)
+		}
 	}
-	req.Header.Set("X-Agent-Token", c.Key)
-	req.Header.Set("User-Agent", "ProxyPilot-Agent/"+c.Version)
-	resp, err := c.HTTP.Do(req)
-	if err != nil {
-		return false, fmt.Errorf("长轮询请求失败：%v", err)
-	}
-	defer resp.Body.Close()
-	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1024))
-	switch resp.StatusCode {
-	case http.StatusOK:
-		return true, nil
-	case http.StatusNoContent:
-		return false, nil
-	case http.StatusNotFound:
-		return false, ErrWaitUnsupported
-	default:
-		return false, fmt.Errorf("长轮询返回 HTTP %d", resp.StatusCode)
-	}
+	return false, lastErr
 }
 
 // Ack 回传任务执行结果。
@@ -284,7 +360,7 @@ func (c *Client) Ack(ctx context.Context, req AckRequest) error {
 
 // WSURL Agent WebSocket 地址（http(s) → ws(s)）。
 func (c *Client) WSURL() string {
-	origin := c.Origin
+	origin, _ := c.snapshot()
 	switch {
 	case strings.HasPrefix(origin, "https://"):
 		origin = "wss://" + strings.TrimPrefix(origin, "https://")
@@ -299,28 +375,39 @@ func (c *Client) post(ctx context.Context, path string, payload interface{}, out
 	if err != nil {
 		return nil, fmt.Errorf("序列化请求失败：%v", err)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.Origin+path, bytes.NewReader(raw))
-	if err != nil {
-		return nil, fmt.Errorf("构造请求失败：%v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Agent-Token", c.Key)
-	req.Header.Set("User-Agent", "ProxyPilot-Agent/"+c.Version)
-	resp, err := c.HTTP.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("请求 %s 失败：%v", path, err)
-	}
-	defer resp.Body.Close()
-	data, _ := io.ReadAll(io.LimitReader(resp.Body, 4*1024*1024))
-	if resp.StatusCode != http.StatusOK {
-		return nil, &StatusError{Status: resp.StatusCode, Body: string(data), RetryAfter: parseRetryAfter(resp.Header.Get("Retry-After"))}
-	}
-	if out != nil {
-		if err := json.Unmarshal(data, out); err != nil {
-			return data, fmt.Errorf("解析响应失败：%v", err)
+	_, origins := c.snapshot()
+	var lastErr error
+	for attempt := 0; attempt < len(origins); attempt++ {
+		origin, _ := c.snapshot()
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, origin+path, bytes.NewReader(raw))
+		if err != nil {
+			return nil, fmt.Errorf("构造请求失败：%v", err)
 		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Agent-Token", c.Key)
+		req.Header.Set("User-Agent", "ProxyPilot-Agent/"+c.Version)
+		resp, err := c.HTTP.Do(req)
+		if err != nil {
+			lastErr = fmt.Errorf("请求 %s 失败：%v", path, err)
+			c.rotate()
+			continue
+		}
+		data, _ := io.ReadAll(io.LimitReader(resp.Body, 4*1024*1024))
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return nil, &StatusError{Status: resp.StatusCode, Body: string(data), RetryAfter: parseRetryAfter(resp.Header.Get("Retry-After"))}
+		}
+		if out != nil {
+			if err := json.Unmarshal(data, out); err != nil {
+				return data, fmt.Errorf("解析响应失败：%v", err)
+			}
+		}
+		return data, nil
 	}
-	return data, nil
+	if lastErr == nil {
+		lastErr = fmt.Errorf("请求 %s 失败：没有可用地址", path)
+	}
+	return nil, lastErr
 }
 
 func parseRetryAfter(v string) int {
@@ -339,3 +426,4 @@ func EncodeOutput(text string) string {
 	}
 	return base64.StdEncoding.EncodeToString(b)
 }
+

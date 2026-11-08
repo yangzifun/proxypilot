@@ -4,6 +4,7 @@ package node
 
 import (
 	"fmt"
+	"net"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -30,7 +31,13 @@ func openTUN(name string, mtu int) (tunDevice, error) {
 // configureTUN 配置地址/MTU、开启转发，并写入 NAT 与隔离规则。
 // 优先用 iptables；系统只有 nft（如 Debian 13 最小镜像）时自动切 nftables。
 func configureTUN(cfg Config) error {
-	_ = run("ip", "addr", "add", cfg.Gateway4+"/24", "dev", cfg.TunName)
+	prefix := 24
+	if _, ipnet, err := net.ParseCIDR(cfg.ClientCIDR); err == nil {
+		if ones, bits := ipnet.Mask.Size(); bits == 32 {
+			prefix = ones
+		}
+	}
+	_ = run("ip", "addr", "add", fmt.Sprintf("%s/%d", cfg.Gateway4, prefix), "dev", cfg.TunName)
 	if err := run("ip", "link", "set", "dev", cfg.TunName, "mtu", strconv.Itoa(cfg.MTU), "up"); err != nil {
 		return err
 	}
@@ -171,3 +178,4 @@ func run(name string, args ...string) error {
 	}
 	return nil
 }
+

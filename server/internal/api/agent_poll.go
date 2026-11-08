@@ -1071,3 +1071,27 @@ func (h *handlers) agentEffectiveAccessURL(ctx context.Context) string {
 	}
 	return strings.TrimSpace(h.settingValue(ctx, settingAgentAccessURL))
 }
+// agentAccessURLList 返回按优先级排序的 Agent 访问地址列表。
+func (h *handlers) agentAccessURLList(ctx context.Context) []string {
+	out := []string{}
+	seen := map[string]bool{}
+	add := func(u string) {
+		u = strings.TrimRight(strings.TrimSpace(u), "/")
+		if u == "" || seen[u] {
+			return
+		}
+		seen[u] = true
+		out = append(out, u)
+	}
+	if raw := strings.TrimSpace(h.settingValue(ctx, settingAgentAccessURLs)); raw != "" {
+		var urls []string
+		if json.Unmarshal([]byte(raw), &urls) == nil {
+			for _, u := range urls {
+				add(u)
+			}
+		}
+	}
+	add(h.settingValue(ctx, settingAgentInternalURL))
+	add(h.settingValue(ctx, settingAgentAccessURL))
+	return out
+}
