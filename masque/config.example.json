@@ -1,0 +1,23 @@
+{
+  "listen": "0.0.0.0:443",
+  "cert_file": "/etc/proxypilot/masque/tls/cert.pem",
+  "key_file": "/etc/proxypilot/masque/tls/key.pem",
+
+  "node_id": 7,
+  "mesh_ip4": "10.99.0.11",
+  "client_cidr4": "10.88.7.0/24",
+  "gateway_ip4": "10.88.7.1",
+
+  "tun": "ppvpn0",
+  "mtu": 1280,
+  "max_datagram": 1360,
+  "wan": "eth0",
+
+  "public_key": "REPLACE_WITH_SERVER_ED25519_PUBLIC_KEY_BASE64",
+  "issuer": "proxypilot",
+  "audience": "masque-node",
+
+  "dns": ["10.88.7.1"],
+  "configure": true,
+  "status_socket": "/run/pp-masque-node.sock"
+}

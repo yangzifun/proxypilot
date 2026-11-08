@@ -1015,6 +1015,8 @@ func isSystemExecPayload(p map[string]any) bool {
 	switch mapStr(p, "system_action", "") {
 	case "cloudflared_update":
 		return true
+	case "vpn_apply":
+		return true
 	}
 	return false
 }
@@ -1051,3 +1053,4 @@ func (h *handlers) ingestAgentWSMetrics(ctx context.Context, srv *agentServer, b
 		h.insertServerMetric(ctx, srv.ID, m, rates)
 	}
 }
+

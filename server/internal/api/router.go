@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"database/sql"
@@ -11,7 +11,7 @@ import (
 )
 
 // Version 由 main 通过 ldflags 注入。
-var Version = "V15.6"
+var Version = "V32.5"
 
 // New 构造 HTTP 处理器。已迁移的路由走真实实现，其余转发给旧 Worker 或返回 501。
 func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
@@ -47,6 +47,23 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("DELETE /api/apikeys/{id}", h.authed(authOpts{superOnly: true}, h.apiKeyItemDispatch))
 	mux.HandleFunc("POST /api/apikeys/{id}/rotate", h.authed(authOpts{superOnly: true}, h.apiKeyRotate))
 
+	// VPN 管理（节点 / 绑定 / 用户资格 / 设置）
+	mux.HandleFunc("GET /api/admin/vpn/settings", h.authed(authOpts{superOnly: true}, h.vpnAdminSettings))
+	mux.HandleFunc("PUT /api/admin/vpn/settings", h.authed(authOpts{superOnly: true}, h.vpnAdminSettings))
+	mux.HandleFunc("GET /api/admin/vpn/mesh", h.authed(authOpts{superOnly: true}, h.vpnAdminMesh))
+	mux.HandleFunc("GET /api/admin/vpn/nodes", h.authed(authOpts{superOnly: true}, h.vpnAdminNodes))
+	mux.HandleFunc("POST /api/admin/vpn/nodes", h.authed(authOpts{superOnly: true}, h.vpnAdminNodes))
+	mux.HandleFunc("GET /api/admin/vpn/nodes/{id}", h.authed(authOpts{superOnly: true}, h.vpnAdminNodeItem))
+	mux.HandleFunc("PUT /api/admin/vpn/nodes/{id}", h.authed(authOpts{superOnly: true}, h.vpnAdminNodeItem))
+	mux.HandleFunc("DELETE /api/admin/vpn/nodes/{id}", h.authed(authOpts{superOnly: true}, h.vpnAdminNodeItem))
+	mux.HandleFunc("POST /api/admin/vpn/nodes/{id}/action", h.authed(authOpts{superOnly: true}, h.vpnAdminNodeAction))
+	mux.HandleFunc("POST /api/admin/vpn/nodes/{id}/deploy", h.authed(authOpts{superOnly: true}, h.vpnAdminNodeDeploy))
+	mux.HandleFunc("GET /api/admin/vpn/nodes/{id}/grants", h.authed(authOpts{superOnly: true}, h.vpnAdminGrants))
+	mux.HandleFunc("POST /api/admin/vpn/nodes/{id}/grants", h.authed(authOpts{superOnly: true}, h.vpnAdminGrants))
+	mux.HandleFunc("DELETE /api/admin/vpn/grants/{id}", h.authed(authOpts{superOnly: true}, h.vpnAdminGrantItem))
+	mux.HandleFunc("GET /api/admin/vpn/users/{uuid}/access", h.authed(authOpts{superOnly: true}, h.vpnAdminUserAccess))
+	mux.HandleFunc("PUT /api/admin/vpn/users/{uuid}/access", h.authed(authOpts{superOnly: true}, h.vpnAdminUserAccess))
+
 	// 用户中心（邮箱验证码登录）
 	mux.HandleFunc("POST /api/admin/users/email/code", h.authed(authOpts{}, h.adminEmailCodeSend))
 	mux.HandleFunc("POST /api/admin/users/email/verify", h.authed(authOpts{}, h.adminEmailVerify))
@@ -62,6 +79,17 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /api/portal/traffic", h.portalTraffic)
 	mux.HandleFunc("GET /api/portal/masque", h.masqueWarpPortal)
 	mux.HandleFunc("GET /api/portal/masque/config", h.masqueWarpPortalConfig)
+
+	// VPN 用户中心（仅返回已绑定且资格有效的节点）
+	mux.HandleFunc("GET /api/portal/vpn/entitlement", h.vpnPortalEntitlement)
+	mux.HandleFunc("GET /api/portal/vpn/nodes", h.vpnPortalNodes)
+	mux.HandleFunc("POST /api/vpn/device/code", h.vpnDeviceCodeRequest)
+	mux.HandleFunc("POST /api/vpn/device/token", h.vpnDeviceCodeToken)
+	mux.HandleFunc("POST /api/portal/vpn/device/approve", h.vpnPortalDeviceApprove)
+	mux.HandleFunc("GET /api/portal/vpn/devices", h.vpnPortalDevices)
+	mux.HandleFunc("DELETE /api/portal/vpn/devices/{id}", h.vpnPortalDeviceItem)
+	mux.HandleFunc("POST /api/portal/vpn/connect", h.vpnPortalConnect)
+	mux.HandleFunc("POST /api/portal/vpn/disconnect", h.vpnPortalDisconnect)
 	mux.HandleFunc("GET /api/portal/mtproto", h.portalMtproto)
 	mux.HandleFunc("POST /api/portal/mtproto/{id}/deliver", h.portalMtprotoDeliver)
 	mux.HandleFunc("POST /api/portal/mtproto/{id}/send-mail", h.portalMtprotoSendMail)
@@ -177,6 +205,8 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 
 	// Agent 接入（keycheck 用接入令牌鉴权；latest 走后台 JWT）
 	mux.HandleFunc("POST /api/agent/poll", h.agentPoll)
+	mux.HandleFunc("POST /api/agent/vpn/register", h.vpnAgentRegister)
+	mux.HandleFunc("POST /api/agent/vpn/heartbeat", h.vpnAgentHeartbeat)
 	mux.HandleFunc("POST /api/agent/ack", h.agentAck)
 	mux.HandleFunc("GET /api/agent/install.sh", h.agentInstallScript)
 	mux.HandleFunc("GET /api/agent/bootstrap", h.agentBootstrap)
@@ -427,3 +457,9 @@ func (h *handlers) health(w http.ResponseWriter, r *http.Request) {
 		"db":      status,
 	})
 }
+
+
+
+
+
+

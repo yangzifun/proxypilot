@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { applyTheme, getTheme, subscribeTheme, THEME_TOKENS } from './theme';
 import { ConfigProvider } from 'antd';
 import { Button, Result } from 'antd';
@@ -19,6 +19,7 @@ import NodeBindings from './pages/NodeBindings';
 import TemplateHub from './pages/TemplateHub';
 import MtprotoPage from './pages/MtprotoPage';
 import MasquePage from './pages/MasquePage';
+import VpnPage from './pages/VpnPage';
 import CdnPreferred from './pages/CdnPreferred';
 import Logs from './pages/Logs';
 import System, { AdminUsersPage, SystemSettingsPage } from './pages/System';
@@ -39,6 +40,7 @@ const PAGES = {
   tplhub: TemplateHub,
   mtproto: MtprotoPage,
   masque: MasquePage,
+  vpn: VpnPage,
   cdnpref: CdnPreferred,
   singbox: Nodes,
   status: ServersUnified,
@@ -109,3 +111,4 @@ export default function App() {
     </ConfigProvider>
   );
 }
+

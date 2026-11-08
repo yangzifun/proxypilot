@@ -68,8 +68,8 @@ export const PAGE_META = {
     accent: '#0ea5e9',
   },
   tplhub: {
-    title: '协议模板',
-    subtitle: 'sing-box / mihomo / MTProto 模板配置',
+    title: '协议管理',
+    subtitle: 'sing-box / mihomo / MTProto / VPN 协议配置',
     icon: <ProfileOutlined />,
     group: '节点运维',
     accent: '#8b5cf6',
@@ -161,6 +161,13 @@ export const PAGE_META = {
     group: '系统',
     accent: '#16a34a',
   },
+  vpn: {
+    title: '组网',
+    subtitle: '服务端 ↔ 节点端自建组网状态',
+    icon: <GlobalOutlined />,
+    group: '节点与网络',
+    accent: '#f6821f',
+  },
   sec: {
     title: '安全中心',
     subtitle: '修改密码、双因素认证与账号安全',
@@ -170,7 +177,7 @@ export const PAGE_META = {
   },
 };
 
-export const NAV_ORDER = ['dash', 'uuids', 'userst', 'tpls', 'tplhub', 'servers', 'bindings', 'cdnpref', 'masque', 'logs', 'attachments', 'backup', 'sec', 'sysusers', 'syssettings'];
+export const NAV_ORDER = ['dash', 'uuids', 'userst', 'tpls', 'tplhub', 'servers', 'bindings', 'cdnpref', 'masque', 'vpn', 'logs', 'attachments', 'backup', 'sec', 'sysusers', 'syssettings'];
 
 /** 侧边栏结构：置顶单页 + 3 个可折叠分组，按日常使用频率排序 */
 export const NAV_GROUPS = [
@@ -178,13 +185,13 @@ export const NAV_GROUPS = [
     key: 'biz',
     title: '用户与业务',
     icon: <TeamOutlined />,
-    keys: ['uuids', 'userst', 'tpls', 'tplhub'],
+    keys: ['uuids', 'userst', 'tpls'],
   },
   {
     key: 'net',
     title: '节点与网络',
     icon: <DeploymentUnitOutlined />,
-    keys: ['servers', 'bindings', 'cdnpref', 'masque'],
+    keys: ['servers', 'bindings', 'cdnpref', 'masque', 'vpn', 'tplhub'],
   },
   {
     key: 'ops',
@@ -221,3 +228,5 @@ export function menuItems(isSuper, collapsed = false) {
   }
   return items;
 }
+
+

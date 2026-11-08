@@ -4,6 +4,7 @@ import { CloudUploadOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/i
 import { api, apiGet, apiPost } from '../api';
 import { PageCard } from '../components';
 import { fmtTime } from '../format';
+import VpnNodesPanel from './VpnNodesPanel';
 
 export default function NodeBindings() {
   const { message } = AntdApp.useApp();
@@ -219,7 +220,8 @@ export default function NodeBindings() {
   ];
 
   return (
-    <PageCard
+    <>
+      <PageCard
       title="节点绑定"
       extra={
         <Space>
@@ -345,6 +347,10 @@ export default function NodeBindings() {
           </div>
         </Form>
       </Modal>
-    </PageCard>
+      </PageCard>
+      <div style={{ marginTop: 16 }}>
+        <VpnNodesPanel />
+      </div>
+    </>
   );
 }

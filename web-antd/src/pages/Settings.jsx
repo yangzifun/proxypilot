@@ -44,6 +44,7 @@ export default function Settings({ embedded = false }) {
   const [form] = Form.useForm();
   const mailProvider = Form.useWatch('mail_provider', form);
   const settings = useAsync(() => api('settings'), []);
+  const vpnSettings = useAsync(() => api('admin/vpn/settings'), []);
   const [saving, setSaving] = useState(false);
   const [checking, setChecking] = useState(false);
   const [checkResult, setCheckResult] = useState(null);
@@ -71,6 +72,14 @@ export default function Settings({ embedded = false }) {
     });
   }, [settings.data, form]);
 
+  useEffect(() => {
+    const d = vpnSettings.data || {};
+    form.setFieldsValue({
+      vpn_sync_transport: d.management_transport || 'warp',
+      vpn_sync_fallback: d.masque_fallback !== false,
+    });
+  }, [vpnSettings.data, form]);
+
   const save = async () => {
     const values = await form.validateFields();
     const body = {};
@@ -82,9 +91,17 @@ export default function Settings({ embedded = false }) {
       if (typeof v === 'boolean') body[k] = v ? '1' : '0';
       else if (v !== undefined && v !== null) body[k] = String(v).trim();
     });
+    const vpnSync = {
+      management_transport: values.vpn_sync_transport || 'warp',
+      masque_fallback: !!values.vpn_sync_fallback,
+    };
+    delete body.vpn_sync_transport;
+    delete body.vpn_sync_fallback;
     setSaving(true);
     try {
       const res = await api('settings', { method: 'PUT', body });
+      const curVpn = vpnSettings.data || {};
+      await api('admin/vpn/settings', { method: 'PUT', body: { ...curVpn, ...vpnSync } });
       settings.setData(res);
       message.success('设置已保存，立即生效');
     } catch (e) {
@@ -371,6 +388,34 @@ export default function Settings({ embedded = false }) {
                     rules={[{ type: 'url', message: '请输入合法 URL' }]}
                   >
                     <Input placeholder="http://100.96.0.18:80" allowClear />
+                  </Form.Item>
+                  <Form.Item
+                    name="agent_fallback_url"
+                    label="备用 Agent 访问地址"
+                    extra="组网内网不可用时的兜底地址，例如 http://10.99.0.1:8080；留空表示不启用"
+                  >
+                    <Input placeholder="http://10.99.0.1:8080" allowClear />
+                  </Form.Item>
+                  <Divider orientation="left">节点同步通道</Divider>
+                  <Form.Item
+                    name="vpn_sync_transport"
+                    label="节点同步通道"
+                    extra="优先 WARP；自建管理网（vpncenter.yzfn.top）作为备用"
+                  >
+                    <Select
+                      style={{ width: 280 }}
+                      options={[
+                        { value: 'warp', label: 'WARP（优先）' },
+                        { value: 'masque', label: '自建管理网' },
+                        { value: 'auto', label: '自动（WARP 优先）' },
+                      ]}
+                    />
+                  </Form.Item>
+                  <Form.Item name="vpn_sync_fallback" label="WARP 不可用时回落自建管理网" valuePropName="checked">
+                    <Switch checkedChildren="开" unCheckedChildren="关" />
+                  </Form.Item>
+                  <Form.Item name="vpn_center_domain" label="组网中心域名" extra="服务端与节点端组网使用，例如 vpncenter.yzfn.top">
+                    <Input placeholder="vpncenter.yzfn.top" allowClear />
                   </Form.Item>
                   <Form.Item
                     name="component_base_url"
