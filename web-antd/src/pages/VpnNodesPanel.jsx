@@ -16,17 +16,6 @@ import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import { api, apiDelete, apiPost, apiPut } from '../api';
 import { PageCard } from '../components';
 
-function fmtTime(v) {
-  if (!v) return '—';
-  const n = typeof v === 'number' ? v : Date.parse(v);
-  if (!n || Number.isNaN(n)) return '—';
-  try {
-    return new Date(n).toLocaleString();
-  } catch (e) {
-    return '—';
-  }
-}
-
 function stateTag(state) {
   const map = {
     active: ['green', '已启用'],
@@ -48,24 +37,29 @@ const EMPTY_NODE = {
   capacity: 500,
 };
 
-// VPN 节点绑定：在「节点绑定」页面创建/审批 VPN 节点，并给用户授权。
+// VPN 节点绑定：只负责节点本身；用户授权在「用户管理 → 授权服务」中完成。
 export default function VpnNodesPanel() {
   const { message } = AntdApp.useApp();
   const [nodeForm] = Form.useForm();
-  const [grantForm] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [nodes, setNodes] = useState([]);
+  const [serverNames, setServerNames] = useState({});
   const [nodeOpen, setNodeOpen] = useState(false);
   const [editingNode, setEditingNode] = useState(null);
-  const [grantOpen, setGrantOpen] = useState(false);
-  const [grantNode, setGrantNode] = useState(null);
-  const [grants, setGrants] = useState([]);
 
   const load = async () => {
     setLoading(true);
     try {
-      const res = await api('admin/vpn/nodes');
+      const [res, bindings] = await Promise.all([
+        api('admin/vpn/nodes'),
+        api('nodes/bindings').catch(() => null),
+      ]);
       setNodes((res && res.nodes) || []);
+      const map = {};
+      for (const row of (bindings && bindings.data) || []) {
+        if (row.server_id) map[row.server_id] = row.server_name || '';
+      }
+      setServerNames(map);
     } catch (e) {
       message.error(e.message || '加载 VPN 节点失败');
     } finally {
@@ -124,15 +118,6 @@ export default function VpnNodesPanel() {
     }
   };
 
-  const deployNode = async (node) => {
-    try {
-      const res = await apiPost(`admin/vpn/nodes/${node.id}/deploy`, {});
-      message.success(`部署任务已下发 #${res.task_id}`);
-    } catch (e) {
-      message.error(e.message || '部署失败');
-    }
-  };
-
   const removeNode = async (node) => {
     try {
       await apiDelete(`admin/vpn/nodes/${node.id}`);
@@ -143,56 +128,15 @@ export default function VpnNodesPanel() {
     }
   };
 
-  const openGrants = async (node) => {
-    setGrantNode(node);
-    setGrantOpen(true);
-    grantForm.resetFields();
-    await loadGrants(node.id);
-  };
-
-  const loadGrants = async (nodeId) => {
-    try {
-      const res = await api(`admin/vpn/nodes/${nodeId}/grants`);
-      setGrants((res && res.grants) || []);
-    } catch (e) {
-      message.error(e.message || '加载授权失败');
-    }
-  };
-
-  const addGrant = async () => {
-    const values = await grantForm.validateFields();
-    const expiresAt = values.days > 0 ? Math.floor(Date.now() / 1000) + values.days * 86400 : 0;
-    try {
-      await apiPost(`admin/vpn/nodes/${grantNode.id}/grants`, {
-        subject_id: values.subject_id.trim(),
-        expires_at: expiresAt,
-        max_devices: values.max_devices || 1,
-        quota_bytes: values.quota_gb ? Math.round(values.quota_gb * 1024 * 1024 * 1024) : 0,
-      });
-      message.success('已绑定用户');
-      grantForm.resetFields();
-      await loadGrants(grantNode.id);
-    } catch (e) {
-      message.error(e.message || '绑定失败');
-    }
-  };
-
-  const revokeGrant = async (g) => {
-    try {
-      await apiDelete(`admin/vpn/grants/${g.id}`);
-      message.success('已解绑');
-      await loadGrants(grantNode.id);
-    } catch (e) {
-      message.error(e.message || '解绑失败');
-    }
-  };
-
   const columns = [
     { title: 'ID', dataIndex: 'id', width: 60 },
-    { title: '名称', dataIndex: 'name', width: 140 },
-    { title: '服务器', dataIndex: 'server_id', width: 90 },
+    { title: '名称', dataIndex: 'name', width: 150 },
+    {
+      title: '服务器', dataIndex: 'server_id', width: 160,
+      render: (v) => serverNames[v] || `#${v}`,
+    },
     { title: '域名', dataIndex: 'domain', width: 220, render: (v) => v || '—' },
-    { title: '接入地址', dataIndex: 'endpoint', width: 200, render: (v) => v || '—' },
+    { title: '接入地址', dataIndex: 'endpoint', width: 210, render: (v) => v || '—' },
     { title: '客户端子网', dataIndex: 'client_cidr4', width: 130, render: (v) => v || '—' },
     { title: '状态', dataIndex: 'state', width: 90, render: stateTag },
     {
@@ -205,28 +149,11 @@ export default function VpnNodesPanel() {
           ) : (
             <Button size="small" type="link" danger onClick={() => nodeAction(node, 'disable')}>停用</Button>
           )}
-          <Button size="small" type="link" onClick={() => openGrants(node)}>授权用户</Button>
-          <Button size="small" type="link" onClick={() => deployNode(node)}>部署</Button>
           <Button size="small" type="link" onClick={() => openNode(node)}>编辑</Button>
           <Popconfirm title="删除该 VPN 节点？" onConfirm={() => removeNode(node)}>
             <Button size="small" type="link" danger>删除</Button>
           </Popconfirm>
         </Space>
-      ),
-    },
-  ];
-
-  const grantColumns = [
-    { title: '用户 UUID', dataIndex: 'subject_id' },
-    { title: '状态', dataIndex: 'enabled', width: 80, render: (v) => (v ? <Tag color="green">启用</Tag> : <Tag>停用</Tag>) },
-    { title: '到期', dataIndex: 'expires_at', width: 160, render: fmtTime },
-    { title: '并发设备', dataIndex: 'max_devices', width: 90 },
-    {
-      title: '操作', key: 'op', width: 90,
-      render: (_, g) => (
-        <Popconfirm title="解除该绑定？" onConfirm={() => revokeGrant(g)}>
-          <Button size="small" type="link" danger>解绑</Button>
-        </Popconfirm>
       ),
     },
   ];
@@ -297,41 +224,6 @@ export default function VpnNodesPanel() {
             </Form.Item>
           </Space>
         </Form>
-      </Modal>
-
-      <Modal
-        title={grantNode ? `授权用户 · ${grantNode.name || grantNode.id}` : '授权用户'}
-        open={grantOpen}
-        onCancel={() => setGrantOpen(false)}
-        footer={null}
-        width={720}
-        destroyOnClose
-      >
-        <Form form={grantForm} layout="inline" style={{ marginBottom: 12 }}>
-          <Form.Item name="subject_id" rules={[{ required: true, message: '填写用户 UUID' }]}>
-            <Input placeholder="用户 UUID" style={{ width: 240 }} />
-          </Form.Item>
-          <Form.Item name="days">
-            <InputNumber min={0} placeholder="有效天数" style={{ width: 100 }} />
-          </Form.Item>
-          <Form.Item name="max_devices">
-            <InputNumber min={1} max={50} placeholder="并发设备" style={{ width: 100 }} />
-          </Form.Item>
-          <Form.Item name="quota_gb">
-            <InputNumber min={0} placeholder="配额 GB" style={{ width: 100 }} />
-          </Form.Item>
-          <Form.Item>
-            <Button type="primary" onClick={addGrant}>绑定</Button>
-          </Form.Item>
-        </Form>
-        <Table
-          rowKey="id"
-          size="small"
-          columns={grantColumns}
-          dataSource={grants}
-          pagination={false}
-          locale={{ emptyText: '未绑定任何用户（用户端不会看到该节点）' }}
-        />
       </Modal>
     </PageCard>
   );
