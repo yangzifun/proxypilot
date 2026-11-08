@@ -69,12 +69,29 @@ export default function Settings({ embedded = false }) {
       smtp_pass: '',
       oidc_client_secret: '',
     });
+    // Agent 访问地址：优先读数组；兼容旧的单地址配置。
+    let urls = [];
+    try {
+      urls = v.agent_access_urls ? JSON.parse(v.agent_access_urls) : [];
+    } catch (e) {
+      urls = [];
+    }
+    if (!Array.isArray(urls) || urls.length === 0) {
+      if (v.agent_internal_url) urls.push(v.agent_internal_url);
+      if (v.agent_fallback_url) urls.push(v.agent_fallback_url);
+    }
+    form.setFieldsValue({ agent_access_urls: urls });
   }, [settings.data, form]);
 
   const save = async () => {
     const values = await form.validateFields();
     const body = {};
     Object.entries(values).forEach(([k, v]) => {
+      if (k === 'agent_access_urls') {
+        const arr = (Array.isArray(v) ? v : []).map((x) => String(x || '').trim()).filter(Boolean);
+        body[k] = JSON.stringify(arr);
+        return;
+      }
       if (SECRETS.includes(k)) {
         if (String(v || '').trim() !== '') body[k] = String(v).trim();
         return;
@@ -380,19 +397,30 @@ export default function Settings({ embedded = false }) {
                   </Form.Item>
 
                   <Form.Item
-                    name="agent_internal_url"
-                    label="Agent 访问地址（组网内网）"
-                    extra="Agent 只通过组网内网访问面板，例如 http://100.96.0.18:80；不再提供公网 TLS 兜底"
-                    rules={[{ type: 'url', message: '请输入合法 URL' }]}
+                    label="Agent 访问地址（按优先级）"
+                    extra="可添加多个地址，列表顺序即优先级：第一个优先使用，失败时按顺序回退"
                   >
-                    <Input placeholder="http://100.96.0.18:80" allowClear />
-                  </Form.Item>
-                  <Form.Item
-                    name="agent_fallback_url"
-                    label="备用 Agent 访问地址"
-                    extra="组网内网不可用时的兜底地址，例如 http://10.99.0.1:8080；留空表示不启用"
-                  >
-                    <Input placeholder="http://10.99.0.1:8080" allowClear />
+                    <Form.List name="agent_access_urls">
+                      {(fields, { add, remove, move }) => (
+                        <>
+                          {fields.map((field, idx) => (
+                            <Space key={field.key} align="baseline" style={{ display: 'flex', marginBottom: 8 }}>
+                              <Tag color={idx === 0 ? 'green' : 'default'}>{idx === 0 ? '优先' : `备用 ${idx}`}</Tag>
+                              <Form.Item
+                                name={field.name}
+                                noStyle
+                                rules={[{ required: true, message: '请输入地址' }, { type: 'url', message: '请输入合法 URL' }]}
+                              >
+                                <Input placeholder="http://10.99.0.1:8080" style={{ width: 360 }} />
+                              </Form.Item>
+                              <Button size="small" disabled={idx === 0} onClick={() => move(field.name, idx - 1)}>上移</Button>
+                              <Button size="small" danger onClick={() => remove(field.name)}>删除</Button>
+                            </Space>
+                          ))}
+                          <Button type="dashed" onClick={() => add('')}>添加地址</Button>
+                        </>
+                      )}
+                    </Form.List>
                   </Form.Item>
                   <Form.Item
                     name="component_base_url"

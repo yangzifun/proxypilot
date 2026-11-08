@@ -312,3 +312,14 @@ DNS 探测成功：收到 89 字节响应（1.1.1.1:53）
   - `agent_mesh_sync`：允许 Agent 通过组网内网同步数据。
 - 说明：Agent 目前尚未实现自建组网客户端，`vpn_mesh_nodes` 会在 Agent 上报
   `mesh_ip4` 后出现成员；组网数据面（隧道/内网路由）待实现。
+## Agent 访问地址多地址优先级（V32.8）
+
+- 移除组网页的「同步通道 / WARP 不可用回落」设置（自建组网不需要该开关）；
+- 系统设置 → 高级设置：
+  - 「Agent 访问地址（按优先级）」支持添加多个 URL，列表顺序即优先级；
+  - 保存为 `app_settings.agent_access_urls`（JSON 数组），兼容旧的
+    `agent_internal_url` / `agent_fallback_url`（列表为空时自动带入）；
+- Agent poll 响应中的 `agent_access_url` / `agent_internal_url` 取列表中的**第一个**，
+  即“优先使用”的地址；旧单地址配置仍可用作兜底。
+- 说明：当前 Agent 每次只接收一个有效地址；若需要地址级自动故障转移，
+  后续可在 Agent 侧接收完整列表并按序重试。

@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"context"
@@ -854,8 +854,8 @@ func (h *handlers) agentPoll(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok": true, "server_id": srv.ID, "server_name": srv.Name,
 		"next_poll_sec": nextPollSec, "metrics_every": metricsEvery,
-		"agent_access_url":  h.settingValue(r.Context(), settingAgentInternalURL),
-		"agent_internal_url": h.settingValue(r.Context(), settingAgentInternalURL),
+		"agent_access_url":  h.agentEffectiveAccessURL(r.Context()),
+		"agent_internal_url": h.agentEffectiveAccessURL(r.Context()),
 		"server_time": now, "agent_script_version": agentScriptVersion,
 		"shell": shell, "actions": agentActionsJSON(actions),
 		"stats_targets":     statsTargets,
@@ -1053,4 +1053,21 @@ func (h *handlers) ingestAgentWSMetrics(ctx context.Context, srv *agentServer, b
 		h.insertServerMetric(ctx, srv.ID, m, rates)
 	}
 }
-
+// agentEffectiveAccessURL 返回按优先级排序后的第一个 Agent 访问地址。
+func (h *handlers) agentEffectiveAccessURL(ctx context.Context) string {
+	raw := strings.TrimSpace(h.settingValue(ctx, settingAgentAccessURLs))
+	if raw != "" {
+		var urls []string
+		if json.Unmarshal([]byte(raw), &urls) == nil {
+			for _, u := range urls {
+				if s := strings.TrimSpace(u); s != "" {
+					return s
+				}
+			}
+		}
+	}
+	if u := strings.TrimSpace(h.settingValue(ctx, settingAgentInternalURL)); u != "" {
+		return u
+	}
+	return strings.TrimSpace(h.settingValue(ctx, settingAgentAccessURL))
+}
