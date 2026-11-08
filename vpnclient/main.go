@@ -16,11 +16,13 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os/exec"
 	"strings"
 	"time"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
+	"github.com/songgao/water"
 )
 
 // Version 是 VPN 客户端版本（V1.x）。
@@ -58,9 +60,27 @@ func main() {
 	nodeID := flag.Int64("node", 0, "节点 ID（0=自动选第一个在线节点）")
 	insecure := flag.Bool("insecure", false, "跳过 TLS 证书校验（自签节点）")
 	dnsAddr := flag.String("dns", "1.1.1.1:53", "探测用 DNS（经隧道访问）")
+	meshToken := flag.String("mesh-token", "", "组网 JWT（设置后进入组网模式）")
+	meshIP := flag.String("mesh-ip", "", "组网 IP，例如 10.99.0.11")
+	meshCIDR := flag.String("mesh-cidr", "10.99.0.0/16", "组网网段")
+	meshTun := flag.String("mesh-tun", "ppmesh0", "组网 TUN 名称")
+	meshEndpoint := flag.String("mesh-endpoint", "vpncenter.yzfn.top:8443", "组网中心地址")
+	meshSNI := flag.String("mesh-sni", "vpncenter.yzfn.top", "组网中心 SNI")
 	timeout := flag.Duration("timeout", 20*time.Second, "整体超时")
 	flag.Parse()
 	log.Printf("ProxyPilot VPN Client %s", Version)
+
+	if *meshToken != "" {
+		if *meshIP == "" {
+			log.Fatal("组网模式需要 -mesh-ip")
+		}
+		mctx, mcancel := context.WithCancel(context.Background())
+		defer mcancel()
+		if err := runMesh(mctx, *meshToken, *meshIP, *meshCIDR, *meshTun, *meshEndpoint, *meshSNI, *insecure); err != nil {
+			log.Fatalf("组网失败：%v", err)
+		}
+		return
+	}
 
 	if *token == "" || *deviceID <= 0 {
 		log.Fatal("需要 -token（门户令牌）与 -device（设备 ID）")
@@ -148,6 +168,52 @@ func connect(ctx context.Context, api, token string, deviceID, nodeID int64) (*p
 		return nil, err
 	}
 	return &p, nil
+}
+
+func runMesh(ctx context.Context, token, ip, cidr, tunName, endpoint, sni string, insecure bool) error {
+	dev, err := water.New(water.Config{
+		DeviceType:             water.TUN,
+		PlatformSpecificParams: water.PlatformSpecificParams{Name: tunName},
+	})
+	if err != nil {
+		return fmt.Errorf("创建 TUN: %w", err)
+	}
+	defer dev.Close()
+	if err := exec.Command("ip", "addr", "add", ip+"/"+strings.Split(cidr, "/")[1], "dev", dev.Name()).Run(); err != nil {
+		return fmt.Errorf("配置地址: %w", err)
+	}
+	if err := exec.Command("ip", "link", "set", "dev", dev.Name(), "up").Run(); err != nil {
+		return fmt.Errorf("启用 TUN: %w", err)
+	}
+	assigned, conn, err := authHTTP3(ctx, endpoint, sni, token, insecure)
+	if err != nil {
+		return fmt.Errorf("HTTP/3 鉴权: %w", err)
+	}
+	log.Printf("组网鉴权成功：节点分配 %s（本地 %s）", assigned, ip)
+
+	go func() {
+		buf := make([]byte, 2048)
+		for {
+			n, err := dev.Read(buf)
+			if err != nil {
+				return
+			}
+			_ = conn.SendDatagram(buf[:n])
+		}
+	}()
+	for {
+		data, err := conn.ReceiveDatagram(ctx)
+		if err != nil {
+			return err
+		}
+		pkt, _, _, err := strip(data)
+		if err != nil {
+			continue
+		}
+		if _, err := dev.Write(pkt); err != nil {
+			return err
+		}
+	}
 }
 
 func authHTTP3(ctx context.Context, endpoint, sni, token string, insecure bool) (string, *quic.Conn, error) {
@@ -275,3 +341,5 @@ func strip(b []byte) ([]byte, net.IP, net.IP, error) {
 	}
 	return b[:total], net.IP(b[12:16]), net.IP(b[16:20]), nil
 }
+
+

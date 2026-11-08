@@ -339,3 +339,17 @@ DNS 探测成功：收到 89 字节响应（1.1.1.1:53）
 - Windows/macOS TUN：当前仅 Linux/water TUN；
 - 证书 CA/ACME：节点仍为自签（域名 CN/SAN 已支持），平台 CA 未实现；
 - Agent 2.0 批量升级：目前仅台北节点已升级并切换内嵌 VPN。
+## 自建组网落地（MASQUE 星型）
+
+- 中心服务：`proxypilot-mesh.service`，`/opt/proxypilot/mesh/pp-masque-node`，
+  TUN `ppmesh0` `10.99.0.1/16`，监听 UDP `8443`，证书 `vpncenter.yzfn.top`（自签），
+  `disable_nat=true`、`allow_client_to_client=true`（纯组网，不做 NAT/用户隔离）；
+- 节点客户端：`vpnclient -mesh-token ... -mesh-ip 10.99.0.11`，
+  创建 `ppmesh0`、配置 `/16` 地址，HTTP/3 鉴权后走 DATAGRAM 收发；
+- 实测（台北节点）：
+  - 节点 `ping 10.99.0.1`：3/3 通，RTT ~192-392ms；
+  - 中心 `ping 10.99.0.11`：3/3 通，RTT ~215-315ms；
+- 组网成员写入 `vpn_mesh_nodes(server_id=16, mesh_ip4=10.99.0.11)`，
+  组网页可展示；
+- 待完善：Agent 自动拉起组网客户端、组网令牌续期、平台证书（当前自签 + insecure）、
+  多节点批量加入。

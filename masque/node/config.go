@@ -37,6 +37,12 @@ type Config struct {
 	// Configure 为 true 时自动配置 TUN 地址/MTU、ip_forward 与 NAT/隔离规则。
 	Configure bool `json:"configure"`
 
+	// DisableNAT 为 true 时只配置 TUN 地址，不做 NAT/隔离（自建组网模式）。
+	DisableNAT bool `json:"disable_nat"`
+
+	// AllowClientToClient 允许客户端互访（组网模式）；默认只允许上网。
+	AllowClientToClient bool `json:"allow_client_to_client"`
+
 	// StatusSocket 可选：unix socket，输出 JSON 状态。
 	StatusSocket string `json:"status_socket"`
 }

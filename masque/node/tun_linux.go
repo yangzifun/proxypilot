@@ -37,6 +37,9 @@ func configureTUN(cfg Config) error {
 	if err := run("sysctl", "-qw", "net.ipv4.ip_forward=1"); err != nil {
 		return err
 	}
+	if cfg.DisableNAT {
+		return nil
+	}
 
 	wan := cfg.WAN
 	if wan == "" {
@@ -53,6 +56,9 @@ func configureTUN(cfg Config) error {
 }
 
 func cleanupTUN(cfg Config) {
+	if cfg.DisableNAT {
+		return
+	}
 	wan := cfg.WAN
 	if wan == "" {
 		wan = defaultWAN()

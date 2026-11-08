@@ -274,8 +274,8 @@ func (s *Server) tunLoop() {
 		if err != nil {
 			continue
 		}
-		if inCIDR(src, s.cfg.ClientCIDR) {
-			// 客户端 → 客户端：按隔离策略丢弃（只允许用户上网）。
+		if inCIDR(src, s.cfg.ClientCIDR) && !s.cfg.AllowClientToClient {
+			// 客户端 → 客户端：VPN 模式下按隔离策略丢弃；组网模式允许互访。
 			continue
 		}
 		sess := s.lookup(dst)
