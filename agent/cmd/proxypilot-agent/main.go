@@ -26,6 +26,7 @@ import (
 	"proxypilot-agent/internal/client"
 	"proxypilot-agent/internal/config"
 	"proxypilot-agent/internal/installer"
+	"proxypilot-agent/internal/vpnnode"
 )
 
 // version 由构建脚本注入：-ldflags "-X main.version=v1.0.0"
@@ -78,12 +79,13 @@ type options struct {
 	key      string
 	interval int
 	stateDir string
+	vpnConfig string
 	services string
 	insecure bool
 }
 
 func parseFlags(args []string) (options, error) {
-	o := options{confPath: config.DefaultPath}
+	o := options{confPath: config.DefaultPath, vpnConfig: vpnnode.DefaultConfigPath}
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		next := func() string {
@@ -106,6 +108,8 @@ func parseFlags(args []string) (options, error) {
 			o.interval = atoi(next())
 		case arg == "-state-dir" || arg == "--state-dir":
 			o.stateDir = next()
+		case arg == "-vpn-config" || arg == "--vpn-config":
+			o.vpnConfig = next()
 		case arg == "-services" || arg == "--services":
 			o.services = next()
 		case arg == "-insecure" || arg == "--insecure":
@@ -188,6 +192,14 @@ func cmdRun(o options) int {
 		cancel()
 	}()
 	fmt.Fprintf(os.Stderr, "[proxypilot-agent] 启动：%s → %s（间隔 %ds，密钥 %s）\n", version, cfg.Origin, cfg.Interval, maskKey(cfg.Key))
+	logf := func(format string, args ...any) { fmt.Fprintf(os.Stderr, format+"\n", args...) }
+	vpnMgr, vpnErr := vpnnode.Start(ctx, o.vpnConfig, logf)
+	if vpnErr != nil {
+		fmt.Fprintf(os.Stderr, "[proxypilot-agent] 内嵌 VPN 未启动：%v\n", vpnErr)
+	}
+	if vpnMgr != nil {
+		defer vpnMgr.Stop()
+	}
 	if err := newAgent(cfg).Daemon(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "[proxypilot-agent] 退出：%v\n", err)
 		return 1
@@ -300,3 +312,4 @@ func atoi(v string) int {
 	}
 	return n
 }
+

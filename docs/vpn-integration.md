@@ -240,4 +240,17 @@ GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w -X main.Version=0.1.0
 4. 服务端 `vpn_apply` 任务改为写 Agent 配置 + `systemctl restart proxypilot-agent`，
    证书仍由任务生成（或后续由平台 CA 签发）；
 5. 组网（WARP 客户端/自建管理网）由 Agent 内置管理，节点同步优先 WARP，备用自建。
+### Agent 内嵌 VPN 节点（2.0.0）
 
+- `masque/internal/node` 已提升为公共包 `masque/node`，Agent 可直接 import；
+- Agent 新增 `internal/vpnnode`：读取 `/etc/proxypilot/agent/vpn.json`，
+  进程内启动 `node.Server`，随 Agent 退出而停止；可用 `-vpn-config` 指定路径；
+- Agent 构建（需要模块模式，仓库 vendor 尚未包含新依赖）：
+  ```bash
+  cd agent
+  go build -mod=mod -ldflags "-X main.version=2.0.0" ./cmd/proxypilot-agent
+  ```
+- 内嵌后 Agent 二进制约 9.5MB（原 7.6MB）；
+- 部署前需给 Agent 的 systemd 单元加 `CAP_NET_ADMIN/CAP_NET_RAW/CAP_NET_BIND_SERVICE`。
+- 台北节点域名验证：`taipei-node.yzfn.top` → `82.152.91.4`，
+  证书 `CN=taipei-node.yzfn.top`、`SAN=DNS:taipei-node.yzfn.top`，服务 active、UDP 443 监听。

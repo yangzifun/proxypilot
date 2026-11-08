@@ -8,7 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/yzfn/proxypilot/masque/internal/node"
+	"github.com/yzfn/proxypilot/masque/node"
 )
 
 // Version 由构建脚本注入。
@@ -40,5 +40,6 @@ func main() {
 		os.Exit(1)
 	}
 }
+
 
 
