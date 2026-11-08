@@ -44,6 +44,7 @@ export default function Settings({ embedded = false }) {
   const [form] = Form.useForm();
   const mailProvider = Form.useWatch('mail_provider', form);
   const settings = useAsync(() => api('settings'), []);
+  const vpnSettings = useAsync(() => api('admin/vpn/settings'), []);
   const [saving, setSaving] = useState(false);
   const [checking, setChecking] = useState(false);
   const [checkResult, setCheckResult] = useState(null);
@@ -83,10 +84,22 @@ export default function Settings({ embedded = false }) {
     form.setFieldsValue({ agent_access_urls: urls });
   }, [settings.data, form]);
 
+  useEffect(() => {
+    const d = vpnSettings.data || {};
+    form.setFieldsValue({
+      server_mesh_domain: d.server_mesh_domain || 'vpncenter.yzfn.top',
+      server_mesh_ip4: d.server_mesh_ip4 || '10.99.0.1',
+      mesh_cidr4: d.mesh_cidr4 || '10.99.0.0/16',
+    });
+  }, [vpnSettings.data, form]);
+
   const save = async () => {
     const values = await form.validateFields();
     const body = {};
     Object.entries(values).forEach(([k, v]) => {
+      if (k === 'server_mesh_domain' || k === 'server_mesh_ip4' || k === 'mesh_cidr4') {
+        return;
+      }
       if (k === 'agent_access_urls') {
         const arr = (Array.isArray(v) ? v : []).map((x) => String(x || '').trim()).filter(Boolean);
         body[k] = JSON.stringify(arr);
@@ -102,6 +115,15 @@ export default function Settings({ embedded = false }) {
     setSaving(true);
     try {
       const res = await api('settings', { method: 'PUT', body });
+      await api('admin/vpn/settings', {
+        method: 'PUT',
+        body: {
+          ...(vpnSettings.data || {}),
+          server_mesh_domain: values.server_mesh_domain,
+          server_mesh_ip4: values.server_mesh_ip4,
+          mesh_cidr4: values.mesh_cidr4,
+        },
+      });
       settings.setData(res);
       message.success('设置已保存，立即生效');
     } catch (e) {
@@ -394,6 +416,16 @@ export default function Settings({ embedded = false }) {
                     valuePropName="checked"
                   >
                     <Switch checkedChildren="开" unCheckedChildren="关" />
+                  </Form.Item>
+                  <Divider orientation="left">自建组网</Divider>
+                  <Form.Item name="server_mesh_domain" label="组网中心域名" extra="节点通过该域名与中心服务器组网">
+                    <Input placeholder="vpncenter.yzfn.top" allowClear />
+                  </Form.Item>
+                  <Form.Item name="server_mesh_ip4" label="中心组网 IP">
+                    <Input placeholder="10.99.0.1" allowClear />
+                  </Form.Item>
+                  <Form.Item name="mesh_cidr4" label="组网网段">
+                    <Input placeholder="10.99.0.0/16" allowClear />
                   </Form.Item>
 
                   <Form.Item
