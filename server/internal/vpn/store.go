@@ -347,12 +347,22 @@ func (s *Store) CreateGrant(ctx context.Context, nodeID int64, subjectID string,
 		`INSERT INTO vpn_node_grants
 		   (node_id, subject_type, subject_id, enabled, expires_at, max_devices,
 		    quota_bytes, used_bytes, created_by, created_at, revoked_at)
-		 VALUES (?, 'user', ?, 1, ?, ?, ?, 0, ?, ?, 0)`,
+		 VALUES (?, 'user', ?, 1, ?, ?, ?, 0, ?, ?, 0)
+		 ON DUPLICATE KEY UPDATE
+		   enabled = 1, expires_at = VALUES(expires_at), max_devices = VALUES(max_devices),
+		   quota_bytes = VALUES(quota_bytes), revoked_at = 0, created_by = VALUES(created_by)`,
 		nodeID, subjectID, ms(expiresAt), maxDevices, quotaBytes, actor, time.Now().UnixMilli())
 	if err != nil {
 		return 0, fmt.Errorf("创建节点绑定: %w", err)
 	}
-	return res.LastInsertId()
+	id, _ := res.LastInsertId()
+	if id == 0 {
+		// 唯一键命中，走 UPDATE：取回已有记录 ID。
+		_ = s.db.QueryRowContext(ctx,
+			`SELECT id FROM vpn_node_grants WHERE node_id = ? AND subject_type = 'user' AND subject_id = ? LIMIT 1`,
+			nodeID, subjectID).Scan(&id)
+	}
+	return id, nil
 }
 
 // RevokeGrant 解绑（停用并记录时间）。
