@@ -1,4 +1,4 @@
-// ProxyPilot VPN 客户端 1.0（联调用 CLI）
+﻿// ProxyPilot VPN 客户端 1.0（联调用 CLI）
 //
 // 流程：门户令牌 → 已绑定节点 → /api/portal/vpn/connect 换取连接 JWT →
 // HTTP/3 鉴权 → QUIC DATAGRAM 发送 DNS 探测包，验证节点数据面。
@@ -64,7 +64,7 @@ func main() {
 	meshIP := flag.String("mesh-ip", "", "组网 IP，例如 10.99.0.11")
 	meshCIDR := flag.String("mesh-cidr", "10.99.0.0/16", "组网网段")
 	meshTun := flag.String("mesh-tun", "ppmesh0", "组网 TUN 名称")
-	meshEndpoint := flag.String("mesh-endpoint", "vpncenter.yzfn.top:8443", "组网中心地址")
+	meshEndpoint := flag.String("mesh-endpoint", "vpncenter.yzfn.top:443", "组网中心地址")
 	meshSNI := flag.String("mesh-sni", "vpncenter.yzfn.top", "组网中心 SNI")
 	timeout := flag.Duration("timeout", 20*time.Second, "整体超时")
 	flag.Parse()
@@ -341,5 +341,6 @@ func strip(b []byte) ([]byte, net.IP, net.IP, error) {
 	}
 	return b[:total], net.IP(b[12:16]), net.IP(b[16:20]), nil
 }
+
 
 

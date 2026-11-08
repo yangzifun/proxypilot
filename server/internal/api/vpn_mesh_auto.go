@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"context"
@@ -44,7 +44,7 @@ Description=ProxyPilot mesh client
 After=network-online.target
 [Service]
 Type=simple
-ExecStart=/bin/sh -c "exec /opt/proxypilot/mesh/pp-mesh-client -mesh-token \"$(cat /etc/proxypilot/mesh.token)\" -mesh-ip %s -mesh-cidr 10.99.0.0/16 -mesh-tun ppmesh0 -mesh-endpoint vpncenter.yzfn.top:8443 -mesh-sni vpncenter.yzfn.top -insecure"
+ExecStart=/bin/sh -c "exec /opt/proxypilot/mesh/pp-mesh-client -mesh-token \"$(cat /etc/proxypilot/mesh.token)\" -mesh-ip %s -mesh-cidr 10.99.0.0/16 -mesh-tun ppmesh0 -mesh-endpoint vpncenter.yzfn.top:443 -mesh-sni vpncenter.yzfn.top -insecure"
 Restart=always
 RestartSec=3
 [Install]
@@ -82,3 +82,4 @@ systemctl is-active pp-mesh-client`, token, unit)
 		 ON DUPLICATE KEY UPDATE mesh_ip4 = VALUES(mesh_ip4), state = 'up', last_seen = VALUES(last_seen), updated_at = VALUES(updated_at)`,
 		srv.ID, ip, now, now)
 }
+
