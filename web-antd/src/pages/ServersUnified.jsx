@@ -573,6 +573,26 @@ export default function ServersUnified() {
 
   /* ---------------- 批量动作（工具条） ---------------- */
 
+  const batchMesh = async (action) => {
+    if (!selected.length) return;
+    try {
+      const res = await api('admin/vpn/mesh/batch', {
+        method: 'POST',
+        body: { server_ids: selected, action },
+      });
+      const results = (res && res.results) || [];
+      const joined = results.filter((x) => x.joined).length;
+      const queued = results.filter((x) => x.queued).length;
+      if (action === 'check') {
+        message.success(`组网检查完成：${joined}/${selected.length} 已加入组网`);
+      } else {
+        message.success(`组网任务已下发：新加入 ${queued} 台，已加入 ${joined} 台`);
+      }
+    } catch (e) {
+      message.error(e.message || '组网操作失败');
+    }
+  };
+
   const batchProbe = async () => {
     if (!selected.length) return;
     setChecking(true);
@@ -1093,9 +1113,11 @@ export default function ServersUnified() {
                   取消选择
                 </Button>
                 <div className="pp-toolbar-right">
-                  <span className="pp-muted" style={{ fontSize: 12 }}>
-                    批量动作
-                  </span>
+                  <Space size={8}>
+                    <Button size="small" onClick={() => batchMesh('check')}>检查组网</Button>
+                    <Button size="small" type="primary" ghost onClick={() => batchMesh('join')}>加入组网</Button>
+                    <span className="pp-muted" style={{ fontSize: 12 }}>批量动作</span>
+                  </Space>
                 </div>
               </div>
             ) : null}
