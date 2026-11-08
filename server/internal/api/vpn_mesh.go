@@ -1,15 +1,12 @@
 package api
 
 import (
-	"net"
 	"net/http"
+	"os/exec"
 	"time"
 )
 
 // GET /api/admin/vpn/mesh — 自建组网状态（节点通过 vpncenter.yzfn.top 与中心组网）。
-//
-// 只展示已加入自建组网的服务器；WARP 等外部组网不在此展示。
-// 组网与 VPN 绑定解耦：服务器可不绑定 VPN 节点，但仍可加入组网用于内网服务。
 func (h *handlers) vpnAdminMesh(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -56,7 +53,7 @@ func (h *handlers) vpnAdminMesh(w http.ResponseWriter, r *http.Request) {
 		out = append(out, m)
 	}
 
-	// 从中心对组网 IP 做 TCP 探活（SSH 端口），实时更新状态/心跳。
+	// 从中心对组网 IP 做 ICMP 探活，实时更新状态/心跳（ping 不存在时按 TCP 22 兜底）。
 	type probe struct {
 		idx int
 		ok  bool
@@ -66,10 +63,7 @@ func (h *handlers) vpnAdminMesh(w http.ResponseWriter, r *http.Request) {
 	for i := range out {
 		go func(i int) {
 			start := time.Now()
-			conn, err := net.DialTimeout("tcp", net.JoinHostPort(out[i].MeshIPv4, "22"), 1200*time.Millisecond)
-			if err == nil {
-				_ = conn.Close()
-			}
+			err := exec.Command("ping", "-c", "1", "-W", "1", out[i].MeshIPv4).Run()
 			ch <- probe{i, err == nil, int(time.Since(start).Milliseconds())}
 		}(i)
 	}

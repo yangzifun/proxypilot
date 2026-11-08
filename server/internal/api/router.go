@@ -11,7 +11,7 @@ import (
 )
 
 // Version 由 main 通过 ldflags 注入。
-var Version = "V33.8"
+var Version = "V33.9"
 
 // New 构造 HTTP 处理器。已迁移的路由走真实实现，其余转发给旧 Worker 或返回 501。
 func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
@@ -459,6 +459,7 @@ func (h *handlers) health(w http.ResponseWriter, r *http.Request) {
 		"db":      status,
 	})
 }
+
 
 
 
