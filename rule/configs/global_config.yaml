@@ -1,13 +1,16 @@
-﻿# 更新时间: 2026-10-23
-# 模板类型: 全球上网模板（无地区分组 + 中国大陆直连）
-# 策略组体系: 与 global_full_config.yaml 完全同构（含规则源）；唯一差异是中国大陆流量直连
-# 设计说明: 全部策略组使用 include-all + exclude-filter 自动测速选路，不再依赖固定地区组
+# ==========================================================
+# 更新时间: 2026-11-08
+# 模板类型: 全球上网模板 (已修正核心报错与语法隐患)
+# 策略说明: 全部策略组使用 include-all + exclude-filter 自动测速选路
 # 作者: YZFN
+# ==========================================================
+
 # ==========================================================
 # 节点信息
 # ==========================================================
 proxies:
   - {name: 直连, type: direct}
+
 # ==========================================================
 # 全局配置 
 # ==========================================================
@@ -23,14 +26,12 @@ unified-delay: true
 tcp-concurrent: true
 log-level: warning
 find-process-mode: 'off'
-global-client-fingerprint: chrome
 keep-alive-idle: 600
 keep-alive-interval: 15
 disable-keep-alive: false
 profile:
   store-selected: true
   store-fake-ip: true
-
 
 # ==========================================================
 # 嗅探
@@ -49,7 +50,7 @@ sniffer:
     - "Mijia Cloud"
     - "dlg.io.mi.com"
     - "+.baidu.com"
-    - "+.apple.com" # 苹果服务建议直连且跳过嗅探以防异常
+    - "+.apple.com"
 
 # ==========================================================
 # 入站  
@@ -59,7 +60,6 @@ tun:
   stack: mixed
   dns-hijack: ["any:53", "tcp://any:53"]
   auto-route: true
-  auto-redirect: true
   auto-detect-interface: true
 
 # ==========================================================
@@ -73,9 +73,9 @@ dns:
   fake-ip-range: 198.18.0.1/16
   enhanced-mode: fake-ip
   fake-ip-filter:
-    - "rule-set:private_domain,cn_domain" # 确保国内域名不返回 Fake-IP
-    - "+.msftconnecttest.com"
-    - "+.msftncsi.com"
+    - "rule-set:private_domain"
+    - "*.msftconnecttest.com"
+    - "*.msftncsi.com"
     - "time.*.com"
   
   # 默认 DNS，用于解析 DNS Over HTTPS 的域名
@@ -92,11 +92,12 @@ dns:
     - https://dns.alidns.com/dns-query
     - https://doh.pub/dns-query
   
-  # 分流解析：国内域名强制走国内 DNS，国外走国外 DNS
+  # 分流解析
   nameserver-policy:
-    "geosite:cn,private": [https://dns.alidns.com/dns-query, https://doh.pub/dns-query]
+    "geosite:private": [https://dns.alidns.com/dns-query, https://doh.pub/dns-query]
+    "geosite:cn": [https://dns.alidns.com/dns-query, https://doh.pub/dns-query]
     "geosite:geolocation-!cn": [https://8dru8z0see.cloudflare-gateway.com/dns-query, https://upw7thu31v.cloudflare-gateway.com/dns-query]
- 
+
 # ==========================================================
 # 锚点配置
 # ==========================================================
@@ -108,50 +109,23 @@ rule-anchor:
 # ==========================================================
 # 出站策略组 (Proxy Groups)
 # ==========================================================
-# 策略组的设计目标：
-#   1. 让常见业务按类型走不同节点，降低单节点过载。
-#   2. 定义默认代理、AI、社交、开发、流媒体等不同赛道。
-#   3. 使用 url-test 对节点做探测，以自动选择低延迟且稳定的节点。
-#   4. 通过 exclude-filter 过滤掉国内节点与明显不合适的地区节点。
-# 下方 url-test 组共享参数说明：include-all 纳入所有代理节点；url 是延迟探测地址；
-# interval 是探测间隔（秒）；tolerance 是切换容差（毫秒）；filter 按名称筛选，exclude-filter 按名称排除。
-# select 组不自动测速，用户可在客户端手动选择其 proxies 列表中的策略或节点。
-# 本模板不使用固定地区组：业务组统一排除大陆节点（AI / Google / TikTok / 微软另排除港澳）后自动选路。
 proxy-groups:
-  # 🚀 默认代理：全局总开关，优先走海外稳定节点，过滤掉国内和高延迟节点
   - {name: 🚀 默认代理, type: url-test, url: "https://www.google.com/generate_204", include-all: true, tolerance: 50, interval: 120, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH"}
-
-  # ⚡ 自动选择：保留全局代理入口，适合未作细分的通用流量
   - {name: ⚡ 自动选择, type: url-test, url: "https://www.google.com/generate_204", include-all: true, tolerance: 50, interval: 120, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH"}
-
-  # 🌌 AI：针对 OpenAI / Claude / Gemini 等 AI 服务，优先稳定和低延迟节点
   - {name: 🌌 AI, type: url-test, url: "https://www.google.com/generate_204", include-all: true, tolerance: 50, interval: 120, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH|香港|澳门|澳門|HK|hk|MO"}
-
-  # 社交媒体相关：Telegram、Instagram、Facebook、Twitter 等高频社交应用
   - {name: 📲 Telegram, type: url-test, url: "https://www.google.com/generate_204", include-all: true, tolerance: 50, interval: 120, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH"}
   - {name: 🌏 Meta, type: url-test, url: "https://www.google.com/generate_204", include-all: true, tolerance: 50, interval: 120, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH"}
   - {name: 🐦 X, type: url-test, url: "https://www.google.com/generate_204", include-all: true, tolerance: 50, interval: 120, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH"}
   - {name: 📱 社交媒体, type: url-test, url: "https://www.google.com/generate_204", include-all: true, tolerance: 50, interval: 120, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH"}
-
-  # 生产力与开发：GitHub、Notion、Figma、LinkedIn 等办公/协作工具
   - {name: 💼 办公, type: url-test, url: "https://www.google.com/generate_204", include-all: true, tolerance: 50, interval: 120, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH"}
   - {name: 🧑‍💻 开发, type: url-test, url: "https://www.google.com/generate_204", include-all: true, tolerance: 50, interval: 120, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH"}
   - {name: ☁️ 云服务, type: url-test, url: "https://www.google.com/generate_204", include-all: true, tolerance: 50, interval: 120, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH"}
-
-  # 影音娱乐相关：YouTube、Netflix、Spotify 等应用的分流入口
-  # 流媒体组仅排除大陆节点，保留香港和澳门节点供流媒体业务选择。
   - {name: 📺 流媒体, type: url-test, url: "https://www.google.com/generate_204", include-all: true, tolerance: 50, interval: 120, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH"}
-  # TikTok 独立选路：排除大陆及港澳节点，避免 TikTok 流量使用这些地区的出口。
   - {name: 🎵 TikTok, type: url-test, url: "https://www.google.com/generate_204", include-all: true, tolerance: 50, interval: 120, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH|香港|澳门|澳門|HK|MO"}
   - {name: 🎧 音乐, type: url-test, url: "https://www.google.com/generate_204", include-all: true, tolerance: 50, interval: 120, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH"}
   - {name: 🎮 游戏, type: url-test, url: "https://www.google.com/generate_204", include-all: true, tolerance: 50, interval: 120, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH"}
-
-  # 区域特色：按照地区筛选节点，适合东南亚、Google 专用等场景
-  # 🌏️ 东南亚：自动筛选区域节点，并额外引用「🚀 默认代理」组作为兜底（区域内无可用节点时仍可出网）
   - {name: 🌏️ 东南亚, type: url-test, url: "https://www.google.com/generate_204", include-all: true, tolerance: 50, interval: 120, filter: "(?i)新加坡|狮城|马来西亚|吉隆坡|马六甲|槟城|印尼|雅加达|巴厘岛|菲律宾|马尼拉|越南|胡志明市|河内|泰国|曼谷|清迈|孟买", proxies: [🚀 默认代理]}
   - {name: 🔍 Google, type: url-test, url: "https://www.google.com/generate_204", include-all: true, tolerance: 50, interval: 120, exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH|香港|HK|hk"}
-
-  # 自定义选择：手动指定某些服务优先走某个节点池，也可以作为兜底策略
   - {name: 🪟 微软, type: url-test, url: "https://www.google.com/generate_204", include-all: true, tolerance: 50, interval: 120, filter: "(?i)日本|东京|大阪|韩国|首尔|釜山|新加坡|狮城|澳洲|悉尼|墨尔本|印度|孟买|荷兰|阿姆斯特丹|爱尔兰|都柏林|法国|巴黎|德国|法兰克福|英国|伦敦|瑞典|瑞士|挪威|美国|美西|美东|洛杉矶|加拿大|多伦多|巴西|圣保罗|阿联酋|迪拜|南非|波兰", exclude-filter: "(?i)直连|上海|北京|广州|深圳|杭州|徐州|江苏|浙江|南京|中国|国内|回国|China|Mainland|CN|SHA|PEK|CAN|SZX|HGH|香港|HK|hk|澳门|MO"}
   - {name: 💳 海外支付, type: select, proxies: [⚡ 自动选择, 🚀 默认代理, DIRECT]}
   - {name: 🚫 广告拦截, type: select, proxies: [REJECT, DIRECT]}
@@ -160,22 +134,9 @@ proxy-groups:
 # ==========================================================
 # 规则匹配 (Rules)
 # ==========================================================
-# 规则从上到下依次匹配，越靠前的规则优先级越高。
-# 这里的设计重点包括：
-#   1. 先阻断明显导致连接问题的 UDP 443 流量，减少丢包和 SNI 识别错误。
-#   2. 对广告和本地私有网络优先直连，减少去代理的无效请求。
-#   3. 对 AI、社交、开发、流媒体等业务应用分类分流，提高可用性。
-#   4. 对部分境外支付、Google 和国内域名做单独兜底，保证稳定性和兼容性。
-# RULE-SET 匹配远程规则集；IP-CIDR 匹配目标 IPv4 网段；IP-ASN 按目标 IP 的自治系统号匹配。
-# no-resolve 表示规则判断时不为域名触发 DNS 解析；AND 用于组合多个条件；REJECT 丢弃匹配流量。
 rules:
-  # [重点优化] 强制阻断 UDP 443 端口，迫使客户端回退到 TCP 协议
-  # 解决三大运营商 UDP QoS 严重丢包问题，并确保 TikTok/浏览器使用 TLS 握手正常嗅探 SNI
   - AND,((NETWORK,UDP),(DST-PORT,443)),REJECT
 
-  # --- 基础去广告与直连 ---
-  # 尽量让广告、局域网、私有域名等流量尽快直连，降低代理资源占用和首包延迟。
-  # 广告规则交给广告策略组处理；私有域名和自定义直连列表直接访问。
   - RULE-SET,category-ads-all,🚫 广告拦截
   - RULE-SET,private_domain,DIRECT
   - RULE-SET,custom_direct,DIRECT
@@ -185,14 +146,10 @@ rules:
   - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
   - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve
 
-  # --- 基础分流 ---
-  # 通用代理列表与韩国规则进入默认代理组，东南亚规则进入地区专用自动测速组（该组额外引用默认代理组作兜底）。
   - RULE-SET,proxylite,🚀 默认代理
   - RULE-SET,se_asia,🌏️ 东南亚
   - RULE-SET,korea,🚀 默认代理
 
-  # --- AI 规则 ---
-  # AI 类应用通常对延迟和稳定性要求更高，因此被单独拆分成独立策略组。
   - RULE-SET,openai,🌌 AI
   - RULE-SET,gemini,🔍 Google
   - RULE-SET,claude,🌌 AI
@@ -200,8 +157,6 @@ rules:
   - RULE-SET,huggingface_domain,🌌 AI
   - RULE-SET,ai,🌌 AI
 
-  # --- 社交与通讯 ---
-  # Telegram 同时匹配 IP 与域名规则；其余服务按域名规则分别归入对应策略组。
   - RULE-SET,telegram_ip,📲 Telegram,no-resolve
   - RULE-SET,telegram_domain,📲 Telegram
   - RULE-SET,discord_domain,📱 社交媒体
@@ -213,20 +168,14 @@ rules:
   - RULE-SET,instagram_domain,🌏 Meta
   - RULE-SET,twitter_domain,🐦 X
 
-  # --- 加密货币 Web3 ---
-  # 交易平台单独归入海外支付策略，方便按支付或账户所在地区调整出口。
   - RULE-SET,binance_domain,💳 海外支付
   - RULE-SET,okx_domain,💳 海外支付
 
-  # --- 生产力与协作 ---
-  # 办公协作平台统一使用办公策略组，避免与娱乐流量共用独立策略。
   - RULE-SET,linkedin_domain,💼 办公
   - RULE-SET,notion_domain,💼 办公
   - RULE-SET,figma_domain,💼 办公
   - RULE-SET,zoom_domain,💼 办公
 
-  # --- 开发者与云服务 ---
-  # 开发平台与基础设施按开发、云服务分组，便于选择更适合的地区出口。
   - RULE-SET,github_domain,🧑‍💻 开发
   - RULE-SET,cloudflare_domain,☁️ 云服务
   - RULE-SET,docker_domain,🧑‍💻 开发
@@ -234,15 +183,11 @@ rules:
   - RULE-SET,aws_domain,☁️ 云服务
   - RULE-SET,dropbox_domain,☁️ 云服务
 
-  # --- 视频与流媒体 ---
-  # 这里优先聚焦 YouTube 和 Netflix 等国际视频与流媒体平台。
   - RULE-SET,youtube_domain,📺 流媒体
   - RULE-SET,netflix_ip,📺 流媒体,no-resolve
   - RULE-SET,netflix_domain,📺 流媒体
   - RULE-SET,disney_domain,📺 流媒体
 
-  # [重点优化] TikTok 域名 + 官方 ASN 自治域匹配（完全解决 TTNet 直连绕过问题）
-  # 该规则针对 TikTok 及其官方网络入口，避免被错误直连或走到不合适的节点。
   - RULE-SET,tiktok_domain,🎵 TikTok
   - IP-ASN,138699,🎵 TikTok,no-resolve
   - IP-ASN,396986,🎵 TikTok,no-resolve
@@ -263,14 +208,11 @@ rules:
   - RULE-SET,twitch_domain,📺 流媒体
   - RULE-SET,porn_domain,📺 流媒体
 
-  # --- 音乐流媒体 ---
   - RULE-SET,spotify_domain,🎧 音乐
   - RULE-SET,deezer_domain,🎧 音乐
   - RULE-SET,soundcloud_domain,🎧 音乐
   - RULE-SET,tidal_domain,🎧 音乐
 
-  # --- 游戏服务 ---
-  # 游戏平台按域名分流到同一组；具体游戏区服仍由服务本身或账号区域决定。
   - RULE-SET,steam_domain,🎮 游戏
   - RULE-SET,ubisoft_domain,🎮 游戏
   - RULE-SET,epic_domain,🎮 游戏
@@ -280,8 +222,6 @@ rules:
   - RULE-SET,xbox_domain,🎮 游戏
   - RULE-SET,roblox_domain,🎮 游戏
 
-  # --- 基础平台与其他 ---
-  # Google 按 IP 和域名覆盖；微软、Apple、PayPal 与常规境外网络分别使用专属策略。
   - RULE-SET,google_ip,🔍 Google,no-resolve
   - RULE-SET,google_domain,🔍 Google
   - RULE-SET,onedrive_domain,🪟 微软
@@ -290,20 +230,15 @@ rules:
   - RULE-SET,paypal_domain,💳 海外支付
   - RULE-SET,gfw_domain,🚀 默认代理
 
-  # 中国大陆域名与 IP 直连（本模板与 global_full_config.yaml 的核心差异：full 走默认代理）
-  # 国内站点、国内 CDN、国内支付等流量不经代理，降低延迟并避免国内服务因出口异常而不可用。
+  # 中国大陆域名与 IP 直连
   - RULE-SET,cn_domain,DIRECT
   - RULE-SET,cn_ip,DIRECT,no-resolve
 
-  # --- 最终兜底规则 ---
-  # 当没有命中更具体规则时，统一落到默认代理或手动选择的兜底策略，以保证任何流量都能由规则控制。
   - MATCH,🧱 漏网之鱼
 
 # ==========================================================
 # 规则源 (Rule-providers)
 # ==========================================================
-# 规则源从远程地址下载并按 rule-anchor 中定义的格式解析；interval 为 86400 秒，即每日检查更新。
-# domain/ip/class 分别表示域名、IP 网段和传统规则集合；规则源不可用时，相关 RULE-SET 将无法正常匹配。
 rule-providers:
   proxylite: { <<: *class, url: "https://s3.proxypilot.yangzifun.org/rule/proxy.list"}
   se_asia: { <<: *class, url: "https://s3.proxypilot.yangzifun.org/rule/se_asia.list"}
@@ -312,7 +247,6 @@ rule-providers:
   custom_direct: { <<: *class, url: "https://s3.proxypilot.yangzifun.org/rule/direct.list"}
   category-ads-all: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ads-all.mrs"}
   
-  # AI 服务：覆盖 OpenAI、Gemini、Claude、Hugging Face、Perplexity 及通用非中国 AI 域名集合。
   openai: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/openai.mrs" }
   gemini: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/google-gemini.mrs" }
   claude: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/anthropic.mrs" }
@@ -320,7 +254,6 @@ rule-providers:
   perplexity_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/perplexity.mrs" }
   ai: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ai-!cn.mrs" }
   
-  # 社交与通讯：各服务独立维护域名清单，由 rules 段映射到社交或专用策略组。
   telegram_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/telegram.mrs"}
   discord_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/discord.mrs"}
   reddit_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/reddit.mrs"}
@@ -331,17 +264,14 @@ rule-providers:
   instagram_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/instagram.mrs"}
   twitter_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/twitter.mrs"}
 
-  # 加密货币 Web3：交易平台域名规则，用于将相关访问交由海外支付策略组处理。
   binance_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/binance.mrs"}
   okx_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/okx.mrs"}
 
-  # 生产力与协作：LinkedIn、Notion、Figma 和 Zoom 等办公服务域名集合。
   linkedin_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/linkedin.mrs"}
   notion_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/notion.mrs"}
   figma_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/figma.mrs"}
   zoom_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/zoom.mrs"}
 
-  # 开发者与云服务：开发托管平台、云基础设施及文件同步服务的域名集合。
   github_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/github.mrs"}
   cloudflare_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cloudflare.mrs"}
   docker_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/docker.mrs"}
@@ -349,7 +279,6 @@ rule-providers:
   aws_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/aws.mrs"}
   dropbox_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/dropbox.mrs"}
 
-  # 影音视频流媒体：视频平台、电视网络及地区性流媒体域名集合；TikTok 另有 ASN 规则补充。
   youtube_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/youtube.mrs"}
   netflix_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/netflix.mrs"}
   disney_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/disney.mrs"}
@@ -370,13 +299,11 @@ rule-providers:
   twitch_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/twitch.mrs"}
   porn_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-porn.mrs"}
   
-  # 音乐流媒体：Spotify、Deezer、SoundCloud 与 Tidal 的域名集合。
   spotify_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/spotify.mrs"}
   deezer_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/deezer.mrs"}
   soundcloud_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/soundcloud.mrs"}
   tidal_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/tidal.mrs"}
 
-  # 游戏服务：游戏平台及在线游戏服务域名集合，不代表游戏内容下载一定经过代理。
   steam_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/steam.mrs"}
   ubisoft_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/ubisoft.mrs"}
   epic_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/epicgames.mrs"}
@@ -386,19 +313,15 @@ rule-providers:
   xbox_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/xbox.mrs"}
   roblox_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/roblox.mrs"}
   
-  # 基础平台与系统：Google、微软、Apple 与 PayPal 域名集合；Apple 使用上游完整规则库。
   google_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/google.mrs"}
   onedrive_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/onedrive.mrs"}
   microsoft_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/microsoft.mrs"}
-  # [重点修复] 替换为海外全量 Apple 规则库，走代理更完整
   apple_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/apple.mrs"}
   paypal_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/paypal.mrs"}
   
-  # 兜底与底层判断：GFW 域名集合用于代理常见受限站点；中国域名集合供国内流量规则匹配。
   gfw_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/gfw.mrs"}
   cn_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs"}
   
-  # GeoIP 规则源：按目标 IP 所属网络归类；仅对 IP 流量生效，域名规则可提供补充覆盖。
   cn_ip: { <<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs"}
   google_ip: { <<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/google.mrs"}
   telegram_ip: { <<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/telegram.mrs"}
