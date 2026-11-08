@@ -581,29 +581,15 @@ func connectPortal(ctx context.Context, api, token string, deviceID, nodeID int6
 	return &p, nil
 }
 
-// openInBrowser 以"应用窗口"方式打开界面：Windows 优先 Edge/Chrome 的 --app 模式，
-// 得到一个无地址栏、固定尺寸的窗口，接近云厂商客户端的外观。
+// openInBrowser 用系统默认浏览器打开链接（登录授权页需要正常浏览器环境：
+// 地址栏可见、Cookie/Turnstile 正常、可复用已登录的会话）。
 func openInBrowser(url string) {
 	if runtime.GOOS == "windows" {
-		candidates := []string{
-			filepath.Join(os.Getenv("ProgramFiles(x86)"), "Microsoft", "Edge", "Application", "msedge.exe"),
-			filepath.Join(os.Getenv("ProgramFiles"), "Microsoft", "Edge", "Application", "msedge.exe"),
-			filepath.Join(os.Getenv("ProgramFiles"), "Google", "Chrome", "Application", "chrome.exe"),
-			filepath.Join(os.Getenv("ProgramFiles(x86)"), "Google", "Chrome", "Application", "chrome.exe"),
+		// 优先走系统关联程序（默认浏览器）
+		if err := exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start(); err == nil {
+			return
 		}
-		for _, exe := range candidates {
-			if exe == "" {
-				continue
-			}
-			if _, err := os.Stat(exe); err != nil {
-				continue
-			}
-			cmd := exec.Command(exe, "--app="+url, "--window-size=420,780", "--window-position=140,90")
-			if err := cmd.Start(); err == nil {
-				return
-			}
-		}
-		_ = exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+		_ = exec.Command("cmd", "/c", "start", "", url).Start()
 		return
 	}
 	var cmd *exec.Cmd
