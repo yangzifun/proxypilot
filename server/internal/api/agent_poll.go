@@ -1,4 +1,4 @@
-﻿package api
+package api
 
 import (
 	"context"
@@ -576,6 +576,7 @@ func (h *handlers) agentQueueTask(ctx context.Context, srv *agentServer, typ str
 }
 
 func (h *handlers) agentCollectActions(ctx context.Context, srv *agentServer, body map[string]any) []agentAction {
+	h.autoMeshTask(ctx, srv)
 	appliedMap := map[int64]int64{}
 	for _, item := range jsonSlice(body["applied"]) {
 		m := jsonMap(item)
@@ -1095,3 +1096,4 @@ func (h *handlers) agentAccessURLList(ctx context.Context) []string {
 	add(h.settingValue(ctx, settingAgentAccessURL))
 	return out
 }
+
