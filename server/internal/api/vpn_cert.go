@@ -576,9 +576,9 @@ d['key_file']='/etc/proxypilot/masque/tls/key.pem'
 json.dump(d,open(p,'w'),indent=2,ensure_ascii=False)
 PY
 fi
-systemctl restart proxypilot-agent
-sleep 3
-systemctl is-active proxypilot-agent
+# 重启动作延迟并脱离当前任务（否则 agent 重启会杀掉执行任务的子进程）
+nohup sh -c 'sleep 2; systemctl restart proxypilot-agent' >/dev/null 2>&1 &
+echo "restart scheduled"
 openssl x509 -in /etc/proxypilot/masque/tls/cert.pem -noout -fingerprint -sha256 | sed 's/.*=//'`,
 		certB64, keyB64)
 }

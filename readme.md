@@ -12,7 +12,7 @@
 - **组网状态可视化**：面板显示 RTT（取自 QUIC `SmoothedRTT`）与传输方式；"心跳在跳但状态 down"直接标识数据面故障。
 - **证书管理（V35.0 新增）**：用 Cloudflare DNS-01 申请 `*.yzfn.top` 通配证书，管理后台一键签发 + 统一下发到组网中心与各节点 VPN（`/admin/certs`）。
 - **会话治理**：连接前回收同设备僵尸会话、定期清理超过 2×TTL 的残留会话，修复"该节点并发设备数超过上限"导致的无法连接。
-- **版本号**：服务端 V35.0 / Agent 2.0.0 / 客户端 V35.0。
+- **版本号**：服务端 V35.0 / Agent 2.0.1 / 客户端 V35.0。
 ## 目录
 
 - [架构总览](#架构总览)
@@ -132,7 +132,7 @@ proxypilot/
 - `workers/`、`wrangler.toml` 与依赖 Worker 的测试脚本已从本分支删除。
 - 历史迁移方案、D1 导入工具仍保留在 `docs/migration/` 与 `server/tools/`，仅用于迁移旧数据。
 - `PP_LEGACY_BASE` 配置项保留，作为迁移期可选兜底；新部署无需配置。
-- 当前版本：V35.0（Go 1.24+ / MySQL 8 / React 18 + Ant Design 6 / Go Agent 2.0.0 / Wails v3 桌面客户端）。
+- 当前版本：V35.0（Go 1.24+ / MySQL 8 / React 18 + Ant Design 6 / Go Agent 2.0.1 / Wails v3 桌面客户端）。
 
 ## 功能总览
 
