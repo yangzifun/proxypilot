@@ -279,3 +279,22 @@ GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w -X main.Version=0.1.0
   `vpncenter.yzfn.top`；
 - `GET /api/admin/vpn/mesh` 改为返回全部服务器（LEFT JOIN vpn_nodes / vpn_node_links），
   Agent 2 分钟内有心跳即标记链路 up。
+## VPN 客户端 1.0（联调完成）
+
+- 模块：`vpnclient/`（`github.com/yzfn/proxypilot/vpnclient`，quic-go v0.55）；
+- 流程：门户令牌 → `/api/portal/vpn/nodes` → `/api/portal/vpn/connect` →
+  HTTP/3 鉴权（`X-VPN-Auth`）→ 复用同一 QUIC 连接收发 DATAGRAM；
+- 身份证：`-token`（门户 JWT）、`-device`（设备 ID）、`-node`、`-insecure`（自签节点）；
+- 探测：构造 IPv4/UDP DNS 查询经隧道发往 `1.1.1.1:53`，校验返回报文。
+
+联调结果（台北节点 `taipei-node.yzfn.top`）：
+
+```
+选择节点 #3 台北-VPN测试 endpoint=taipei-node.yzfn.top:443 online=true
+连接成功：session=2 ip4=10.88.1.11 sni=taipei-node.yzfn.top mtu=1280
+HTTP/3 鉴权成功，节点确认客户端 IP=10.88.1.11
+DNS 探测成功：收到 89 字节响应（1.1.1.1:53）
+```
+
+说明：客户端 ↔ 节点（quic-go 0.55 ↔ 0.42）HTTP/3 与 DATAGRAM 互操作正常；
+平台 connect API、JWT、节点鉴权、TUN/NAT 数据面全链路已打通。
