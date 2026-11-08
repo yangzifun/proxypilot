@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/binary"
 	"encoding/json"
 	"flag"
@@ -16,6 +17,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -27,6 +29,8 @@ import (
 
 // Version 是 VPN 客户端版本（V1.x）。
 const Version = "1.0.0"
+
+var caPEM []byte
 
 type node struct {
 	ID       int64  `json:"id"`
@@ -59,6 +63,7 @@ func main() {
 	deviceID := flag.Int64("device", 0, "设备 ID")
 	nodeID := flag.Int64("node", 0, "节点 ID（0=自动选第一个在线节点）")
 	insecure := flag.Bool("insecure", false, "跳过 TLS 证书校验（自签节点）")
+	caPath := flag.String("ca", "", "内部 CA 证书路径（PEM），用于校验节点证书")
 	dnsAddr := flag.String("dns", "1.1.1.1:53", "探测用 DNS（经隧道访问）")
 	meshToken := flag.String("mesh-token", "", "组网 JWT（设置后进入组网模式）")
 	meshIP := flag.String("mesh-ip", "", "组网 IP，例如 10.99.0.11")
@@ -69,6 +74,13 @@ func main() {
 	meshAPI := flag.String("mesh-api", "https://proxypilot.yangzifun.org", "组网心跳 API 地址")
 	timeout := flag.Duration("timeout", 20*time.Second, "整体超时")
 	flag.Parse()
+	if *caPath != "" {
+		b, err := os.ReadFile(*caPath)
+		if err != nil {
+			log.Fatalf("读取 CA 失败：%v", err)
+		}
+		caPEM = b
+	}
 	log.Printf("ProxyPilot VPN Client %s", Version)
 
 	if *meshToken != "" {
@@ -245,6 +257,14 @@ func authHTTP3(ctx context.Context, endpoint, sni, token string, insecure bool) 
 		MinVersion:         tls.VersionTLS13,
 		NextProtos:         []string{"h3"},
 		InsecureSkipVerify: insecure,
+	}
+	if len(caPEM) > 0 {
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM(caPEM) {
+			return "", nil, fmt.Errorf("CA 证书无效")
+		}
+		tlsConf.RootCAs = pool
+		tlsConf.InsecureSkipVerify = false
 	}
 	tr := &http3.Transport{
 		TLSClientConfig: tlsConf,
