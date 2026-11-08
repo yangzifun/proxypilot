@@ -1,4 +1,4 @@
-// ProxyPilot VPN 客户端 1.0（联调用 CLI）
+﻿// ProxyPilot VPN 客户端 1.0（联调用 CLI）
 //
 // 流程：门户令牌 → 已绑定节点 → /api/portal/vpn/connect 换取连接 JWT →
 // HTTP/3 鉴权 → QUIC DATAGRAM 发送 DNS 探测包，验证节点数据面。
@@ -195,7 +195,7 @@ func runMesh(ctx context.Context, token, ip, cidr, tunName, endpoint, sni, apiBa
 	if err := exec.Command("ip", "addr", "add", ip+"/"+strings.Split(cidr, "/")[1], "dev", dev.Name()).Run(); err != nil {
 		return fmt.Errorf("配置地址: %w", err)
 	}
-	if err := exec.Command("ip", "link", "set", "dev", dev.Name(), "up").Run(); err != nil {
+	if err := exec.Command("ip", "link", "set", "dev", dev.Name(), "mtu", "1280", "up").Run(); err != nil {
 		return fmt.Errorf("启用 TUN: %w", err)
 	}
 	assigned, conn, err := authHTTP3(ctx, endpoint, sni, token, insecure)
@@ -383,6 +383,7 @@ func strip(b []byte) ([]byte, net.IP, net.IP, error) {
 	}
 	return b[:total], net.IP(b[12:16]), net.IP(b[16:20]), nil
 }
+
 
 
 
