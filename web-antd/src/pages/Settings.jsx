@@ -401,7 +401,7 @@ export default function Settings({ embedded = false }) {
                   <Form.Item name="site_public_base_url" label="对外访问地址" extra="用于 Agent 分发与 OIDC 回调推导" rules={[{ type: 'url', message: '请输入合法 URL' }]}>
                     <Input placeholder="https://pp.example.com" allowClear />
                   </Form.Item>
-                  <Form.Item name="agent_binary_base_url" label="Agent 分发基址" extra="留空使用本站 /agent-dist">
+                  <Form.Item name="agent_binary_base_url" label="Agent 分发基址" extra="留空使用本站 /agent-dist；建议填写存储桶目录，如 https://s3.proxypilot.yangzifun.org/agent">
                     <Input placeholder="https://cdn.example.com/agent-dist" allowClear />
                   </Form.Item>
                   <Divider orientation="left">Agent 内网通信（自建组网）</Divider>

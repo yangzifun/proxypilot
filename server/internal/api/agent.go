@@ -135,7 +135,7 @@ func (h *handlers) agentKeycheck(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// agentBinaryBaseURL 返回显式配置的基址（外部对象存储或 PP_PUBLIC_BASE_URL + /agent-dist）；
+// agentBinaryBaseURL 返回显式配置的基址（统一使用对象存储桶的 agent 目录）；
 // 返回空串表示只能按请求 origin 推导（见 agentBaseFor）。
 func (h *handlers) agentBinaryBaseURL() string {
 	if s := strings.TrimSpace(h.setting(context.Background(), settingAgentBinaryBase, h.cfg.AgentBinaryBaseURL)); s != "" {
