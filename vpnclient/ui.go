@@ -279,6 +279,7 @@ func runUI(ctx context.Context, addr string, defaults uiSettings, openBrowser, d
 	mux.HandleFunc("/api/install/start", srv.handleInstallStart)
 	mux.HandleFunc("/api/install/launch", srv.handleInstallLaunch)
 	mux.HandleFunc("/api/install/exit", srv.handleInstallExit)
+	mux.HandleFunc("/api/logs/open", srv.handleLogsOpen)
 
 	httpSrv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	go func() {
@@ -346,6 +347,8 @@ func (s *uiServer) handleState(w http.ResponseWriter, r *http.Request) {
 	payload["tun_name"] = cfg.TunName
 	payload["mesh_cidr"] = cfg.MeshCIDR
 	payload["tun_supported"] = runtimeSupportsTun()
+	payload["log_path"] = logFilePath()
+	payload["log_dir"] = filepathDir(logFilePath())
 	payload["platform"] = runtime.GOOS
 	payload["token_hint"] = maskToken(cfg.Token)
 	payload["version"] = Version
@@ -908,4 +911,23 @@ func (s *uiServer) resolveDevice(ctx context.Context, cfg uiSettings) (int64, er
 	_ = saveSettings(saved)
 	log.Printf("使用设备 #%d 连接", fallback)
 	return fallback, nil
+}
+
+// POST /api/logs/open —— 在资源管理器里打开日志目录
+func (s *uiServer) handleLogsOpen(w http.ResponseWriter, r *http.Request) {
+	if !openLogFolder() {
+		writeJSON(w, map[string]any{"ok": false, "error": "无法打开日志目录", "path": logFilePath()})
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true, "path": logFilePath()})
+}
+
+// filepathDir 取目录部分（避免在多个平台文件里重复引入 path/filepath）。
+func filepathDir(p string) string {
+	for i := len(p) - 1; i >= 0; i-- {
+		if p[i] == '/' || p[i] == '\\' {
+			return p[:i]
+		}
+	}
+	return p
 }

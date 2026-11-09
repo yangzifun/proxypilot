@@ -16,8 +16,10 @@
 
 | 文件 | 作用 |
 |---|---|
-| `ProxyPilot-1.0-windows-amd64.exe` | **安装程序**（29.9 MB，内嵌客户端）。每次运行只做安装/修复，不进入主界面 |
-| `ProxyPilot-App-1.0-windows-amd64.exe` | 客户端主程序（14.98 MB）。安装后由安装程序写入 `%LOCALAPPDATA%\Programs\ProxyPilot\ProxyPilot.exe` |
+| `proxypilot-vpn-1.0-windows-amd64-install.exe` | **安装程序**（约 30 MB，内嵌客户端主程序）。每次运行只做安装/修复，不进入主界面 |
+| `proxypilot-vpn-1.0-windows-amd64-cli.exe` | 命令行版（自检 / 诊断用） |
+
+安装后客户端位于 `%LOCALAPPDATA%\Programs\ProxyPilot\ProxyPilot.exe`，从桌面或开始菜单图标启动。
 
 ### 行为约定
 
@@ -165,3 +167,19 @@ sudo ./proxypilot-vpn -mesh-token <JWT> -mesh-ip 10.99.0.11 -mesh-mode full
 - `wintun_windows.go`：内置驱动释放与预加载
 
 > 路由清理是幂等的：断线、切换节点、退出程序都会调用 `cleanupTun`。
+## 客户端日志
+
+GUI 版没有控制台，运行日志写入文件：
+
+```
+%LOCALAPPDATA%\ProxyPilot\logs\client.log      # 超过 2MB 自动滚动为 client.log.1
+```
+
+查看方式：
+
+- 客户端「首选项」底部显示日志路径，点「打开日志文件夹」直接打开
+- 或运行 `proxypilot-vpn-1.0-windows-amd64-cli.exe -diag`，输出安装状态、网卡、路由表，
+  并保存到 `%TEMP%\proxypilot-diag.txt`
+
+日志内容包含：启动信息、连接各阶段、隧道参数（地址/网关/网段/DNS）、
+每 5 秒的隧道收发包数、断开原因。

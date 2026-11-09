@@ -192,6 +192,11 @@
     <div class="field"><label>门户令牌</label><input id="fToken" placeholder="粘贴门户登录令牌"></div>
     <label class="check"><input type="checkbox" id="fInsecure"> 跳过节点证书校验</label>
     <div class="field"><label>节点</label><div class="nodes-list" id="nodes"><div class="nrow"><span class="nm" style="color:var(--dim)">加载中…</span></div></div></div>
+    <div class="field">
+      <label>客户端日志</label>
+      <input id="fLogPath" readonly placeholder="加载中…">
+    </div>
+    <button class="btn" id="openLogs">打开日志文件夹</button>
     <button class="btn primary" id="save">保存</button>
   </section>
 
@@ -322,6 +327,7 @@ function openSettings(){
   $('fToken').value = '';
   $('fToken').placeholder = state.logged_in ? ('已保存：'+state.token_hint) : '粘贴门户登录令牌';
   $('fInsecure').checked = !!state.insecure;
+  $('fLogPath').value = state.log_path || '';
   loadNodes();
 }
 function closeSettings(){
@@ -486,6 +492,7 @@ $('btnLogin').onclick = async ()=>{
   }catch(e){ $('loginHint').textContent = '请求失败：'+e.message; }
   $('btnLogin').disabled = false;
 };
+$('openLogs').onclick = async ()=>{ try{ await fetch('/api/logs/open',{method:'POST'}); }catch(e){} };
 $('save').onclick = async ()=>{
   await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
     api: $('fAPI').value.trim(), token: $('fToken').value.trim(),

@@ -23,6 +23,14 @@ type tunDevice interface {
 	Name() string
 }
 
+// datagramConn 是数据面真正用到的 QUIC 能力（窄接口，便于测试替换）。
+type datagramConn interface {
+	SendDatagram([]byte) error
+	ReceiveDatagram(context.Context) ([]byte, error)
+	CloseWithError(quic.ApplicationErrorCode, string) error
+	Context() context.Context
+}
+
 type connKey struct{}
 
 type session struct {
@@ -30,7 +38,7 @@ type session struct {
 	ip      net.IP
 	device  string
 	grantID int64
-	conn    quic.Connection
+	conn    datagramConn
 	started time.Time
 	tx      uint64
 	rx      uint64

@@ -79,19 +79,20 @@ $env:GOFLAGS = ''
 
 Step 'VPN 客户端'
 $vcDir = Join-Path $root 'vpnclient'
-# Windows 主程序（Wails v3，无控制台窗口，清单要求管理员）
-$appExe = Join-Path $out "ProxyPilot-App-$clientVer-windows-amd64.exe"
+# Windows 主程序先构建到临时目录（只用于内嵌，不单独发布）
+$appTmp = Join-Path $env:TEMP "pp-app-$clientVer.exe"
 Build-Go -Dir $vcDir -Goos windows -Goarch amd64 -Tags @('desktop') `
-    -LdFlags '-H windowsgui -s -w' -Out $appExe
+    -LdFlags '-H windowsgui -s -w' -Out $appTmp
 
 # Windows 安装程序：把主程序嵌进安装包，运行时只安装、不进主界面
 $embedPath = Join-Path $vcDir 'assets/ProxyPilotApp.exe'
-Copy-Item $appExe $embedPath -Force
+Copy-Item $appTmp $embedPath -Force
 try {
     Build-Go -Dir $vcDir -Goos windows -Goarch amd64 -Tags @('desktop', 'installer') `
-        -LdFlags '-H windowsgui -s -w' -Out (Join-Path $out "ProxyPilot-$clientVer-windows-amd64.exe")
+        -LdFlags '-H windowsgui -s -w' -Out (Join-Path $out "proxypilot-vpn-$clientVer-windows-amd64-install.exe")
 } finally {
     Remove-Item $embedPath -Force -ErrorAction SilentlyContinue
+    Remove-Item $appTmp -Force -ErrorAction SilentlyContinue
 }
 # Windows CLI：可运行 -tun-selftest 等自检
 Build-Go -Dir $vcDir -Goos windows -Goarch amd64 `
@@ -110,16 +111,16 @@ Copy-Item (Join-Path $root 'deploy/maintenance.sh') $out -Force
 Copy-Item (Join-Path $root 'deploy/README.md') (Join-Path $out 'DEPLOY-README.md') -Force
 Ok '安装 / 升级 / 卸载 / 维护脚本已复制'
 
-Step 'Windows 客户端安装/卸载脚本'
+Step 'Windows 卸载脚本'
 $winDir = Join-Path $root 'deploy/windows'
-foreach ($f in @('install.cmd', 'install.ps1', 'uninstall.cmd', 'uninstall.ps1')) {
+foreach ($f in @('uninstall.cmd', 'uninstall.ps1')) {
     $dst = Join-Path $out $f
     $txt = [System.IO.File]::ReadAllText((Join-Path $winDir $f), [System.Text.Encoding]::UTF8)
     $txt = $txt.Replace('__CLIENTVER__', $clientVer)
     $enc = if ($f -like '*.ps1') { New-Object System.Text.UTF8Encoding($true) } else { [System.Text.Encoding]::ASCII }
     [System.IO.File]::WriteAllText($dst, $txt, $enc)
 }
-Ok 'install.cmd / install.ps1 / uninstall.cmd / uninstall.ps1 已生成'
+Ok 'uninstall.cmd / uninstall.ps1 已生成'
 
 Step '生成 SHA256SUMS.txt / MANIFEST.txt'
 $files = Get-ChildItem $out -File | Where-Object { $_.Name -notin @('SHA256SUMS.txt', 'MANIFEST.txt') } | Sort-Object Name
@@ -145,8 +146,8 @@ $manifest += ""
 $manifest += "安装："
 $manifest += "  服务端    sudo ./install.sh --binary ./proxypilot-$panelVer-linux-amd64"
 $manifest += "  升级      sudo ./upgrade.sh --binary ./proxypilot-$panelVer-linux-amd64"
-$manifest += "  Windows   双击 ProxyPilot-$clientVer-windows-amd64.exe（安装程序，只安装不运行）"
-$manifest += "            安装后从开始菜单/桌面启动 ProxyPilot（客户端 v$clientVer）"
+$manifest += "  Windows   双击 proxypilot-vpn-$clientVer-windows-amd64-install.exe（安装程序，只安装不运行）"
+$manifest += "            安装后从开始菜单/桌面图标启动 ProxyPilot（客户端 v$clientVer）"
 $manifest += "            卸载：设置 → 应用 → ProxyPilot VPN，或运行 uninstall.cmd"
 $manifest += "  客户端自检 proxypilot-vpn-$clientVer-windows-amd64-cli.exe -tun-selftest"
 [System.IO.File]::WriteAllText((Join-Path $out 'MANIFEST.txt'), ($manifest -join "`n") + "`n", (New-Object System.Text.UTF8Encoding($false)))
