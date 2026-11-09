@@ -80,16 +80,9 @@ func applyTun(s TunSpec, dev PacketDevice) (TunResult, error) {
 	}
 
 	for _, r := range planRoutes(s) {
-		ip, mask, err := cidrToNetsh(r)
-		if err != nil {
-			return res, err
-		}
-		// 用网卡网关作为下一跳（没有网关时退回 on-link）
-		hop := gw
-		if hop == "" {
-			hop = "0.0.0.0"
-		}
-		if out, err := runWin("route", "add", ip, "mask", mask, hop, "metric", "5"); err != nil {
+		// 直接挂到网卡：下一跳 0.0.0.0（on-link），避免对虚拟网关做 ARP 解析
+		if out, err := runWin("netsh", "interface", "ipv4", "add", "route",
+			r, dev.Name(), "0.0.0.0", "metric=5", "store=active"); err != nil {
 			return res, fmt.Errorf("下发路由 %s 失败：%v %s", r, err, out)
 		}
 		res.Routes = append(res.Routes, r)
@@ -136,12 +129,13 @@ func cleanupTun(res TunResult) {
 			_, _ = runWin("route", "delete", ip)
 			continue
 		}
-		if a, b, err := cidrToNetsh(ip); err == nil {
-			_, _ = runWin("route", "delete", a, "mask", b)
+		if strings.Contains(ip, "/") {
+			_, _ = runWin("netsh", "interface", "ipv4", "delete", "route", ip, res.Adapter, "store=active")
 		}
 	}
+	// 只清地址与 DNS，不禁用适配器（保持下次连接可直接复用）
 	if res.Adapter != "" {
-		_, _ = runWin("netsh", "interface", "set", "interface", res.Adapter, "admin=disabled")
+		_, _ = runWin("netsh", "interface", "ipv4", "set", "address", "name="+res.Adapter, "source=dhcp")
 	}
 }
 

@@ -661,6 +661,7 @@ func (s *uiServer) connect(nodeID int64) error {
 				st.status = "connected"
 				st.tun = tun
 				st.adapter = res.Adapter
+				st.gateway = res.Gateway
 				st.routes = res.Routes
 				st.tunMode = string(res.Mode)
 				st.tunErr = ""
