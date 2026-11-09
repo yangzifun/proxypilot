@@ -182,6 +182,7 @@ type sessionState struct {
 	rx        uint64
 	tx        uint64
 	adapter string
+	gateway string
 	routes []string
 	tunMode string
 	tunErr string
@@ -219,6 +220,7 @@ func (s *sessionState) snapshot() map[string]any {
 		"tx":         s.tx,
 		"started_at": s.startedAt,
 		"adapter":    s.adapter,
+		"gateway":    s.gateway,
 		"routes":     append([]string{}, s.routes...),
 		"tun_mode":   s.tunMode,
 		"tun_error":  s.tunErr,
@@ -461,6 +463,7 @@ func (s *uiServer) disconnect(reason string) {
 	s.state.message = reason
 	s.state.startedAt = 0
 	s.state.adapter = ""
+	s.state.gateway = ""
 	s.state.routes = nil
 	s.state.tunErr = ""
 	s.state.mu.Unlock()
@@ -601,10 +604,30 @@ func (s *uiServer) connect(nodeID int64) error {
 		if prof.MeshCIDR != "" {
 			log.Printf("采用服务端下发组网网段：%s（节点客户端子网 %s）", prof.MeshCIDR, prof.ClientCIDR)
 		}
-		dnsServer := ""
-		if cfg.SetDNS {
-			dnsServer = strings.Split(cfg.DNSAddr, ":")[0]
+		// 网关：服务端 connect 响应里的 dns[0] 就是客户端子网网关
+		gateway := ""
+		if len(prof.DNS) > 0 {
+			gateway = strings.TrimSpace(prof.DNS[0])
 		}
+		if gateway == "" && prof.ClientCIDR != "" {
+			if _, netw, nerr := net.ParseCIDR(prof.ClientCIDR); nerr == nil {
+				if v4 := netw.IP.To4(); v4 != nil {
+					gateway = net.IPv4(v4[0], v4[1], v4[2], 1).String()
+				}
+			}
+		}
+		// 网卡掩码取自节点客户端子网（例如 10.88.1.0/24 → /24）
+		prefixLen := 0
+		if prof.ClientCIDR != "" {
+			if _, netw, nerr := net.ParseCIDR(prof.ClientCIDR); nerr == nil {
+				if ones, _ := netw.Mask.Size(); ones > 0 {
+					prefixLen = ones
+				}
+			}
+		}
+		// 网卡 DNS 固定 1.1.1.1 与 8.8.8.8
+		tunDNS := []string{"1.1.1.1", "8.8.8.8"}
+		log.Printf("隧道参数：地址=%s 网关=%s 网段=%s DNS=%v", prof.IP4, gateway, cidr, tunDNS)
 		tun, terr := StartTunnel(ctx, TunOptions{
 			Spec: TunSpec{
 				Name:     cfg.TunName,
@@ -612,8 +635,10 @@ func (s *uiServer) connect(nodeID int64) error {
 				CIDR:     cidr,
 				MTU:      prof.MTU,
 				Mode:     mode,
-				Endpoint: pick.Endpoint,
-				DNS:      dnsServer,
+				Endpoint:  pick.Endpoint,
+				Gateway:   gateway,
+				PrefixLen: prefixLen,
+				DNS:       tunDNS,
 			},
 			Conn: conn,
 			OnStats: func(rx, tx int64) {

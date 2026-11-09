@@ -2,29 +2,29 @@ ProxyPilot 发布包
 面板版本 : V35.2
 Agent    : 2.0.1
 客户端   : 1.0
-构建时间 : 2026-11-09 13:03:06
+构建时间 : 2026-11-09 13:09:00
 
 文件清单：
-  DEPLOY-README.md                                   0.0 MB
-  install.cmd                                        0.0 MB
-  install.ps1                                        0.0 MB
-  install.sh                                         0.0 MB
-  maintenance.sh                                     0.0 MB
-  ProxyPilot-1.0-windows-amd64.exe                  29.9 MB
-  proxypilot-agent-2.0.1-linux-amd64                 9.5 MB
-  proxypilot-agent-2.0.1-linux-arm64                 8.8 MB
-  ProxyPilot-App-1.0-windows-amd64.exe              15.0 MB
-  proxypilot-V35.2-linux-amd64                      18.3 MB
-  proxypilot-V35.2-linux-arm64                      17.3 MB
-  proxypilot-vpn-1.0-darwin-amd64                    9.0 MB
-  proxypilot-vpn-1.0-darwin-arm64                    8.3 MB
-  proxypilot-vpn-1.0-linux-amd64                     8.8 MB
-  proxypilot-vpn-1.0-linux-arm64                     8.1 MB
-  proxypilot-vpn-1.0-windows-amd64-cli.exe           9.5 MB
-  uninstall.cmd                                      0.0 MB
-  uninstall.ps1                                      0.0 MB
-  uninstall.sh                                       0.0 MB
-  upgrade.sh                                         0.0 MB
+  DEPLOY-README.md                                       0.0 MB
+  install.cmd                                            0.0 MB
+  install.ps1                                            0.0 MB
+  install.sh                                             0.0 MB
+  maintenance.sh                                         0.0 MB
+  ProxyPilot-1.0-windows-amd64.exe                      30.0 MB
+  proxypilot-agent-2.0.1-linux-amd64                     9.5 MB
+  proxypilot-agent-2.0.1-linux-arm64                     8.8 MB
+  ProxyPilot-App-1.0-windows-amd64.exe                  15.0 MB
+  proxypilot-V35.2-linux-amd64                          18.3 MB
+  proxypilot-V35.2-linux-arm64                          17.3 MB
+  proxypilot-vpn-1.0-darwin-amd64                        9.0 MB
+  proxypilot-vpn-1.0-darwin-arm64                        8.3 MB
+  proxypilot-vpn-1.0-linux-amd64                         8.8 MB
+  proxypilot-vpn-1.0-linux-arm64                         8.1 MB
+  proxypilot-vpn-1.0-windows-amd64-cli.exe               9.5 MB
+  uninstall.cmd                                          0.0 MB
+  uninstall.ps1                                          0.0 MB
+  uninstall.sh                                           0.0 MB
+  upgrade.sh                                             0.0 MB
 
 安装：
   服务端    sudo ./install.sh --binary ./proxypilot-V35.2-linux-amd64

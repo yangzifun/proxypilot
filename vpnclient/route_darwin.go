@@ -25,16 +25,23 @@ func applyTun(s TunSpec, dev PacketDevice) (TunResult, error) {
 		return strings.TrimSpace(string(out)), err
 	}
 
+	gw := s.gateway()
+	res.Gateway = gw
 	if s.IP != "" {
-		if out, err := run("ifconfig", dev.Name(), s.IP, s.IP, "mtu", fmt.Sprint(res.MTU), "up"); err != nil {
+		args := []string{"ifconfig", dev.Name(), s.IP}
+		if gw != "" {
+			args = append(args, gw)
+		}
+		args = append(args, "mtu", fmt.Sprint(res.MTU), "up")
+		if out, err := run(args...); err != nil {
 			return res, fmt.Errorf("配置网卡失败：%v %s", err, out)
 		}
 	}
 
-	gw := defaultGateway()
-	if res.Mode == TunModeFull && gw != "" {
+	serverGW := defaultGateway()
+	if res.Mode == TunModeFull && serverGW != "" {
 		if host := s.endpointHost(); host != "" {
-			_, _ = run("route", "-n", "add", "-host", host, gw)
+			_, _ = run("route", "-n", "add", "-host", host, serverGW)
 		}
 	}
 	for _, r := range planRoutes(s) {

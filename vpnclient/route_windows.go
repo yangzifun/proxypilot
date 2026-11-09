@@ -4,11 +4,15 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"strings"
 
 	"golang.org/x/sys/windows/registry"
 	"golang.org/x/sys/windows"
 )
+
+// logWin 输出调试日志。
+func logWin(format string, args ...any) { log.Printf(format, args...) }
 
 // runWin 执行命令并合并输出（不弹窗）。
 func runWin(args ...string) (string, error) {
@@ -38,13 +42,22 @@ func applyTun(s TunSpec, dev PacketDevice) (TunResult, error) {
 		}
 	}
 
-	// 地址：netsh interface ipv4 set address name="<适配器>" static <ip> <mask>
-	if _, err := runWin("netsh", "interface", "ipv4", "set", "address",
-		"name="+dev.Name(), "static", s.IP, strings.Split(res.IP, "/")[1]); err != nil {
+	// 地址 + 网关：netsh interface ipv4 set address name="<适配器>" static <ip> <mask> <gateway>
+	gw := s.gateway()
+	res.Gateway = gw
+	mask := strings.Split(res.IP, "/")[1]
+	addrArgs := []string{"interface", "ipv4", "set", "address", "name=" + dev.Name(), "static", s.IP, mask}
+	if gw != "" {
+		addrArgs = append(addrArgs, gw)
+	}
+	if _, err := runWin(append([]string{"netsh"}, addrArgs...)...); err != nil {
 		// 某些系统上名字匹配失败，退回按索引
 		if idx, ierr := interfaceIndex(dev.Name()); ierr == nil {
-			if _, err2 := runWin("netsh", "interface", "ipv4", "set", "address",
-				fmt.Sprint(idx), "static", s.IP, strings.Split(res.IP, "/")[1]); err2 != nil {
+			idxArgs := []string{"interface", "ipv4", "set", "address", fmt.Sprint(idx), "static", s.IP, mask}
+			if gw != "" {
+				idxArgs = append(idxArgs, gw)
+			}
+			if _, err2 := runWin(append([]string{"netsh"}, idxArgs...)...); err2 != nil {
 				return res, fmt.Errorf("配置网卡地址失败：%v", err2)
 			}
 		} else {
@@ -71,20 +84,40 @@ func applyTun(s TunSpec, dev PacketDevice) (TunResult, error) {
 		if err != nil {
 			return res, err
 		}
-		// 以网卡名作为网关参数即可把流量压到该适配器
-		if out, err := runWin("route", "add", ip, "mask", mask, s.IP, "metric", "5"); err != nil {
+		// 用网卡网关作为下一跳（没有网关时退回 on-link）
+		hop := gw
+		if hop == "" {
+			hop = "0.0.0.0"
+		}
+		if out, err := runWin("route", "add", ip, "mask", mask, hop, "metric", "5"); err != nil {
 			return res, fmt.Errorf("下发路由 %s 失败：%v %s", r, err, out)
 		}
 		res.Routes = append(res.Routes, r)
 	}
 
-	// 可选 DNS
-	if dns := strings.TrimSpace(s.DNS); dns != "" && isIPv4(dns) {
-		if _, err := runWin("netsh", "interface", "ipv4", "set", "dnsservers",
-			"name="+dev.Name(), "static", dns, "primary"); err == nil {
-			res.DNS = dns
+	// DNS：默认 1.1.1.1 + 8.8.8.8
+	dns := s.dnsList()
+	applied := []string{}
+	for i, d := range dns {
+		if !isIPv4(d) {
+			continue
 		}
+		var out string
+		var err error
+		if i == 0 {
+			out, err = runWin("netsh", "interface", "ipv4", "set", "dnsservers",
+				"name="+dev.Name(), "static", d, "primary")
+		} else {
+			out, err = runWin("netsh", "interface", "ipv4", "add", "dnsservers",
+				"name="+dev.Name(), d, fmt.Sprintf("index=%d", i+1))
+		}
+		if err != nil {
+			logWin("设置 DNS %s 失败：%v %s", d, err, out)
+			continue
+		}
+		applied = append(applied, d)
 	}
+	res.DNS = strings.Join(applied, ", ")
 	return res, nil
 }
 

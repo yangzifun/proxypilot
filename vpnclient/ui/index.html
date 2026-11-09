@@ -168,6 +168,7 @@
       <div class="row"><span class="k">分配地址</span><span class="v" id="rIP">—</span></div>
       <div class="row"><span class="k">组网网段</span><span class="v" id="rCIDR">—</span></div>
       <div class="row"><span class="k">虚拟网卡</span><span class="v" id="rAdapter">—</span></div>
+      <div class="row"><span class="k">网关</span><span class="v" id="rGW">—</span></div>
       <div class="row"><span class="k">接管路由</span><span class="v" id="rRoutes">—</span></div>
       <div class="row"><span class="k">延迟</span><span class="v" id="rRTT">—</span></div>
       <div class="row"><span class="k">在线时长</span><span class="v" id="rDur">—</span></div>
@@ -256,6 +257,7 @@ function render(){
   $('rRTT').className = 'v' + (state.rtt_ms && state.rtt_ms > 300 ? ' bad' : state.rtt_ms ? ' ok' : '');
   $('rDur').textContent = state.duration ? fmtDur(state.duration) : '—';
   $('rCIDR').textContent = state.mesh_cidr || '—';
+  $('rGW').textContent = state.gateway || '—';
   $('rAdapter').textContent = state.adapter || (state.tun_error ? '接管失败' : '—');
   $('rAdapter').className = 'v' + (state.adapter ? ' ok' : state.tun_error ? ' bad' : '');
   const routes = state.routes || [];

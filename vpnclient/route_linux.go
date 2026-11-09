@@ -25,6 +25,9 @@ func applyTun(s TunSpec, dev PacketDevice) (TunResult, error) {
 		return strings.TrimSpace(string(out)), err
 	}
 
+	gw := s.gateway()
+	res.Gateway = gw
+
 	if out, err := run("ip", "link", "set", "dev", dev.Name(), "mtu", fmt.Sprint(res.MTU)); err != nil {
 		return res, fmt.Errorf("设置 MTU 失败：%v %s", err, out)
 	}
@@ -46,10 +49,28 @@ func applyTun(s TunSpec, dev PacketDevice) (TunResult, error) {
 	}
 
 	for _, r := range planRoutes(s) {
-		if out, err := run("ip", "route", "replace", r, "dev", dev.Name()); err != nil {
+		args := []string{"ip", "route", "replace", r}
+		if gw != "" {
+			args = append(args, "via", gw)
+		}
+		args = append(args, "dev", dev.Name())
+		if out, err := run(args...); err != nil {
 			return res, fmt.Errorf("下发路由 %s 失败：%v %s", r, err, out)
 		}
 		res.Routes = append(res.Routes, r)
+	}
+
+	// DNS：优先用 systemd-resolved 下发到该网卡
+	dns := s.dnsList()
+	if len(dns) > 0 {
+		if _, lerr := exec.LookPath("resolvectl"); lerr == nil {
+			args := append([]string{"resolvectl", "dns", dev.Name()}, dns...)
+			if out, err := run(args...); err == nil {
+				_, _ = run("resolvectl", "domain", dev.Name(), "~.")
+				res.DNS = strings.Join(dns, ", ")
+				_ = out
+			}
+		}
 	}
 	return res, nil
 }

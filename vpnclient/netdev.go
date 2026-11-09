@@ -32,9 +32,14 @@ type TunSpec struct {
 	IP       string // 分配给网卡的地址，例如 10.99.0.11
 	CIDR     string // 组网网段，例如 10.99.0.0/16
 	MTU      int    // 0 则用 1420
+	// PrefixLen 是网卡地址的掩码位数（来自节点客户端子网）；0 则按 CIDR 推断
+	PrefixLen int
 	Mode     TunMode
 	Endpoint string // VPN 服务器地址（host:port），full 模式下加主机路由防止流量回环
-	DNS      string // 可选：写入系统的 DNS（空=不改）
+	// Gateway 是隧道对端（节点侧）地址，会写进网卡的默认网关。
+	Gateway string
+	// DNS 是要写入该网卡的 DNS 服务器列表（默认 1.1.1.1 与 8.8.8.8）。
+	DNS []string
 }
 
 func (s TunSpec) mtu() int {
@@ -54,14 +59,17 @@ func (s TunSpec) name() string {
 	return strings.TrimSpace(s.Name)
 }
 
-// prefixLen 返回 CIDR 的前缀长度（解析失败给 16）。
+// prefixLen 返回网卡掩码位数：优先显式 PrefixLen，其次按 CIDR 推断。
 func (s TunSpec) prefixLen() int {
+	if s.PrefixLen > 0 && s.PrefixLen <= 32 {
+		return s.PrefixLen
+	}
 	if _, n, err := net.ParseCIDR(strings.TrimSpace(s.CIDR)); err == nil {
 		if ones, _ := n.Mask.Size(); ones > 0 {
 			return ones
 		}
 	}
-	return 16
+	return 24
 }
 
 // meshNetwork 规范化组网网段；解析失败返回空串。
@@ -82,6 +90,32 @@ func (s TunSpec) endpointHost() string {
 		return h
 	}
 	return host
+}
+
+// 默认下发到网卡的 DNS 服务器。
+var defaultDNS = []string{"1.1.1.1", "8.8.8.8"}
+
+// dnsList 返回要写入网卡的 DNS（未指定则用默认值）。
+func (s TunSpec) dnsList() []string {
+	if len(s.DNS) > 0 {
+		return s.DNS
+	}
+	return defaultDNS
+}
+
+// gateway 返回网卡网关：优先显式指定，否则按网段取 .1。
+func (s TunSpec) gateway() string {
+	if gw := strings.TrimSpace(s.Gateway); gw != "" {
+		return gw
+	}
+	if _, network, err := net.ParseCIDR(strings.TrimSpace(s.CIDR)); err == nil {
+		ip := network.IP.To4()
+		if ip != nil {
+			gw := net.IPv4(ip[0], ip[1], ip[2], 1)
+			return gw.String()
+		}
+	}
+	return ""
 }
 
 // 接管类路由（full 模式）。
@@ -106,6 +140,7 @@ type TunResult struct {
 	MTU     int      // 已配置 MTU
 	Mode    TunMode  // 接管模式
 	Routes  []string // 已下发路由
+	Gateway string   // 已配置网关
 	DNS     string   // 已写入的 DNS（空=未改）
 }
 
@@ -113,5 +148,5 @@ func (r TunResult) Summary() string {
 	if r.Adapter == "" {
 		return "未接管"
 	}
-	return fmt.Sprintf("%s（%s · %s · MTU %d · 路由 %d 条）", r.Adapter, r.IP, r.Mode, r.MTU, len(r.Routes))
+	return fmt.Sprintf("%s（%s · 网关 %s · %s · MTU %d · 路由 %d 条）", r.Adapter, r.IP, r.Gateway, r.Mode, r.MTU, len(r.Routes))
 }
