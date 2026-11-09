@@ -74,6 +74,8 @@ func StartTunnel(ctx context.Context, opts TunOptions) (*Tunnel, error) {
 // pumpUp 读网卡 → 发 QUIC DATAGRAM。
 func (t *Tunnel) pumpUp() {
 	defer t.wg.Done()
+	log.Printf("数据面：网卡→隧道 协程已启动")
+	first := true
 	buf := make([]byte, 2048)
 	for {
 		if t.ctx.Err() != nil {
@@ -89,8 +91,13 @@ func (t *Tunnel) pumpUp() {
 		if n <= 0 {
 			continue
 		}
+		if first {
+			log.Printf("数据面：从网卡读到首个报文（%d 字节）", n)
+			first = false
+		}
 		pkt := stripIPv4(buf[:n])
 		if len(pkt) == 0 {
+			log.Printf("数据面：网卡报文无法解析（首字节 0x%02x，长度 %d）", buf[0], n)
 			continue
 		}
 		if err := t.conn.SendPacket(pkt); err != nil {
@@ -107,6 +114,7 @@ func (t *Tunnel) pumpUp() {
 // pumpDown 收 QUIC DATAGRAM → 写网卡。
 func (t *Tunnel) pumpDown() {
 	defer t.wg.Done()
+	log.Printf("数据面：隧道→网卡 协程已启动")
 	for {
 		if t.ctx.Err() != nil {
 			return
@@ -220,6 +228,8 @@ func (t *Tunnel) countLog() {
 				log.Printf("隧道流量：网卡→隧道 %d 包（+%d），隧道→网卡 %d 包（+%d）",
 					tx, tx-lastTx, rx, rx-lastRx)
 				lastRx, lastTx = rx, tx
+			} else {
+				log.Printf("隧道流量：仍为 0（网卡→隧道 %d，隧道→网卡 %d）", tx, rx)
 			}
 		}
 	}

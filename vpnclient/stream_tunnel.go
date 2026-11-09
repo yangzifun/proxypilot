@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"log"
 	"sync"
 )
 
@@ -23,8 +24,10 @@ type packetConn interface {
 type streamPacketConn struct {
 	w      io.Writer
 	r      io.Reader
-	wmu    sync.Mutex
-	closed bool
+	wmu       sync.Mutex
+	closed    bool
+	loggedOK  bool
+	loggedErr bool
 }
 
 func newStreamPacketConn(w io.Writer, r io.Reader) *streamPacketConn {
@@ -46,8 +49,19 @@ func (c *streamPacketConn) SendPacket(pkt []byte) error {
 	if c.closed {
 		return fmt.Errorf("流已关闭")
 	}
-	_, err := c.w.Write(buf)
-	return err
+	n, err := c.w.Write(buf)
+	if err != nil {
+		if !c.loggedErr {
+			c.loggedErr = true
+			log.Printf("数据面：写入隧道流失败：%v（已写 %d/%d 字节）", err, n, len(buf))
+		}
+		return err
+	}
+	if !c.loggedOK {
+		c.loggedOK = true
+		log.Printf("数据面：首个报文已写入隧道流（%d 字节）", len(pkt))
+	}
+	return nil
 }
 
 func (c *streamPacketConn) RecvPacket() ([]byte, error) {
