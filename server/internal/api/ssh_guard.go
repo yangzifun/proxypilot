@@ -61,8 +61,21 @@ RemainAfterExit=yes
 [Install]
 WantedBy=multi-user.target
 UNIT
+cat > /etc/systemd/system/pp-ssh-guard.timer <<'TIMER'
+[Unit]
+Description=ProxyPilot SSH 防护定时校验（自愈：规则被清空时重新下发）
+
+[Timer]
+OnBootSec=90s
+OnUnitActiveSec=30min
+Unit=pp-ssh-guard.service
+
+[Install]
+WantedBy=timers.target
+TIMER
 systemctl daemon-reload
 systemctl enable pp-ssh-guard.service >/dev/null 2>&1
+systemctl enable --now pp-ssh-guard.timer >/dev/null 2>&1
 systemctl restart pp-ssh-guard.service
 echo "GUARD_ON ports=$PORTS"`}
 
@@ -72,8 +85,9 @@ func sshGuardDisableScript() string {
 CHAIN=` + sshGuardCmd + `
 PORTS=$(ss -tlnp 2>/dev/null | grep -E 'sshd|ssh' | awk '{print $4}' | sed 's/.*://' | sort -u | tr '\n' ' ')
 [ -z "$PORTS" ] && PORTS=22
+systemctl disable --now pp-ssh-guard.timer >/dev/null 2>&1
 systemctl disable --now pp-ssh-guard.service >/dev/null 2>&1
-rm -f /etc/systemd/system/pp-ssh-guard.service /usr/local/sbin/pp-ssh-guard.sh
+rm -f /etc/systemd/system/pp-ssh-guard.service /etc/systemd/system/pp-ssh-guard.timer /usr/local/sbin/pp-ssh-guard.sh
 systemctl daemon-reload 2>/dev/null
 for BIN in iptables ip6tables; do
   command -v $BIN >/dev/null 2>&1 || continue
