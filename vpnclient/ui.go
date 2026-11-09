@@ -183,6 +183,9 @@ type sessionState struct {
 	tx        uint64
 	adapter string
 	gateway string
+	netOK        bool
+	netRTT       int
+	netErr       string
 	routes []string
 	tunMode string
 	tunErr string
@@ -221,6 +224,9 @@ func (s *sessionState) snapshot() map[string]any {
 		"started_at": s.startedAt,
 		"adapter":    s.adapter,
 		"gateway":    s.gateway,
+		"net_ok":     s.netOK,
+		"net_rtt_ms": s.netRTT,
+		"net_error":  s.netErr,
 		"routes":     append([]string{}, s.routes...),
 		"tun_mode":   s.tunMode,
 		"tun_error":  s.tunErr,
@@ -467,6 +473,9 @@ func (s *uiServer) disconnect(reason string) {
 	s.state.startedAt = 0
 	s.state.adapter = ""
 	s.state.gateway = ""
+	s.state.netOK = false
+	s.state.netRTT = 0
+	s.state.netErr = ""
 	s.state.routes = nil
 	s.state.tunErr = ""
 	s.state.mu.Unlock()
@@ -660,6 +669,14 @@ func (s *uiServer) connect(nodeID int64) error {
 		} else {
 			res := tun.Result()
 			log.Printf("系统网络已接管：%s", res.Summary())
+			// 端到端连通性探测：绑定隧道地址发真实 DNS 查询
+			runTunnelProbe(ctx, prof.IP4, defaultDNSAddr, func(ok bool, rtt time.Duration, errMsg string) {
+				s.state.set(func(st *sessionState) {
+					st.netOK = ok
+					st.netRTT = int(rtt.Milliseconds())
+					st.netErr = errMsg
+				})
+			})
 			s.state.set(func(st *sessionState) {
 				st.status = "connected"
 				st.tun = tun
