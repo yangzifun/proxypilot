@@ -116,7 +116,7 @@ func (s *uiServer) handleInstallStart(w http.ResponseWriter, r *http.Request) {
 		{Key: "adapter", Label: "注册虚拟网卡 ProxyPilot VPN"},
 		{Key: "registry", Label: "写入卸载登记项"},
 		{Key: "autostart", Label: "设置开机后台运行"},
-		{Key: "shortcut", Label: "创建快捷方式"},
+		{Key: "shortcut", Label: "创建桌面与开始菜单图标"},
 	}
 	installer.mu.Unlock()
 
@@ -231,12 +231,14 @@ func runInstallWizard(dir string, autostart, shortcuts bool) {
 	}
 	installer.setStep("autostart", true, "")
 
-	// 7) 快捷方式
-	step("shortcut", "创建快捷方式")
+	// 7) 桌面 / 开始菜单图标
+	step("shortcut", "创建桌面与开始菜单图标")
 	if shortcuts {
 		if err := installCreateShortcuts(dst); err != nil {
-			log.Printf("创建快捷方式失败：%v", err)
+			fail("shortcut", "创建图标失败："+err.Error())
+			return
 		}
+		log.Printf("已创建图标：%v", shortcutPaths())
 	}
 	installer.setStep("shortcut", true, "")
 
@@ -244,7 +246,7 @@ func runInstallWizard(dir string, autostart, shortcuts bool) {
 	installer.running = false
 	installer.finished = true
 	installer.failed = false
-	installer.message = fmt.Sprintf("安装完成：%s", dir)
+	installer.message = fmt.Sprintf("安装完成：%s，可从桌面/开始菜单图标启动", dir)
 	installer.mu.Unlock()
 	log.Printf("安装向导完成：目录=%s 网卡=%s", dir, name)
 }

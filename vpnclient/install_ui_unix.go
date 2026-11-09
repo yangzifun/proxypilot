@@ -33,5 +33,6 @@ func copySelfUnix(src, dst string) error {
 func installWriteRegistry(dir, exe string) error { return nil }
 func installSetAutostart(exe string, enable bool) error { return nil }
 func installCreateShortcuts(exe string) error          { return nil }
+func shortcutPaths() []string                         { return nil }
 func launchProgram(exe, args string) error             { return errors.New("当前平台不支持自启动安装版本") }
 func platformName() string                             { return runtime.GOOS }
