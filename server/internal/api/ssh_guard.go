@@ -14,11 +14,12 @@ import (
 // 放行清单（IPv4）：
 //   - 100.96.0.0/12  Cloudflare WARP / 组网管理网
 //   - 10.99.0.0/16   自建组网网段
-// IPv6 不再放行任何来源网段（只保留 ESTABLISHED,RELATED），需要时再扩。
+// 放行清单（IPv6）：
+//   - 2606:4700:cf1:1000::/64  组网管理网 IPv6
 const (
 	sshGuardCmd  = "PP_SSH_GUARD"
 	sshGuardV4s  = "100.96.0.0/12 10.99.0.0/16"
-	sshGuardV6s  = ""
+	sshGuardV6s  = "2606:4700:cf1:1000::/64"
 )
 
 // sshGuardEnableScript 开启防护并把规则持久化（重启后由 systemd 单元重新下发）。

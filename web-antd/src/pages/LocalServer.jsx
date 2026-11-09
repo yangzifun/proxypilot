@@ -278,7 +278,7 @@ export default function LocalServer() {
               message={guardOn ? 'SSH 安全防护已开启' : 'SSH 安全防护未开启'}
               description={
                 guardOn
-                  ? '仅允许 100.96.0.0/12（WARP/组网管理网）与 10.99.0.0/16（自建组网）访问 SSH，其他来源将被丢弃。'
+                  ? '仅允许 100.96.0.0/12、10.99.0.0/16 与 2606:4700:cf1:1000::/64 访问 SSH，其他来源将被丢弃。'
                   : '当前所有 IP 均可尝试 SSH 登录；建议开启后仅允许组网网段访问。'
               }
               action={
