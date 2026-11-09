@@ -47,6 +47,7 @@ export default function VpnNodesPanel() {
   const [serverOptions, setServerOptions] = useState([]);
   const [nodeOpen, setNodeOpen] = useState(false);
   const [editingNode, setEditingNode] = useState(null);
+  const [deploying, setDeploying] = useState({});
 
   const load = async () => {
     setLoading(true);
@@ -130,6 +131,21 @@ export default function VpnNodesPanel() {
     }
   };
 
+  // 部署下发：把配置与证书写到节点并重启内嵌节点
+  const deployNode = async (node) => {
+    setDeploying((m) => ({ ...m, [node.id]: true }));
+    try {
+      const res = await apiPost(`admin/vpn/nodes/${node.id}/deploy`, {});
+      const task = res && res.task_id ? `（任务 #${res.task_id}）` : '';
+      message.success(`已下发部署${task}，节点将在数秒内生效`);
+      setTimeout(() => load(), 1500);
+    } catch (e) {
+      message.error(e.message || '部署失败');
+    } finally {
+      setDeploying((m) => ({ ...m, [node.id]: false }));
+    }
+  };
+
   const removeNode = async (node) => {
     try {
       await apiDelete(`admin/vpn/nodes/${node.id}`);
@@ -154,13 +170,23 @@ export default function VpnNodesPanel() {
     {
       title: '操作',
       key: 'op',
+      width: 300,
       render: (_, node) => (
-        <Space size={4} wrap>
+        <Space size={4}>
           {node.state !== 'active' ? (
             <Button size="small" type="link" onClick={() => nodeAction(node, 'approve')}>启用</Button>
           ) : (
             <Button size="small" type="link" danger onClick={() => nodeAction(node, 'disable')}>停用</Button>
           )}
+          <Popconfirm
+            title={`部署「${node.name}」到服务器？`}
+            description="会写入节点配置与证书，并重启节点，期间该节点短暂不可用。"
+            okText="部署"
+            cancelText="取消"
+            onConfirm={() => deployNode(node)}
+          >
+            <Button size="small" type="link" loading={!!deploying[node.id]}>部署下发</Button>
+          </Popconfirm>
           <Button size="small" type="link" onClick={() => openNode(node)}>编辑</Button>
           <Popconfirm title="删除该 VPN 节点？" onConfirm={() => removeNode(node)}>
             <Button size="small" type="link" danger>删除</Button>
