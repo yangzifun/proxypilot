@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ApiOutlined,
   ApartmentOutlined,
+  CloudServerOutlined,
   DeleteOutlined,
   EditOutlined,
   EyeOutlined,
@@ -17,7 +18,6 @@ import {
   App as AntdApp,
   Button,
   Descriptions,
-  Divider,
   Drawer,
   Form,
   Input,
@@ -108,13 +108,18 @@ export default function GroupDetail({ uuid, onClose }) {
           },
           {
             key: 'configs',
-            label: (<span><UnorderedListOutlined /> 节点配置</span>),
+            label: (<span><UnorderedListOutlined /> 代理配置</span>),
             children: <Configs uuid={uuid} onChanged={loadRow} />,
           },
           {
             key: 'nodes',
-            label: (<span><SafetyCertificateOutlined /> 授权服务</span>),
+            label: (<span><SafetyCertificateOutlined /> 代理授权</span>),
             children: <AuthorizeNodes uuid={uuid} onChanged={loadRow} />,
+          },
+          {
+            key: 'vpn',
+            label: (<span><CloudServerOutlined /> VPN 授权</span>),
+            children: <VpnGrants uuid={uuid} />,
           },
           {
             key: 'subs',
@@ -440,91 +445,6 @@ function Configs({ uuid, onChanged }) {
   );
 }
 
-/* ---------------- VPN 节点授权 ---------------- */
-function AuthorizeVPN({ uuid }) {
-  const { message } = AntdApp.useApp();
-  const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [busy, setBusy] = useState(0);
-
-  const load = useCallback(async () => {
-    if (!uuid) return;
-    setLoading(true);
-    try {
-      const res = await api(`admin/vpn/users/${uuid}/grants`);
-      setRows((res && res.nodes) || []);
-    } catch (e) {
-      message.error(e.message || '加载 VPN 授权失败');
-    } finally {
-      setLoading(false);
-    }
-  }, [uuid, message]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  const toggle = async (row, on) => {
-    setBusy(row.id);
-    try {
-      if (on) {
-        await api(`admin/vpn/nodes/${row.id}/grants`, {
-          method: 'POST',
-          body: { subject_id: uuid, expires_at: 0, max_devices: 1, quota_bytes: 0 },
-        });
-      } else {
-        await api(`admin/vpn/grants/${row.grant_id}`, { method: 'DELETE' });
-      }
-      message.success(on ? '已授权该用户连接此节点' : '已取消该节点的 VPN 授权');
-      load();
-    } catch (e) {
-      message.error(e.message || '操作失败');
-    } finally {
-      setBusy(0);
-    }
-  };
-
-  const columns = [
-    { title: 'VPN 节点', dataIndex: 'name' },
-    { title: '域名', dataIndex: 'domain', render: (v) => v || '—' },
-    {
-      title: '状态', dataIndex: 'state', width: 100,
-      render: (v) => <Tag color={v === 'active' ? 'green' : 'default'}>{v === 'active' ? '已启用' : '未启用'}</Tag>,
-    },
-    {
-      title: '授权', dataIndex: 'granted', width: 110,
-      render: (v, row) => (
-        <Switch
-          checked={!!v}
-          loading={busy === row.id}
-          onChange={(on) => toggle(row, on)}
-        />
-      ),
-    },
-  ];
-
-  return (
-    <div>
-      <Alert
-        type="warning"
-        showIcon
-        style={{ borderRadius: 10, marginBottom: 12 }}
-        message="只有已授权的 VPN 节点才会出现在客户端节点列表"
-        description="未授权（或已撤销）的节点，用户无法连接；授权即时生效。"
-      />
-      <Table
-        rowKey="id"
-        size="small"
-        loading={loading}
-        columns={columns}
-        dataSource={rows}
-        pagination={false}
-        locale={{ emptyText: '还没有 VPN 节点，请先在「节点绑定」中创建' }}
-      />
-    </div>
-  );
-}
-
 /* ---------------- 授权服务 ---------------- */
 function AuthorizeNodes({ uuid, onChanged }) {
   const { message } = AntdApp.useApp();
@@ -693,9 +613,118 @@ function AuthorizeNodes({ uuid, onChanged }) {
         }}
         locale={{ emptyText: '暂无 sing-box / mihomo / MTProto 服务' }}
       />
-      <Divider orientation="left">VPN 授权</Divider>
-      <AuthorizeVPN uuid={uuid} />
     </div>
+  );
+}
+
+/* ---------------- VPN 授权 ---------------- */
+function VpnGrants({ uuid }) {
+  const { message } = AntdApp.useApp();
+  const [state, setState] = useState({ data: [], loading: false, error: null });
+  const [busy, setBusy] = useState('');
+
+  const load = useCallback(async () => {
+    if (!uuid) return;
+    setState((s) => ({ ...s, loading: true, error: null }));
+    try {
+      const res = await api(`admin/vpn/users/${encodeURIComponent(uuid)}/grants`);
+      setState({ data: (res && res.nodes) || (res && res.data) || [], loading: false, error: null });
+    } catch (e) {
+      setState({ data: [], loading: false, error: e });
+    }
+  }, [uuid]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const grant = async (row) => {
+    setBusy(String(row.id));
+    try {
+      await api(`admin/vpn/nodes/${row.id}/grants`, {
+        method: 'POST',
+        body: { subject_id: uuid, max_devices: 3 },
+      });
+      message.success(`已授权「${row.name}」`);
+      load();
+    } catch (e) {
+      message.error(e.message || '授权失败');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const revoke = async (row) => {
+    if (!row.grant_id) return;
+    setBusy(String(row.id));
+    try {
+      await api(`admin/vpn/grants/${row.grant_id}`, { method: 'DELETE' });
+      message.success(`已撤销「${row.name}」`);
+      load();
+    } catch (e) {
+      message.error(e.message || '撤销失败');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const columns = [
+    { title: '节点', dataIndex: 'name', width: 180, render: (v) => v || '—' },
+    { title: '域名', dataIndex: 'domain', ellipsis: true },
+    {
+      title: '状态',
+      dataIndex: 'state',
+      width: 96,
+      render: (v) => (
+        <Tag color={v === 'active' ? 'green' : v === 'pending' ? 'gold' : 'default'} style={{ marginInlineEnd: 0 }}>
+          {v === 'active' ? '已启用' : v === 'pending' ? '待审批' : (v || '—')}
+        </Tag>
+      ),
+    },
+    {
+      title: 'VPN 授权',
+      width: 110,
+      render: (_, row) => (row.granted
+        ? <Tag color="success" style={{ marginInlineEnd: 0 }}>已授权</Tag>
+        : <Tag style={{ marginInlineEnd: 0 }}>未授权</Tag>),
+    },
+    {
+      title: '授权操作',
+      width: 120,
+      render: (_, row) => (row.granted ? (
+        <Popconfirm
+          title={`撤销「${row.name}」的 VPN 授权？`}
+          okText="撤销"
+          okButtonProps={{ danger: true }}
+          onConfirm={() => revoke(row)}
+        >
+          <Button size="small" danger loading={busy === String(row.id)}>撤销</Button>
+        </Popconfirm>
+      ) : (
+        <Button size="small" type="primary" loading={busy === String(row.id)} onClick={() => grant(row)}>
+          授权
+        </Button>
+      )),
+    },
+  ];
+
+  return (
+    <>
+      <Toolbar
+        left={<span className="pp-muted" style={{ fontSize: 12 }}>VPN 授权与「代理授权」相互独立：这里控制的是自建 VPN 节点（桌面客户端接入）</span>}
+        right={<Button size="small" icon={<ReloadOutlined />} onClick={load} loading={state.loading}>刷新</Button>}
+      />
+      {state.error ? <ErrorBlock error={state.error} onRetry={load} /> : null}
+      <Table
+        rowKey="id"
+        size="small"
+        loading={state.loading}
+        columns={columns}
+        dataSource={state.data}
+        pagination={false}
+        locale={{ emptyText: '还没有 VPN 节点，先到「节点绑定 → VPN 节点绑定」创建' }}
+      />
+    </>
   );
 }
 
