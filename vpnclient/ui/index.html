@@ -170,6 +170,7 @@
       <div class="row"><span class="k">虚拟网卡</span><span class="v" id="rAdapter">—</span></div>
       <div class="row"><span class="k">网关</span><span class="v" id="rGW">—</span></div>
       <div class="row"><span class="k">接管路由</span><span class="v" id="rRoutes">—</span></div>
+      <div class="row"><span class="k">隧道流量</span><span class="v" id="rTraffic">—</span></div>
       <div class="row"><span class="k">延迟</span><span class="v" id="rRTT">—</span></div>
       <div class="row"><span class="k">在线时长</span><span class="v" id="rDur">—</span></div>
     </div>
@@ -258,6 +259,8 @@ function render(){
   $('rDur').textContent = state.duration ? fmtDur(state.duration) : '—';
   $('rCIDR').textContent = state.mesh_cidr || '—';
   $('rGW').textContent = state.gateway || '—';
+  const fmtBytes = (n)=>{ n=Number(n||0); if(n<1024) return n+' B'; if(n<1048576) return (n/1024).toFixed(1)+' KB'; return (n/1048576).toFixed(2)+' MB'; };
+  $('rTraffic').textContent = (state.rx||state.tx) ? ('↓'+fmtBytes(state.rx)+' ↑'+fmtBytes(state.tx)) : '—';
   $('rAdapter').textContent = state.adapter || (state.tun_error ? '接管失败' : '—');
   $('rAdapter').className = 'v' + (state.adapter ? ' ok' : state.tun_error ? ' bad' : '');
   const routes = state.routes || [];

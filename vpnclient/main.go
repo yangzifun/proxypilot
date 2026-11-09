@@ -19,6 +19,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"os/signal"
 	"strings"
 	"sync"
@@ -89,6 +90,7 @@ func runCLI() {
 	installDir := flag.String("install-dir", "", "安装目录（默认 %LOCALAPPDATA%\\Programs\\ProxyPilot）")
 	installAutostart := flag.Bool("autostart", false, "安装时写入开机自启（托盘后台运行）")
 	adapterCheck := flag.Bool("adapter-status", false, "检查虚拟网卡是否已注册")
+	doDiag := flag.Bool("diag", false, "生成诊断报告（网卡、路由、日志路径）")
 	tunSelftestMode := flag.String("tun-selftest-mode", "mesh", "自检接管模式：mesh|full")
 	tunSelftestKeep := flag.Int("tun-selftest-keep", 5, "自检保留秒数（到点自动清理）")
 	cfgPath := flag.String("config", "", "配置文件路径（默认用系统配置目录）")
@@ -101,6 +103,7 @@ func runCLI() {
 		}
 		caPEM = b
 	}
+	setupFileLog()
 	log.Printf("ProxyPilot VPN Client %s", Version)
 
 	if *cfgPath != "" {
@@ -116,6 +119,10 @@ func runCLI() {
 	}
 	if *adapterCheck {
 		runAdapterStatus()
+		return
+	}
+	if *doDiag {
+		runDiag()
 		return
 	}
 
@@ -683,4 +690,17 @@ func runAdapterStatus() {
 	}
 	fmt.Printf("adapter=%s registered=no\n", name)
 	os.Exit(2)
+}
+
+// runDiag 输出诊断报告到控制台，并另存一份到临时目录。
+func runDiag() {
+	report := diagReport(nil)
+	fmt.Print(report)
+	if path := logFilePath(); path != "" {
+		fmt.Printf("\n日志文件: %s\n", path)
+	}
+	out := filepath.Join(os.TempDir(), "proxypilot-diag.txt")
+	if err := os.WriteFile(out, []byte(report), 0o644); err == nil {
+		fmt.Printf("报告已保存: %s\n", out)
+	}
 }

@@ -25,6 +25,8 @@ type Tunnel struct {
 
 	rxBytes atomic.Int64
 	txBytes atomic.Int64
+	rxPkts  atomic.Int64
+	txPkts  atomic.Int64
 	lastErr atomic.Value // string
 }
 
@@ -65,6 +67,8 @@ func StartTunnel(ctx context.Context, opts TunOptions) (*Tunnel, error) {
 	t.wg.Add(2)
 	go t.pumpUp()
 	go t.pumpDown()
+	t.wg.Add(1)
+	go t.countLog()
 	if opts.OnStats != nil {
 		t.wg.Add(1)
 		go t.reportLoop(opts.OnStats)
@@ -102,6 +106,7 @@ func (t *Tunnel) pumpUp() {
 			return
 		}
 		t.txBytes.Add(int64(len(pkt)))
+		t.txPkts.Add(1)
 	}
 }
 
@@ -130,6 +135,7 @@ func (t *Tunnel) pumpDown() {
 			return
 		}
 		t.rxBytes.Add(int64(len(pkt)))
+		t.rxPkts.Add(1)
 	}
 }
 
@@ -202,4 +208,30 @@ func runtimeSupportsTun() bool {
 		return true
 	}
 	return false
+}
+
+// countLog 每 5 秒打印一次网卡收发包数，便于判断流量是否真的进入隧道。
+func (t *Tunnel) countLog() {
+	defer t.wg.Done()
+	tk := time.NewTicker(5 * time.Second)
+	defer tk.Stop()
+	var lastRx, lastTx int64
+	for {
+		select {
+		case <-t.ctx.Done():
+			return
+		case <-tk.C:
+			rx, tx := t.rxPkts.Load(), t.txPkts.Load()
+			if rx != lastRx || tx != lastTx {
+				log.Printf("隧道流量：网卡→隧道 %d 包（+%d），隧道→网卡 %d 包（+%d）",
+					tx, tx-lastTx, rx, rx-lastRx)
+				lastRx, lastTx = rx, tx
+			}
+		}
+	}
+}
+
+// PacketStats 返回包数统计。
+func (t *Tunnel) PacketStats() (rxPkts, txPkts int64) {
+	return t.rxPkts.Load(), t.txPkts.Load()
 }

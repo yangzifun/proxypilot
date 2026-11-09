@@ -80,6 +80,8 @@ func applyTun(s TunSpec, dev PacketDevice) (TunResult, error) {
 	}
 
 	for _, r := range planRoutes(s) {
+		// 先删掉旧版本可能残留的同前缀路由（否则 add 会因已存在而失败）
+		_, _ = runWin("netsh", "interface", "ipv4", "delete", "route", r, dev.Name())
 		// 直接挂到网卡：下一跳 0.0.0.0（on-link），避免对虚拟网关做 ARP 解析
 		if out, err := runWin("netsh", "interface", "ipv4", "add", "route",
 			r, dev.Name(), "0.0.0.0", "metric=5", "store=active"); err != nil {

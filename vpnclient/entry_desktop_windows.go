@@ -36,6 +36,8 @@ func main() {
 	flag.Parse()
 	startHidden := *background || *trayOnly
 
+	setupFileLog() // GUI 无控制台，日志落 %LOCALAPPDATA%\ProxyPilot\logs\client.log
+
 	if installerBuild {
 		// 这是安装程序：只做安装，永远不进主界面
 		runInstallerApp()
