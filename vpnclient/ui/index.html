@@ -34,18 +34,25 @@
   .dial{position:absolute;inset:0;border-radius:50%;border:0;background:transparent;cursor:pointer;padding:0}
   .dial svg{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg)}
   .dial .track{fill:none;stroke:#1b222b;stroke-width:3}
-  .dial .arc{fill:none;stroke:var(--accent);stroke-width:3;stroke-linecap:round;transition:stroke .25s,stroke-dashoffset .6s;
+  /* 空闲时不显示进度弧：避免圆头线帽在顶部留下一个孤立小点 */
+  .dial:not(.on):not(.busy):not(.err) .arc{opacity:0}
+  .dial .arc{fill:none;stroke:var(--accent);stroke-width:3;stroke-linecap:round;
+    transform-box:fill-box;transform-origin:50% 50%;
+    transition:stroke .25s,stroke-dashoffset .6s,stroke-dasharray .25s;
     stroke-dasharray:596; stroke-dashoffset:596}
   .dial .core{position:absolute;inset:18px;border-radius:50%;background:radial-gradient(circle at 50% 38%,#151b23,#0d1116 70%);
     border:1px solid #202833;display:grid;place-items:center;transition:.25s;text-align:center}
   .dial:hover .core{border-color:#2b3542;background:radial-gradient(circle at 50% 38%,#18202a,#0e1319 70%)}
   .dial .state{font-size:14px;font-weight:700;letter-spacing:.01em}
   .dial .hint{font-size:11px;color:var(--dim);margin-top:5px}
-  .dial.on .arc{stroke:var(--ok);stroke-dashoffset:0}
+  .dial.on .arc{stroke:var(--ok);stroke-dasharray:596;stroke-dashoffset:0;animation:none}
   .dial.on .core{border-color:rgba(52,211,153,.45);box-shadow:0 0 34px rgba(52,211,153,.16) inset}
-  .dial.busy .arc{stroke:var(--warn);animation:spin 1.1s linear infinite;stroke-dashoffset:440}
-  .dial.err .arc{stroke:var(--bad);stroke-dashoffset:0}
-  @keyframes spin{to{transform:rotate(270deg)}}
+  .dial.busy .arc{stroke:var(--warn);stroke-dasharray:118 478;stroke-dashoffset:0;
+    animation:dial-ring-spin 1.05s linear infinite}
+  .dial.busy .core{animation:dial-core-pulse 1.8s ease-in-out infinite}
+  .dial.err .arc{stroke:var(--bad);stroke-dasharray:596;stroke-dashoffset:0;animation:none}
+  @keyframes dial-ring-spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+  @keyframes dial-core-pulse{0%,100%{box-shadow:0 0 0 0 rgba(251,191,36,0)}50%{box-shadow:0 0 20px rgba(251,191,36,.10) inset}}
 
   .badge{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;font-size:11.5px;
     font-weight:600;border:1px solid var(--line);color:var(--muted);background:rgba(18,22,28,.6)}
@@ -93,10 +100,10 @@
 .inst-step.done{color:#34d399}
 .inst-step.err{color:#f87171}
 .inst-dot{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--line2);flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:10px}
-.inst-step.active .inst-dot{border-color:#3b82f6;border-top-color:transparent;animation:spin .8s linear infinite}
+.inst-step.active .inst-dot{border-color:#3b82f6;border-top-color:transparent;animation:inst-spin .8s linear infinite}
 .inst-step.done .inst-dot{border-color:#34d399;background:#34d399;color:#04120c}
 .inst-step.err .inst-dot{border-color:#f87171;background:#f87171;color:#1a0505}
-@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes inst-spin{to{transform:rotate(360deg)}}
 .inst-bar{height:4px;border-radius:2px;background:var(--line);overflow:hidden}
 .inst-bar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,#3b82f6,#22d3ee);transition:width .3s}
 .inst-actions{display:flex;gap:10px;margin-top:2px}
