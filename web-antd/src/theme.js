@@ -19,8 +19,9 @@ export const brand = {
   line: '#eef2f7',
 };
 
-/* 品牌 Logo（对象存储上的白底方形图，直接用圆角裁切当图标） */
-export const LOGO_URL = 'https://s3.yangzifun.org/logo.png';
+/* 品牌 Logo：统一使用站点内置的圆角图标（与服务端 favicon / 客户端图标同款），
+   不再引用对象存储上的外链图片（外链失效会变成裂图，且风格不统一）。 */
+export const LOGO_URL = '/favicon.svg';
 
 export const chartPalette = [
   brand.primary,
