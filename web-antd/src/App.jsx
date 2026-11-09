@@ -25,6 +25,7 @@ import Logs from './pages/Logs';
 import System, { AdminUsersPage, SystemSettingsPage } from './pages/System';
 import LocalServer from './pages/LocalServer';
 import Security from './pages/Security';
+import Certs from './pages/Certs';
 import Backup from './pages/Backup';
 import Attachments from './pages/Attachments';
 
@@ -51,6 +52,7 @@ const PAGES = {
   syssettings: SystemSettingsPage,
   attachments: Attachments,
   backup: Backup,
+  certs: Certs,
   sec: Security,
 };
 

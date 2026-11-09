@@ -2,7 +2,7 @@ ProxyPilot 发布包
 面板版本 : V35.2
 Agent    : 2.1.1
 客户端   : 1.9
-构建时间 : 2026-11-09 16:10:37
+构建时间 : 2026-11-09 16:19:33
 
 文件清单：
   DEPLOY-README.md                                       0.0 MB
@@ -10,8 +10,8 @@ Agent    : 2.1.1
   maintenance.sh                                         0.0 MB
   proxypilot-agent-2.1.1-linux-amd64                     9.7 MB
   proxypilot-agent-2.1.1-linux-arm64                     8.9 MB
-  proxypilot-V35.2-linux-amd64                          18.3 MB
-  proxypilot-V35.2-linux-arm64                          17.3 MB
+  proxypilot-V35.2-linux-amd64                          18.4 MB
+  proxypilot-V35.2-linux-arm64                          17.4 MB
   proxypilot-vpn-1.9-darwin-amd64                        9.0 MB
   proxypilot-vpn-1.9-darwin-arm64                        8.4 MB
   proxypilot-vpn-1.9-linux-amd64                         8.8 MB

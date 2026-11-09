@@ -168,6 +168,14 @@ export const PAGE_META = {
     group: '节点与网络',
     accent: '#f6821f',
   },
+  certs: {
+    title: '证书管理',
+    subtitle: '本站 CA 与功能证书：签发、下发、下载',
+    icon: <SafetyCertificateOutlined />,
+    group: '系统',
+    accent: '#0ea5e9',
+    superOnly: true,
+  },
   sec: {
     title: '安全中心',
     subtitle: '修改密码、双因素认证与账号安全',
@@ -177,7 +185,7 @@ export const PAGE_META = {
   },
 };
 
-export const NAV_ORDER = ['dash', 'uuids', 'userst', 'tpls', 'tplhub', 'servers', 'bindings', 'cdnpref', 'masque', 'vpn', 'logs', 'attachments', 'backup', 'sec', 'sysusers', 'syssettings'];
+export const NAV_ORDER = ['dash', 'uuids', 'userst', 'tpls', 'tplhub', 'servers', 'bindings', 'cdnpref', 'masque', 'vpn', 'logs', 'attachments', 'backup', 'certs', 'sec', 'sysusers', 'syssettings'];
 
 /** 侧边栏结构：置顶单页 + 3 个可折叠分组，按日常使用频率排序 */
 export const NAV_GROUPS = [
@@ -197,7 +205,7 @@ export const NAV_GROUPS = [
     key: 'ops',
     title: '运维与安全',
     icon: <ToolOutlined />,
-    keys: ['local', 'logs', 'attachments', 'backup', 'sec', 'sysusers', 'syssettings'],
+    keys: ['local', 'logs', 'attachments', 'backup', 'certs', 'sec', 'sysusers', 'syssettings'],
   },
 ];
 

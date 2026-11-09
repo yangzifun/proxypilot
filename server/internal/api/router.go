@@ -51,6 +51,13 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /api/admin/vpn/settings", h.authed(authOpts{superOnly: true}, h.vpnAdminSettings))
 	mux.HandleFunc("PUT /api/admin/vpn/settings", h.authed(authOpts{superOnly: true}, h.vpnAdminSettings))
 	mux.HandleFunc("POST /api/vpn/mesh/heartbeat", h.vpnMeshHeartbeat)
+	// 证书管理（管理后台「证书管理」页）
+	mux.HandleFunc("GET /api/vpn/ca/status", h.authed(authOpts{superOnly: true}, h.vpnCAStatus))
+	mux.HandleFunc("GET /api/vpn/cert/status", h.authed(authOpts{superOnly: true}, h.vpnCertStatus))
+	mux.HandleFunc("POST /api/vpn/cert/issue", h.authed(authOpts{superOnly: true}, h.vpnCertIssue))
+	mux.HandleFunc("POST /api/vpn/cert/distribute", h.authed(authOpts{superOnly: true}, h.vpnCertDistribute))
+	mux.HandleFunc("GET /api/vpn/cert/download", h.authed(authOpts{superOnly: true}, h.vpnCertDownload))
+	mux.HandleFunc("GET /admin/certs", h.vpnCertPage)
 	mux.HandleFunc("GET /api/vpn/ca.crt", h.vpnPublicCACert)
 	mux.HandleFunc("POST /api/admin/vpn/mesh/batch", h.authed(authOpts{superOnly: true}, h.vpnAdminMeshBatch))
 	mux.HandleFunc("GET /api/admin/vpn/mesh", h.authed(authOpts{superOnly: true}, h.vpnAdminMesh))
