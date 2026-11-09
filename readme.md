@@ -216,7 +216,7 @@ proxypilot/
 
 ## VPN 与组网协议栈
 
-面板里有两套基于 QUIC 的自研网络，**都不经过 sing-box**，由 Agent 内嵌的 MASQUE 节点承载：
+面板里有两套基于 QUIC 的自研网络，**都不经过 sing-box**，由 Agent 内嵌的 HTTP/3 隧道节点承载：
 
 - **VPN**：终端用户电脑接入公网（节点做 NAT 出口）
 - **组网**：服务器之间组成内网（10.99.0.0/16，节点间可互访）
@@ -240,7 +240,7 @@ proxypilot/
 │ 鉴权       面板签发 JWT（Ed25519），Bearer 头                     │
 │            声明：uuid / node / grant / ipv4 / jti / exp          │
 ├─────────────────────────────────────────────────────────────────┤
-│ 节点侧     MASQUE 节点（Agent 内嵌）                              │
+│ 节点侧     自研 HTTP/3 隧道节点（Agent 内嵌）                     │
 │            TUN ppvpn0 = 10.88.x.1/24                             │
 │            ip_forward=1 + iptables MASQUERADE → 出口网卡 eth0     │
 └─────────────────────────────────────────────────────────────────┘
@@ -285,7 +285,7 @@ proxypilot/
 │ IP 层      10.99.0.x/16（中心固定 10.99.0.1）                     │
 │            路由：10.99.0.0/16 → 组网网卡                          │
 ├─────────────────────────────────────────────────────────────────┤
-│ 隧道层     与 VPN 同一套 MASQUE 节点代码                          │
+│ 隧道层     与 VPN 同一套 HTTP/3 隧道代码                          │
 │            节点配置 disable_nat=true、allow_client_to_client=true │
 ├─────────────────────────────────────────────────────────────────┤
 │ 传输层     QUIC / HTTP/3（UDP 443，中心 vpncenter.yzfn.top）      │
@@ -314,6 +314,28 @@ pp-mesh-client -mesh-token "$(cat /etc/proxypilot/mesh.token)" \
   -mesh-endpoint vpncenter.yzfn.top:443 -mesh-sni vpncenter.yzfn.top
 ```
 
+### 和标准 MASQUE 的关系
+
+**这套自研隧道不是严格意义上的 MASQUE**，虽然包名沿用了 `masque`。
+
+| 标准 MASQUE（RFC 9484 CONNECT-IP / RFC 9297 HTTP Datagram） | 本项目自研隧道 |
+| --- | --- |
+| HTTP/3 **扩展 CONNECT**，`:protocol = connect-ip` | 普通 **POST `/tunnel`** |
+| 地址/路由通过 Capsule（`ADDRESS_ASSIGN` / `ROUTE_ADVERTISEMENT`）协商 | 面板 `/api/portal/vpn/connect` 返回 JSON（ip4 / mtu / dns / 网段） |
+| 报文走 HTTP Datagram（不可靠）或 Capsule（可靠） | 自定义 `[2 字节长度][IP 报文]` 分帧，跑在 HTTP/3 流上 |
+| 鉴权多为 HTTP Basic / Proxy-Authorization | 面板签发 JWT，`Authorization: Bearer` |
+| 客户端：sing-box / mihomo 等标准栈 | 仅本项目客户端 `vpnclient` |
+
+相同点：都跑在 **HTTP/3（QUIC + TLS 1.3，ALPN=h3）** 之上，都是 **IP-in-HTTP** 形态的隧道，都靠节点侧 TUN + NAT 出口。
+
+> 面板订阅里另有一个**真正的 MASQUE**：sing-box 1.15+ 的 `masque-server` endpoint
+> （端口 13707/13708，CONNECT-IP），与本节的自动隧道是两套独立实现：
+> 前者给用户订阅用，后者给桌面客户端与服务器组网用。
+
+若要和标准 MASQUE 客户端互通，需要补：扩展 CONNECT + `connect-ip` Capsule、
+HTTP Datagram（RFC 9297）承载、并改用 CONNECT 头鉴权。当前选择「可靠流 + JWT」，
+是为了在跨境丢包链路上稳定，并复用面板已有的授权 / 配额 / 会话体系。
+
 ### 两套网络的差异
 
 | 维度 | VPN | 组网 |
@@ -330,7 +352,7 @@ pp-mesh-client -mesh-token "$(cat /etc/proxypilot/mesh.token)" \
 | 组件 | 版本 | 说明 |
 | --- | --- | --- |
 | 面板 | V35.2 | 签发令牌、分配 IP、会话治理 |
-| Agent | 2.1.0 | 内嵌 MASQUE 节点（可靠流） |
+| Agent | 2.1.0 | 内嵌 HTTP/3 隧道节点（可靠流） |
 | 客户端 | 1.8 | Windows/macOS/Linux 桌面端 |
 
 ---
