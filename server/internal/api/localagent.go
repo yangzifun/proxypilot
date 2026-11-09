@@ -339,6 +339,10 @@ func collectLocal() localSample {
 		},
 		"conn":      map[string]any{"total": connTotal, "established": connEst},
 		"proc":      map[string]any{"total": procTotal},
+		// 前端「本机服务器」卡片读取的是 load.one / procs，这里补别名，
+		// 同时保留 load1 / proc.total 供服务器列表使用。
+		"load":  map[string]any{"one": load1, "five": load5, "fifteen": load15},
+		"procs": procTotal,
 		"memUsedMb": memUsed / 1024 / 1024, "memTotalMb": memTotal / 1024 / 1024,
 		"cores": runtime.NumCPU(), "source": "local", "agentVersion": "local",
 	}

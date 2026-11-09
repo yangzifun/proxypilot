@@ -247,10 +247,10 @@ export default function LocalServer() {
           <StatCard icon={<CloudServerOutlined />} label="磁盘" value={`${Math.round(Number(m.diskPercent) || 0)}%`} accent="#0ea5e9" />
         </Col>
         <Col xs={12} lg={4}>
-          <StatCard icon={<Badge status="processing" />} label="负载 1m" value={fmtNum(Number(m.load && m.load.one) || 0)} accent="#8b5cf6" />
+          <StatCard icon={<Badge status="processing" />} label="负载 1m" value={fmtNum(Number((m.load && m.load.one) ?? m.load1) || 0)} accent="#8b5cf6" />
         </Col>
         <Col xs={12} lg={4}>
-          <StatCard icon={<CodeOutlined />} label="进程数" value={fmtNum(Number(m.procs) || 0)} accent="#f59e0b" />
+          <StatCard icon={<CodeOutlined />} label="进程数" value={fmtNum(Number(m.procs ?? (m.proc && m.proc.total)) || 0)} accent="#f59e0b" />
         </Col>
         <Col xs={12} lg={4}>
           <StatCard icon={<CloudDownloadOutlined />} label="运行时长" value={fmtUptime(m.uptimeSec)} accent="#06b6d4" />
