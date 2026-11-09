@@ -11,6 +11,7 @@ import (
 	"crypto/x509"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -18,9 +19,7 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"os/signal"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -28,11 +27,10 @@ import (
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
-	"github.com/songgao/water"
 )
 
 // Version 是 VPN 客户端版本（V1.x）。
-const Version = "V35.0"
+const Version = "V35.2"
 
 var caPEM []byte
 
@@ -77,10 +75,14 @@ func runCLI() {
 	meshSNI := flag.String("mesh-sni", "vpncenter.yzfn.top", "组网中心 SNI")
 	meshAPI := flag.String("mesh-api", "https://proxypilot.yangzifun.org", "组网心跳 API 地址")
 	meshHeartbeat := flag.Duration("mesh-heartbeat", 20*time.Second, "组网心跳间隔")
+	meshMode := flag.String("mesh-mode", "mesh", "接管范围：mesh=仅组网网段，full=接管全部流量")
 	uiMode := flag.Bool("ui", false, "启动本地控制台界面（127.0.0.1）")
 	uiAddr := flag.String("ui-addr", "127.0.0.1:8899", "控制台监听地址")
 	uiOpen := flag.Bool("ui-open", true, "启动后自动打开浏览器")
 	uiDemo := flag.Bool("ui-demo", false, "控制台使用演示数据（不发起真实连接）")
+	tunSelftest := flag.Bool("tun-selftest", false, "自检：创建网卡并下发路由后立即清理（需要管理员/root）")
+	tunSelftestMode := flag.String("tun-selftest-mode", "mesh", "自检接管模式：mesh|full")
+	tunSelftestKeep := flag.Int("tun-selftest-keep", 5, "自检保留秒数（到点自动清理）")
 	cfgPath := flag.String("config", "", "配置文件路径（默认用系统配置目录）")
 	timeout := flag.Duration("timeout", 20*time.Second, "整体超时")
 	flag.Parse()
@@ -96,6 +98,17 @@ func runCLI() {
 	if *cfgPath != "" {
 		configPathOverride = *cfgPath
 	}
+	if *tunSelftest {
+		mode := TunMode(strings.ToLower(strings.TrimSpace(*tunSelftestMode)))
+		if mode != TunModeFull {
+			mode = TunModeMesh
+		}
+		if err := runTunSelftest(mode, *tunSelftestKeep); err != nil {
+			log.Fatalf("网卡自检失败：%v", err)
+		}
+		return
+	}
+
 	if *uiMode {
 		uctx, ustop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer ustop()
@@ -119,7 +132,11 @@ func runCLI() {
 		mctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
 		eps := splitEndpoints(*meshEndpoint)
-		if err := runMesh(mctx, *meshToken, *meshIP, *meshCIDR, *meshTun, eps, *meshSNI, *meshAPI, *meshHeartbeat, *insecure); err != nil {
+		mm := TunMode(strings.ToLower(strings.TrimSpace(*meshMode)))
+		if mm != TunModeFull {
+			mm = TunModeMesh
+		}
+		if err := runMesh(mctx, *meshToken, *meshIP, *meshCIDR, *meshTun, eps, *meshSNI, *meshAPI, *meshHeartbeat, *insecure, mm); err != nil {
 			log.Fatalf("组网失败：%v", err)
 		}
 		return
@@ -293,35 +310,7 @@ func splitEndpoints(raw string) []string {
 	return out
 }
 
-// setupMeshTUN 幂等地准备组网网卡：重启不会因为地址已存在而失败。
-func setupMeshTUN(ip, cidr, tunName string) (*water.Interface, error) {
-	dev, err := openTUN(tunName)
-	if err != nil {
-		return nil, err
-	}
-	bits := "16"
-	if _, network, perr := net.ParseCIDR(cidr); perr == nil {
-		if ones, _ := network.Mask.Size(); ones > 0 {
-			bits = strconv.Itoa(ones)
-		}
-	}
-	addr := ip + "/" + bits
-	if out, err := exec.Command("ip", "addr", "replace", addr, "dev", dev.Name()).CombinedOutput(); err != nil {
-		log.Printf("配置组网地址失败：%v %s", err, strings.TrimSpace(string(out)))
-	}
-	if out, err := exec.Command("ip", "link", "set", "dev", dev.Name(), "mtu", "1280", "up").CombinedOutput(); err != nil {
-		log.Printf("启用组网网卡失败：%v %s", err, strings.TrimSpace(string(out)))
-	}
-	return dev, nil
-}
-
-func runMesh(ctx context.Context, token, ip, cidr, tunName string, endpoints []string, sni, apiBase string, hbInterval time.Duration, insecure bool) error {
-	dev, err := setupMeshTUN(ip, cidr, tunName)
-	if err != nil {
-		return fmt.Errorf("创建 TUN: %w", err)
-	}
-	defer dev.Close()
-
+func runMesh(ctx context.Context, token, ip, cidr, tunName string, endpoints []string, sni, apiBase string, hbInterval time.Duration, insecure bool, mode TunMode) error {
 	st := &meshState{}
 	// 心跳先起：即使数据面暂时不通，面板也能看到"在线但 down"，而不是彻底失联。
 	go meshHeartbeat(ctx, apiBase, token, hbInterval, st)
@@ -332,7 +321,28 @@ func runMesh(ctx context.Context, token, ip, cidr, tunName string, endpoints []s
 			return nil
 		}
 		started := time.Now()
-		err := meshDataPlane(ctx, dev, endpoints, sni, token, ip, insecure, st)
+		tun, err := meshDataPlane(ctx, endpoints, sni, token, ip, cidr, tunName, insecure, st, mode)
+		if err == nil && tun != nil {
+			// 数据面正常：等它自己断开
+			for {
+				select {
+				case <-ctx.Done():
+					tun.Close()
+					return nil
+				case <-time.After(time.Second):
+					if e := tun.Err(); e != "" {
+						err = errors.New(e)
+					}
+					if err != nil || ctx.Err() != nil {
+						break
+					}
+				}
+				if err != nil || ctx.Err() != nil {
+					break
+				}
+			}
+			tun.Close()
+		}
 		if ctx.Err() != nil {
 			return nil
 		}
@@ -353,11 +363,11 @@ func runMesh(ctx context.Context, token, ip, cidr, tunName string, endpoints []s
 }
 
 // meshDataPlane 维持一条到中心的长连接；失败按候选端点回退，不退出进程。
-func meshDataPlane(ctx context.Context, dev *water.Interface, endpoints []string, sni, token, localIP string, insecure bool, st *meshState) error {
+func meshDataPlane(ctx context.Context, endpoints []string, sni, token, localIP, cidr, tunName string, insecure bool, st *meshState, mode TunMode) (*Tunnel, error) {
 	var lastErr error
 	for _, ep := range endpoints {
 		if ctx.Err() != nil {
-			return nil
+			return nil, nil
 		}
 		start := time.Now()
 		assigned, conn, err := authHTTP3(ctx, ep, sni, token, insecure)
@@ -370,45 +380,32 @@ func meshDataPlane(ctx context.Context, dev *water.Interface, endpoints []string
 		log.Printf("组网鉴权成功：节点分配 %s（本地 %s，端点 %s，握手 %s）",
 			assigned, localIP, ep, time.Since(start).Round(time.Millisecond))
 
-		pumpCtx, stopPump := context.WithCancel(ctx)
-		go func() {
-			buf := make([]byte, 2048)
-			for {
-				select {
-				case <-pumpCtx.Done():
-					return
-				default:
-				}
-				n, err := dev.Read(buf)
-				if err != nil {
-					return
-				}
-				if err := conn.SendDatagram(buf[:n]); err != nil {
-					return
-				}
-			}
-		}()
-
-		err = func() error {
-			for {
-				data, err := conn.ReceiveDatagram(ctx)
-				if err != nil {
-					return err
-				}
-				pkt, _, _, err := strip(data)
-				if err != nil {
-					continue
-				}
-				if _, err := dev.Write(pkt); err != nil {
-					return err
-				}
-			}
-		}()
-		stopPump()
-		_ = conn.CloseWithError(0, "reconnect")
-		return err
+		if mode == "" {
+			mode = TunModeMesh
+		}
+		tun, perr := StartTunnel(ctx, TunOptions{
+			Spec: TunSpec{
+				Name:     tunName,
+				IP:       localIP,
+				CIDR:     cidr,
+				MTU:      1280,
+				Mode:     mode,
+				Endpoint: ep,
+			},
+			Conn: conn,
+		})
+		if perr != nil {
+			_ = conn.CloseWithError(0, "tun-failed")
+			lastErr = perr
+			log.Printf("建立隧道失败（%s）：%v", ep, perr)
+			continue
+		}
+		return tun, nil
 	}
-	return lastErr
+	if lastErr == nil {
+		lastErr = errors.New("没有可用端点")
+	}
+	return nil, lastErr
 }
 
 // meshHeartbeat 独立于数据面运行：上报存活、RTT 与数据面状态。
@@ -594,6 +591,41 @@ func strip(b []byte) ([]byte, net.IP, net.IP, error) {
 	return b[:total], net.IP(b[12:16]), net.IP(b[16:20]), nil
 }
 
+// runTunSelftest 验证「创建网卡 + 配置地址 + 下发路由 + 清理」这条链路。
+// 不需要真实 VPN 会话，适合安装后确认驱动与权限是否就绪。
+func runTunSelftest(mode TunMode, keepSec int) error {
+	if !runtimeSupportsTun() {
+		return fmt.Errorf("当前平台不支持 TUN")
+	}
+	if keepSec <= 0 {
+		keepSec = 5
+	}
+	spec := TunSpec{
+		IP:   "10.99.0.250",
+		CIDR: "10.99.0.0/16",
+		MTU:  1420,
+		Mode: mode,
+	}
+	log.Printf("自检开始：模式=%s", mode)
 
+	dev, err := openTUN(spec.name())
+	if err != nil {
+		return err
+	}
+	res, err := applyTun(spec, dev)
+	if err != nil {
+		_ = dev.Close()
+		return err
+	}
+	log.Printf("网卡已创建：%s", res.Summary())
+	for _, r := range res.Routes {
+		log.Printf("  路由：%s", r)
+	}
+	log.Printf("%d 秒后自动清理…", keepSec)
+	time.Sleep(time.Duration(keepSec) * time.Second)
 
-
+	cleanupTun(res)
+	_ = dev.Close()
+	log.Printf("自检完成：网卡与路由已清理")
+	return nil
+}

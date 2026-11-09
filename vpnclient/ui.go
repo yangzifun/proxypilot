@@ -89,8 +89,16 @@ type uiSettings struct {
 	Token    string `json:"token"`
 	Insecure bool   `json:"insecure"`
 	DNSAddr  string `json:"dns_addr"`
-	NodeID   int64  `json:"node_id"`
+	NodeID int64
 	DeviceID int64  `json:"device_id"`
+	// 接管系统网络：mesh=仅组网网段，full=接管全部流量
+	TunMode string
+	// 虚拟网卡名（留空用默认）
+	TunName string `json:"tun_name"`
+	// 是否把系统 DNS 指到隧道内（留空=不改）
+	SetDNS bool `json:"set_dns"`
+	// 组网网段（默认 10.99.0.0/16）
+	MeshCIDR string `json:"mesh_cidr"`
 }
 
 // configPathOverride 由 -config 指定；为空时用系统配置目录，写入失败再退到可执行文件同级。
@@ -154,23 +162,28 @@ func saveSettings(s uiSettings) error {
 
 type sessionState struct {
 	mu        sync.Mutex
-	status    string `json:"status"` // idle | connecting | connected | error
-	message   string `json:"message"`
-	nodeID    int64  `json:"node_id"`
-	nodeName  string `json:"node_name"`
-	nodeHost  string `json:"node_host"`
-	ip4       string `json:"ip4"`
-	sni       string `json:"sni"`
-	mtu       int    `json:"mtu"`
-	sessionID int64  `json:"session_id"`
-	probeOK   bool   `json:"probe_ok"`
-	probeInfo string `json:"probe_info"`
-	rttMs     int    `json:"rtt_ms"`
-	startedAt int64  `json:"started_at"`
+	status string // idle | connecting | connected | error
+	message string
+	nodeID int64
+	nodeName string
+	nodeHost string
+	ip4 string
+	sni string
+	mtu int
+	sessionID int64
+	probeOK bool
+	probeInfo string
+	rttMs int
+	startedAt int64
 	cancel    context.CancelFunc
 	conn      *quic.Conn
+	tun       *Tunnel
 	rx        uint64
 	tx        uint64
+	adapter string
+	routes []string
+	tunMode string
+	tunErr string
 }
 
 func (s *sessionState) snapshot() map[string]any {
@@ -203,6 +216,11 @@ func (s *sessionState) snapshot() map[string]any {
 		"rx":         s.rx,
 		"tx":         s.tx,
 		"started_at": s.startedAt,
+		"adapter":    s.adapter,
+		"routes":     append([]string{}, s.routes...),
+		"tun_mode":   s.tunMode,
+		"tun_error":  s.tunErr,
+		"tun_ready":  s.adapter != "",
 	}
 }
 
@@ -287,7 +305,14 @@ func (c uiSettings) validate() error {
 func (s *uiServer) currentSettings() uiSettings {
 	s.cfgMu.Lock()
 	defer s.cfgMu.Unlock()
-	return s.cfg
+	cfg := s.cfg
+	if cfg.TunMode == "" {
+		cfg.TunMode = string(TunModeMesh)
+	}
+	if cfg.MeshCIDR == "" {
+		cfg.MeshCIDR = "10.99.0.0/16"
+	}
+	return cfg
 }
 
 func (s *uiServer) handleState(w http.ResponseWriter, r *http.Request) {
@@ -301,6 +326,12 @@ func (s *uiServer) handleState(w http.ResponseWriter, r *http.Request) {
 	payload["logged_in"] = strings.TrimSpace(cfg.Token) != ""
 	payload["insecure"] = cfg.Insecure
 	payload["dns_addr"] = cfg.DNSAddr
+	payload["tun_mode"] = cfg.TunMode
+	payload["tun_name"] = cfg.TunName
+	payload["mesh_cidr"] = cfg.MeshCIDR
+	payload["set_dns"] = cfg.SetDNS
+	payload["tun_supported"] = runtimeSupportsTun()
+	payload["platform"] = runtime.GOOS
 	payload["token_hint"] = maskToken(cfg.Token)
 	payload["version"] = Version
 	writeJSON(w, payload)
@@ -334,6 +365,20 @@ func (s *uiServer) handleSettings(w http.ResponseWriter, r *http.Request) {
 	if body.DNSAddr != "" {
 		s.cfg.DNSAddr = strings.TrimSpace(body.DNSAddr)
 	}
+	if body.TunMode != "" {
+		if body.TunMode == string(TunModeFull) {
+			s.cfg.TunMode = string(TunModeFull)
+		} else {
+			s.cfg.TunMode = string(TunModeMesh)
+		}
+	}
+	if body.TunName != "" {
+		s.cfg.TunName = strings.TrimSpace(body.TunName)
+	}
+	if body.MeshCIDR != "" {
+		s.cfg.MeshCIDR = strings.TrimSpace(body.MeshCIDR)
+	}
+	s.cfg.SetDNS = body.SetDNS
 	s.cfg.Insecure = body.Insecure
 	cfg := s.cfg
 	s.cfgMu.Unlock()
@@ -371,7 +416,7 @@ func (s *uiServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		NodeID int64 `json:"node_id"`
+		NodeID int64
 	}
 	_ = json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&body)
 	if err := s.connect(body.NodeID); err != nil {
@@ -408,14 +453,22 @@ func (s *uiServer) disconnect(reason string) {
 	s.state.mu.Lock()
 	cancel := s.state.cancel
 	conn := s.state.conn
+	tun := s.state.tun
 	s.state.cancel = nil
 	s.state.conn = nil
+	s.state.tun = nil
 	s.state.status = "idle"
 	s.state.message = reason
 	s.state.startedAt = 0
+	s.state.adapter = ""
+	s.state.routes = nil
+	s.state.tunErr = ""
 	s.state.mu.Unlock()
 	if cancel != nil {
 		cancel()
+	}
+	if tun != nil {
+		tun.Close()
 	}
 	if conn != nil {
 		_ = conn.CloseWithError(0, "client disconnect")
@@ -525,15 +578,65 @@ func (s *uiServer) connect(nodeID int64) error {
 			return
 		}
 		s.state.set(func(st *sessionState) {
-			st.status = "connected"
 			st.probeOK = true
 			st.probeInfo = "DNS 探测通过"
-			st.startedAt = time.Now().UnixMilli()
-			st.message = "已连接"
+			st.message = "数据面已通，正在接管系统网络…"
 		})
-		log.Printf("数据面探测通过，连接就绪（%s）", cfg.DNSAddr)
+		log.Printf("数据面探测通过，开始接管系统网络（%s）", cfg.DNSAddr)
 
-		// 保活：保持 QUIC 连接（长连接），直到用户断开或连接异常。
+		// ---- 接管系统网络：创建虚拟网卡 + 配置地址 + 下发路由 ----
+		mode := TunMode(cfg.TunMode)
+		if mode != TunModeFull {
+			mode = TunModeMesh
+		}
+		cidr := strings.TrimSpace(cfg.MeshCIDR)
+		if cidr == "" {
+			cidr = "10.99.0.0/16"
+		}
+		dnsServer := ""
+		if cfg.SetDNS {
+			dnsServer = strings.Split(cfg.DNSAddr, ":")[0]
+		}
+		tun, terr := StartTunnel(ctx, TunOptions{
+			Spec: TunSpec{
+				Name:     cfg.TunName,
+				IP:       prof.IP4,
+				CIDR:     cidr,
+				MTU:      prof.MTU,
+				Mode:     mode,
+				Endpoint: pick.Endpoint,
+				DNS:      dnsServer,
+			},
+			Conn: conn,
+			OnStats: func(rx, tx int64) {
+				s.state.set(func(st *sessionState) { st.rx, st.tx = uint64(rx), uint64(tx) })
+			},
+		})
+
+		if terr != nil {
+			log.Printf("系统网络接管失败：%v", terr)
+			s.state.set(func(st *sessionState) {
+				st.status = "connected"
+				st.tunErr = terr.Error()
+				st.startedAt = time.Now().UnixMilli()
+				st.message = "已连接，但系统网络未接管：" + terr.Error()
+			})
+		} else {
+			res := tun.Result()
+			log.Printf("系统网络已接管：%s", res.Summary())
+			s.state.set(func(st *sessionState) {
+				st.status = "connected"
+				st.tun = tun
+				st.adapter = res.Adapter
+				st.routes = res.Routes
+				st.tunMode = string(res.Mode)
+				st.tunErr = ""
+				st.startedAt = time.Now().UnixMilli()
+				st.message = "已连接 · " + res.Summary()
+			})
+		}
+
+		// 保活：保持 QUIC 连接并同步 RTT/流量，直到用户断开或隧道中断。
 		ticker := time.NewTicker(2 * time.Second)
 		defer ticker.Stop()
 		for {
@@ -543,6 +646,19 @@ func (s *uiServer) connect(nodeID int64) error {
 			case <-ticker.C:
 				if stats := conn.ConnectionStats(); stats.SmoothedRTT > 0 {
 					s.state.set(func(st *sessionState) { st.rttMs = int(stats.SmoothedRTT.Milliseconds()) })
+				}
+				if tun != nil {
+					if e := tun.Err(); e != "" {
+						rx, tx := tun.Stats()
+						s.state.set(func(st *sessionState) {
+							st.status = "error"
+							st.message = "隧道中断：" + e
+							st.tunErr = e
+							st.rx, st.tx = uint64(rx), uint64(tx)
+						})
+						cancel()
+						return
+					}
 				}
 			}
 		}

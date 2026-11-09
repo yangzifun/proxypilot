@@ -1,0 +1,117 @@
+package main
+
+import (
+	"fmt"
+	"net"
+	"strings"
+)
+
+// PacketDevice 抽象各平台的虚拟网卡（Linux/macOS: /dev/net/tun；Windows: Wintun）。
+type PacketDevice interface {
+	// Name 返回系统里看到的网卡名（Windows 为适配器名称）。
+	Name() string
+	Read(p []byte) (int, error)
+	Write(p []byte) (int, error)
+	Close() error
+}
+
+// TunMode 是接管范围。
+type TunMode string
+
+const (
+	// TunModeMesh 只把组网网段指到虚拟网卡，其余流量照旧（默认）。
+	TunModeMesh TunMode = "mesh"
+	// TunModeFull 接管全部 IPv4 流量（用 0.0.0.0/1 + 128.0.0.0/1 覆盖默认路由，
+	// 保留原默认路由以便回滚，并给 VPN 服务器本身加主机路由避免环路）。
+	TunModeFull TunMode = "full"
+)
+
+// TunSpec 描述一次网卡与路由的配置。
+type TunSpec struct {
+	Name     string // 网卡名，空则用默认
+	IP       string // 分配给网卡的地址，例如 10.99.0.11
+	CIDR     string // 组网网段，例如 10.99.0.0/16
+	MTU      int    // 0 则用 1420
+	Mode     TunMode
+	Endpoint string // VPN 服务器地址（host:port），full 模式下加主机路由防止流量回环
+	DNS      string // 可选：写入系统的 DNS（空=不改）
+}
+
+func (s TunSpec) mtu() int {
+	if s.MTU <= 0 {
+		return 1420
+	}
+	if s.MTU < 576 {
+		return 576
+	}
+	return s.MTU
+}
+
+func (s TunSpec) name() string {
+	if strings.TrimSpace(s.Name) == "" {
+		return defaultTunName()
+	}
+	return strings.TrimSpace(s.Name)
+}
+
+// prefixLen 返回 CIDR 的前缀长度（解析失败给 16）。
+func (s TunSpec) prefixLen() int {
+	if _, n, err := net.ParseCIDR(strings.TrimSpace(s.CIDR)); err == nil {
+		if ones, _ := n.Mask.Size(); ones > 0 {
+			return ones
+		}
+	}
+	return 16
+}
+
+// meshNetwork 规范化组网网段；解析失败返回空串。
+func (s TunSpec) meshNetwork() string {
+	if _, n, err := net.ParseCIDR(strings.TrimSpace(s.CIDR)); err == nil {
+		return n.String()
+	}
+	return ""
+}
+
+// endpointHost 取端点里的主机部分（去掉端口）。
+func (s TunSpec) endpointHost() string {
+	host := strings.TrimSpace(s.Endpoint)
+	if host == "" {
+		return ""
+	}
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		return h
+	}
+	return host
+}
+
+// 接管类路由（full 模式）。
+var fullModeRoutes = []string{"0.0.0.0/1", "128.0.0.0/1"}
+
+// planRoutes 计算需要下发的路由列表（不含主机路由）。
+func planRoutes(s TunSpec) []string {
+	out := []string{}
+	if net := s.meshNetwork(); net != "" {
+		out = append(out, net)
+	}
+	if s.Mode == TunModeFull {
+		out = append(out, fullModeRoutes...)
+	}
+	return out
+}
+
+// TunResult 是一次接管的结果，供界面展示与断开时清理。
+type TunResult struct {
+	Adapter string   // 系统网卡名
+	IP      string   // 已配置地址
+	MTU     int      // 已配置 MTU
+	Mode    TunMode  // 接管模式
+	Routes  []string // 已下发路由
+	DNS     string   // 已写入的 DNS（空=未改）
+}
+
+func (r TunResult) Summary() string {
+	if r.Adapter == "" {
+		return "未接管"
+	}
+	return fmt.Sprintf("%s（%s · %s · MTU %d · 路由 %d 条）", r.Adapter, r.IP, r.Mode, r.MTU, len(r.Routes))
+}
