@@ -210,6 +210,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	go s.readSession(sess)
+	s.log.Info("会话建立", "ip", ip.String(), "device", claims.Subject,
+		"node", claims.NodeID, "remote", r.RemoteAddr)
 }
 
 func (s *Server) register(sess *session) bool {
@@ -250,21 +252,40 @@ func (s *Server) readSession(sess *session) {
 		s.log.Info("会话结束", "ip", sess.ip, "device", sess.device,
 			"duration", time.Since(sess.started).Round(time.Second))
 	}()
+	var badPkt, badSrc int
+	lastStats := time.Now()
 	for {
 		data, err := sess.conn.ReceiveDatagram(sess.conn.Context())
 		if err != nil {
+			s.log.Info("会话数据面结束", "ip", sess.ip.String(), "err", err.Error(),
+				"rx", sess.rx, "tx", sess.tx, "bad_pkt", badPkt, "bad_src", badSrc)
 			return
 		}
-		pkt, src, _, err := StripPadding(data)
-		if err != nil {
+		pkt, src, _, perr := StripPadding(data)
+		if perr != nil {
+			badPkt++
+			if badPkt == 1 {
+				s.log.Warn("丢弃无法解析的报文", "ip", sess.ip.String(), "len", len(data), "err", perr.Error())
+			}
 			continue
 		}
 		if !src.Equal(sess.ip) {
-			continue // 防伪造：源地址必须是分配的 IP
+			badSrc++
+			if badSrc == 1 {
+				s.log.Warn("丢弃源地址不符的报文", "sess_ip", sess.ip.String(), "src", src.String())
+			}
+			continue
 		}
-		if _, err := s.tun.Write(pkt); err != nil {
-			s.log.Warn("写入 TUN 失败", "err", err)
-			return
+		if time.Since(lastStats) > 30*time.Second {
+			s.log.Info("会话流量", "ip", sess.ip.String(), "rx", sess.rx, "tx", sess.tx,
+				"bad_pkt", badPkt, "bad_src", badSrc)
+			lastStats = time.Now()
+		}
+		if _, werr := s.tun.Write(pkt); werr != nil {
+			// 单个报文写失败（例如超过 TUN MTU）不能终止会话，
+			// 否则后续所有流量都会被静默丢弃、表现为「已连接但完全不通」。
+			s.log.Warn("写入 TUN 失败", "err", werr, "len", len(pkt), "ip", sess.ip.String())
+			continue
 		}
 		sess.tx++
 	}
