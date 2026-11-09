@@ -32,7 +32,7 @@ const EMPTY_NODE = {
   region: '',
   domain: '',
   endpoint: '',
-  cert_mode: 'selfsigned',
+  cert_mode: 'internal_ca',
   listen_port: 443,
   capacity: 500,
 };
@@ -232,12 +232,16 @@ export default function VpnNodesPanel() {
           <Form.Item name="endpoint" label="客户端接入地址（UDP）" extra="留空自动使用 域名:端口">
             <Input placeholder="留空 = 域名:443" />
           </Form.Item>
-          <Form.Item name="cert_mode" label="证书模式">
+          <Form.Item
+            name="cert_mode"
+            label="证书模式"
+            extra="内部 CA：客户端自动信任平台 CA；公网 ACME：使用「证书管理」里已签发的通配证书，域名必须被覆盖"
+          >
             <Select
               options={[
-                { value: 'selfsigned', label: '自签（当前）' },
-                { value: 'internal_ca', label: '平台内部 CA（待实现）' },
-                { value: 'acme', label: '公网 ACME（待实现）' },
+                { value: 'internal_ca', label: '平台内部 CA（推荐）' },
+                { value: 'acme', label: '公网 ACME（通配证书）' },
+                { value: 'selfsigned', label: '节点自签（客户端跳过校验）' },
               ]}
             />
           </Form.Item>

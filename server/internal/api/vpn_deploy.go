@@ -1,8 +1,10 @@
 package api
 
 import (
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"net"
 	"net/http"
@@ -91,13 +93,31 @@ func (h *handlers) vpnAdminNodeDeploy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	certPEM, keyPEM := "", ""
-	if strings.EqualFold(node.CertMode, "internal_ca") {
+	switch strings.ToLower(strings.TrimSpace(node.CertMode)) {
+	case "internal_ca":
+		// 平台内部 CA：直接给节点签发证书（客户端需信任 /api/vpn/ca.crt）
 		c, k, cerr := h.vpnIssueNodeCert(r.Context(), host)
 		if cerr != nil {
 			writeError(w, http.StatusInternalServerError, "内部 CA 签发失败："+cerr.Error())
 			return
 		}
 		certPEM, keyPEM = string(c), string(k)
+	case "acme":
+		// 公网 ACME：使用「证书管理」里已签发的通配证书，先校验域名是否被覆盖
+		stored, cerr := h.loadCert(r.Context())
+		if cerr != nil || stored == nil || strings.TrimSpace(stored.CertPEM) == "" {
+			writeError(w, http.StatusConflict, "尚未签发公网证书，请先到「证书管理」签发后再部署")
+			return
+		}
+		if !certCoversHost(stored.CertPEM, host) {
+			writeError(w, http.StatusConflict,
+				fmt.Sprintf("已签发的证书不覆盖域名 %s，请到「证书管理」重新签发包含该域名的证书", host))
+			return
+		}
+		certPEM, keyPEM = stored.CertPEM, stored.KeyPEM
+		if strings.TrimSpace(stored.ChainPEM) != "" {
+			certPEM = certPEM + "\n" + stored.ChainPEM
+		}
 	}
 	cfg := vpnNodeConfig{
 		Listen:      fmt.Sprintf("0.0.0.0:%d", node.ListenPort),
@@ -122,10 +142,8 @@ func (h *handlers) vpnAdminNodeDeploy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// MASQUE 节点已内嵌在 Agent 中，部署不再下载二进制；body.BinaryURL 仅为兼容旧客户端保留
 	binaryURL := strings.TrimSpace(body.BinaryURL)
-	if binaryURL == "" {
-		binaryURL = strings.TrimRight(requestOrigin(r), "/") + "/agent-dist/pp-masque-node-linux-amd64"
-	}
 	script := buildVPNDeployScript(host, binaryURL, string(cfgJSON), node.ListenPort, certPEM, keyPEM)
 
 	payload := map[string]any{
@@ -141,7 +159,7 @@ func (h *handlers) vpnAdminNodeDeploy(w http.ResponseWriter, r *http.Request) {
 	}
 	h.vpnAudit(r.Context(), actorOf(r), "vpn.node.deploy", strconv.FormatInt(node.ID, 10), binaryURL)
 	writeJSON(w, http.StatusOK, map[string]any{
-		"ok": true, "task_id": taskID, "binary_url": binaryURL, "server_id": node.ServerID,
+		"ok": true, "task_id": taskID, "server_id": node.ServerID, "embedded": true,
 	})
 }
 
@@ -160,60 +178,56 @@ cat > "$DIR/tls/key.pem" <<'PPKEY'
 ` + keyPEM + `PPKEY
 chmod 600 "$DIR/tls/key.pem"`
 	}
-	unit := `[Unit]
-Description=ProxyPilot MASQUE Node
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-ExecStart=/opt/proxypilot/masque/pp-masque-node -config /etc/proxypilot/masque/config.json
-Restart=always
-RestartSec=3
-AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE
-CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE
-NoNewPrivileges=true
-LimitNOFILE=65535
-
-[Install]
-WantedBy=multi-user.target
-`
+	// MASQUE 节点现在内嵌在 Agent 进程里，不再单独下载二进制：
+	// 只需要把证书与配置写到约定位置，然后重启 Agent 让内嵌节点重新加载。
 	return `set -euo pipefail
-BIN=/opt/proxypilot/masque/pp-masque-node
 DIR=/etc/proxypilot/masque
-mkdir -p /opt/proxypilot/masque "$DIR/tls"
-if command -v curl >/dev/null 2>&1; then
-  curl -fsSL --retry 3 --connect-timeout 10 -o "$BIN.new" ` + shellQuote(binaryURL) + `
-else
-  wget -q -O "$BIN.new" ` + shellQuote(binaryURL) + `
-fi
-chmod +x "$BIN.new"
-mv "$BIN.new" "$BIN"
+AGENT_DIR=/etc/proxypilot/agent
+mkdir -p "$DIR/tls" "$AGENT_DIR"
 
 ` + certBlock + `
 
-cat > "$DIR/config.json" <<'PPVPNCFG'
+cat > "$AGENT_DIR/vpn.json" <<'PPVPNCFG'
 ` + cfgJSON + `
 PPVPNCFG
+chmod 644 "$AGENT_DIR/vpn.json"
 
-cat > /etc/systemd/system/proxypilot-masque.service <<'PPVPNUNIT'
-` + unit + `PPVPNUNIT
-
-systemctl daemon-reload
-systemctl enable proxypilot-masque >/dev/null 2>&1 || true
-systemctl restart proxypilot-masque
-sleep 2
-if ! systemctl is-active --quiet proxypilot-masque; then
-  echo "pp-masque-node 启动失败："
-  journalctl -u proxypilot-masque -n 30 --no-pager
-  exit 1
+# 旧版独立节点服务若存在则停掉，避免与内嵌节点抢 UDP 443
+if systemctl list-unit-files 2>/dev/null | grep -q '^proxypilot-masque\.service'; then
+  systemctl disable --now proxypilot-masque >/dev/null 2>&1 || true
 fi
-systemctl --no-pager --lines=5 status proxypilot-masque | head -8
-ss -lunp 2>/dev/null | grep -E ':` + strconv.Itoa(port) + `\b' || true
+
+# 异步重启 Agent：本任务本身就由 Agent 执行，同步重启会掐断任务回报
+nohup sh -c 'sleep 1; systemctl restart proxypilot-agent' >/dev/null 2>&1 &
+echo "VPN 节点配置已写入 $AGENT_DIR/vpn.json，证书已更新，Agent 将在 1 秒后重启"
 `
 }
 
-func shellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+// certCoversHost 判断 PEM 证书是否覆盖给定域名（精确匹配或通配 *.example.com）。
+func certCoversHost(certPEM, host string) bool {
+	block, _ := pem.Decode([]byte(certPEM))
+	if block == nil {
+		return false
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return false
+	}
+	host = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(host), "."))
+	if host == "" {
+		return false
+	}
+	if err := cert.VerifyHostname(host); err == nil {
+		return true
+	}
+	for _, name := range cert.DNSNames {
+		n := strings.ToLower(name)
+		if strings.HasPrefix(n, "*.") && strings.HasSuffix(host, n[1:]) {
+			// 通配只匹配一级
+			if strings.Count(host, ".") == strings.Count(n[1:], ".")+1 {
+				return true
+			}
+		}
+	}
+	return false
 }
-

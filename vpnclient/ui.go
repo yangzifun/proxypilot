@@ -565,9 +565,23 @@ func (s *uiServer) connect(nodeID int64) error {
 		if sni == "" {
 			sni = strings.Split(pick.Endpoint, ":")[0]
 		}
-		// 节点自签证书时自动跳过校验（等同 CLI 的 -insecure）；换成 ACME 证书后自动走严格校验。
+		// 证书校验策略：
+		//   selfsigned → 跳过校验（节点自签，无信任锚）
+		//   internal_ca → 自动拉取平台 CA（/api/vpn/ca.crt）并严格校验
+		//   acme        → 用系统根证书严格校验
 		skipVerify := cfg.Insecure
-		if strings.EqualFold(prof.TLS.Mode, "selfsigned") || strings.EqualFold(prof.TLS.Mode, "internal") {
+		tlsMode := strings.ToLower(strings.TrimSpace(prof.TLS.Mode))
+		switch {
+		case tlsMode == "internal_ca" || tlsMode == "internal":
+			if pemBytes, err := fetchPlatformCA(ctx, cfg.API); err != nil {
+				log.Printf("拉取平台 CA 失败，本次退化为跳过校验：%v", err)
+				skipVerify = true
+			} else {
+				caPEM = pemBytes
+				saveCACache(pemBytes)
+				log.Printf("已加载平台 CA（%d 字节），启用严格证书校验", len(pemBytes))
+			}
+		case tlsMode == "selfsigned" || tlsMode == "self_signed":
 			skipVerify = true
 			log.Printf("节点证书模式为 %s，本次连接跳过证书校验", prof.TLS.Mode)
 		}
