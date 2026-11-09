@@ -642,17 +642,22 @@ func (s *uiServer) connect(nodeID int64) error {
 		defer cleanupStream()
 		s.state.set(func(st *sessionState) { st.message = "隧道流已建立，正在接管系统网络…" })
 
+		// 解析 VPN 服务器地址：这些 IP 必须绕过隧道直连，否则会形成路由环
+		endpointIPs := resolveEndpointIPs(pick.Endpoint)
+		log.Printf("VPN 服务器地址解析：%v（原始 %s）", endpointIPs, pick.Endpoint)
+
 		tun, terr := StartTunnel(ctx, TunOptions{
 			Spec: TunSpec{
-				Name:     cfg.TunName,
-				IP:       prof.IP4,
-				CIDR:     cidr,
-				MTU:      prof.MTU,
-				Mode:     mode,
-				Endpoint:  pick.Endpoint,
-				Gateway:   gateway,
-				PrefixLen: prefixLen,
-				DNS:       tunDNS,
+				Name:        cfg.TunName,
+				IP:          prof.IP4,
+				CIDR:        cidr,
+				MTU:         prof.MTU,
+				Mode:        mode,
+				Endpoint:    pick.Endpoint,
+				EndpointIPs: endpointIPs,
+				Gateway:     gateway,
+				PrefixLen:   prefixLen,
+				DNS:         tunDNS,
 			},
 			Conn: pc,
 			OnStats: func(rx, tx int64) {

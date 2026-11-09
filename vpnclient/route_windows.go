@@ -61,13 +61,22 @@ func applyTun(s TunSpec, dev PacketDevice) (TunResult, error) {
 	_, _ = runWin("netsh", "interface", "ipv4", "set", "subinterface", dev.Name(),
 		fmt.Sprintf("mtu=%d", res.MTU), "store=active")
 
-	// full 模式：给 VPN 服务器加主机路由，避免隧道流量回绕
+	// 关键：先给 VPN 服务器自身加主机路由，绕开即将下发的 /1 全局路由。
+	// 否则 QUIC 发往节点的包会被送进隧道，形成环路（表现为 wsasendto 不可达 / 隧道中断）。
 	if res.Mode == TunModeFull {
-		if host := s.endpointHost(); host != "" && isIPv4(host) {
-			if gw := defaultGatewayWin(); gw != "" {
-				_, _ = runWin("route", "add", host, "mask", "255.255.255.255", gw, "metric", "1")
-				res.Routes = append(res.Routes, host+"/32(via "+gw+")")
+		realGW := defaultGatewayWin()
+		if realGW != "" {
+			for _, ip := range s.endpointIPs() {
+				_, _ = runWin("route", "delete", ip)
+				if out, err := runWin("route", "add", ip, "mask", "255.255.255.255", realGW, "metric", "1"); err != nil {
+					logWin("给服务器 %s 加主机路由失败：%v %s", ip, err, out)
+					continue
+				}
+				res.Routes = append(res.Routes, ip+"/32(via "+realGW+")")
+				logWin("已为 VPN 服务器 %s 添加直连主机路由（经 %s）", ip, realGW)
 			}
+		} else {
+			logWin("未能获取真实默认网关，跳过服务器主机路由（可能导致环路）")
 		}
 	}
 

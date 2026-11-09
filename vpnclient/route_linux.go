@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os/exec"
 	"strings"
 )
@@ -40,10 +41,13 @@ func applyTun(s TunSpec, dev PacketDevice) (TunResult, error) {
 
 	// full 模式：先给 VPN 服务器加主机路由，避免隧道流量回环
 	if res.Mode == TunModeFull {
-		if host := s.endpointHost(); host != "" {
-			gw := defaultGateway()
-			if gw != "" {
-				_, _ = run("ip", "route", "replace", host+"/32", "via", gw)
+		if gw := defaultGateway(); gw != "" {
+			for _, ip := range s.endpointIPs() {
+				if out, err := run("ip", "route", "replace", ip+"/32", "via", gw); err != nil {
+					log.Printf("给服务器 %s 加主机路由失败：%v %s", ip, err, out)
+					continue
+				}
+				res.Routes = append(res.Routes, ip+"/32(via "+gw+")")
 			}
 		}
 	}

@@ -38,6 +38,8 @@ type TunSpec struct {
 	Endpoint string // VPN 服务器地址（host:port），full 模式下加主机路由防止流量回环
 	// Gateway 是隧道对端（节点侧）地址，会写进网卡的默认网关。
 	Gateway string
+	// EndpointIPs 是 VPN 服务器已解析出的 IPv4 地址，必须绕过隧道直连。
+	EndpointIPs []string
 	// DNS 是要写入该网卡的 DNS 服务器列表（默认 1.1.1.1 与 8.8.8.8）。
 	DNS []string
 }
@@ -149,4 +151,53 @@ func (r TunResult) Summary() string {
 		return "未接管"
 	}
 	return fmt.Sprintf("%s（%s · 网关 %s · %s · MTU %d · 路由 %d 条）", r.Adapter, r.IP, r.Gateway, r.Mode, r.MTU, len(r.Routes))
+}
+// endpointIPs 返回需要直连的服务器 IPv4 地址：优先用调用方解析好的列表，
+// 否则从 Endpoint 里取（仅当它是 IP）。
+func (s TunSpec) endpointIPs() []string {
+	out := []string{}
+	seen := map[string]bool{}
+	for _, ip := range s.EndpointIPs {
+		ip = strings.TrimSpace(ip)
+		if v4 := net.ParseIP(ip); v4 != nil && v4.To4() != nil && !seen[ip] {
+			seen[ip] = true
+			out = append(out, ip)
+		}
+	}
+	if len(out) == 0 {
+		if h := s.endpointHost(); net.ParseIP(h) != nil && net.ParseIP(h).To4() != nil {
+			out = append(out, h)
+		}
+	}
+	return out
+}
+// resolveEndpointIPs 解析 VPN 服务器地址为 IPv4 列表（host 也可直接是 IP）。
+func resolveEndpointIPs(endpoint string) []string {
+	host := strings.TrimSpace(endpoint)
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	host = strings.Trim(host, "[]")
+	if host == "" {
+		return nil
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		if v4 := ip.To4(); v4 != nil {
+			return []string{v4.String()}
+		}
+		return nil
+	}
+	ips, err := net.LookupIP(host)
+	if err != nil {
+		return nil
+	}
+	out := []string{}
+	seen := map[string]bool{}
+	for _, ip := range ips {
+		if v4 := ip.To4(); v4 != nil && !seen[v4.String()] {
+			seen[v4.String()] = true
+			out = append(out, v4.String())
+		}
+	}
+	return out
 }
