@@ -7,37 +7,44 @@ import (
 	"strings"
 )
 
-// SSH 安全防护：开启后仅允许组网（Cloudflare WARP）网段访问 SSH。
+// SSH 安全防护：开启后仅允许内网网段访问 SSH。
+//
+// 放行清单（IPv4）：
+//   - 100.96.0.0/12  Cloudflare WARP / 组网管理网
+//   - 10.99.0.0/16   自建组网网段
+// IPv6 不再放行任何来源网段（只保留 ESTABLISHED,RELATED），需要时再扩。
 const (
-	sshGuardV4  = "100.96.0.0/12"
-	sshGuardV6  = "2606:4700:cf1:1000::/64"
-	sshGuardCmd = "PP_SSH_GUARD"
+	sshGuardCmd  = "PP_SSH_GUARD"
+	sshGuardV4s  = "100.96.0.0/12 10.99.0.0/16"
+	sshGuardV6s  = ""
 )
 
 // sshGuardEnableScript 开启防护并把规则持久化（重启后由 systemd 单元重新下发）。
 func sshGuardEnableScript() string {
 	return `set -u
-V4=` + sshGuardV4 + `
-V6=` + sshGuardV6 + `
-CHAIN=` + sshGuardCmd + `
+V4S="` + sshGuardV4s + `"
+V6S="` + sshGuardV6s + `"
+CHAIN="` + sshGuardCmd + `"
 PORTS=$(ss -tlnp 2>/dev/null | grep -E 'sshd|ssh' | awk '{print $4}' | sed 's/.*://' | sort -u | tr '\n' ' ')
 [ -z "$PORTS" ] && PORTS=22
 
 cat > /usr/local/sbin/pp-ssh-guard.sh <<'GUARD'
 #!/bin/sh
 set -u
-V4=` + sshGuardV4 + `
-V6=` + sshGuardV6 + `
-CHAIN=` + sshGuardCmd + `
+V4S="` + sshGuardV4s + `"
+V6S="` + sshGuardV6s + `"
+CHAIN="` + sshGuardCmd + `"
 PORTS=$(ss -tlnp 2>/dev/null | grep -E 'sshd|ssh' | awk '{print $4}' | sed 's/.*://' | sort -u | tr '\n' ' ')
 [ -z "$PORTS" ] && PORTS=22
 for BIN in iptables ip6tables; do
   command -v $BIN >/dev/null 2>&1 || continue
-  CIDR=$V4
-  [ "$BIN" = "ip6tables" ] && CIDR=$V6
+  CIDRS=$V4S
+  [ "$BIN" = "ip6tables" ] && CIDRS=$V6S
   $BIN -N $CHAIN 2>/dev/null
   $BIN -F $CHAIN 2>/dev/null
-  $BIN -A $CHAIN -s $CIDR -j ACCEPT
+  for CIDR in $CIDRS; do
+    $BIN -A $CHAIN -s $CIDR -j ACCEPT
+  done
   $BIN -A $CHAIN -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
   $BIN -A $CHAIN -j DROP
   for P in $PORTS; do
