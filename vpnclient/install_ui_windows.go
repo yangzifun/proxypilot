@@ -4,9 +4,9 @@ package main
 
 import (
 	"fmt"
-	"strings"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // installCopySelf 复制当前可执行文件到目标路径。
@@ -31,43 +31,54 @@ func installSetAutostart(exe string, enable bool) error {
 	return setAutostart(exe, enable)
 }
 
-// installCreateShortcuts 创建开始菜单（含文件夹）与桌面快捷方式，并校验 .lnk 确实生成。
-func installCreateShortcuts(exe string) error {
-	desktop := filepath.Join(os.Getenv("USERPROFILE"), "Desktop")
-	if _, err := os.Stat(desktop); err != nil {
-		// OneDrive 重定向时回落到注册表里的桌面路径
-		if out, qerr := runWin("powershell", "-NoProfile", "-Command",
-			"[Environment]::GetFolderPath('Desktop')"); qerr == nil {
-			if p := strings.TrimSpace(out); p != "" {
-				desktop = p
-			}
-		}
-	}
-	startMenu := filepath.Join(os.Getenv("APPDATA"), "Microsoft", "Windows", "Start Menu", "Programs")
-
-	script := fmt.Sprintf(`
-$ErrorActionPreference = 'Stop'
-$shell = New-Object -ComObject WScript.Shell
-function New-Lnk($path) {
-  $dir = Split-Path -Parent $path
-  if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
-  $l = $shell.CreateShortcut($path)
-  $l.TargetPath = %q
-  $l.WorkingDirectory = %q
-  $l.IconLocation = '%s,0'
-  $l.Description = 'ProxyPilot VPN 客户端'
-  $l.Save()
-  if (-not (Test-Path $path)) { throw "未生成 $path" }
-  Write-Output ("ok " + $path)
+// psQuote 生成 PowerShell 单引号字符串字面量（内部单引号写两次）。
+// 单引号字符串不解析反斜杠，路径可以原样写入。
+func psQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
 }
-New-Lnk %q
-New-Lnk %q
-`, exe, filepath.Dir(exe), exe,
-		filepath.Join(desktop, "ProxyPilot.lnk"),
-		filepath.Join(startMenu, "ProxyPilot", "ProxyPilot.lnk"))
+
+// shortcutPaths 返回期望生成的快捷方式路径。
+func shortcutPaths() []string {
+	desktop := filepath.Join(os.Getenv("USERPROFILE"), "Desktop", "ProxyPilot.lnk")
+	startMenu := filepath.Join(os.Getenv("APPDATA"), "Microsoft", "Windows", "Start Menu", "Programs", "ProxyPilot", "ProxyPilot.lnk")
+	return []string{desktop, startMenu}
+}
+
+// installCreateShortcuts 创建桌面与开始菜单图标，并逐个校验文件存在。
+//
+// 注意：脚本必须写成 UTF-8 BOM，否则 Windows PowerShell 5.1 会按 ANSI 解析，
+// 中文字符被破坏后导致 "字符串缺少终止符" 的语法错误。
+func installCreateShortcuts(exe string) error {
+	dir := filepath.Dir(exe)
+	// 脚本保持纯 ASCII，避免任何编码问题
+	script := strings.Join([]string{
+		"$ErrorActionPreference = 'Stop'",
+		"$shell = New-Object -ComObject WScript.Shell",
+		"function New-Lnk([string]$path) {",
+		"  $parent = Split-Path -Parent $path",
+		"  if (-not (Test-Path $parent)) { New-Item -ItemType Directory -Force -Path $parent | Out-Null }",
+		"  $l = $shell.CreateShortcut($path)",
+		"  $l.TargetPath = " + psQuote(exe),
+		"  $l.WorkingDirectory = " + psQuote(dir),
+		"  $l.IconLocation = " + psQuote(exe+",0"),
+		"  $l.Description = 'ProxyPilot VPN Client'",
+		"  $l.Save()",
+		"  if (-not (Test-Path $path)) { throw ('shortcut not created: ' + $path) }",
+		"  Write-Output ('ok ' + $path)",
+		"}",
+		"",
+	}, "\r\n")
+
+	var calls []string
+	for _, p := range shortcutPaths() {
+		calls = append(calls, "New-Lnk "+psQuote(p))
+	}
+	script += strings.Join(calls, "\r\n") + "\r\n"
 
 	ps := filepath.Join(os.TempDir(), "pp-shortcut.ps1")
-	if err := os.WriteFile(ps, []byte(script), 0o644); err != nil {
+	// UTF-8 BOM
+	content := append([]byte{0xEF, 0xBB, 0xBF}, []byte(script)...)
+	if err := os.WriteFile(ps, content, 0o644); err != nil {
 		return err
 	}
 	defer os.Remove(ps)
@@ -76,14 +87,18 @@ New-Lnk %q
 	if err != nil {
 		return fmt.Errorf("创建快捷方式失败：%v %s", err, strings.TrimSpace(out))
 	}
-	return nil
-}
 
-// shortcutPaths 返回期望生成的快捷方式路径，供安装结果展示与校验。
-func shortcutPaths() []string {
-	desktop := filepath.Join(os.Getenv("USERPROFILE"), "Desktop", "ProxyPilot.lnk")
-	startMenu := filepath.Join(os.Getenv("APPDATA"), "Microsoft", "Windows", "Start Menu", "Programs", "ProxyPilot", "ProxyPilot.lnk")
-	return []string{desktop, startMenu}
+	// Go 侧再校验一次，避免依赖脚本输出
+	missing := []string{}
+	for _, p := range shortcutPaths() {
+		if _, serr := os.Stat(p); serr != nil {
+			missing = append(missing, p)
+		}
+	}
+	if len(missing) == len(shortcutPaths()) {
+		return fmt.Errorf("快捷方式未生成：%v", missing)
+	}
+	return nil
 }
 
 // launchProgram 启动指定程序（安装完成后拉起已安装版本）。
