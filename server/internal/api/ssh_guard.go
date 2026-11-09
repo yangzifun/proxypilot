@@ -195,13 +195,15 @@ func (h *handlers) serverSSHGuardStatus(w http.ResponseWriter, r *http.Request) 
 
 var _ = context.Background
 
-// GET /api/local/ssh-guard —— 本机 SSH 防护状态（独立表 local_server）
+// GET /api/local/ssh-guard —— 本机不做 SSH 来源限制（控制服务器是运维入口）
 func (h *handlers) localSSHGuardStatus(w http.ResponseWriter, r *http.Request) {
 	var guard int64
 	_ = h.db.QueryRowContext(r.Context(), `SELECT COALESCE(ssh_guard,0) FROM local_server WHERE id = ?`, LocalServerID).Scan(&guard)
 	writeJSON(w, http.StatusOK, map[string]any{
-		"success": true, "enabled": guard == 1,
-		"allow": []string{"100.96.0.0/12", "10.99.0.0/16"},
+		"success":     true,
+		"enabled":     guard == 1,
+		"restricted":  false,
+		"reason":      "本机（控制服务器）不做 SSH 来源限制",
 	})
 }
 
@@ -213,6 +215,11 @@ func (h *handlers) localSSHGuard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	enabled, _ := body["enabled"].(bool)
+	if enabled {
+		// 本机是运维入口，禁止开启来源限制，避免把面板/SSH 一起锁死
+		writeError(w, http.StatusBadRequest, "本机（控制服务器）不做 SSH 来源限制；如需限制请用组网 VPN 或云厂商安全组")
+		return
+	}
 	script := sshGuardDisableScript()
 	verb := "关闭"
 	if enabled {

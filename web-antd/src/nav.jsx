@@ -125,7 +125,7 @@ export const PAGE_META = {
   },
   local: {
     title: '本机服务器',
-    subtitle: '控制服务器：SSH 防护、隧道、端口、进程与文件',
+    subtitle: '控制服务器：隧道、端口、进程、文件与终端',
     icon: <CloudServerOutlined />,
     group: '系统',
     accent: '#0ea5e9',

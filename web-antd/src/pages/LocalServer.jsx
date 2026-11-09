@@ -55,7 +55,7 @@ async function uploadFile(formData) {
   return data;
 }
 
-/** 本机（控制服务器）管理：状态、SSH 安全防护、cloudflared、端口、进程、上传、终端 */
+/** 本机（控制服务器）管理：状态、cloudflared、端口、进程、上传、终端（不做 SSH 限制） */
 export default function LocalServer() {
   const { message } = AntdApp.useApp();
   const [overview, setOverview] = useState(null);
@@ -86,26 +86,10 @@ export default function LocalServer() {
   const m = (overview && overview.metrics) || {};
   const services = m.services || {};
   const versions = m.versions || {};
-  const guardOn = !!(overview && Number(overview.ssh_guard) === 1);
   const cfState = String(services.cloudflared || 'not-installed');
   const warpState = String(services['warp-svc'] || 'not-installed');
   const warpVersion = String(versions['warp-svc'] || versions['warp'] || '');
   const cfVersion = String(versions.cloudflared || '');
-
-  const toggleGuard = async () => {
-    if (!overview) return;
-    const enable = !guardOn;
-    setBusy('guard');
-    try {
-      const res = await apiPost('local/ssh-guard', { enabled: enable });
-      message.success((res && res.message) || `已下发${enable ? '开启' : '关闭'} SSH 安全防护`);
-      setTimeout(() => load().catch(() => {}), 1500);
-    } catch (e) {
-      message.error(e.message || '操作失败');
-    } finally {
-      setBusy('');
-    }
-  };
 
   const updateWarp = async () => {
     if (!overview) return;
@@ -273,24 +257,10 @@ export default function LocalServer() {
         >
           <Space direction="vertical" size={12} style={{ width: '100%' }}>
             <Alert
-              type={guardOn ? 'success' : 'warning'}
+              type="info"
               showIcon
-              message={guardOn ? 'SSH 安全防护已开启' : 'SSH 安全防护未开启'}
-              description={
-                guardOn
-                  ? '仅允许 100.96.0.0/12、10.99.0.0/16 与 2606:4700:cf1:1000::/64 访问 SSH，其他来源将被丢弃。'
-                  : '当前所有 IP 均可尝试 SSH 登录；建议开启后仅允许组网网段访问。'
-              }
-              action={
-                <Popconfirm
-                  title={guardOn ? '关闭 SSH 安全防护？' : '开启 SSH 安全防护？'}
-                  okText={guardOn ? '关闭' : '开启'}
-                  okButtonProps={guardOn ? { danger: true } : undefined}
-                  onConfirm={toggleGuard}
-                >
-                  <Switch checked={guardOn} loading={busy === 'guard'} />
-                </Popconfirm>
-              }
+              message="本机（控制服务器）不做 SSH 来源限制"
+              description="控制服务器是运维入口，SSH 防护只作用于节点服务器；本机保持所有来源可登录，避免误操作锁死面板。"
             />
             <Row gutter={[12, 12]}>
               <Col xs={24} md={12}>
