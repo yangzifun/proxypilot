@@ -33,3 +33,11 @@ __pycache__/
 *.pyc
 web-antd/build.log
 web-antd/render.log
+
+# 发布产物：只保留脚本与校验清单入库，二进制（100MB+）不入库
+dist-release/*
+!dist-release/*.txt
+!dist-release/*.md
+!dist-release/*.sh
+!dist-release/*.cmd
+!dist-release/*.ps1
