@@ -92,6 +92,36 @@ func (h *handlers) shellStatus(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// GET /api/shell/precheck/{id} —— WebSocket 握手失败时浏览器读不到响应体，
+// 先做一次预检查，让前端能显示明确原因（未开启执行命令 / 接入方式不符等）。
+func (h *handlers) shellPrecheck(w http.ResponseWriter, r *http.Request) {
+	serverID := jsonInt(pathParam(r, "id"))
+	if serverID <= 0 {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": "服务器不存在"})
+		return
+	}
+	var linkMode string
+	var allowExec, exists int64
+	if err := h.db.QueryRowContext(r.Context(),
+		`SELECT COUNT(*), COALESCE(MAX(link_mode),'agent'), COALESCE(MAX(allow_exec),0) FROM servers WHERE id = ?`,
+		serverID).Scan(&exists, &linkMode, &allowExec); err != nil || exists == 0 {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": "服务器不存在"})
+		return
+	}
+	if linkMode != "agent" && linkMode != "local" {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": "该服务器不是 Agent / 本地接入方式"})
+		return
+	}
+	if allowExec != 1 {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok": false, "link_mode": linkMode,
+			"error": "该服务器未开启「允许执行命令」，请在服务器设置里打开后再打开终端",
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "link_mode": linkMode})
+}
+
 // GET /api/shell/browser/{id}?token=<JWT>
 func (h *handlers) shellBrowser(w http.ResponseWriter, r *http.Request) {
 	serverID := jsonInt(pathParam(r, "id"))

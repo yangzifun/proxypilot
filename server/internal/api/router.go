@@ -395,6 +395,7 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /api/servers/services", h.authed(authOpts{}, h.serversServices))
 	mux.HandleFunc("GET /api/servers/monitor", h.authed(authOpts{}, h.serversMonitor))
 	mux.HandleFunc("GET /api/shell/status", h.authed(authOpts{}, h.shellStatus))
+	mux.HandleFunc("GET /api/shell/precheck/{id}", h.authed(authOpts{}, h.shellPrecheck))
 	mux.HandleFunc("GET /api/shell/browser/{id}", h.shellBrowser)
 	mux.HandleFunc("GET /api/shell/agent/{id}", h.shellAgent)
 	mux.HandleFunc("GET /api/agent/wait", h.agentWait)

@@ -209,13 +209,22 @@ export default function RemoteShell({ server, open, onClose }) {
       }
     };
 
-    const connect = () => {
+    const connect = async () => {
       const token = getToken();
       if (!token) {
         setStatus('error');
         setMessage('登录已过期，请刷新页面重新登录');
         return;
       }
+      // WebSocket 握手失败时浏览器拿不到响应体，这里先查一次原因
+      try {
+        const pre = await api(`shell/precheck/${server.id}`);
+        if (pre && pre.ok === false) {
+          setStatus('error');
+          setMessage(pre.error || '该服务器当前不可打开终端');
+          return;
+        }
+      } catch (e) { /* 预检查失败不阻塞，走原有流程 */ }
       const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
       const url =
         `${proto}://${window.location.host}/api/shell/browser/${server.id}` +
@@ -281,7 +290,7 @@ export default function RemoteShell({ server, open, onClose }) {
       ws.onerror = () => {
         if (!aliveRef.current) return;
         setStatus('error');
-        setMessage('终端隧道连接失败：请确认面板在线且节点 Agent 已连接');
+        setMessage('终端连接失败：可能是未开启「允许执行命令」、Agent 离线或反向代理未放行 WebSocket');
       };
       ws.onclose = (ev) => {
         if (!aliveRef.current) return;

@@ -27,6 +27,9 @@ var localPrev = struct {
 }{}
 
 // EnsureLocalServer 启动时保证存在一条 link_mode=local 的服务器记录。
+//
+// 注意：这里不能重置 allow_exec —— 之前每次启动都写 0，导致本机服务器远程终端
+// 的 WebSocket 握手一直被 403 拒绝。
 func EnsureLocalServer(ctx context.Context, db *sql.DB, log interface{ Info(string, ...any) }) int64 {
 	if db == nil {
 		return 0
@@ -34,7 +37,7 @@ func EnsureLocalServer(ctx context.Context, db *sql.DB, log interface{ Info(stri
 	var id int64
 	err := db.QueryRowContext(ctx, `SELECT id FROM servers WHERE link_mode='local' ORDER BY id LIMIT 1`).Scan(&id)
 	if err == nil {
-		_, _ = db.ExecContext(ctx, `UPDATE servers SET enabled=1, allow_exec=0, agent_next_poll_sec=5, metrics_every=1, updated_at=? WHERE id=?`, nowMillis(), id)
+		_, _ = db.ExecContext(ctx, `UPDATE servers SET enabled=1, agent_next_poll_sec=5, metrics_every=1, updated_at=? WHERE id=?`, nowMillis(), id)
 		return id
 	}
 	res, err := db.ExecContext(ctx, `INSERT INTO servers
