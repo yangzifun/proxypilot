@@ -97,7 +97,7 @@ export default function LocalServer() {
     const enable = !guardOn;
     setBusy('guard');
     try {
-      const res = await apiPost(`servers/${overview.id}/ssh-guard`, { enabled: enable });
+      const res = await apiPost('local/ssh-guard', { enabled: enable });
       message.success((res && res.message) || `已下发${enable ? '开启' : '关闭'} SSH 安全防护`);
       setTimeout(() => load().catch(() => {}), 1500);
     } catch (e) {
@@ -614,7 +614,8 @@ export default function LocalServer() {
 
       {overview ? (
         <RemoteShell
-          server={{ id: overview.id, name: overview.name || '本机（控制服务器）', status: 'online', last_status: 'online' }}
+          local
+          server={{ name: overview.name || '本机（控制服务器）', status: 'online', last_status: 'online' }}
           open={termOpen}
           onClose={() => setTermOpen(false)}
         />

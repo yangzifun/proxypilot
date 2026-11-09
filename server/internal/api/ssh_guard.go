@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os/exec"
 	"strings"
+	"time"
 )
 
 // SSH 安全防护：开启后仅允许内网网段访问 SSH。
@@ -191,3 +193,49 @@ func (h *handlers) serverSSHGuardStatus(w http.ResponseWriter, r *http.Request) 
 }
 
 var _ = context.Background
+
+// GET /api/local/ssh-guard —— 本机 SSH 防护状态（独立表 local_server）
+func (h *handlers) localSSHGuardStatus(w http.ResponseWriter, r *http.Request) {
+	var guard int64
+	_ = h.db.QueryRowContext(r.Context(), `SELECT COALESCE(ssh_guard,0) FROM local_server WHERE id = ?`, LocalServerID).Scan(&guard)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success": true, "enabled": guard == 1,
+		"allow": []string{"100.96.0.0/12", "10.99.0.0/16"},
+	})
+}
+
+// POST /api/local/ssh-guard {enabled} —— 本机直接执行（不需要 Agent）
+func (h *handlers) localSSHGuard(w http.ResponseWriter, r *http.Request) {
+	var body map[string]any
+	if err := decodeJSON(w, r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "请求体无效")
+		return
+	}
+	enabled, _ := body["enabled"].(bool)
+	script := sshGuardDisableScript()
+	verb := "关闭"
+	if enabled {
+		script = sshGuardEnableScript()
+		verb = "开启"
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", script)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError,
+			fmt.Sprintf("%s本机 SSH 防护失败：%v %s", verb, err, strings.TrimSpace(string(out))))
+		return
+	}
+	state := int64(0)
+	if enabled {
+		state = 1
+	}
+	_, _ = h.db.ExecContext(r.Context(),
+		`UPDATE local_server SET ssh_guard = ?, updated_at = ? WHERE id = ?`, state, nowMillis(), LocalServerID)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success": true, "enabled": enabled,
+		"message": fmt.Sprintf("已%s本机 SSH 安全防护", verb),
+		"output":  strings.TrimSpace(string(out)),
+	})
+}

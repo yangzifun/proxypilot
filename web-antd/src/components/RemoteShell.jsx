@@ -101,7 +101,7 @@ function decodeUtf8(bytes) {
   }
 }
 
-export default function RemoteShell({ server, open, onClose }) {
+export default function RemoteShell({ server, open, onClose, local = false }) {
   const [status, setStatus] = useState('checking');
   const [message, setMessage] = useState('');
   const [nonce, setNonce] = useState(0);
@@ -216,19 +216,20 @@ export default function RemoteShell({ server, open, onClose }) {
         setMessage('登录已过期，请刷新页面重新登录');
         return;
       }
-      // WebSocket 握手失败时浏览器拿不到响应体，这里先查一次原因
-      try {
-        const pre = await api(`shell/precheck/${server.id}`);
-        if (pre && pre.ok === false) {
-          setStatus('error');
-          setMessage(pre.error || '该服务器当前不可打开终端');
-          return;
-        }
-      } catch (e) { /* 预检查失败不阻塞，走原有流程 */ }
+      // WebSocket 握手失败时浏览器拿不到响应体，这里先查一次原因（本机不需要）
+      if (!local) {
+        try {
+          const pre = await api(`shell/precheck/${server.id}`);
+          if (pre && pre.ok === false) {
+            setStatus('error');
+            setMessage(pre.error || '该服务器当前不可打开终端');
+            return;
+          }
+        } catch (e) { /* 预检查失败不阻塞，走原有流程 */ }
+      }
       const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
-      const url =
-        `${proto}://${window.location.host}/api/shell/browser/${server.id}` +
-        `?token=${encodeURIComponent(token)}`;
+      const path = local ? '/api/shell/local' : `/api/shell/browser/${server.id}`;
+      const url = `${proto}://${window.location.host}${path}?token=${encodeURIComponent(token)}`;
       setStatus('connecting');
       let ws;
       try {

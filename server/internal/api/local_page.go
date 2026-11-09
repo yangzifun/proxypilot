@@ -19,11 +19,14 @@ import (
 
 const localUploadDir = "/opt/proxypilot/uploads"
 
-// localServerID 返回本机服务器的 ID（不存在则 0）。
+// localServerID 返回本机记录主键（local_server 独立表，固定为 LocalServerID）。
 func (h *handlers) localServerID(r *http.Request) int64 {
 	var id int64
-	_ = h.db.QueryRowContext(r.Context(), `SELECT id FROM servers WHERE link_mode='local' ORDER BY id LIMIT 1`).Scan(&id)
-	return id
+	_ = h.db.QueryRowContext(r.Context(), `SELECT id FROM local_server WHERE id = ?`, LocalServerID).Scan(&id)
+	if id == 0 {
+		return 0
+	}
+	return LocalServerID
 }
 
 // GET /api/local/overview
@@ -34,10 +37,10 @@ func (h *handlers) localOverview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := queryRowsAsMaps(r.Context(), h.db,
-		`SELECT id, COALESCE(name,'') AS name, COALESCE(host,'') AS host, COALESCE(last_status,'') AS last_status,
-		        COALESCE(last_metrics,'') AS last_metrics, COALESCE(ssh_guard,0) AS ssh_guard,
-		        COALESCE(last_ip,'') AS last_ip, COALESCE(updated_at,0) AS updated_at
-		   FROM servers WHERE id = ?`, id)
+		`SELECT id, COALESCE(name,'') AS name, COALESCE(host,'') AS host, COALESCE(status,'') AS last_status,
+		        COALESCE(metrics,'') AS last_metrics, COALESCE(ssh_guard,0) AS ssh_guard,
+		        COALESCE(ip,'') AS last_ip, COALESCE(updated_at,0) AS updated_at
+		   FROM local_server WHERE id = ?`, id)
 	if err != nil || len(rows) == 0 {
 		writeError(w, http.StatusInternalServerError, "读取本机信息失败")
 		return

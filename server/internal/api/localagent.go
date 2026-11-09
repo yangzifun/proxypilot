@@ -26,32 +26,30 @@ var localPrev = struct {
 	diskRead, diskWrite uint64
 }{}
 
-// EnsureLocalServer 启动时保证存在一条 link_mode=local 的服务器记录。
+// LocalServerID 是本机（控制服务器）在独立表 local_server 中的固定主键。
 //
-// 注意：这里不能重置 allow_exec —— 之前每次启动都写 0，导致本机服务器远程终端
-// 的 WebSocket 握手一直被 403 拒绝。
+// 本机不再写入 servers 表：与节点服务器完全隔离（节点列表、批量任务、Agent 升级
+// 等都不应出现本机）。
+const LocalServerID int64 = 1
+
+// EnsureLocalServer 启动时保证 local_server 里有本机记录。
 func EnsureLocalServer(ctx context.Context, db *sql.DB, log interface{ Info(string, ...any) }) int64 {
 	if db == nil {
 		return 0
 	}
 	var id int64
-	err := db.QueryRowContext(ctx, `SELECT id FROM servers WHERE link_mode='local' ORDER BY id LIMIT 1`).Scan(&id)
+	err := db.QueryRowContext(ctx, `SELECT id FROM local_server WHERE id = ?`, LocalServerID).Scan(&id)
 	if err == nil {
-		_, _ = db.ExecContext(ctx, `UPDATE servers SET enabled=1, agent_next_poll_sec=5, metrics_every=1, updated_at=? WHERE id=?`, nowMillis(), id)
-		return id
+		_, _ = db.ExecContext(ctx, `UPDATE local_server SET status='online', updated_at=? WHERE id=?`, nowMillis(), LocalServerID)
+		return LocalServerID
 	}
-	res, err := db.ExecContext(ctx, `INSERT INTO servers
-	  (name, host, username, link_mode, enabled, allow_exec, metrics_every, agent_next_poll_sec,
-	   last_status, last_error, created_at, updated_at)
-	  VALUES ('本机（控制服务器）', '127.0.0.1', 'root', 'local', 1, 1, 1, 5, 'online', '', ?, ?)`,
-		nowMillis(), nowMillis())
-	if err != nil {
-		log.Info("创建本地服务器失败", "err", err)
+	if _, err := db.ExecContext(ctx, `INSERT INTO local_server (id, name, host, status, updated_at)
+	  VALUES (?, '本机（控制服务器）', '127.0.0.1', 'online', ?)`, LocalServerID, nowMillis()); err != nil {
+		log.Info("创建本机记录失败", "err", err)
 		return 0
 	}
-	id, _ = res.LastInsertId()
-	log.Info("已创建本地服务器（无需 Agent）", "id", id)
-	return id
+	log.Info("已创建本机记录（local_server 独立表）")
+	return LocalServerID
 }
 
 // StartLocalMonitor 每 5 秒采集一次本机指标，写入与 Agent 相同的数据结构。
@@ -359,14 +357,12 @@ func runLocalSample(ctx context.Context, db *sql.DB, serverID int64, log interfa
 	s := collectLocal()
 	b, _ := json.Marshal(s.summary)
 	now := nowMillis()
-	if _, err := db.ExecContext(ctx, `UPDATE servers SET last_status='online', last_error='',
-	  last_check_at=?, agent_last_seen=?, agent_last_poll_at=?, agent_version='local',
-	  agent_platform='local', os_info=?, last_metrics=?,
-	  last_ip=COALESCE(NULLIF(?, ''), last_ip),
-	  last_ip4=COALESCE(NULLIF(?, ''), last_ip4),
-	  last_ip6=COALESCE(NULLIF(?, ''), last_ip6),
-	  updated_at=? WHERE id=?`,
-		now, now, now, s.osInfo, string(b), s.ip, s.ip4, s.ip6, now, serverID); err != nil {
+	if _, err := db.ExecContext(ctx, `UPDATE local_server SET status='online', os_info=?, metrics=?,
+	  ip=COALESCE(NULLIF(?, ''), ip),
+	  ip4=COALESCE(NULLIF(?, ''), ip4),
+	  ip6=COALESCE(NULLIF(?, ''), ip6),
+	  checked_at=?, updated_at=? WHERE id=?`,
+		s.osInfo, string(b), s.ip, s.ip4, s.ip6, now, now, LocalServerID); err != nil {
 		log.Info("本地指标更新失败", "err", err)
 		return
 	}
@@ -379,7 +375,7 @@ func runLocalSample(ctx context.Context, db *sql.DB, serverID int64, log interfa
 	   disk_read_bytes, disk_write_bytes, disk_read_rate, disk_write_rate,
 	   conn_total, conn_established, conn_timewait, proc_total)
 	  VALUES (?, 'online', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
-		serverID,
+		localMetricsServerID,
 		f(jsonNum(s.summary["load1"])), f(jsonNum(s.summary["load5"])), f(jsonNum(s.summary["load15"])),
 		f(jsonNum(s.summary["cpuPercent"])), f(jsonNum(s.summary["memPercent"])),
 		jsonInt(s.summary["memUsedMb"]), jsonInt(s.summary["memTotalMb"]),
@@ -393,6 +389,10 @@ func runLocalSample(ctx context.Context, db *sql.DB, serverID int64, log interfa
 		log.Info("本地监控采样写入失败", "err", err)
 	}
 }
+
+// localMetricsServerID 是本机历史采样的占位 server_id：
+// servers.id 从 1 开始，用 0 保证永不与节点冲突。
+const localMetricsServerID int64 = 0
 
 func f(v float64) float64 { return v }
 
