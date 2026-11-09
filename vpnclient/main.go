@@ -31,7 +31,7 @@ import (
 )
 
 // Version 是 VPN 客户端版本（V1.x）。
-const Version = "1.2"
+const Version = "1.3"
 
 var caPEM []byte
 
@@ -411,6 +411,13 @@ func meshDataPlane(ctx context.Context, endpoints []string, sni, token, localIP,
 		if mode == "" {
 			mode = TunModeMesh
 		}
+		pc, cleanupStream, serr := openTunnelStream(ctx, ep, sni, token, insecure)
+		if serr != nil {
+			_ = conn.CloseWithError(0, "stream-failed")
+			lastErr = serr
+			log.Printf("建立隧道流失败（%s）：%v", ep, serr)
+			continue
+		}
 		tun, perr := StartTunnel(ctx, TunOptions{
 			Spec: TunSpec{
 				Name:     tunName,
@@ -420,8 +427,9 @@ func meshDataPlane(ctx context.Context, endpoints []string, sni, token, localIP,
 				Mode:     mode,
 				Endpoint: ep,
 			},
-			Conn: conn,
+			Conn: pc,
 		})
+		_ = cleanupStream
 		if perr != nil {
 			_ = conn.CloseWithError(0, "tun-failed")
 			lastErr = perr

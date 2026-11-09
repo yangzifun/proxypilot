@@ -575,6 +575,7 @@ func (s *uiServer) connect(nodeID int64) error {
 			log.Printf("节点证书模式为 %s，本次连接跳过证书校验", prof.TLS.Mode)
 		}
 		assigned, conn, err := authHTTP3(ctx, pick.Endpoint, sni, prof.Token, skipVerify)
+		_ = conn // 仅用于鉴权；数据面走可靠流
 		if err != nil {
 			s.fail(cancel, "HTTP/3 鉴权失败", err)
 			return
@@ -586,19 +587,12 @@ func (s *uiServer) connect(nodeID int64) error {
 		})
 		log.Printf("HTTP/3 鉴权成功：节点分配 %s（SNI=%s）", assigned, sni)
 
-		probeCtx, probeCancel := context.WithTimeout(ctx, 12*time.Second)
-		_, perr := dnsProbe(probeCtx, conn, net.ParseIP(prof.IP4).To4(), cfg.DNSAddr)
-		probeCancel()
-		if perr != nil {
-			s.fail(cancel, "DNS 探测失败", perr)
-			return
-		}
 		s.state.set(func(st *sessionState) {
 			st.probeOK = true
-			st.probeInfo = "DNS 探测通过"
-			st.message = "数据面已通，正在接管系统网络…"
+			st.probeInfo = "鉴权通过"
+			st.message = "鉴权通过，正在建立隧道…"
 		})
-		log.Printf("数据面探测通过，开始接管系统网络（%s）", cfg.DNSAddr)
+		log.Printf("HTTP/3 鉴权通过，开始建立可靠隧道（固定 DNS=%s）", cfg.DNSAddr)
 
 		// ---- 接管系统网络：创建虚拟网卡 + 配置地址 + 下发路由 ----
 		mode := TunMode(cfg.TunMode)
@@ -640,6 +634,14 @@ func (s *uiServer) connect(nodeID int64) error {
 		// 网卡 DNS 固定 1.1.1.1 与 8.8.8.8
 		tunDNS := []string{"1.1.1.1", "8.8.8.8"}
 		log.Printf("隧道参数：地址=%s 网关=%s 网段=%s DNS=%v", prof.IP4, gateway, cidr, tunDNS)
+		pc, cleanupStream, serr := openTunnelStream(ctx, pick.Endpoint, sni, prof.Token, skipVerify)
+		if serr != nil {
+			s.fail(cancel, "建立隧道流失败", serr)
+			return
+		}
+		defer cleanupStream()
+		s.state.set(func(st *sessionState) { st.message = "隧道流已建立，正在接管系统网络…" })
+
 		tun, terr := StartTunnel(ctx, TunOptions{
 			Spec: TunSpec{
 				Name:     cfg.TunName,
@@ -652,7 +654,7 @@ func (s *uiServer) connect(nodeID int64) error {
 				PrefixLen: prefixLen,
 				DNS:       tunDNS,
 			},
-			Conn: conn,
+			Conn: pc,
 			OnStats: func(rx, tx int64) {
 				s.state.set(func(st *sessionState) { st.rx, st.tx = uint64(rx), uint64(tx) })
 			},

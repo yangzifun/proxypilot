@@ -39,6 +39,9 @@ type session struct {
 	device  string
 	grantID int64
 	conn    datagramConn
+	// send / closeFn 由具体传输（DATAGRAM 或可靠流）注入
+	send    func([]byte) error
+	closeFn func()
 	started time.Time
 	tx      uint64
 	rx      uint64
@@ -163,6 +166,10 @@ func (s *Server) Close() {
 
 // ServeHTTP 处理客户端的 HTTP/3 鉴权请求。
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/tunnel" {
+		s.serveStream(w, r)
+		return
+	}
 	if r.Method != http.MethodGet || r.URL.Path != "/" {
 		http.NotFound(w, r)
 		return
@@ -197,6 +204,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		jti: claims.JTI, ip: ip, device: claims.Subject, grantID: claims.GrantID,
 		conn: conn, started: time.Now(),
 	}
+	sess.send = func(p []byte) error { return sess.conn.SendDatagram(p) }
+	sess.closeFn = func() { _ = sess.conn.CloseWithError(0, "session closed") }
 	if !s.register(sess) {
 		http.Error(w, "ip already in use", http.StatusConflict)
 		return
@@ -248,7 +257,11 @@ func (s *Server) lookup(ip net.IP) *session {
 func (s *Server) readSession(sess *session) {
 	defer func() {
 		s.unregister(sess)
-		_ = sess.conn.CloseWithError(0, "session closed")
+		if sess.closeFn != nil {
+			sess.closeFn()
+		} else if sess.conn != nil {
+			_ = sess.conn.CloseWithError(0, "session closed")
+		}
 		s.log.Info("会话结束", "ip", sess.ip, "device", sess.device,
 			"duration", time.Since(sess.started).Round(time.Second))
 	}()
@@ -323,7 +336,10 @@ func (s *Server) tunLoop() {
 		if sess == nil {
 			continue
 		}
-		if err := sess.conn.SendDatagram(pkt); err != nil {
+		if sess.send == nil {
+			continue
+		}
+		if err := sess.send(pkt); err != nil {
 			continue
 		}
 		sess.rx++

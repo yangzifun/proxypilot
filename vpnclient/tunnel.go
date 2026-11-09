@@ -10,14 +10,13 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/quic-go/quic-go"
 	"time"
 )
 
 // Tunnel 是一次已建立的隧道：虚拟网卡 + QUIC 数据面 + 路由接管。
 type Tunnel struct {
 	dev    PacketDevice
-	conn   datagramConn
+	conn   packetConn
 	res    TunResult
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -30,17 +29,12 @@ type Tunnel struct {
 	lastErr atomic.Value // string
 }
 
-// datagramConn 抽象 quic.Conn 里用到的方法，便于测试替换。
-type datagramConn interface {
-	SendDatagram([]byte) error
-	ReceiveDatagram(context.Context) ([]byte, error)
-	CloseWithError(code quic.ApplicationErrorCode, msg string) error
-}
+// Tunnel 数据面使用 packetConn（可靠流实现见 stream_tunnel.go）。
 
 // TunOptions 是建立隧道所需的参数。
 type TunOptions struct {
 	Spec    TunSpec
-	Conn    datagramConn
+	Conn    packetConn
 	OnStats func(rx, tx int64) // 可选：统计回调（每秒）
 }
 
@@ -99,7 +93,7 @@ func (t *Tunnel) pumpUp() {
 		if len(pkt) == 0 {
 			continue
 		}
-		if err := t.conn.SendDatagram(pkt); err != nil {
+		if err := t.conn.SendPacket(pkt); err != nil {
 			if t.ctx.Err() == nil {
 				t.fail(fmt.Sprintf("发送失败：%v", err))
 			}
@@ -117,7 +111,7 @@ func (t *Tunnel) pumpDown() {
 		if t.ctx.Err() != nil {
 			return
 		}
-		data, err := t.conn.ReceiveDatagram(t.ctx)
+		data, err := t.conn.RecvPacket()
 		if err != nil {
 			if t.ctx.Err() == nil && !errors.Is(err, context.Canceled) {
 				t.fail(fmt.Sprintf("接收失败：%v", err))

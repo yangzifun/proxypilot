@@ -115,7 +115,9 @@ func newTestServer(t *testing.T) (*Server, *fakeTUN) {
 
 func registerSession(srv *Server, ip string, conn *fakeConn) {
 	srv.mu.Lock()
-	srv.sessions[ip] = &session{ip: net.ParseIP(ip).To4(), conn: conn, started: time.Now()}
+	sess := &session{ip: net.ParseIP(ip).To4(), started: time.Now()}
+	sess.send = conn.SendDatagram
+	srv.sessions[ip] = sess
 	srv.mu.Unlock()
 }
 
