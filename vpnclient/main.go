@@ -31,7 +31,7 @@ import (
 )
 
 // Version 是 VPN 客户端版本（V1.x）。
-const Version = "1.9"
+const Version = "2.0"
 
 var caPEM []byte
 
