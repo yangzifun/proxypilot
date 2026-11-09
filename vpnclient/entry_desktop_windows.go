@@ -36,9 +36,15 @@ func main() {
 	flag.Parse()
 	startHidden := *background || *trayOnly
 
-	// UI 版本「先安装后运行」：未安装时由前端安装向导引导完成安装
-	// （复制程序 / 装 Wintun 驱动 / 注册网卡 / 开机自启 / 快捷方式），
-	// 完成后可一键启动已安装版本。因此这里不再用弹窗拦截启动。
+	if installerBuild {
+		// 这是安装程序：只做安装，永远不进主界面
+		runInstallerApp()
+		return
+	}
+	// 主程序：必须已安装才能使用
+	if !ensureInstalledForApp() {
+		return
+	}
 
 	// 允许与安装/卸载/自检共用同一个 exe：这些参数已在 CLI 入口处理，
 	// 桌面版这里只需忽略未知参数带来的误判。
@@ -85,7 +91,7 @@ func main() {
 	})
 
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title:     "ProxyPilot",
+		Title:     "ProxyPilot v" + Version,
 		Width:     420,
 		Height:    780,
 		MinWidth:  380,
@@ -277,4 +283,66 @@ func samePath(a, b string) bool {
 		return false
 	}
 	return strings.EqualFold(filepath.Clean(a), filepath.Clean(b))
+}
+
+// runInstallerApp 安装程序入口：启动本地控制台并强制显示安装向导。
+func runInstallerApp() {
+	addr, err := freeLocalAddr()
+	if err != nil {
+		log.Fatalf("找不到可用端口：%v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		defaults := uiSettings{API: "https://proxypilot.yangzifun.org", DNSAddr: defaultDNSAddr}
+		if err := runUI(ctx, addr, defaults, false, false); err != nil {
+			log.Printf("本地控制台退出：%v", err)
+		}
+	}()
+
+	for i := 0; i < 60; i++ {
+		c, derr := net.DialTimeout("tcp", addr, 100*time.Millisecond)
+		if derr == nil {
+			_ = c.Close()
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	app := application.New(application.Options{
+		Name:        "ProxyPilot 安装程序",
+		Description: "安装 ProxyPilot VPN 客户端",
+		Icon:        appIcon,
+		Windows: application.WindowsOptions{
+			WebviewUserDataPath: webviewDataDir(),
+		},
+		OnShutdown: func() { cancel() },
+	})
+
+	app.Window.NewWithOptions(application.WebviewWindowOptions{
+		Title:     "ProxyPilot v" + Version + " 安装程序",
+		Width:     520,
+		Height:    760,
+		MinWidth:  480,
+		MinHeight: 620,
+		URL:       "http://" + addr + "/?installer=1",
+	})
+
+	if err := app.Run(); err != nil {
+		log.Fatalf("安装程序启动失败：%v", err)
+	}
+}
+
+// ensureInstalledForApp 主程序必须已安装：未安装时提示运行安装包。
+func ensureInstalledForApp() bool {
+	if IsInstalled() && samePath(selfPath(), InstalledExePath()) {
+		return true
+	}
+	messageBox("ProxyPilot v"+Version,
+		"未检测到已安装的 ProxyPilot。\n\n"+
+			"请先运行安装程序（ProxyPilot-"+Version+"-windows-amd64.exe）完成安装，\n"+
+			"安装后从开始菜单或桌面快捷方式启动客户端。",
+		mbOK|mbIconInfo)
+	return false
 }

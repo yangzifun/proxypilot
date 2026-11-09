@@ -269,7 +269,7 @@ function render(){
   else if(st==='connected' && state.adapter){ n.textContent = '已接管：' + state.adapter + '（全局流量）'; }
   else { n.textContent = ''; }
 
-  $('footVer').textContent = 'ProxyPilot ' + (state.version||'');
+  $('footVer').textContent = 'ProxyPilot v' + (state.version||'');
   $('footAPI').textContent = state.api ? state.api.replace(/^https?:\/\//,'') : '';
 
   const logged = !!state.logged_in;
@@ -431,7 +431,10 @@ async function initInstaller(){
   try{
     const r = await fetch('/api/install/status',{cache:'no-store'});
     const st = await r.json();
-    if(st.installed){ showInstaller(false); return; }
+    // 安装程序构建（URL 带 installer=1）始终显示向导，即使是重装/修复
+    const forceInstaller = new URLSearchParams(location.search).get('installer') === '1';
+    if(st.installed && !forceInstaller){ showInstaller(false); return; }
+    if(forceInstaller){ $('instTitle').textContent = '安装 ProxyPilot v' + (st.version||''); }
     showInstaller(true);
     $('instDir').value = st.default_dir || '';
     $('instSub').textContent = st.is_admin

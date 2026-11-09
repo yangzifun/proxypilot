@@ -24,7 +24,9 @@ $mainGo  = Join-Path $root 'server/cmd/proxypilot/main.go'
 $panelVer = (Select-String -Path $mainGo -Pattern 'var version = "([^"]+)"').Matches[0].Groups[1].Value
 $agentGo  = Join-Path $root 'agent/internal/agent/agent.go'
 $agentVer = (Select-String -Path $agentGo -Pattern 'const Version = "([^"]+)"').Matches[0].Groups[1].Value
-Step "版本：面板 $panelVer / Agent $agentVer"
+$clientGo = Join-Path $root 'vpnclient/main.go'
+$clientVer = (Select-String -Path $clientGo -Pattern 'const Version = "([^"]+)"').Matches[0].Groups[1].Value
+Step "版本：面板 $panelVer / Agent $agentVer / 客户端 $clientVer"
 
 if (-not (Test-Path $out)) { New-Item -ItemType Directory -Path $out | Out-Null }
 
@@ -77,17 +79,28 @@ $env:GOFLAGS = ''
 
 Step 'VPN 客户端'
 $vcDir = Join-Path $root 'vpnclient'
-# Windows GUI：Wails v3，无控制台窗口，清单要求管理员
+# Windows 主程序（Wails v3，无控制台窗口，清单要求管理员）
+$appExe = Join-Path $out "ProxyPilot-App-$clientVer-windows-amd64.exe"
 Build-Go -Dir $vcDir -Goos windows -Goarch amd64 -Tags @('desktop') `
-    -LdFlags '-H windowsgui -s -w' -Out (Join-Path $out "ProxyPilot-$panelVer-windows-amd64.exe")
+    -LdFlags '-H windowsgui -s -w' -Out $appExe
+
+# Windows 安装程序：把主程序嵌进安装包，运行时只安装、不进主界面
+$embedPath = Join-Path $vcDir 'assets/ProxyPilotApp.exe'
+Copy-Item $appExe $embedPath -Force
+try {
+    Build-Go -Dir $vcDir -Goos windows -Goarch amd64 -Tags @('desktop', 'installer') `
+        -LdFlags '-H windowsgui -s -w' -Out (Join-Path $out "ProxyPilot-$clientVer-windows-amd64.exe")
+} finally {
+    Remove-Item $embedPath -Force -ErrorAction SilentlyContinue
+}
 # Windows CLI：可运行 -tun-selftest 等自检
 Build-Go -Dir $vcDir -Goos windows -Goarch amd64 `
-    -Out (Join-Path $out "proxypilot-vpn-$panelVer-windows-amd64-cli.exe")
+    -Out (Join-Path $out "proxypilot-vpn-$clientVer-windows-amd64-cli.exe")
 # Linux / macOS
-Build-Go -Dir $vcDir -Goos linux  -Goarch amd64 -Out (Join-Path $out "proxypilot-vpn-$panelVer-linux-amd64")
-Build-Go -Dir $vcDir -Goos linux  -Goarch arm64 -Out (Join-Path $out "proxypilot-vpn-$panelVer-linux-arm64")
-Build-Go -Dir $vcDir -Goos darwin -Goarch amd64 -Out (Join-Path $out "proxypilot-vpn-$panelVer-darwin-amd64")
-Build-Go -Dir $vcDir -Goos darwin -Goarch arm64 -Out (Join-Path $out "proxypilot-vpn-$panelVer-darwin-arm64")
+Build-Go -Dir $vcDir -Goos linux  -Goarch amd64 -Out (Join-Path $out "proxypilot-vpn-$clientVer-linux-amd64")
+Build-Go -Dir $vcDir -Goos linux  -Goarch arm64 -Out (Join-Path $out "proxypilot-vpn-$clientVer-linux-arm64")
+Build-Go -Dir $vcDir -Goos darwin -Goarch amd64 -Out (Join-Path $out "proxypilot-vpn-$clientVer-darwin-amd64")
+Build-Go -Dir $vcDir -Goos darwin -Goarch arm64 -Out (Join-Path $out "proxypilot-vpn-$clientVer-darwin-arm64")
 
 Step '脚本与文档'
 Copy-Item (Join-Path $root 'deploy/install.sh')     $out -Force
@@ -102,7 +115,7 @@ $winDir = Join-Path $root 'deploy/windows'
 foreach ($f in @('install.cmd', 'install.ps1', 'uninstall.cmd', 'uninstall.ps1')) {
     $dst = Join-Path $out $f
     $txt = [System.IO.File]::ReadAllText((Join-Path $winDir $f), [System.Text.Encoding]::UTF8)
-    $txt = $txt.Replace('__VER__', $panelVer)
+    $txt = $txt.Replace('__CLIENTVER__', $clientVer)
     $enc = if ($f -like '*.ps1') { New-Object System.Text.UTF8Encoding($true) } else { [System.Text.Encoding]::ASCII }
     [System.IO.File]::WriteAllText($dst, $txt, $enc)
 }
@@ -121,6 +134,7 @@ $manifest = @()
 $manifest += "ProxyPilot 发布包"
 $manifest += "面板版本 : $panelVer"
 $manifest += "Agent    : $agentVer"
+$manifest += "客户端   : $clientVer"
 $manifest += "构建时间 : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
 $manifest += ""
 $manifest += "文件清单："
@@ -131,10 +145,10 @@ $manifest += ""
 $manifest += "安装："
 $manifest += "  服务端    sudo ./install.sh --binary ./proxypilot-$panelVer-linux-amd64"
 $manifest += "  升级      sudo ./upgrade.sh --binary ./proxypilot-$panelVer-linux-amd64"
-$manifest += "  Windows   双击 install.cmd，或直接运行 ProxyPilot-$panelVer-windows-amd64.exe"
-$manifest += "            未安装时会进入安装向导：选择目录/开机自启/快捷方式 → 开始安装 → 立即启动"
-$manifest += "  卸载      double-click uninstall.cmd 或 设置 → 应用 → ProxyPilot VPN"
-$manifest += "  客户端自检 ProxyPilot-$panelVer-windows-amd64-cli.exe -tun-selftest"
+$manifest += "  Windows   双击 ProxyPilot-$clientVer-windows-amd64.exe（安装程序，只安装不运行）"
+$manifest += "            安装后从开始菜单/桌面启动 ProxyPilot（客户端 v$clientVer）"
+$manifest += "            卸载：设置 → 应用 → ProxyPilot VPN，或运行 uninstall.cmd"
+$manifest += "  客户端自检 proxypilot-vpn-$clientVer-windows-amd64-cli.exe -tun-selftest"
 [System.IO.File]::WriteAllText((Join-Path $out 'MANIFEST.txt'), ($manifest -join "`n") + "`n", (New-Object System.Text.UTF8Encoding($false)))
 
 Step '完成'

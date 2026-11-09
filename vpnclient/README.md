@@ -10,38 +10,32 @@
 | Linux | `/dev/net/tun` + `ip` | root 或 `CAP_NET_ADMIN` | 内核自带 |
 | macOS | `utun` + `route` | root（或用 sudo 启动） | 系统自带 |
 
-## Windows 安装（先安装，再使用）
+## Windows 安装（安装程序 + 客户端，两个文件）
 
-> **UI 版本先安装后运行**：未安装时双击 `ProxyPilot-V35.2-windows-amd64.exe` 会直接进入
-> **安装向导**（不再是弹窗），可填写安装目录、勾选「开机后台运行 / 创建快捷方式」，
-> 点「开始安装」后逐条显示进度：检查权限 → 复制程序 → 释放 Wintun 驱动 →
-> 注册虚拟网卡 → 写卸载登记 → 开机自启 → 创建快捷方式，完成后点「立即启动」。
-> 安装失败会标红对应步骤并给出原因，可直接「重试安装」。
+客户端版本 **v1.0**，与面板/Agent 版本相互独立。
 
+| 文件 | 作用 |
+|---|---|
+| `ProxyPilot-1.0-windows-amd64.exe` | **安装程序**（29.9 MB，内嵌客户端）。每次运行只做安装/修复，不进入主界面 |
+| `ProxyPilot-App-1.0-windows-amd64.exe` | 客户端主程序（14.98 MB）。安装后由安装程序写入 `%LOCALAPPDATA%\Programs\ProxyPilot\ProxyPilot.exe` |
 
-Windows 版**必须先安装**：安装阶段才会释放 Wintun 驱动并**注册虚拟网卡**，之后连接时直接复用。
+### 行为约定
 
-```
-dist-release/
-├── ProxyPilot-V35.2-windows-amd64.exe     ← 主程序（GUI，清单要求管理员）
-├── install.cmd                            ← 双击安装（自动提权）
-├── install.ps1
-├── uninstall.cmd                          ← 双击卸载
-└── uninstall.ps1
-```
+- **安装程序**：窗口标题 `ProxyPilot v1.0 安装程序`，始终显示安装向导（已安装时即为修复/重装）
+- **主程序**：必须以已安装路径运行；若在别处直接运行，会提示「未检测到已安装的 ProxyPilot，请先运行安装程序」后退出
+- 版本号三处可见：窗口标题、界面页脚（`ProxyPilot v1.0`）、exe 属性 → 详细信息（`1.0.0.0`）
 
-安装流程：
+### 安装向导
 
-1. 双击 `install.cmd`（UAC 提权）
-2. 复制程序到 `%LOCALAPPDATA%\Programs\ProxyPilot`
-3. 调用 `ProxyPilot.exe -install`：
-   - 把内置 `wintun.dll` 释放到安装目录
-   - 创建（或复用）名为 **ProxyPilot VPN** 的虚拟网卡 —— 首次会安装 Wintun 驱动
-   - 在 `HKLM\...\Uninstall\ProxyPilot` 写入卸载信息
-4. 脚本用 `Get-NetAdapter` 校验网卡已存在
-5. 创建开始菜单与桌面快捷方式
+安装程序启动后：
 
-安装完成后，「网络连接」里就能看到 **ProxyPilot VPN** 适配器（未连接时处于断开状态）。
+1. 选择安装位置（默认 `%LOCALAPPDATA%\Programs\ProxyPilot`）
+2. 勾选「开机后台运行（托盘常驻）」「创建开始菜单与桌面快捷方式」
+3. 点「开始安装」，分步执行：检查权限 → 写入主程序 → 释放 Wintun 驱动 →
+   注册虚拟网卡 → 写卸载登记 → 开机自启 → 创建快捷方式
+4. 完成后点「立即启动」打开已安装客户端
+
+失败会标红对应步骤并给出原因，可直接「重试安装」。
 
 ### 后台运行与系统托盘
 

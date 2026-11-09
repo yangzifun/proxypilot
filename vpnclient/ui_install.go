@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
 	"sync"
 	"time"
 )
@@ -182,11 +181,11 @@ func runInstallWizard(dir string, autostart, shortcuts bool) {
 	}
 	installer.setStep("check", true, "")
 
-	// 2) 复制程序
-	step("copy", "复制程序到安装目录")
-	dst := filepath.Join(dir, "ProxyPilot.exe")
-	if err := installCopySelf(dst); err != nil {
-		fail("copy", "复制程序失败："+err.Error())
+	// 2) 写入客户端主程序
+	step("copy", "写入客户端主程序")
+	dst, err := installAppBinary(dir)
+	if err != nil {
+		fail("copy", err.Error())
 		return
 	}
 	installer.setStep("copy", true, "")

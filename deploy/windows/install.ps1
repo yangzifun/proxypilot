@@ -18,7 +18,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$exeName = 'ProxyPilot-__VER__-windows-amd64.exe'
+$exeName = 'ProxyPilot-App-__CLIENTVER__-windows-amd64.exe'
 $source  = Join-Path $PSScriptRoot $exeName
 if (-not (Test-Path $source)) {
     Write-Host "找不到 $exeName（请把本脚本和 exe 放在同一目录）" -ForegroundColor Red
