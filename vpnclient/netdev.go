@@ -124,15 +124,17 @@ func (s TunSpec) gateway() string {
 var fullModeRoutes = []string{"0.0.0.0/1", "128.0.0.0/1"}
 
 // planRoutes 计算需要下发的路由列表（不含主机路由）。
+//
+// 全局模式（客户端默认）只接管公网：下发 0.0.0.0/1 与 128.0.0.0/1，
+// 不再附带组网网段 —— 客户端不显示也不访问组网网络。
 func planRoutes(s TunSpec) []string {
-	out := []string{}
-	if net := s.meshNetwork(); net != "" {
-		out = append(out, net)
+	if s.Mode == TunModeMesh {
+		if net := s.meshNetwork(); net != "" {
+			return []string{net}
+		}
+		return nil
 	}
-	if s.Mode == TunModeFull {
-		out = append(out, fullModeRoutes...)
-	}
-	return out
+	return append([]string{}, fullModeRoutes...)
 }
 
 // TunResult 是一次接管的结果，供界面展示与断开时清理。

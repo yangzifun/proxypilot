@@ -168,7 +168,6 @@ type sessionState struct {
 	nodeName string
 	nodeHost string
 	ip4 string
-	meshCIDR string
 	sni string
 	mtu int
 	sessionID int64
@@ -211,7 +210,6 @@ func (s *sessionState) snapshot() map[string]any {
 		"node_name":  s.nodeName,
 		"node_host":  s.nodeHost,
 		"ip4":        s.ip4,
-		"mesh_cidr":  s.meshCIDR,
 		"sni":        s.sni,
 		"mtu":        s.mtu,
 		"session_id": s.sessionID,
@@ -559,7 +557,6 @@ func (s *uiServer) connect(nodeID int64) error {
 			st.sessionID = prof.SessionID
 			st.ip4 = prof.IP4
 			st.mtu = prof.MTU
-			st.meshCIDR = prof.MeshCIDR
 			st.message = fmt.Sprintf("会话 %d 已建立，正在 HTTP/3 鉴权…", prof.SessionID)
 		})
 		log.Printf("门户会话建立：session=%d ip4=%s mtu=%d", prof.SessionID, prof.IP4, prof.MTU)
@@ -599,16 +596,13 @@ func (s *uiServer) connect(nodeID int64) error {
 		if mode != TunModeFull {
 			mode = TunModeMesh
 		}
-		// 组网网段由节点端下发（connect 响应），客户端不再自行填写
-		cidr := strings.TrimSpace(prof.MeshCIDR)
+		// 客户端不访问组网网段：隧道只接管公网，网卡网段取节点分配的客户端子网
+		cidr := strings.TrimSpace(prof.ClientCIDR)
 		if cidr == "" {
-			cidr = strings.TrimSpace(cfg.MeshCIDR)
+			cidr = strings.TrimSpace(prof.MeshCIDR)
 		}
 		if cidr == "" {
 			cidr = "10.99.0.0/16"
-		}
-		if prof.MeshCIDR != "" {
-			log.Printf("采用服务端下发组网网段：%s（节点客户端子网 %s）", prof.MeshCIDR, prof.ClientCIDR)
 		}
 		// 网关：服务端 connect 响应里的 dns[0] 就是客户端子网网关
 		gateway := ""
