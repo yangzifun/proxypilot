@@ -10,6 +10,10 @@ import "log"
 // 系统所有流量都会被送到一个不存在的隧道网关 → 全网上不去。
 // 每次启动都先把我们自己的适配器恢复干净，再重新接管。
 func cleanStaleTunnel() {
+	// 先撤销上次崩溃可能残留的 DNS 守卫（NRPT / 防火墙规则），
+	// 否则用户会表现为「能上网但所有域名解析失败」。
+	revertDNSGuard()
+
 	name := defaultTunName()
 	if name == "" {
 		return

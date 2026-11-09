@@ -243,6 +243,7 @@
       <div class="row"><span class="k">网关</span><span class="v" id="rGW">—</span></div>
       <div class="row"><span class="k">接管路由</span><span class="v" id="rRoutes">—</span></div>
       <div class="row"><span class="k">接管状态</span><span class="v" id="rTakeover">—</span></div>
+      <div class="row"><span class="k">DNS 泄露防护</span><span class="v" id="rDnsGuard">—</span></div>
     </div>
     <div class="notice" id="noticeDetail"></div>
   </section>
@@ -341,6 +342,14 @@ function render(){
   else if(st==='connected' && !state.probe_ok){ n.textContent = '会话已建立，正在验证数据面…'; }
   else if(st==='connected' && state.tun_error){ n.textContent = '系统网络未接管：' + state.tun_error; }
   else { n.textContent = ''; }
+
+  const dg = $('rDnsGuard');
+  if (dg) {
+    const items = state.dns_guard || [];
+    if (items.length) { dg.textContent = '已启用（' + items.length + ' 项）'; dg.className = 'v ok'; }
+    else { dg.textContent = st === 'connected' ? '未启用' : '—'; dg.className = 'v'; }
+    dg.title = items.join('\n');
+  }
 
   const nd = $('noticeDetail');
   if (nd) nd.textContent = (st === 'error' && state.message) ? state.message : '';

@@ -188,8 +188,9 @@ type sessionState struct {
 	netRTT       int
 	netErr       string
 	routes []string
-	tunMode string
-	tunErr string
+	tunMode  string
+	tunErr   string
+	dnsGuard []string
 }
 
 func (s *sessionState) snapshot() map[string]any {
@@ -231,6 +232,7 @@ func (s *sessionState) snapshot() map[string]any {
 		"tun_mode":   s.tunMode,
 		"tun_error":  s.tunErr,
 		"tun_ready":  s.adapter != "",
+		"dns_guard":  append([]string{}, s.dnsGuard...),
 	}
 }
 
@@ -524,6 +526,7 @@ func (s *uiServer) disconnect(reason string) {
 	s.state.message = reason
 	s.state.startedAt = 0
 	s.state.adapter = ""
+	s.state.dnsGuard = nil
 	s.state.gateway = ""
 	s.state.netOK = false
 	s.state.netRTT = 0
@@ -760,6 +763,7 @@ func (s *uiServer) connect(nodeID int64) error {
 				st.status = "connected"
 				st.tun = tun
 				st.adapter = res.Adapter
+		st.dnsGuard = append([]string{}, res.DNSGuard...)
 				st.gateway = res.Gateway
 				st.routes = res.Routes
 				st.tunMode = string(res.Mode)

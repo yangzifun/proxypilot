@@ -114,6 +114,10 @@ func applyTun(s TunSpec, dev PacketDevice) (TunResult, error) {
 		applied = append(applied, d)
 	}
 	res.DNS = strings.Join(applied, ", ")
+
+	// DNS 泄露防护：NRPT 强制走隧道 DNS + 封禁物理网卡的明文 DNS 出站。
+	// Windows 会并行向所有网卡的 DNS 发查询，只配虚拟网卡会漏到运营商 DNS。
+	res.DNSGuard = applyDNSGuard(dns)
 	return res, nil
 }
 
@@ -136,6 +140,8 @@ func cleanupTun(res TunResult) {
 			_, _ = runWin("netsh", "interface", "ipv4", "delete", "route", ip, res.Adapter, "store=active")
 		}
 	}
+	// 先撤销 DNS 守卫，再清地址（顺序重要：先恢复解析，避免断开后短暂无 DNS）
+	revertDNSGuard()
 	// 只清地址与 DNS，不禁用适配器（保持下次连接可直接复用）
 	if res.Adapter != "" {
 		_, _ = runWin("netsh", "interface", "ipv4", "set", "address", "name="+res.Adapter, "source=dhcp")

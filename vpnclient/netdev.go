@@ -146,6 +146,8 @@ type TunResult struct {
 	Routes  []string // 已下发路由
 	Gateway string   // 已配置网关
 	DNS     string   // 已写入的 DNS（空=未改）
+	// DNSGuard 记录 DNS 泄露防护已生效的项（NRPT / 防火墙规则）
+	DNSGuard []string
 }
 
 func (r TunResult) Summary() string {
