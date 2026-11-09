@@ -31,7 +31,7 @@ import (
 )
 
 // Version 是 VPN 客户端版本（V1.x）。
-const Version = "1.5"
+const Version = "1.6"
 
 var caPEM []byte
 
@@ -104,6 +104,7 @@ func runCLI() {
 		caPEM = b
 	}
 	setupFileLog()
+	cleanStaleTunnel()
 	log.Printf("ProxyPilot VPN Client %s", Version)
 
 	if *cfgPath != "" {

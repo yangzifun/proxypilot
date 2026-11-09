@@ -42,32 +42,24 @@ func applyTun(s TunSpec, dev PacketDevice) (TunResult, error) {
 		}
 	}
 
-	// 地址 + 网关：netsh interface ipv4 set address name="<适配器>" static <ip> <mask> <gateway>
+	// 地址：先清掉旧配置（dhcp），再用 add address 叠加当前地址。
+	// 注意：不能用 set address ... static <gw>，它会把默认网关写成「永久路由」，
+	// 客户端异常退出后会残留在系统里，导致所有流量被黑洞。
 	gw := s.gateway()
 	res.Gateway = gw
 	mask := strings.Split(res.IP, "/")[1]
-	addrArgs := []string{"interface", "ipv4", "set", "address", "name=" + dev.Name(), "static", s.IP, mask}
-	if gw != "" {
-		addrArgs = append(addrArgs, gw)
+	runWinSilent("netsh", "interface", "ipv4", "set", "address", "name="+dev.Name(), "source=dhcp")
+	if out, err := runWin("netsh", "interface", "ipv4", "add", "address", dev.Name(), s.IP, mask); err != nil {
+		return res, fmt.Errorf("配置网卡地址失败：%v %s", err, out)
 	}
-	if _, err := runWin(append([]string{"netsh"}, addrArgs...)...); err != nil {
-		// 某些系统上名字匹配失败，退回按索引
-		if idx, ierr := interfaceIndex(dev.Name()); ierr == nil {
-			idxArgs := []string{"interface", "ipv4", "set", "address", fmt.Sprint(idx), "static", s.IP, mask}
-			if gw != "" {
-				idxArgs = append(idxArgs, gw)
-			}
-			if _, err2 := runWin(append([]string{"netsh"}, idxArgs...)...); err2 != nil {
-				return res, fmt.Errorf("配置网卡地址失败：%v", err2)
-			}
-		} else {
-			return res, fmt.Errorf("配置网卡地址失败：%v", err)
-		}
+	// 网关只写进「活动」路由表（ipconfig 可见），不持久化
+	if gw != "" {
+		runWinSilent("netsh", "interface", "ipv4", "add", "route", "0.0.0.0/0", dev.Name(), gw, "metric=60", "store=active")
 	}
 
 	// MTU
 	_, _ = runWin("netsh", "interface", "ipv4", "set", "subinterface", dev.Name(),
-		fmt.Sprintf("mtu=%d", res.MTU), "store=persistent")
+		fmt.Sprintf("mtu=%d", res.MTU), "store=active")
 
 	// full 模式：给 VPN 服务器加主机路由，避免隧道流量回绕
 	if res.Mode == TunModeFull {

@@ -215,6 +215,9 @@ func runInstallWizard(dir string, autostart, shortcuts bool) {
 	installer.mu.Unlock()
 	installer.setStep("adapter", true, "")
 
+	// 清理旧版本残留的路由/网关
+	cleanStaleTunnel()
+
 	// 5) 卸载登记
 	step("registry", "写入卸载登记项")
 	if err := installWriteRegistry(dir, dst); err != nil {
