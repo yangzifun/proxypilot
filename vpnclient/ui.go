@@ -270,6 +270,11 @@ func runUI(ctx context.Context, addr string, defaults uiSettings, openBrowser, d
 	mux.HandleFunc("/api/logs", srv.handleLogs)
 	mux.HandleFunc("/api/login/start", srv.handleLoginStart)
 	mux.HandleFunc("/api/login/poll", srv.handleLoginPoll)
+	// 安装向导
+	mux.HandleFunc("/api/install/status", srv.handleInstallStatus)
+	mux.HandleFunc("/api/install/start", srv.handleInstallStart)
+	mux.HandleFunc("/api/install/launch", srv.handleInstallLaunch)
+	mux.HandleFunc("/api/install/exit", srv.handleInstallExit)
 
 	httpSrv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	go func() {

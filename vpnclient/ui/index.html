@@ -73,6 +73,38 @@
   .login button{width:100%}
 
   .sel{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;color:var(--fg);font-size:13px;outline:none}
+[hidden]{display:none!important}
+#main.hide{display:none!important}
+/* 安装向导 */
+#installer{display:none;flex-direction:column;gap:14px;padding-top:4px}
+#installer.show{display:flex}
+.inst-head{display:flex;align-items:center;gap:10px}
+.inst-head h2{font-size:17px;margin:0;font-weight:600}
+.inst-sub{font-size:12px;color:var(--muted);line-height:1.7}
+.inst-box{border:1px solid var(--line);border-radius:14px;background:var(--card);padding:14px;display:flex;flex-direction:column;gap:10px}
+.inst-field{display:flex;flex-direction:column;gap:5px}
+.inst-field label{font-size:11.5px;color:var(--muted)}
+.inst-field input{background:#0d1117;border:1px solid var(--line);border-radius:10px;padding:10px 12px;color:var(--txt);font-size:12.5px;outline:none}
+.inst-field input:focus{border-color:#3b82f6}
+.inst-check{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted)}
+.inst-check input{width:15px;height:15px;accent-color:#3b82f6}
+.inst-steps{display:flex;flex-direction:column;gap:2px}
+.inst-step{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;font-size:12.5px;color:var(--dim);transition:.2s}
+.inst-step.active{background:rgba(59,130,246,.10);color:var(--txt)}
+.inst-step.done{color:#34d399}
+.inst-step.err{color:#f87171}
+.inst-dot{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--line2);flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:10px}
+.inst-step.active .inst-dot{border-color:#3b82f6;border-top-color:transparent;animation:spin .8s linear infinite}
+.inst-step.done .inst-dot{border-color:#34d399;background:#34d399;color:#04120c}
+.inst-step.err .inst-dot{border-color:#f87171;background:#f87171;color:#1a0505}
+@keyframes spin{to{transform:rotate(360deg)}}
+.inst-bar{height:4px;border-radius:2px;background:var(--line);overflow:hidden}
+.inst-bar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,#3b82f6,#22d3ee);transition:width .3s}
+.inst-actions{display:flex;gap:10px;margin-top:2px}
+.inst-actions .btn{flex:1}
+.inst-msg{font-size:12px;color:var(--muted);min-height:18px;line-height:1.6;word-break:break-all}
+.inst-msg.ok{color:#34d399}
+.inst-msg.err{color:#f87171}
 /* 设置页 */
   #settings{display:none;flex-direction:column;gap:14px;padding-top:4px}
   #settings.show{display:flex}
@@ -173,6 +205,40 @@
     <button class="btn primary" id="save">保存</button>
   </section>
 
+  <section id="installer">
+    <div class="inst-head">
+      <h2 id="instTitle">安装 ProxyPilot</h2>
+    </div>
+    <div class="inst-sub" id="instSub">
+      首次使用需要先完成安装：复制程序、安装 Wintun 驱动并注册虚拟网卡。
+    </div>
+
+    <div class="inst-box" id="instForm">
+      <div class="inst-field">
+        <label>安装位置</label>
+        <input id="instDir" placeholder="C:\Users\...\Programs\ProxyPilot">
+      </div>
+      <label class="inst-check"><input type="checkbox" id="instAutostart" checked> 开机后台运行（托盘常驻，不弹窗口）</label>
+      <label class="inst-check"><input type="checkbox" id="instShortcut" checked> 创建开始菜单与桌面快捷方式</label>
+    </div>
+
+    <div class="inst-box" id="instProgress" hidden>
+      <div class="inst-bar"><i id="instBarFill"></i></div>
+      <div class="inst-steps" id="instSteps"></div>
+      <div class="inst-msg" id="instMsg"></div>
+    </div>
+
+    <div class="inst-actions" id="instActions">
+      <button class="btn primary" id="instStart">开始安装</button>
+      <button class="btn" id="instCancel">退出</button>
+    </div>
+
+    <div class="inst-actions" id="instDoneActions" hidden>
+      <button class="btn primary" id="instLaunch">立即启动</button>
+      <button class="btn" id="instClose">关闭</button>
+    </div>
+  </section>
+
   <footer><span id="footVer">ProxyPilot</span><span id="footAPI"></span></footer>
 </div>
 
@@ -205,8 +271,7 @@ function render(){
   $('rAdapter').className = 'v' + (state.adapter ? ' ok' : state.tun_error ? ' bad' : '');
   const routes = state.routes || [];
   $('rRoutes').textContent = routes.length ? (routes.length + ' 条：' + routes.slice(0,3).join('、') + (routes.length>3?' …':'')) : '—';
-  $('rRoutes').title = routes.join('
-');
+  $('rRoutes').title = routes.join('\n');
 
   const n = $('notice');
   if(st==='error' && state.message){ n.textContent = state.message; }
@@ -271,8 +336,127 @@ function openSettings(){
   loadNodes();
 }
 function closeSettings(){
-  view='main'; $('settings').classList.remove('show'); $('main').classList.remove('hide');
+  view='main'; $('settings').classList.remove('show');
+  if(!$('installer').classList.contains('show')) $('main').classList.remove('hide');
 }
+
+// ---------------- 安装向导 ----------------
+let instTimer = null;
+
+function showInstaller(show){
+  $('installer').classList.toggle('show', show);
+  $('gear').style.display = show ? 'none' : '';
+  $('main').classList.toggle('hide', show);
+  $('settings').classList.remove('show');
+}
+
+function renderSteps(st){
+  const box = $('instSteps');
+  const steps = st.steps || [];
+  if(!box.dataset.init || box.children.length !== steps.length){
+    box.innerHTML = steps.map(s=>`<div class="inst-step" data-k="${s.key}"><span class="inst-dot"></span><span>${s.label}</span></div>`).join('');
+    box.dataset.init = '1';
+  }
+  let doneCount = 0;
+  steps.forEach(s=>{
+    const el = box.querySelector(`[data-k="${s.key}"]`);
+    if(!el) return;
+    el.className = 'inst-step' + (s.error ? ' err' : s.done ? ' done' : (st.running ? ' active' : ''));
+    el.querySelector('.inst-dot').textContent = s.error ? '!' : s.done ? '✓' : '';
+    if(s.done) doneCount++;
+  });
+  const pct = steps.length ? Math.round(doneCount / steps.length * 100) : 0;
+  $('instBarFill').style.width = pct + '%';
+  const msg = $('instMsg');
+  msg.className = 'inst-msg' + (st.failed ? ' err' : st.finished ? ' ok' : '');
+  msg.textContent = st.message || '';
+}
+
+async function pollInstall(){
+  try{
+    const r = await fetch('/api/install/status', {cache:'no-store'});
+    const st = await r.json();
+    renderSteps(st);
+    if(st.finished){
+      clearInterval(instTimer); instTimer = null;
+      if(st.failed){
+        // 失败：退回表单，允许重试
+        $('instForm').hidden = false;
+        $('instActions').hidden = false;
+        $('instDoneActions').hidden = true;
+        $('instProgress').hidden = false;
+        $('instStart').disabled = false;
+        $('instStart').textContent = '重试安装';
+        $('instTitle').textContent = '安装未完成';
+        $('instSub').textContent = '请按上面的提示处理后重试。';
+      } else {
+        $('instActions').hidden = true;
+        $('instDoneActions').hidden = false;
+        $('instProgress').hidden = false;
+        $('instForm').hidden = true;
+        $('instTitle').textContent = '安装完成';
+        $('instSub').textContent = '虚拟网卡：' + (st.adapter || 'ProxyPilot VPN') + '　安装目录：' + (st.install_to || '');
+      }
+    }
+  }catch(e){}
+}
+
+function startInstallPolling(){
+  if(instTimer) clearInterval(instTimer);
+  instTimer = setInterval(pollInstall, 600);
+}
+
+$('instStart').onclick = async ()=>{
+  $('instStart').disabled = true;
+  $('instForm').hidden = true;
+  $('instProgress').hidden = false;
+  $('instTitle').textContent = '正在安装';
+  $('instSub').textContent = '请稍候，安装过程约需 3-10 秒。';
+  try{
+    const r = await fetch('/api/install/start',{method:'POST',headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        dir: $('instDir').value.trim(),
+        autostart: $('instAutostart').checked,
+        shortcuts: $('instShortcut').checked,
+      })});
+    const d = await r.json();
+    if(!d.ok){ $('instMsg').textContent = d.error || '启动安装失败'; $('instMsg').className = 'inst-msg err'; $('instStart').disabled = false; return; }
+    startInstallPolling();
+  }catch(e){
+    $('instMsg').textContent = '请求失败：' + e.message;
+    $('instMsg').className = 'inst-msg err';
+    $('instStart').disabled = false;
+  }
+};
+
+$('instCancel').onclick = async ()=>{
+  try{ await fetch('/api/install/exit',{method:'POST'}); }catch(e){}
+};
+$('instClose').onclick = async ()=>{
+  try{ await fetch('/api/install/exit',{method:'POST'}); }catch(e){}
+};
+$('instLaunch').onclick = async ()=>{
+  try{
+    const r = await fetch('/api/install/launch',{method:'POST'});
+    const d = await r.json();
+    if(!d.ok){ $('instMsg').textContent = d.error || '启动失败'; $('instMsg').className = 'inst-msg err'; }
+  }catch(e){}
+};
+
+async function initInstaller(){
+  try{
+    const r = await fetch('/api/install/status',{cache:'no-store'});
+    const st = await r.json();
+    if(st.installed){ showInstaller(false); return; }
+    showInstaller(true);
+    $('instDir').value = st.default_dir || '';
+    $('instSub').textContent = st.is_admin
+      ? '首次使用需要先完成安装：复制程序、安装 Wintun 驱动并注册虚拟网卡。'
+      : '首次使用需要先完成安装；当前不是管理员，安装会失败，请以管理员身份运行。';
+    if(st.running){ $('instForm').hidden = true; $('instProgress').hidden = false; startInstallPolling(); }
+  }catch(e){}
+}
+initInstaller();
 
 $('dial').onclick = toggle;
 $('gear').onclick = openSettings;
