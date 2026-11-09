@@ -280,8 +280,14 @@ func (s *Server) tunLoop() {
 		if err != nil {
 			continue
 		}
-		if inCIDR(src, s.cfg.ClientCIDR) && !s.cfg.AllowClientToClient {
-			// 客户端 → 客户端：VPN 模式下按隔离策略丢弃；组网模式允许互访。
+		// 只在「客户端 → 客户端」时按隔离策略丢弃；访问网关或公网必须放行。
+		// 旧逻辑只看源地址，导致所有出站流量（源地址就是客户端 IP）被整包丢弃。
+		srcClient := inCIDR(src, s.cfg.ClientCIDR)
+		dstClient := inCIDR(dst, s.cfg.ClientCIDR)
+		// 网关（节点自身）的应答也要放行：ping 网关、网关发起的回包
+		gatewayIP := net.ParseIP(strings.TrimSpace(s.cfg.Gateway4))
+		touchesGateway := gatewayIP != nil && (src.Equal(gatewayIP) || dst.Equal(gatewayIP))
+		if srcClient && dstClient && !touchesGateway && !s.cfg.AllowClientToClient {
 			continue
 		}
 		sess := s.lookup(dst)
