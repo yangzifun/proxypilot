@@ -115,6 +115,7 @@ func (s *uiServer) handleInstallStart(w http.ResponseWriter, r *http.Request) {
 		{Key: "driver", Label: "释放 Wintun 驱动"},
 		{Key: "adapter", Label: "注册虚拟网卡 ProxyPilot VPN"},
 		{Key: "registry", Label: "写入卸载登记项"},
+		{Key: "firewall", Label: "配置 Windows 防火墙放行"},
 		{Key: "autostart", Label: "设置开机后台运行"},
 		{Key: "shortcut", Label: "创建桌面与开始菜单图标"},
 	}
@@ -222,7 +223,14 @@ func runInstallWizard(dir string, autostart, shortcuts bool) {
 	}
 	installer.setStep("registry", true, "")
 
-	// 6) 开机自启
+	// 6) 防火墙放行
+	step("firewall", "配置 Windows 防火墙放行")
+	if err := installFirewallRules(dst); err != nil {
+		log.Printf("配置防火墙失败（可忽略）：%v", err)
+	}
+	installer.setStep("firewall", true, "")
+
+	// 7) 开机自启
 	step("autostart", "设置开机后台运行")
 	if autostart {
 		if err := installSetAutostart(dst, true); err != nil {
@@ -231,7 +239,7 @@ func runInstallWizard(dir string, autostart, shortcuts bool) {
 	}
 	installer.setStep("autostart", true, "")
 
-	// 7) 桌面 / 开始菜单图标
+	// 8) 桌面 / 开始菜单图标
 	step("shortcut", "创建桌面与开始菜单图标")
 	if shortcuts {
 		if err := installCreateShortcuts(dst); err != nil {

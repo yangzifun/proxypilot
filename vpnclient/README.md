@@ -12,20 +12,20 @@
 
 ## Windows 安装（安装程序 + 客户端，两个文件）
 
-客户端版本 **v1.1**，与面板/Agent 版本相互独立。
+客户端版本 **v1.2**，与面板/Agent 版本相互独立。
 
 | 文件 | 作用 |
 |---|---|
-| `proxypilot-vpn-1.1-windows-amd64-install.exe` | **安装程序**（约 30 MB，内嵌客户端主程序）。每次运行只做安装/修复，不进入主界面 |
-| `proxypilot-vpn-1.1-windows-amd64-cli.exe` | 命令行版（自检 / 诊断用） |
+| `proxypilot-vpn-1.2-windows-amd64-install.exe` | **安装程序**（约 30 MB，内嵌客户端主程序）。每次运行只做安装/修复，不进入主界面 |
+| `proxypilot-vpn-1.2-windows-amd64-cli.exe` | 命令行版（自检 / 诊断用） |
 
 安装后客户端位于 `%LOCALAPPDATA%\Programs\ProxyPilot\ProxyPilot.exe`，从桌面或开始菜单图标启动。
 
 ### 行为约定
 
-- **安装程序**：窗口标题 `ProxyPilot v1.1 安装程序`，始终显示安装向导（已安装时即为修复/重装）
+- **安装程序**：窗口标题 `ProxyPilot v1.2 安装程序`，始终显示安装向导（已安装时即为修复/重装）
 - **主程序**：必须以已安装路径运行；若在别处直接运行，会提示「未检测到已安装的 ProxyPilot，请先运行安装程序」后退出
-- 版本号三处可见：窗口标题、界面页脚（`ProxyPilot v1.1`）、exe 属性 → 详细信息（`1.1.0.0`）
+- 版本号三处可见：窗口标题、界面页脚（`ProxyPilot v1.2`）、exe 属性 → 详细信息（`1.2.0.0`）
 
 ### 安装向导
 
@@ -178,7 +178,7 @@ GUI 版没有控制台，运行日志写入文件：
 查看方式：
 
 - 客户端「首选项」底部显示日志路径，点「打开日志文件夹」直接打开
-- 或运行 `proxypilot-vpn-1.1-windows-amd64-cli.exe -diag`，输出安装状态、网卡、路由表，
+- 或运行 `proxypilot-vpn-1.2-windows-amd64-cli.exe -diag`，输出安装状态、网卡、路由表，
   并保存到 `%TEMP%\proxypilot-diag.txt`
 
 日志内容包含：启动信息、连接各阶段、隧道参数（地址/网关/网段/DNS）、
