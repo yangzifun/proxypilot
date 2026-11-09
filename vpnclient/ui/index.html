@@ -72,8 +72,7 @@
   .login .hint2{margin-top:8px;font-size:11px;color:var(--dim);line-height:1.6}
   .login button{width:100%}
 
-  .sel{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;color:var(--fg);font-size:13px;outline:none}
-[hidden]{display:none!important}
+  [hidden]{display:none!important}
 #main.hide{display:none!important}
 /* 安装向导 */
 #installer{display:none;flex-direction:column;gap:14px;padding-top:4px}
@@ -167,6 +166,7 @@
     <div class="rows" style="margin-top:14px">
       <div class="row"><span class="k">节点</span><span class="v" id="rNode">—</span></div>
       <div class="row"><span class="k">分配地址</span><span class="v" id="rIP">—</span></div>
+      <div class="row"><span class="k">组网网段</span><span class="v" id="rCIDR">—</span></div>
       <div class="row"><span class="k">虚拟网卡</span><span class="v" id="rAdapter">—</span></div>
       <div class="row"><span class="k">接管路由</span><span class="v" id="rRoutes">—</span></div>
       <div class="row"><span class="k">延迟</span><span class="v" id="rRTT">—</span></div>
@@ -188,19 +188,7 @@
     </div>
     <div class="field"><label>面板地址</label><input id="fAPI" placeholder="https://proxypilot.yangzifun.org"></div>
     <div class="field"><label>门户令牌</label><input id="fToken" placeholder="粘贴门户登录令牌"></div>
-    <div class="field"><label>DNS 探测地址</label><input id="fDNS" placeholder="1.1.1.1:53"></div>
-    <div class="field">
-      <label>网络接管范围</label>
-      <select id="fMode" class="sel">
-        <option value="mesh">仅组网网段（推荐）</option>
-        <option value="full">接管全部流量（全局代理）</option>
-      </select>
-    </div>
-    <div class="field"><label>组网网段</label><input id="fCIDR" placeholder="10.99.0.0/16"></div>
-    <div class="field"><label>虚拟网卡名（留空=默认）</label><input id="fTun" placeholder="ppvpn0 / ProxyPilot VPN"></div>
-    <label class="check"><input type="checkbox" id="fSetDNS"> 同时把系统 DNS 指向隧道</label>
     <label class="check"><input type="checkbox" id="fInsecure"> 跳过节点证书校验</label>
-    <div class="hint2">接管需要管理员/root 权限；断开时自动删除路由并关闭网卡。</div>
     <div class="field"><label>节点</label><div class="nodes-list" id="nodes"><div class="nrow"><span class="nm" style="color:var(--dim)">加载中…</span></div></div></div>
     <button class="btn primary" id="save">保存</button>
   </section>
@@ -267,6 +255,7 @@ function render(){
   $('rRTT').textContent = state.rtt_ms ? state.rtt_ms + ' ms' : '—';
   $('rRTT').className = 'v' + (state.rtt_ms && state.rtt_ms > 300 ? ' bad' : state.rtt_ms ? ' ok' : '');
   $('rDur').textContent = state.duration ? fmtDur(state.duration) : '—';
+  $('rCIDR').textContent = state.mesh_cidr || '—';
   $('rAdapter').textContent = state.adapter || (state.tun_error ? '接管失败' : '—');
   $('rAdapter').className = 'v' + (state.adapter ? ' ok' : state.tun_error ? ' bad' : '');
   const routes = state.routes || [];
@@ -277,7 +266,7 @@ function render(){
   if(st==='error' && state.message){ n.textContent = state.message; }
   else if(st==='connected' && !state.probe_ok){ n.textContent = '会话已建立，正在验证数据面…'; }
   else if(st==='connected' && state.tun_error){ n.textContent = '系统网络未接管：' + state.tun_error; }
-  else if(st==='connected' && state.adapter){ n.textContent = '已接管：' + state.adapter + (state.tun_mode==='full' ? '（全局流量）' : '（仅组网网段）'); }
+  else if(st==='connected' && state.adapter){ n.textContent = '已接管：' + state.adapter + '（全局流量）'; }
   else { n.textContent = ''; }
 
   $('footVer').textContent = 'ProxyPilot ' + (state.version||'');
@@ -327,11 +316,6 @@ function openSettings(){
   $('fAPI').value = state.api || '';
   $('fToken').value = '';
   $('fToken').placeholder = state.logged_in ? ('已保存：'+state.token_hint) : '粘贴门户登录令牌';
-  $('fDNS').value = state.dns_addr || '1.1.1.1:53';
-  $('fMode').value = state.tun_mode === 'full' ? 'full' : 'mesh';
-  $('fCIDR').value = state.mesh_cidr || '10.99.0.0/16';
-  $('fTun').value = state.tun_name || '';
-  $('fSetDNS').checked = !!state.set_dns;
   $('fInsecure').checked = !!state.insecure;
   loadNodes();
 }
@@ -497,9 +481,7 @@ $('btnLogin').onclick = async ()=>{
 $('save').onclick = async ()=>{
   await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
     api: $('fAPI').value.trim(), token: $('fToken').value.trim(),
-    dns_addr: $('fDNS').value.trim(), insecure: $('fInsecure').checked,
-    tun_mode: $('fMode').value, mesh_cidr: $('fCIDR').value.trim(),
-    tun_name: $('fTun').value.trim(), set_dns: $('fSetDNS').checked
+    insecure: $('fInsecure').checked
   })});
   await poll(); closeSettings();
 };

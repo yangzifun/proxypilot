@@ -48,6 +48,9 @@ type profile struct {
 	IP4       string `json:"ip4"`
 	MTU       int    `json:"mtu"`
 	DNS       []string
+	// 服务端下发的组网网段与节点客户端子网（客户端不自填）
+	MeshCIDR   string `json:"mesh_cidr"`
+	ClientCIDR string `json:"client_cidr"`
 	Node      struct {
 		ID       int64  `json:"id"`
 		Name     string `json:"name"`

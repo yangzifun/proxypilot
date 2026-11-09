@@ -156,6 +156,9 @@ func (h *handlers) vpnPortalConnect(w http.ResponseWriter, r *http.Request) {
 		"token": token,
 		"ip4":   ip4,
 		"mtu":   settings.MTU,
+		// 组网网段与节点客户端子网由服务端下发，客户端不再自行填写
+		"mesh_cidr":   settings.MeshCIDR4,
+		"client_cidr": node.ClientCIDR,
 		"dns":   []string{cidrGateway(node.ClientCIDR)},
 		"routes": []map[string]string{
 			{"dst": "0.0.0.0/0", "note": "全流量（节点 NAT）"},

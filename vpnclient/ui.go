@@ -168,6 +168,7 @@ type sessionState struct {
 	nodeName string
 	nodeHost string
 	ip4 string
+	meshCIDR string
 	sni string
 	mtu int
 	sessionID int64
@@ -206,6 +207,7 @@ func (s *sessionState) snapshot() map[string]any {
 		"node_name":  s.nodeName,
 		"node_host":  s.nodeHost,
 		"ip4":        s.ip4,
+		"mesh_cidr":  s.meshCIDR,
 		"sni":        s.sni,
 		"mtu":        s.mtu,
 		"session_id": s.sessionID,
@@ -307,13 +309,20 @@ func (c uiSettings) validate() error {
 	return nil
 }
 
+// defaultDNSAddr 是固定的探测 DNS（客户端不提供修改入口）。
+const defaultDNSAddr = "1.1.1.1:53"
+
 func (s *uiServer) currentSettings() uiSettings {
 	s.cfgMu.Lock()
 	defer s.cfgMu.Unlock()
 	cfg := s.cfg
-	if cfg.TunMode == "" {
-		cfg.TunMode = string(TunModeMesh)
-	}
+	// 接管范围固定为「全部流量」，客户端不提供切换
+	cfg.TunMode = string(TunModeFull)
+	// 虚拟网卡名由平台默认值决定，不允许用户修改
+	cfg.TunName = ""
+	// 探测地址固定
+	cfg.DNSAddr = defaultDNSAddr
+	// 组网网段以服务端下发为准，这里仅作兜底
 	if cfg.MeshCIDR == "" {
 		cfg.MeshCIDR = "10.99.0.0/16"
 	}
@@ -334,7 +343,6 @@ func (s *uiServer) handleState(w http.ResponseWriter, r *http.Request) {
 	payload["tun_mode"] = cfg.TunMode
 	payload["tun_name"] = cfg.TunName
 	payload["mesh_cidr"] = cfg.MeshCIDR
-	payload["set_dns"] = cfg.SetDNS
 	payload["tun_supported"] = runtimeSupportsTun()
 	payload["platform"] = runtime.GOOS
 	payload["token_hint"] = maskToken(cfg.Token)
@@ -367,23 +375,10 @@ func (s *uiServer) handleSettings(w http.ResponseWriter, r *http.Request) {
 	if body.Token != "" {
 		s.cfg.Token = strings.TrimSpace(body.Token)
 	}
-	if body.DNSAddr != "" {
-		s.cfg.DNSAddr = strings.TrimSpace(body.DNSAddr)
-	}
-	if body.TunMode != "" {
-		if body.TunMode == string(TunModeFull) {
-			s.cfg.TunMode = string(TunModeFull)
-		} else {
-			s.cfg.TunMode = string(TunModeMesh)
-		}
-	}
-	if body.TunName != "" {
-		s.cfg.TunName = strings.TrimSpace(body.TunName)
-	}
-	if body.MeshCIDR != "" {
-		s.cfg.MeshCIDR = strings.TrimSpace(body.MeshCIDR)
-	}
-	s.cfg.SetDNS = body.SetDNS
+	// DNS 探测地址、接管范围、网卡名一律使用固定值，不接受客户端提交
+	s.cfg.TunMode = string(TunModeFull)
+	s.cfg.TunName = ""
+	s.cfg.DNSAddr = defaultDNSAddr
 	s.cfg.Insecure = body.Insecure
 	cfg := s.cfg
 	s.cfgMu.Unlock()
@@ -549,6 +544,7 @@ func (s *uiServer) connect(nodeID int64) error {
 			st.sessionID = prof.SessionID
 			st.ip4 = prof.IP4
 			st.mtu = prof.MTU
+			st.meshCIDR = prof.MeshCIDR
 			st.message = fmt.Sprintf("会话 %d 已建立，正在 HTTP/3 鉴权…", prof.SessionID)
 		})
 		log.Printf("门户会话建立：session=%d ip4=%s mtu=%d", prof.SessionID, prof.IP4, prof.MTU)
@@ -594,9 +590,16 @@ func (s *uiServer) connect(nodeID int64) error {
 		if mode != TunModeFull {
 			mode = TunModeMesh
 		}
-		cidr := strings.TrimSpace(cfg.MeshCIDR)
+		// 组网网段由节点端下发（connect 响应），客户端不再自行填写
+		cidr := strings.TrimSpace(prof.MeshCIDR)
+		if cidr == "" {
+			cidr = strings.TrimSpace(cfg.MeshCIDR)
+		}
 		if cidr == "" {
 			cidr = "10.99.0.0/16"
+		}
+		if prof.MeshCIDR != "" {
+			log.Printf("采用服务端下发组网网段：%s（节点客户端子网 %s）", prof.MeshCIDR, prof.ClientCIDR)
 		}
 		dnsServer := ""
 		if cfg.SetDNS {

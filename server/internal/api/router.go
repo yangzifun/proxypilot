@@ -77,6 +77,11 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("POST /api/login/email-code/verify", h.loginEmailCodeVerify)
 	mux.HandleFunc("POST /api/login/email-code/mfa", h.loginEmailCodeMfa)
 
+	// 客户端网页登录（桌面客户端「使用浏览器登录」）
+	mux.HandleFunc("POST /api/client-auth/start", h.clientAuthStart)
+	mux.HandleFunc("GET /api/client-auth/poll", h.clientAuthPoll)
+	mux.HandleFunc("POST /api/client-auth/approve", h.clientAuthApprove)
+	mux.HandleFunc("GET /client-auth", h.clientAuthPage)
 	mux.HandleFunc("POST /api/portal/send-code", h.portalSendCode)
 	mux.HandleFunc("POST /api/portal/login", h.portalLogin)
 	mux.HandleFunc("GET /api/portal/uuids", h.portalUuids)
