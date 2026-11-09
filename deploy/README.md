@@ -9,6 +9,7 @@
 | `install.sh` | 全新安装（装 MySQL、建库、生成配置、装 systemd 单元） |
 | `upgrade.sh` | 升级二进制（自动备份、健康检查、失败回滚） |
 | `uninstall.sh` | 卸载（`--purge` 连数据库一起删） |
+| `maintenance.sh` | 磁盘体检与回收（binlog / 旧日志 / 旧备份），建议加入 crontab |
 | `web-guard/` | 站点 80/443 仅允许组网 + Cloudflare 回源（可选加固） |
 
 ## 支持的系统
@@ -44,7 +45,7 @@ sudo ./install.sh --binary ./proxypilot --port 80
 脚本会依次完成：
 
 1. 识别系统并补齐 `curl/tar/openssl`
-2. 安装并启动 MySQL（已有则复用），创建数据库 `proxypilot` 与用户
+2. 安装并启动 MySQL（已有则复用），创建数据库 `proxypilot` 与用户，并写入 `skip-log-bin` 配置防止 binlog 写满磁盘
 3. 创建系统用户 `proxypilot` 与目录 `/opt/proxypilot`
 4. 安装二进制（保留最近备份）
 5. 生成 `.env`（自动生成 JWT 密钥与管理员口令）
@@ -103,7 +104,56 @@ sudo ./uninstall.sh --purge   # 连数据库与系统用户一起删
 - 建议面板只监听 `127.0.0.1:<端口>`，由反代转发
 - 用 `deploy/web-guard/` 限制 80/443 仅允许组网与 Cloudflare 回源
 
-## 七、常见问题
+## 七、磁盘写满（面板「所有页面无数据」）
+
+**症状**：页面能打开，但列表/统计全空；`curl http://127.0.0.1/healthz` 返回 `{"db":"down"}`。
+
+**最常见原因**：MySQL binlog 把磁盘写满。单机面板没有主从复制与按时间点恢复需求，
+但 MySQL 默认开启 binlog（`max_binlog_size=100M`，默认保留 30 天），高频写入下几天就能堆到几十 GB，
+磁盘 100% 后 MySQL 无法写入，面板所有查询失败。
+
+**排查**
+
+```bash
+df -h /                          # 使用率 100%？
+du -sh /var/lib/mysql/binlog.* | tail -1
+mysql -uroot -e "SHOW VARIABLES LIKE 'log_bin'"
+```
+
+**修复**
+
+```bash
+# 1) 立即回收
+mysql -uroot -e "PURGE BINARY LOGS BEFORE NOW();"
+
+# 2) 永久关闭 binlog（install.sh 已默认写入该配置）
+cat > /etc/mysql/mysql.conf.d/99-proxypilot.cnf <<'EOF'
+[mysqld]
+skip-log-bin
+binlog_expire_logs_seconds = 259200
+EOF
+systemctl restart mysql
+```
+
+**日常体检/自动回收**
+
+```bash
+sudo ./deploy/maintenance.sh          # 只体检
+sudo ./deploy/maintenance.sh --fix    # 清 binlog / 旧日志 / 旧备份
+
+# 建议加入 crontab（每日 04:17）
+17 4 * * * /opt/proxypilot/deploy/maintenance.sh --fix >/dev/null 2>&1
+```
+
+**其他可能**
+
+| 现象 | 检查 |
+|---|---|
+| `db: down` 且磁盘正常 | `systemctl status mysql`、`journalctl -u mysql -n 50` |
+| 磁盘正常但接口 500 | `journalctl -u proxypilot -n 100`，多为迁移失败 |
+| 页面空白无报错 | 浏览器强刷（Ctrl+Shift+R），或检查 `/admin` HTML 是否被 CDN 缓存 |
+
+## 八、常见问题
 
 **服务起不来**
 

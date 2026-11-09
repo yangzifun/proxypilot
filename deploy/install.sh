@@ -119,6 +119,26 @@ else
     log "检测到已安装 MySQL/MariaDB，复用"
   fi
 
+  # 关闭 binlog：单机面板无主从/PITR 需求。binlog 按 100MB 滚动且默认保留 30 天，
+  # 曾把 39G 磁盘写满导致 MySQL 不可写、面板所有接口读不到数据。
+  MYSQL_CONF=""
+  if [[ -d /etc/mysql/mysql.conf.d ]]; then
+    MYSQL_CONF=/etc/mysql/mysql.conf.d/99-proxypilot.cnf
+  elif [[ -d /etc/my.cnf.d ]]; then
+    MYSQL_CONF=/etc/my.cnf.d/99-proxypilot.cnf
+  fi
+  if [[ -n "$MYSQL_CONF" ]]; then
+    log "写入 MySQL 调优：$MYSQL_CONF"
+    cat > "$MYSQL_CONF" <<'MYCNF'
+# ProxyPilot 单机部署：关闭 binlog（无主从/按时间点恢复需求）
+[mysqld]
+skip-log-bin
+binlog_expire_logs_seconds = 259200
+# 单机面板写入量不大，缩小日志与缓冲，减少磁盘压力
+max_connections = 150
+MYCNF
+  fi
+
   if [[ $PKG == deb ]]; then
     systemctl enable --now mysql 2>/dev/null || systemctl enable --now mariadb 2>/dev/null || true
   else
