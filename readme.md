@@ -1,10 +1,17 @@
 # ProxyPilot
 
-![Go](https://img.shields.io/badge/Go-1.24+-00ADD8?logo=go&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white) ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black) ![Ant Design](https://img.shields.io/badge/Ant%20Design-6-1677FF?logo=antdesign&logoColor=white) ![Agent](https://img.shields.io/badge/Agent-Go-00ADD8?logo=go&logoColor=white) ![Version](https://img.shields.io/badge/Version-V35.2-blue.svg) ![License](https://img.shields.io/badge/License-MIT-green.svg)
+![Go](https://img.shields.io/badge/Go-1.24+-00ADD8?logo=go&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white) ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black) ![Ant Design](https://img.shields.io/badge/Ant%20Design-6-1677FF?logo=antdesign&logoColor=white) ![Agent](https://img.shields.io/badge/Agent-Go-00ADD8?logo=go&logoColor=white) ![Version](https://img.shields.io/badge/Version-V35.3-blue.svg) ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
 ---
 
-## V35.2 更新（2026-11）
+## V35.3 更新（2026-11）
+
+- **证书模式打通**：VPN 节点 internal_ca / cme 两种模式真正生效（ACME 使用证书管理里的通配证书并校验域名覆盖）。
+- **内部 CA 信任**：客户端自动拉取 /api/vpn/ca.crt 严格校验，不再跳过。
+- **本机服务器独立存储**：迁移到 local_server 表，不再与节点混用 servers。
+- **证书管理页**：本站 CA + 功能证书签发/下发/下载。
+- **用户详情标签页**：节点配置 → 代理配置、授权服务 → 代理授权，VPN 授权独立子页面。
+- **客户端 2.3**：切换节点立即生效并自动重连、圆角图标、连接动画修正。
 
 - **桌面客户端**：新增 Wails v3（WebView2）原生窗口版 `ProxyPilot.exe`，界面与网页控制台一致，按用户安装（`install.cmd`，免管理员），图标取自站点 favicon。
 - **客户端网页登录**：客户端点「使用浏览器登录」→ 浏览器完成邮箱验证并授权 → 客户端自动拿到令牌，无需手工粘贴。
@@ -12,12 +19,12 @@
 - **组网状态可视化**：面板显示 RTT（取自 QUIC `SmoothedRTT`）与传输方式；"心跳在跳但状态 down"直接标识数据面故障。
 - **证书管理（V35.0 新增）**：用 Cloudflare DNS-01 申请 `*.yzfn.top` 通配证书，管理后台一键签发 + 统一下发到组网中心与各节点 VPN（`/admin/certs`）。
 - **会话治理**：连接前回收同设备僵尸会话、定期清理超过 2×TTL 的残留会话，修复"该节点并发设备数超过上限"导致的无法连接。
-- **客户端接管系统网络（V35.2 新增）**：Windows 版**先安装**（`install.cmd`，自动提权）——安装时释放 Wintun 驱动并**注册虚拟网卡**，之后连接直接复用；**安装程序**（`proxypilot-vpn-1.2-windows-amd64-install.exe`）与**客户端主程序**分离，安装程序只安装不运行，主程序必须已安装才能启动，版本 v1.1 见窗口标题/页脚/exe 属性；安装向导分步显示进度；可选开机后台运行，关闭窗口缩到**系统托盘**继续工作，托盘菜单含连接/断开/设置/退出；连接后配置地址/MTU 并下发路由（Windows 用内置 Wintun、Linux/macOS 用 TUN），
+- **客户端接管系统网络（V35.3 新增）**：Windows 版**先安装**（`install.cmd`，自动提权）——安装时释放 Wintun 驱动并**注册虚拟网卡**，之后连接直接复用；**安装程序**（`proxypilot-vpn-1.2-windows-amd64-install.exe`）与**客户端主程序**分离，安装程序只安装不运行，主程序必须已安装才能启动，版本 v1.1 见窗口标题/页脚/exe 属性；安装向导分步显示进度；可选开机后台运行，关闭窗口缩到**系统托盘**继续工作，托盘菜单含连接/断开/设置/退出；连接后配置地址/MTU 并下发路由（Windows 用内置 Wintun、Linux/macOS 用 TUN），
   自动配置地址/MTU 并按模式下发路由：「仅组网网段」或「接管全部流量」；断开时自动删除路由并关闭网卡。
   Windows 版以管理员身份运行（清单 `requireAdministrator`），驱动随安装包内置，无需单独安装。
 - **证书管理页**：管理后台新增「证书管理」（`#certs`）—— 本站内部 CA（ECDSA P-256，10 年，加密存库）与站点功能证书（Cloudflare DNS-01 通配），支持一键签发/续签、下发到组网中心与全部节点、下载证书/链/私钥。
 - **协议栈**：新增「VPN 与组网协议栈」章节 —— VPN 走 QUIC 可靠流（`[2字节长度][IP报文]` 分帧 + `0.0.0.0/1` 双半区路由 + 服务器 `/32` 直连防环），组网走同一套 HTTP/3 隧道（`10.99.0.0/16`、无 NAT、允许互访）。
-- **版本号**：服务端 V35.2 / Agent 2.1.0 / 客户端 1.8。
+- **版本号**：服务端 V35.3 / Agent 2.1.1 / 客户端 2.3。
 ## 目录
 
 - [架构总览](#架构总览)
@@ -140,7 +147,7 @@ proxypilot/
 - `workers/`、`wrangler.toml` 与依赖 Worker 的测试脚本已从本分支删除。
 - 历史迁移方案、D1 导入工具仍保留在 `docs/migration/` 与 `server/tools/`，仅用于迁移旧数据。
 - `PP_LEGACY_BASE` 配置项保留，作为迁移期可选兜底；新部署无需配置。
-- 当前版本：V35.2（Go 1.24+ / MySQL 8 / React 18 + Ant Design 6 / Go Agent 2.1.0 / Wails v3 桌面客户端）。
+- 当前版本：V35.3（Go 1.24+ / MySQL 8 / React 18 + Ant Design 6 / Go Agent 2.1.1 / Wails v3 桌面客户端）。
 
 ## 功能总览
 
@@ -356,9 +363,9 @@ pp-mesh-client -mesh-token "$(cat /etc/proxypilot/mesh.token)" \
 
 | 组件 | 版本 | 说明 |
 | --- | --- | --- |
-| 面板 | V35.2 | 签发令牌、分配 IP、会话治理 |
-| Agent | 2.1.0 | 内嵌 HTTP/3 隧道节点（可靠流） |
-| 客户端 | 1.8 | Windows/macOS/Linux 桌面端 |
+| 面板 | V35.3 | 签发令牌、分配 IP、会话治理 |
+| Agent | 2.1.1 | 内嵌 HTTP/3 隧道节点（可靠流） |
+| 客户端 | 2.3 | Windows/macOS/Linux 桌面端 |
 
 ---
 
