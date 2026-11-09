@@ -54,6 +54,8 @@
   @keyframes dial-ring-spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
   @keyframes dial-core-pulse{0%,100%{box-shadow:0 0 0 0 rgba(251,191,36,0)}50%{box-shadow:0 0 20px rgba(251,191,36,.10) inset}}
 
+  .btn.danger{color:#f87171;border-color:rgba(248,113,113,.35);background:rgba(248,113,113,.08)}
+  .btn.danger:hover{background:rgba(248,113,113,.14)}
   .badge{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;font-size:11.5px;
     font-weight:600;border:1px solid var(--line);color:var(--muted);background:rgba(18,22,28,.6)}
   .badge .dot{width:6px;height:6px;border-radius:50%;background:var(--dim)}
@@ -65,11 +67,27 @@
   .badge.err .dot{background:var(--bad)}
   @keyframes blink{50%{opacity:.2}}
 
+  .picker{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center}
+  .picker[hidden]{display:none!important}
+  .picker-mask{position:absolute;inset:0;background:rgba(4,8,12,.62)}
+  .picker-body{position:relative;width:min(380px,86vw);max-height:70vh;display:flex;flex-direction:column;
+    border:1px solid var(--line2);border-radius:16px;background:#0e1319;box-shadow:0 24px 60px rgba(0,0,0,.5)}
+  .picker-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line)}
+  .picker-close{border:0;background:transparent;color:var(--muted);font-size:12px;cursor:pointer}
+  .picker-list{overflow:auto;padding:8px}
+  .picker-row{display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:10px;cursor:pointer;font-size:13px}
+  .picker-row:hover{background:rgba(56,189,248,.08)}
+  .picker-row.sel{background:rgba(56,189,248,.14);border:1px solid rgba(56,189,248,.35)}
+  .picker-row .pn{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .picker-row .pe{color:var(--dim);font-size:11px;font-family:var(--mono)}
   .rows{width:100%;border:1px solid var(--line);border-radius:14px;background:var(--card);overflow:hidden}
   .row{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-bottom:1px solid var(--line);font-size:12.5px}
   .row:last-child{border-bottom:0}
   .row .k{color:var(--muted)}
   .row .v{font-family:var(--mono);font-size:12px;color:var(--txt);max-width:62%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .row.clickable{cursor:pointer}
+  .row.clickable:hover .v{color:var(--accent)}
+  .row.clickable .v::after{content:'⌄';margin-left:6px;color:var(--dim);font-family:system-ui}
   .row .v.ok{color:var(--ok)}
   .row .v.bad{color:var(--bad)}
   .notice{margin-top:12px;width:100%;font-size:11.5px;line-height:1.5;color:var(--warn);
@@ -170,8 +188,15 @@
     </div>
     <div class="badge" id="badge"><span class="dot"></span><span id="badgeText">已断开</span></div>
 
+    <div id="nodePicker" class="picker" hidden>
+      <div class="picker-mask"></div>
+      <div class="picker-body">
+        <div class="picker-head"><b>选择节点</b><button class="picker-close" id="pickerClose">关闭</button></div>
+        <div class="picker-list" id="pickerList"></div>
+      </div>
+    </div>
     <div class="rows" style="margin-top:14px">
-      <div class="row"><span class="k">节点</span><span class="v" id="rNode">—</span></div>
+      <div class="row clickable" id="rowNode"><span class="k">节点</span><span class="v" id="rNode">—</span></div>
       <div class="row"><span class="k">分配地址</span><span class="v" id="rIP">—</span></div>
       <div class="row"><span class="k">虚拟网卡</span><span class="v" id="rAdapter">—</span></div>
       <div class="row"><span class="k">网关</span><span class="v" id="rGW">—</span></div>
@@ -205,6 +230,7 @@
     </div>
     <button class="btn" id="openLogs">打开日志文件夹</button>
     <button class="btn primary" id="save">保存</button>
+    <button class="btn danger" id="btnLogout">退出登录</button>
   </section>
 
   <section id="installer">
@@ -339,6 +365,12 @@ async function loadNodes(){
 }
 
 // 切换节点：写回后端记忆；若正在连接/已连接则自动用新节点重连
+$('rowNode').onclick = async ()=>{
+  if (!state.logged_in) { openSettings(); return; }
+  openPicker(true);
+};
+$('pickerClose').onclick = ()=> openPicker(false);
+
 async function pickNode(id){
   if(!id) return;
   const wasActive = state.status==='connected' || state.status==='connecting';
@@ -354,6 +386,32 @@ async function pickNode(id){
     await fetch('/api/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({node_id:id})});
     setTimeout(poll,300);
   }
+}
+
+// 渲染「选择节点」弹层
+function renderPicker(){
+  const list = $('pickerList');
+  if (!list) return;
+  if (!nodes.length) {
+    list.innerHTML = '<div class="picker-row"><span class="pn" style="color:var(--dim)">没有可用节点</span></div>';
+    return;
+  }
+  list.innerHTML = nodes.map((n)=>`
+    <div class="picker-row ${n.id===selectedNode?'sel':''}" data-id="${n.id}">
+      <span class="st ${n.online?'up':''}"></span>
+      <span class="pn">${n.name||('#'+n.id)}</span>
+      <span class="pe">${(n.endpoint||'').split(':')[0]||''}</span>
+    </div>`).join('');
+  list.querySelectorAll('.picker-row[data-id]').forEach((el)=>{
+    el.onclick = async ()=>{ openPicker(false); await pickNode(Number(el.dataset.id)); };
+  });
+}
+
+function openPicker(on){
+  const box = $('nodePicker');
+  if (!box) return;
+  box.hidden = !on;
+  if (on) { renderPicker(); loadNodes().then(renderPicker); }
 }
 
 async function toggle(){
@@ -522,6 +580,15 @@ function loginPoll(code){
     }catch(e){}
   }, 2000);
 }
+
+$('btnLogout').onclick = async ()=>{
+  if (!confirm('退出登录？本机保存的门户令牌会被清除。')) return;
+  try {
+    await fetch('/api/logout', { method:'POST' });
+    await poll();
+    closeSettings();
+  } catch(e) { alert('退出失败：'+e); }
+};
 
 $('btnLogin').onclick = async ()=>{
   $('btnLogin').disabled = true;

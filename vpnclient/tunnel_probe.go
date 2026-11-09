@@ -32,21 +32,40 @@ func probeTunnelOnce(localIP, dnsAddr string, timeout time.Duration) (time.Durat
 	}
 	defer conn.Close()
 
-	q := buildDNSQuery(src, dst, 0x5a5a)
+	const qid uint16 = 0x5a5a
+	q := buildDNSMessage(qid)
+	target := &net.UDPAddr{IP: dst, Port: atoiPort(port, 53)}
 	start := time.Now()
-	if _, err := conn.WriteToUDP(q, &net.UDPAddr{IP: dst, Port: atoiPort(port, 53)}); err != nil {
+	if _, err := conn.WriteToUDP(q, target); err != nil {
 		return 0, fmt.Errorf("发送失败：%w", err)
 	}
 	_ = conn.SetReadDeadline(time.Now().Add(timeout))
 	buf := make([]byte, 1500)
-	n, err := conn.Read(buf)
-	if err != nil {
-		return 0, fmt.Errorf("无应答（%s）", err.Error())
+	for {
+		n, err := conn.Read(buf)
+		if err != nil {
+			return 0, fmt.Errorf("无应答（%s）", err.Error())
+		}
+		if n >= 12 && binary.BigEndian.Uint16(buf[0:2]) == qid {
+			return time.Since(start), nil
+		}
 	}
-	if n < 12 || binary.BigEndian.Uint16(buf[0:2]) != 0x5a5a {
-		return 0, fmt.Errorf("应答不匹配")
-	}
-	return time.Since(start), nil
+}
+
+// buildDNSMessage 构造一个标准 DNS 查询报文（只含 DNS 消息，IP/UDP 头交给内核）。
+//
+// 早期版本错误地把「手工拼好的 IPv4 包」当作 UDP 载荷发出去，
+// 对端收到的是乱码，所以连通检测永远显示「不通」。
+func buildDNSMessage(id uint16) []byte {
+	name := []byte{7, 'e', 'x', 'a', 'm', 'p', 'l', 'e', 3, 'c', 'o', 'm', 0}
+	msg := make([]byte, 12+len(name)+4)
+	binary.BigEndian.PutUint16(msg[0:2], id)
+	msg[2] = 0x01 // recursion desired
+	binary.BigEndian.PutUint16(msg[4:6], 1)
+	copy(msg[12:], name)
+	binary.BigEndian.PutUint16(msg[len(msg)-4:], 1) // A
+	binary.BigEndian.PutUint16(msg[len(msg)-2:], 1) // IN
+	return msg
 }
 
 func atoiPort(s string, def int) int {

@@ -276,6 +276,7 @@ func runUI(ctx context.Context, addr string, defaults uiSettings, openBrowser, d
 	mux.HandleFunc("/api/settings", srv.handleSettings)
 	mux.HandleFunc("/api/nodes", srv.handleNodes)
 	mux.HandleFunc("/api/select-node", srv.handleSelectNode)
+	mux.HandleFunc("/api/logout", srv.handleLogout)
 	mux.HandleFunc("/api/connect", srv.handleConnect)
 	mux.HandleFunc("/api/disconnect", srv.handleDisconnect)
 	mux.HandleFunc("/api/logs", srv.handleLogs)
@@ -400,6 +401,23 @@ func (s *uiServer) handleSettings(w http.ResponseWriter, r *http.Request) {
 		log.Printf("保存配置失败：%v", err)
 	}
 	log.Printf("配置已更新：面板=%s dns=%s insecure=%v", cfg.API, cfg.DNSAddr, cfg.Insecure)
+	writeJSON(w, map[string]any{"ok": true})
+}
+
+// POST /api/logout —— 清除本机保存的门户令牌（退出登录）。
+func (s *uiServer) handleLogout(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	s.cfgMu.Lock()
+	s.cfg.Token = ""
+	cfg := s.cfg
+	s.cfgMu.Unlock()
+	if err := saveSettings(cfg); err != nil {
+		log.Printf("保存配置失败：%v", err)
+	}
+	log.Printf("已退出登录（清除本机令牌）")
 	writeJSON(w, map[string]any{"ok": true})
 }
 
