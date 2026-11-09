@@ -10,8 +10,9 @@ import (
 	"github.com/yzfn/proxypilot/server/internal/config"
 )
 
-// Version 由 main 通过 ldflags 注入。
-var Version = "V35.0"
+// Version 由 main 在启动时写入（取自 cmd 里的 version 常量 / ldflags）。
+// 这里故意不写死版本号：写死会出现「加载页显示旧版本」这类不一致。
+var Version = ""
 
 // New 构造 HTTP 处理器。已迁移的路由走真实实现，其余转发给旧 Worker 或返回 501。
 func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {

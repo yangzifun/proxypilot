@@ -27,7 +27,14 @@ dayjs.locale('zh-cn');
  */
 const zhCN = zhCNraw && zhCNraw.default && zhCNraw.default.Modal ? zhCNraw.default : zhCNraw;
 
-window.__PP_BOOT__ = window.__PP_BOOT__ || { superAdmin: 'admin', version: 'V15.0', flavor: 'antd' };
+/**
+ * 版本兜底：服务端会在 <meta name="pp-version"> 与 __PP_BOOT__ 里注入真实版本。
+ * 这里不再写死任何版本号，避免内置版本与发布版本不一致（曾出现加载页显示旧版本）。
+ */
+const ppVersionMeta = document.querySelector('meta[name="pp-version"]');
+const ppVersionFallback = (ppVersionMeta && ppVersionMeta.getAttribute('content')) || '';
+window.__PP_BOOT__ = window.__PP_BOOT__ || { superAdmin: 'admin', version: ppVersionFallback, flavor: 'antd' };
+if (window.__PP_BOOT__ && !window.__PP_BOOT__.version) window.__PP_BOOT__.version = ppVersionFallback;
 
 /**
  * OIDC 回调成功后 worker.js 会重定向到 `/admin#token=<jwt>`。

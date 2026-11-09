@@ -217,7 +217,7 @@ export default function Login() {
 
           <div style={{ position: 'relative', zIndex: 1, color: '#475569', fontSize: 11.5 }}>
             <Tag color="geekblue" style={{ background: 'rgba(99,102,241,.14)', border: 'none', color: '#a5b4fc' }}>
-              {boot.version || 'V15.0'} · Ant Design
+              {boot.version || '—'} · Ant Design
             </Tag>
             <span style={{ marginLeft: 8 }}>后端由 Go 服务端与节点 Agent 提供</span>
           </div>

@@ -1,4 +1,4 @@
-﻿package api
+package api
 
 import (
 	"context"
@@ -121,6 +121,7 @@ func (h *handlers) shellHTML(mode string) string {
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="` + theme + `">
 <meta name="robots" content="noindex,nofollow">
+<meta name="pp-version" content="` + webVersion(meta.Version) + `">
 <title>` + title + `</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=` + ver + `">
 <link rel="shortcut icon" href="/favicon.ico?v=` + ver + `">
@@ -154,7 +155,7 @@ func (h *handlers) shellHTML(mode string) string {
       <span class="pp-boot-ring"></span>
     </div>
     <div class="pp-boot-title">` + title + `</div>
-    <div class="pp-boot-version">` + meta.Version + `</div>
+    <div class="pp-boot-version">` + webVersion(meta.Version) + `</div>
     <div class="pp-boot-track"><i></i></div>
     <div class="pp-boot-tip">正在加载控制台…</div>
     <div class="pp-boot-retry" id="pp-boot-retry" hidden>加载时间较长，<a href="" onclick="location.reload();return false;">刷新页面</a></div>

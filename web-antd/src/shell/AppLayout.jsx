@@ -101,12 +101,12 @@ export default function AppLayout({ activeKey, onNavigate, children }) {
           style={{ borderInlineEnd: 'none', padding: '0 8px', background: 'transparent' }}
         />
         <Tooltip
-          title={`ProxyPilot ${boot.version || 'V15.0'} · React 18 · Ant Design 6`}
+          title={`ProxyPilot ${boot.version || '版本未知'} · React 18 · Ant Design 6`}
           placement="right"
         >
           <div className="pp-sider-foot">
             <span className="pp-sider-foot-dot" />
-            {collapsed ? null : <span className="pp-sider-foot-text">{boot.version || 'V15.0'}</span>}
+            {collapsed ? null : <span className="pp-sider-foot-text">{boot.version || '—'}</span>}
           </div>
         </Tooltip>
       </Sider>
