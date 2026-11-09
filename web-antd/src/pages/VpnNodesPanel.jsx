@@ -44,6 +44,7 @@ export default function VpnNodesPanel() {
   const [loading, setLoading] = useState(false);
   const [nodes, setNodes] = useState([]);
   const [serverNames, setServerNames] = useState({});
+  const [serverOptions, setServerOptions] = useState([]);
   const [nodeOpen, setNodeOpen] = useState(false);
   const [editingNode, setEditingNode] = useState(null);
 
@@ -60,6 +61,17 @@ export default function VpnNodesPanel() {
         if (row.server_id) map[row.server_id] = row.server_name || '';
       }
       setServerNames(map);
+
+      // 服务器下拉：只列 Agent 接入的节点（本机不在 servers 表里，天然排除）
+      try {
+        const resp = await api('servers');
+        const rows = (resp && resp.data) || [];
+        setServerOptions(rows.map((s) => ({
+          value: Number(s.id),
+          label: `${s.name || ('#' + s.id)}（#${s.id} · ${s.status || s.last_status || '未知'}）`,
+          name: s.name || ('#' + s.id),
+        })));
+      } catch (e) { /* 服务器列表取不到时退化为手填 ID */ }
     } catch (e) {
       message.error(e.message || '加载 VPN 节点失败');
     } finally {
@@ -186,8 +198,22 @@ export default function VpnNodesPanel() {
         destroyOnClose
       >
         <Form form={nodeForm} layout="vertical" initialValues={EMPTY_NODE}>
-          <Form.Item name="server_id" label="服务器 ID（servers.id）" rules={[{ required: true }]}>
-            <InputNumber min={1} style={{ width: '100%' }} />
+          <Form.Item
+            name="server_id"
+            label="服务器"
+            extra={serverOptions.length ? undefined : '暂无 Agent 接入的服务器，请先到「服务器」页接入'}
+            rules={[{ required: true, message: '请选择服务器' }]}
+          >
+            <Select
+              showSearch
+              placeholder="选择要部署 VPN 节点的服务器"
+              optionFilterProp="label"
+              options={serverOptions.length ? serverOptions : (editingNode ? [{
+                value: Number(editingNode.server_id),
+                label: `#${editingNode.server_id}`,
+              }] : [])}
+              notFoundContent="没有匹配的服务器"
+            />
           </Form.Item>
           <Form.Item name="name" label="名称" rules={[{ required: true }]}>
             <Input placeholder="台北-01" />
