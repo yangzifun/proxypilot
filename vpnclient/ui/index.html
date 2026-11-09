@@ -247,6 +247,7 @@
 <script>
 const $ = (id) => document.getElementById(id);
 let state = {}, nodes = [], selectedNode = 0, view = 'main';
+let selectedSynced = false;
 
 const fmtDur = (s)=>{ s=Math.max(0,s|0); const h=(s/3600)|0,m=((s%3600)/60)|0,x=s%60;
   return (h?h+':':'')+String(m).padStart(2,'0')+':'+String(x).padStart(2,'0'); };
@@ -264,7 +265,15 @@ function render(){
   $('badgeText').textContent = st==='connected' ? ('已连接 · '+(state.probe_ok?'数据面正常':'探测中'))
     : st==='connecting' ? '正在建立会话' : st==='error' ? '连接异常' : '已断开';
 
-  $('rNode').textContent = state.node_name ? state.node_name + (state.mtu?(' · MTU '+state.mtu):'') : '—';
+  // 已连接显示实际会话节点；未连接显示当前选中的节点（切换后立即生效）
+  const pickedNode = nodes.find((x) => x.id === selectedNode);
+  if (state.node_name) {
+    $('rNode').textContent = state.node_name + (state.mtu ? (' · MTU ' + state.mtu) : '');
+  } else if (pickedNode) {
+    $('rNode').textContent = (pickedNode.name || ('#' + pickedNode.id)) + '（待连接）';
+  } else {
+    $('rNode').textContent = '—';
+  }
   $('rIP').textContent = state.ip4 || '—';
   $('rRTT').textContent = state.rtt_ms ? state.rtt_ms + ' ms' : '—';
   $('rRTT').className = 'v' + (state.rtt_ms && state.rtt_ms > 300 ? ' bad' : state.rtt_ms ? ' ok' : '');
@@ -302,7 +311,16 @@ function render(){
 }
 
 async function poll(){
-  try{ const r = await fetch('/api/state',{cache:'no-store'}); state = await r.json(); render(); }catch(e){}
+  try{
+    const r = await fetch('/api/state',{cache:'no-store'});
+    state = await r.json();
+    if(!selectedSynced && state.selected_node){
+      selectedNode = Number(state.selected_node) || 0;
+      selectedSynced = true;
+      loadNodes();
+    }
+    render();
+  }catch(e){}
 }
 
 async function loadNodes(){
@@ -316,8 +334,26 @@ async function loadNodes(){
         <span class="nm">${n.name||n.id}</span>
         <span class="ep">${(n.endpoint||'').split(':')[0]}</span>
       </div>`).join('');
-    $('nodes').querySelectorAll('.nrow').forEach(el=>el.onclick=()=>{ selectedNode=Number(el.dataset.id); loadNodes(); });
+    $('nodes').querySelectorAll('.nrow').forEach(el=>el.onclick=()=>{ pickNode(Number(el.dataset.id)); });
   }catch(e){}
+}
+
+// 切换节点：写回后端记忆；若正在连接/已连接则自动用新节点重连
+async function pickNode(id){
+  if(!id) return;
+  const wasActive = state.status==='connected' || state.status==='connecting';
+  selectedNode = id;
+  render(); loadNodes();
+  try{
+    const r = await fetch('/api/select-node',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({node_id:id})});
+    if(!r.ok) throw new Error('切换失败');
+  }catch(e){ /* 后端记忆失败不影响本次选择 */ }
+  if(wasActive){
+    await fetch('/api/disconnect',{method:'POST'});
+    await new Promise(res=>setTimeout(res,300));
+    await fetch('/api/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({node_id:id})});
+    setTimeout(poll,300);
+  }
 }
 
 async function toggle(){

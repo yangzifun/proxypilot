@@ -90,6 +90,8 @@ type uiSettings struct {
 	Insecure bool   `json:"insecure"`
 	DNSAddr  string `json:"dns_addr"`
 	NodeID int64
+	// SelectedNode 记住用户在客户端里选中的节点，重启后仍然生效
+	SelectedNode int64 `json:"selected_node"`
 	DeviceID int64  `json:"device_id"`
 	// 接管系统网络：mesh=仅组网网段，full=接管全部流量
 	TunMode string
@@ -273,6 +275,7 @@ func runUI(ctx context.Context, addr string, defaults uiSettings, openBrowser, d
 	mux.HandleFunc("/api/state", srv.handleState)
 	mux.HandleFunc("/api/settings", srv.handleSettings)
 	mux.HandleFunc("/api/nodes", srv.handleNodes)
+	mux.HandleFunc("/api/select-node", srv.handleSelectNode)
 	mux.HandleFunc("/api/connect", srv.handleConnect)
 	mux.HandleFunc("/api/disconnect", srv.handleDisconnect)
 	mux.HandleFunc("/api/logs", srv.handleLogs)
@@ -356,6 +359,7 @@ func (s *uiServer) handleState(w http.ResponseWriter, r *http.Request) {
 	payload["platform"] = runtime.GOOS
 	payload["token_hint"] = maskToken(cfg.Token)
 	payload["version"] = Version
+	payload["selected_node"] = cfg.SelectedNode
 	writeJSON(w, payload)
 }
 
@@ -397,6 +401,38 @@ func (s *uiServer) handleSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("配置已更新：面板=%s dns=%s insecure=%v", cfg.API, cfg.DNSAddr, cfg.Insecure)
 	writeJSON(w, map[string]any{"ok": true})
+}
+
+// POST /api/select-node {node_id} —— 记住用户选中的节点；已连接时由前端决定是否重连。
+func (s *uiServer) handleSelectNode(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		NodeID int64 `json:"node_id"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&body); err != nil {
+		http.Error(w, "参数错误", http.StatusBadRequest)
+		return
+	}
+	if body.NodeID <= 0 {
+		http.Error(w, "node_id 非法", http.StatusBadRequest)
+		return
+	}
+	s.cfgMu.Lock()
+	s.cfg.SelectedNode = body.NodeID
+	cfg := s.cfg
+	s.cfgMu.Unlock()
+	if err := saveSettings(cfg); err != nil {
+		log.Printf("保存选中节点失败：%v", err)
+	}
+	log.Printf("已切换目标节点：#%d", body.NodeID)
+	writeJSON(w, map[string]any{
+		"ok":        true,
+		"node_id":   body.NodeID,
+		"connected": s.state.snapshot()["status"] == "connected",
+	})
 }
 
 func (s *uiServer) handleNodes(w http.ResponseWriter, r *http.Request) {
@@ -509,6 +545,9 @@ func (s *uiServer) connect(nodeID int64) error {
 		st.rx, st.tx = 0, 0
 		st.startedAt = 0
 	})
+	if nodeID <= 0 {
+		nodeID = cfg.SelectedNode
+	}
 	log.Printf("开始连接：面板=%s 指定节点=%d", cfg.API, nodeID)
 
 	go func() {
@@ -541,6 +580,13 @@ func (s *uiServer) connect(nodeID int64) error {
 			st.nodeHost = pick.Endpoint
 			st.message = fmt.Sprintf("已选择节点 %s，正在换票…", pick.Name)
 		})
+		// 记住本次使用的节点，下次打开客户端默认还是它
+		s.cfgMu.Lock()
+		if s.cfg.SelectedNode != pick.ID {
+			s.cfg.SelectedNode = pick.ID
+			_ = saveSettings(s.cfg)
+		}
+		s.cfgMu.Unlock()
 		log.Printf("选择节点：#%d %s endpoint=%s online=%v", pick.ID, pick.Name, pick.Endpoint, pick.Online)
 
 		devID, derr := s.resolveDevice(ctx, cfg)
