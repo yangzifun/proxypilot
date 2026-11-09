@@ -27,7 +27,6 @@
 - [功能总览](#功能总览)
 - [协议与端口](#协议与端口)
 - [VPN 与组网协议栈](#vpn-与组网协议栈)
-- [命名说明（MASQUE）](#命名说明masque)
 - [权限模型](#权限模型)
 - [生产部署](#生产部署单机直接安装)
 - [使用指南](#使用指南)
@@ -134,21 +133,6 @@ proxypilot/
 - 源码唯一入口：`web-antd/src`，构建：`cd web-antd && node scripts/build.mjs`（esbuild）。
 - 构建产物会**自动同步**到 `server/internal/api/assets_web/`，被 `go:embed` 打进二进制，部署只需一个可执行文件。
 - 调试期也可设置 `PP_WEB_DIST=.../web-antd/dist` 让 Go 直接读磁盘产物，改前端无需重新编译后端。
-
-### 命名说明（MASQUE）
-
-仓库里有三处容易混淆的「MASQUE」：
-
-1. **`masque/` 目录 + `pp-masque-node` 二进制**：自研 HTTP/3 IP 隧道节点。
-   跑在 HTTP/3 之上、用 `POST /tunnel` + `[2字节长度][IP报文]` 分帧，
-   **没有**实现 RFC 9484 `CONNECT-IP` 与 RFC 9297 HTTP Datagram，
-   因此不是标准 MASQUE，不能与 sing-box / mihomo 的 MASQUE 客户端互通。
-   保留该名字只是历史原因（协议常量 `Audience=masque-node`、配置路径 `/etc/proxypilot/masque/` 也沿用）。
-2. **面板订阅模板里的 MASQUE**：由 sing-box ≥ 1.15.0 的 `masque-server` endpoint 提供，
-   走 CONNECT-IP，是**真正的 MASQUE**，供用户订阅使用。
-3. **WARP 页面的 `#masque`**：Cloudflare WARP 的 MASQUE 接入参数管理，同样是标准协议。
-
----
 
 ## 旧版代码
 
@@ -346,13 +330,14 @@ pp-mesh-client -mesh-token "$(cat /etc/proxypilot/mesh.token)" \
 
 相同点：都跑在 **HTTP/3（QUIC + TLS 1.3，ALPN=h3）** 之上，都是 **IP-in-HTTP** 形态的隧道，都靠节点侧 TUN + NAT 出口。
 
-> 面板订阅里另有一个**真正的 MASQUE**：sing-box 1.15+ 的 `masque-server` endpoint
-> （端口 13707/13708，CONNECT-IP），与本节的自动隧道是两套独立实现：
-> 前者给用户订阅用，后者给桌面客户端与服务器组网用。
+仓库里另外两处「MASQUE」是真协议，别和本节混了：
 
-若要和标准 MASQUE 客户端互通，需要补：扩展 CONNECT + `connect-ip` Capsule、
-HTTP Datagram（RFC 9297）承载、并改用 CONNECT 头鉴权。当前选择「可靠流 + JWT」，
-是为了在跨境丢包链路上稳定，并复用面板已有的授权 / 配额 / 会话体系。
+- 订阅模板里的 `masque-server`（sing-box ≥ 1.15，端口 13707/13708）——CONNECT-IP，标准 MASQUE
+- **WARP** 页面的 `#masque`——Cloudflare WARP 接入参数
+
+`masque/` 目录与 `pp-masque-node` 二进制保留旧名只是历史原因（`Audience=masque-node`、
+`/etc/proxypilot/masque/` 仍在用）。要互通标准客户端需补扩展 CONNECT + `connect-ip` Capsule
+与 HTTP Datagram；当前选「可靠流 + JWT」是为了跨境链路稳定并复用面板授权体系。
 
 ### 两套网络的差异
 
