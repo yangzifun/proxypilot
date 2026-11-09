@@ -81,7 +81,7 @@ func main() {
 
 	app := application.New(application.Options{
 		Name:        "ProxyPilot",
-		Description: "ProxyPilot MASQUE / HTTP-3 客户端",
+		Description: "ProxyPilot VPN 客户端（自研 HTTP/3 隧道）",
 		Icon:        appIcon,
 		Windows: application.WindowsOptions{
 			WebviewUserDataPath: webviewDataDir(),

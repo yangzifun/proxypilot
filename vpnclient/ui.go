@@ -2,7 +2,7 @@
 //
 // 设计目标：
 //   - 不依赖 Node/WebView，一个二进制即可运行（Windows/Linux）；
-//   - 界面风格与 masque-h3-anti-censorship 的深色控制台一致；
+//   - 界面风格与面板控制台保持一致（深色）；隧道为自研 HTTP/3 流，非标准 MASQUE。
 //   - 连接动作复用 CLI 的 门户换票 → HTTP/3 鉴权 → DNS 探测 流程，并把每一步回显到界面。
 package main
 

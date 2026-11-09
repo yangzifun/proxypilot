@@ -47,7 +47,7 @@ type session struct {
 	rx      uint64
 }
 
-// Server 是 MASQUE 节点。
+// Server 是自研 HTTP/3 隧道节点（非标准 MASQUE）。
 type Server struct {
 	cfg      Config
 	log      *slog.Logger
@@ -129,7 +129,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 
 	go s.tunLoop()
-	s.log.Info("MASQUE 节点已启动", "listen", s.cfg.Listen, "tun", dev.Name(),
+	s.log.Info("HTTP/3 隧道节点已启动", "listen", s.cfg.Listen, "tun", dev.Name(),
 		"client_cidr", s.cfg.ClientCIDR, "gateway", s.cfg.Gateway4)
 
 	errCh := make(chan error, 1)

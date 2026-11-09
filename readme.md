@@ -15,7 +15,7 @@
 - **客户端接管系统网络（V35.2 新增）**：Windows 版**先安装**（`install.cmd`，自动提权）——安装时释放 Wintun 驱动并**注册虚拟网卡**，之后连接直接复用；**安装程序**（`proxypilot-vpn-1.2-windows-amd64-install.exe`）与**客户端主程序**分离，安装程序只安装不运行，主程序必须已安装才能启动，版本 v1.1 见窗口标题/页脚/exe 属性；安装向导分步显示进度；可选开机后台运行，关闭窗口缩到**系统托盘**继续工作，托盘菜单含连接/断开/设置/退出；连接后配置地址/MTU 并下发路由（Windows 用内置 Wintun、Linux/macOS 用 TUN），
   自动配置地址/MTU 并按模式下发路由：「仅组网网段」或「接管全部流量」；断开时自动删除路由并关闭网卡。
   Windows 版以管理员身份运行（清单 `requireAdministrator`），驱动随安装包内置，无需单独安装。
-- **协议栈**：新增「VPN 与组网协议栈」章节 —— VPN 走 QUIC 可靠流（`[2字节长度][IP报文]` 分帧 + `0.0.0.0/1` 双半区路由 + 服务器 `/32` 直连防环），组网走同一套 MASQUE 节点（`10.99.0.0/16`、无 NAT、允许互访）。
+- **协议栈**：新增「VPN 与组网协议栈」章节 —— VPN 走 QUIC 可靠流（`[2字节长度][IP报文]` 分帧 + `0.0.0.0/1` 双半区路由 + 服务器 `/32` 直连防环），组网走同一套 HTTP/3 隧道（`10.99.0.0/16`、无 NAT、允许互访）。
 - **版本号**：服务端 V35.2 / Agent 2.1.0 / 客户端 1.8。
 ## 目录
 
@@ -27,6 +27,7 @@
 - [功能总览](#功能总览)
 - [协议与端口](#协议与端口)
 - [VPN 与组网协议栈](#vpn-与组网协议栈)
+- [命名说明（MASQUE）](#命名说明masque)
 - [权限模型](#权限模型)
 - [生产部署](#生产部署单机直接安装)
 - [使用指南](#使用指南)
@@ -121,6 +122,8 @@ proxypilot/
 │   └── dist/                   # 构建产物（会同步进 server/internal/api/assets_web/）
 ├── deploy/                     # 单机安装 / 升级 / 卸载脚本与站点加固
 ├── agent/                      # Go Agent + install.sh + build.sh + dist/
+├── masque/                     # 自研 HTTP/3 隧道节点（包名为历史命名，非 RFC 9484 MASQUE）
+├── vpnclient/                  # VPN 客户端（Wails v3 桌面端 + CLI，含组网模式）
 ├── .github/                    # CI：Release 构建与安全扫描
 ├── rule/                       # Clash / Mihomo 模板与规则
 ├── docs/                       # 架构与迁移文档
@@ -131,6 +134,21 @@ proxypilot/
 - 源码唯一入口：`web-antd/src`，构建：`cd web-antd && node scripts/build.mjs`（esbuild）。
 - 构建产物会**自动同步**到 `server/internal/api/assets_web/`，被 `go:embed` 打进二进制，部署只需一个可执行文件。
 - 调试期也可设置 `PP_WEB_DIST=.../web-antd/dist` 让 Go 直接读磁盘产物，改前端无需重新编译后端。
+
+### 命名说明（MASQUE）
+
+仓库里有三处容易混淆的「MASQUE」：
+
+1. **`masque/` 目录 + `pp-masque-node` 二进制**：自研 HTTP/3 IP 隧道节点。
+   跑在 HTTP/3 之上、用 `POST /tunnel` + `[2字节长度][IP报文]` 分帧，
+   **没有**实现 RFC 9484 `CONNECT-IP` 与 RFC 9297 HTTP Datagram，
+   因此不是标准 MASQUE，不能与 sing-box / mihomo 的 MASQUE 客户端互通。
+   保留该名字只是历史原因（协议常量 `Audience=masque-node`、配置路径 `/etc/proxypilot/masque/` 也沿用）。
+2. **面板订阅模板里的 MASQUE**：由 sing-box ≥ 1.15.0 的 `masque-server` endpoint 提供，
+   走 CONNECT-IP，是**真正的 MASQUE**，供用户订阅使用。
+3. **WARP 页面的 `#masque`**：Cloudflare WARP 的 MASQUE 接入参数管理，同样是标准协议。
+
+---
 
 ## 旧版代码
 
@@ -689,7 +707,7 @@ node scripts/build.mjs   # esbuild 构建并自动同步 server/internal/api/ass
 
 ## 适用场景
 
-- 自建节点（sing-box / MASQUE）统一编排与下发
+- 自建节点（sing-box，含标准 MASQUE endpoint）统一编排与下发
 - 多台服务器、多 UUID 的订阅分发与访问统计
 - 想要「面板 + Agent」但不想开放管理端口的环境
 

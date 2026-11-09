@@ -1,5 +1,9 @@
-// Package node 实现 ProxyPilot 的 MASQUE 节点守护进程：
-// HTTP/3 + QUIC DATAGRAM 接入、JWT 验签、TUN/NAT、用户隔离。
+// Package node 实现 ProxyPilot 的 HTTP/3 IP 隧道节点守护进程：
+// HTTP/3 接入（POST /tunnel 可靠流）、JWT 验签、TUN/NAT、用户隔离。
+//
+// 命名说明：包名/二进制名沿用历史命名 "masque"，但本实现并未采用 RFC 9484
+// CONNECT-IP 与 RFC 9297 HTTP Datagram，因此不具备与标准 MASQUE 客户端互通的
+// 能力；协议细节见 readme「VPN 与组网协议栈」。
 package node
 
 import (

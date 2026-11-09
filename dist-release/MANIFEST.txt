@@ -1,8 +1,8 @@
 ProxyPilot 发布包
 面板版本 : V35.2
 Agent    : 2.1.0
-客户端   : 1.8
-构建时间 : 2026-11-09 15:20:14
+客户端   : 1.9
+构建时间 : 2026-11-09 15:27:35
 
 文件清单：
   DEPLOY-README.md                                       0.0 MB
@@ -12,12 +12,12 @@ Agent    : 2.1.0
   proxypilot-agent-2.1.0-linux-arm64                     8.9 MB
   proxypilot-V35.2-linux-amd64                          18.3 MB
   proxypilot-V35.2-linux-arm64                          17.3 MB
-  proxypilot-vpn-1.8-darwin-amd64                        9.0 MB
-  proxypilot-vpn-1.8-darwin-arm64                        8.4 MB
-  proxypilot-vpn-1.8-linux-amd64                         8.8 MB
-  proxypilot-vpn-1.8-linux-arm64                         8.2 MB
-  proxypilot-vpn-1.8-windows-amd64-cli.exe               9.5 MB
-  proxypilot-vpn-1.8-windows-amd64-install.exe          30.0 MB
+  proxypilot-vpn-1.9-darwin-amd64                        9.0 MB
+  proxypilot-vpn-1.9-darwin-arm64                        8.4 MB
+  proxypilot-vpn-1.9-linux-amd64                         8.8 MB
+  proxypilot-vpn-1.9-linux-arm64                         8.2 MB
+  proxypilot-vpn-1.9-windows-amd64-cli.exe               9.5 MB
+  proxypilot-vpn-1.9-windows-amd64-install.exe          30.0 MB
   uninstall.cmd                                          0.0 MB
   uninstall.ps1                                          0.0 MB
   uninstall.sh                                           0.0 MB
@@ -26,7 +26,7 @@ Agent    : 2.1.0
 安装：
   服务端    sudo ./install.sh --binary ./proxypilot-V35.2-linux-amd64
   升级      sudo ./upgrade.sh --binary ./proxypilot-V35.2-linux-amd64
-  Windows   双击 proxypilot-vpn-1.8-windows-amd64-install.exe（安装程序，只安装不运行）
-            安装后从开始菜单/桌面图标启动 ProxyPilot（客户端 v1.8）
+  Windows   双击 proxypilot-vpn-1.9-windows-amd64-install.exe（安装程序，只安装不运行）
+            安装后从开始菜单/桌面图标启动 ProxyPilot（客户端 v1.9）
             卸载：设置 → 应用 → ProxyPilot VPN，或运行 uninstall.cmd
-  客户端自检 proxypilot-vpn-1.8-windows-amd64-cli.exe -tun-selftest
+  客户端自检 proxypilot-vpn-1.9-windows-amd64-cli.exe -tun-selftest
