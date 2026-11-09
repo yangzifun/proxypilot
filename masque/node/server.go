@@ -118,9 +118,9 @@ func (s *Server) Run(ctx context.Context) error {
 	s.ln = ln
 	s.srv = &http3.Server{
 		TLSConfig:  tlsConf,
-		QuicConfig: quicConf,
+		QUICConfig: quicConf,
 		Handler:    s,
-		ConnContext: func(ctx context.Context, c quic.Connection) context.Context {
+		ConnContext: func(ctx context.Context, c *quic.Conn) context.Context {
 			return context.WithValue(ctx, connKey{}, c)
 		},
 	}
@@ -187,7 +187,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "ip not in client cidr", http.StatusForbidden)
 		return
 	}
-	conn, _ := r.Context().Value(connKey{}).(quic.Connection)
+	conn, _ := r.Context().Value(connKey{}).(*quic.Conn)
 	if conn == nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
