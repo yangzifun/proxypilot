@@ -1,28 +1,42 @@
 //go:build windows && desktop
 
-// 桌面版入口：Wails v3（WebView2）原生窗口 + 内置本地控制台。
+// 桌面版入口：Wails v3（WebView2）原生窗口 + 内置本地控制台 + 系统托盘。
 //
-// 界面复用 ui/index.html 与 /api/*，窗口加载本地控制台地址，
-// 不弹外部浏览器、不需要单独起服务。
+// 运行形态：
+//   - 默认：打开窗口；关闭窗口不退出，隐藏到托盘继续后台运行
+//   - -background / -tray：启动即隐藏，只在托盘（安装时勾选「开机后台运行」用它）
+//   - 托盘菜单：显示窗口 / 连接 / 断开 / 应用设置 / 退出
 package main
 
 import (
 	_ "embed"
+	"bytes"
 	"context"
+	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
 //go:embed assets/app.ico
 var appIcon []byte
 
 func main() {
+	background := flag.Bool("background", false, "启动后只在系统托盘运行，不显示窗口")
+	trayOnly := flag.Bool("tray", false, "同 -background")
+	flag.Parse()
+	startHidden := *background || *trayOnly
+
+	// 允许与安装/卸载/自检共用同一个 exe：这些参数已在 CLI 入口处理，
+	// 桌面版这里只需忽略未知参数带来的误判。
 	addr, err := freeLocalAddr()
 	if err != nil {
 		log.Fatalf("找不到可用端口：%v", err)
@@ -57,20 +71,76 @@ func main() {
 		Icon:        appIcon,
 		Windows: application.WindowsOptions{
 			WebviewUserDataPath: webviewDataDir(),
+			// 关闭窗口后进程继续留在托盘
+			DisableQuitOnLastWindowClosed: true,
 		},
 		OnShutdown: func() {
 			cancel()
 		},
 	})
 
-	app.Window.NewWithOptions(application.WebviewWindowOptions{
+	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:     "ProxyPilot",
 		Width:     420,
 		Height:    780,
 		MinWidth:  380,
 		MinHeight: 640,
 		URL:       "http://" + addr + "/",
+		Hidden:    startHidden,
 	})
+
+	// ---------- 系统托盘 ----------
+	tray := app.SystemTray.New()
+	tray.SetIcon(appIcon)
+	tray.SetTooltip("ProxyPilot VPN")
+
+	menu := app.NewMenu()
+	menu.Add("显示窗口").OnClick(func(*application.Context) {
+		window.Show()
+		window.Focus()
+	})
+	menu.Add("隐藏到托盘").OnClick(func(*application.Context) {
+		window.Hide()
+	})
+	menu.AddSeparator()
+	menu.Add("连接").OnClick(func(*application.Context) {
+		if err := localPost(addr, "/api/connect", map[string]any{"node_id": 0}); err != nil {
+			log.Printf("托盘连接失败：%v", err)
+			return
+		}
+		window.Show()
+	})
+	menu.Add("断开").OnClick(func(*application.Context) {
+		if err := localPost(addr, "/api/disconnect", nil); err != nil {
+			log.Printf("托盘断开失败：%v", err)
+			return
+		}
+	})
+	menu.AddSeparator()
+	menu.Add("打开设置").OnClick(func(*application.Context) {
+		window.Show()
+		window.Focus()
+		// 前端监听 hash 变化切到首选项
+		window.ExecJS(`location.hash = '#settings'`)
+	})
+	menu.Add("退出").OnClick(func(*application.Context) {
+		cancel()
+		app.Quit()
+	})
+	tray.SetMenu(menu)
+
+	// 左键单击托盘：切换窗口显示
+	tray.OnClick(func() {
+		tray.ToggleWindow()
+	})
+
+	// 关闭窗口 = 隐藏到托盘（不退出进程）
+	hideOnClose := func(e *application.WindowEvent) {
+		window.Hide()
+		e.Cancel()
+	}
+	window.OnWindowEvent(events.Common.WindowClosing, hideOnClose)
+	window.OnWindowEvent(events.Windows.WindowClosing, hideOnClose)
 
 	if err := app.Run(); err != nil {
 		log.Fatalf("窗口启动失败（WebView2 运行库是否已安装？）：%v", err)
@@ -96,4 +166,30 @@ func webviewDataDir() string {
 	dir := filepath.Join(base, "ProxyPilot", "webview2")
 	_ = os.MkdirAll(dir, 0o755)
 	return dir
+}
+
+// localPost 调用内置控制台的本地接口（托盘菜单用）。
+func localPost(addr, path string, body map[string]any) error {
+	var buf *bytes.Reader
+	if body == nil {
+		buf = bytes.NewReader([]byte("{}"))
+	} else {
+		raw, _ := json.Marshal(body)
+		buf = bytes.NewReader(raw)
+	}
+	req, err := http.NewRequest(http.MethodPost, "http://"+addr+path, buf)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	return nil
 }

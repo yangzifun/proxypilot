@@ -81,6 +81,10 @@ func runCLI() {
 	uiOpen := flag.Bool("ui-open", true, "启动后自动打开浏览器")
 	uiDemo := flag.Bool("ui-demo", false, "控制台使用演示数据（不发起真实连接）")
 	tunSelftest := flag.Bool("tun-selftest", false, "自检：创建网卡并下发路由后立即清理（需要管理员/root）")
+	doInstall := flag.Bool("install", false, "安装：释放驱动、注册虚拟网卡、写入卸载信息（需要管理员）")
+	doUninstall := flag.Bool("uninstall", false, "卸载：移除虚拟网卡与卸载信息（需要管理员）")
+	installDir := flag.String("install-dir", "", "安装目录（默认与 exe 同目录）")
+	adapterCheck := flag.Bool("adapter-status", false, "检查虚拟网卡是否已注册")
 	tunSelftestMode := flag.String("tun-selftest-mode", "mesh", "自检接管模式：mesh|full")
 	tunSelftestKeep := flag.Int("tun-selftest-keep", 5, "自检保留秒数（到点自动清理）")
 	cfgPath := flag.String("config", "", "配置文件路径（默认用系统配置目录）")
@@ -98,6 +102,19 @@ func runCLI() {
 	if *cfgPath != "" {
 		configPathOverride = *cfgPath
 	}
+	if *doInstall {
+		runInstallMode(*installDir)
+		return
+	}
+	if *doUninstall {
+		runUninstallMode()
+		return
+	}
+	if *adapterCheck {
+		runAdapterStatus()
+		return
+	}
+
 	if *tunSelftest {
 		mode := TunMode(strings.ToLower(strings.TrimSpace(*tunSelftestMode)))
 		if mode != TunModeFull {
@@ -628,4 +645,38 @@ func runTunSelftest(mode TunMode, keepSec int) error {
 	_ = dev.Close()
 	log.Printf("自检完成：网卡与路由已清理")
 	return nil
+}
+
+// runInstallMode 执行安装流程并输出结果。
+func runInstallMode(dir string) {
+	if !runtimeSupportsTun() {
+		log.Fatalf("当前平台不支持安装流程")
+	}
+	res, err := RunInstall(dir)
+	if err != nil {
+		log.Printf("安装失败：%v", err)
+		os.Exit(1)
+	}
+	printInstallResult(res)
+	log.Printf("安装完成：网卡=%s 驱动=%s", res.Adapter, res.DriverPath)
+}
+
+// runUninstallMode 移除驱动注册与卸载信息。
+func runUninstallMode() {
+	if err := RunUninstall(); err != nil {
+		log.Printf("卸载失败：%v", err)
+		os.Exit(1)
+	}
+	log.Printf("已移除虚拟网卡与卸载信息")
+}
+
+// runAdapterStatus 检查网卡是否已注册（安装脚本用它做校验）。
+func runAdapterStatus() {
+	name, ok := adapterStatus()
+	if ok {
+		fmt.Printf("adapter=%s registered=yes\n", name)
+		return
+	}
+	fmt.Printf("adapter=%s registered=no\n", name)
+	os.Exit(2)
 }

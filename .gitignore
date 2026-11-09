@@ -41,3 +41,6 @@ dist-release/*
 !dist-release/*.sh
 !dist-release/*.cmd
 !dist-release/*.ps1
+# 误构建产物（go build 未指定 -o 时生成）
+vpnclient/vpnclient
+vpnclient/vpnclient.exe

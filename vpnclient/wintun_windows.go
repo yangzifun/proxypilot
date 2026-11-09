@@ -24,33 +24,26 @@ var wintunARM64 []byte
 var (
 	wintunOnce sync.Once
 	wintunErr  error
-	// wintunHandle 保持模块常驻，不能被 GC/释放，否则后续调用会再次去磁盘找 dll
+	// wintunHandle 保持模块常驻，不能被释放，否则后续调用会再次去磁盘找 dll
 	wintunHandle windows.Handle
 )
 
 // ensureWintun 保证 wintun.dll 已在进程内加载：
 //
-//	wintun 包用 LoadLibraryEx("wintun.dll", LOAD_LIBRARY_SEARCH_APPLICATION_DIR)
-//	只会找 exe 同目录与 System32，不认 WINTUN_DLL_PATH。
-//	所以这里把内置 dll 释放到本地目录后用 LoadLibrary 绝对路径预加载——
-//	同名模块一旦已在进程内，后续 LoadLibraryEx("wintun.dll") 会直接复用。
+//  1. exe 同目录（安装时由 -install 放置）优先
+//  2. 否则释放内置驱动到缓存目录再预加载
+//
+// wintun 包只认 exe 同目录与 System32，不认环境变量，所以必须预加载同名模块。
 func ensureWintun() error {
 	wintunOnce.Do(func() {
 		exe, _ := os.Executable()
-		// 1) exe 同目录已有（安装包放置）时直接用
 		if exe != "" {
 			local := filepath.Join(filepath.Dir(exe), "wintun.dll")
 			if _, err := os.Stat(local); err == nil {
-				h, lerr := windows.LoadLibrary(local)
-				if lerr != nil {
-					wintunErr = fmt.Errorf("加载同目录 wintun.dll 失败：%w", lerr)
-					return
-				}
-				wintunHandle = h
+				wintunErr = preloadDriver(local)
 				return
 			}
 		}
-		// 2) 释放内置驱动到缓存目录再预加载
 		blob := wintunAMD64
 		if runtime.GOARCH == "arm64" {
 			blob = wintunARM64
@@ -75,12 +68,7 @@ func ensureWintun() error {
 				return
 			}
 		}
-		h, err := windows.LoadLibrary(dll)
-		if err != nil {
-			wintunErr = fmt.Errorf("预加载 wintun.dll 失败：%w", err)
-			return
-		}
-		wintunHandle = h
+		wintunErr = preloadDriver(dll)
 	})
 	return wintunErr
 }

@@ -6,9 +6,71 @@
 
 | 平台 | 能力 | 权限 | 驱动 |
 |---|---|---|---|
-| Windows 10/11 | Wintun 虚拟网卡 + `route.exe` 路由 | **管理员**（清单已 `requireAdministrator`） | `wintun.dll` **已内置**，运行时释放到 `%LOCALAPPDATA%\ProxyPilot\wintun\<arch>\` 并预加载 |
+| Windows 10/11 | Wintun 虚拟网卡 + `route.exe` 路由 | **管理员**（清单已 `requireAdministrator`） | `wintun.dll` **已内置**；安装时释放到安装目录并注册网卡 |
 | Linux | `/dev/net/tun` + `ip` | root 或 `CAP_NET_ADMIN` | 内核自带 |
 | macOS | `utun` + `route` | root（或用 sudo 启动） | 系统自带 |
+
+## Windows 安装（先安装，再使用）
+
+Windows 版**必须先安装**：安装阶段才会释放 Wintun 驱动并**注册虚拟网卡**，之后连接时直接复用。
+
+```
+dist-release/
+├── ProxyPilot-V35.2-windows-amd64.exe     ← 主程序（GUI，清单要求管理员）
+├── install.cmd                            ← 双击安装（自动提权）
+├── install.ps1
+├── uninstall.cmd                          ← 双击卸载
+└── uninstall.ps1
+```
+
+安装流程：
+
+1. 双击 `install.cmd`（UAC 提权）
+2. 复制程序到 `%LOCALAPPDATA%\Programs\ProxyPilot`
+3. 调用 `ProxyPilot.exe -install`：
+   - 把内置 `wintun.dll` 释放到安装目录
+   - 创建（或复用）名为 **ProxyPilot VPN** 的虚拟网卡 —— 首次会安装 Wintun 驱动
+   - 在 `HKLM\...\Uninstall\ProxyPilot` 写入卸载信息
+4. 脚本用 `Get-NetAdapter` 校验网卡已存在
+5. 创建开始菜单与桌面快捷方式
+
+安装完成后，「网络连接」里就能看到 **ProxyPilot VPN** 适配器（未连接时处于断开状态）。
+
+### 后台运行与系统托盘
+
+安装时会询问「是否随 Windows 启动并在后台（托盘）运行？」（也可用 `-Background` / `-NoBackground` 指定）。
+
+- 开机自启写入 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`，命令为 `"...\ProxyPilot.exe" -background`
+- `-background`：启动后**不弹窗口**，直接常驻托盘
+- **关闭窗口不退出**：窗口只是隐藏，隧道与托盘继续工作
+- 托盘菜单：显示窗口 / 隐藏到托盘 / 连接 / 断开 / 打开设置 / 退出
+- 托盘图标左键单击：切换窗口显示与隐藏
+- 只有托盘菜单里的「退出」才会真正结束进程
+
+对应的前端/程序参数：
+
+| 参数 | 作用 |
+|---|---|
+| `-background` / `-tray` | 启动即隐藏，仅托盘运行 |
+| （无参） | 正常打开窗口，关闭时缩到托盘 |
+
+卸载可在「设置 → 应用 → ProxyPilot VPN」，或双击 `uninstall.cmd`。
+
+### 手动执行安装动作
+
+```powershell
+# 管理员 PowerShell
+.\ProxyPilot-V35.2-windows-amd64.exe -install -install-dir "$env:LOCALAPPDATA\Programs\ProxyPilot"
+.\ProxyPilot-V35.2-windows-amd64.exe -adapter-status   # 校验网卡是否注册
+.\ProxyPilot-V35.2-windows-amd64.exe -uninstall        # 移除网卡与卸载信息
+```
+
+`-install` 会输出 JSON（同时写入 `%TEMP%\proxypilot-install.json`），便于脚本解析：
+
+```json
+{ "ok": true, "install_dir": "...", "exe_path": "...", "adapter": "ProxyPilot VPN",
+  "driver_path": "...\\wintun.dll", "version": "V35.2" }
+```
 
 ## 接管模式
 
