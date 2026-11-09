@@ -19,15 +19,39 @@ type installResult struct {
 	Adapter    string `json:"adapter"`
 	DriverPath string `json:"driver_path"`
 	Version    string `json:"version"`
+	Autostart  bool   `json:"autostart"`
 	Error      string `json:"error,omitempty"`
 }
 
+// InstallOptions 与 Windows 版本保持同名结构。
+type InstallOptions struct {
+	Dir           string
+	Autostart     bool
+	SkipAutostart bool
+}
+
+// DefaultInstallDir 非 Windows 平台返回可执行文件所在目录。
+func DefaultInstallDir() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return "."
+	}
+	return exe
+}
+
+// InstalledExePath 非 Windows 平台即当前程序。
+func InstalledExePath() string { return DefaultInstallDir() }
+
+// IsInstalled 非 Windows 平台始终视为「已就绪」。
+func IsInstalled() bool { return true }
+
 // RunInstall 在非 Windows 平台无需安装驱动，直接返回当前可执行文件信息。
-func RunInstall(dir string) (installResult, error) {
+func RunInstall(opts InstallOptions) (installResult, error) {
 	exe, err := os.Executable()
 	if err != nil {
 		return installResult{}, err
 	}
+	dir := opts.Dir
 	if dir == "" {
 		dir = exe
 	}
@@ -36,12 +60,12 @@ func RunInstall(dir string) (installResult, error) {
 
 // RunUninstall 非 Windows 平台无驱动需要移除。
 func RunUninstall() error {
-	return errors.New("当前平台的卸载请使用系统包管理器或删除二进制/blob")
+	return errors.New("当前平台的卸载请删除二进制并使用系统包管理器")
 }
 
-// adapterStatus 非 Windows 平台通过 /sys 或 ip 命令判断，这里简化为未注册。
+// adapterStatus 非 Windows 平台由内核提供 TUN，无需注册。
 func adapterStatus() (string, bool) {
-	return defaultTunName(), false
+	return defaultTunName(), true
 }
 
 // printInstallResult 输出安装结果。

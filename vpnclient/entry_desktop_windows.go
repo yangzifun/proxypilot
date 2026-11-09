@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -34,6 +35,12 @@ func main() {
 	trayOnly := flag.Bool("tray", false, "同 -background")
 	flag.Parse()
 	startHidden := *background || *trayOnly
+
+	// UI 版本必须「先安装后运行」：没安装就提示安装（会注册驱动与虚拟网卡），
+	// 安装完成后自动拉起已安装版本，避免用户直接双击裸 exe 导致网卡未注册。
+	if !ensureInstalled() {
+		return
+	}
 
 	// 允许与安装/卸载/自检共用同一个 exe：这些参数已在 CLI 入口处理，
 	// 桌面版这里只需忽略未知参数带来的误判。
@@ -192,4 +199,84 @@ func localPost(addr, path string, body map[string]any) error {
 		return fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 	return nil
+}
+
+// ensureInstalled 保证当前运行的是已安装版本。
+//
+// 返回 true 表示可以继续启动；false 表示已处理（提示/安装/退出），直接返回即可。
+func ensureInstalled() bool {
+	if IsInstalled() && samePath(selfPath(), InstalledExePath()) {
+		return true
+	}
+	// 已经在安装目录里但缺卸载项（例如手动复制）→ 直接补一次安装
+	if samePath(selfPath(), InstalledExePath()) {
+		res, err := RunInstall(InstallOptions{Dir: DefaultInstallDir(), Autostart: true})
+		if err != nil {
+			messageBox("ProxyPilot 安装未完成", "注册虚拟网卡失败：\n"+err.Error()+"\n\n请以管理员身份重新安装。", mbOK|mbIconError)
+			return false
+		}
+		_ = res
+		return true
+	}
+
+	// 从下载目录直接运行：先征得同意再安装
+	choice := messageBox("ProxyPilot 需要先安装",
+		"检测到当前是未安装的临时程序。\n\n"+
+			"安装会：\n"+
+			"  · 复制程序到 "+DefaultInstallDir()+"\n"+
+			"  · 安装 Wintun 驱动并注册「ProxyPilot VPN」虚拟网卡\n"+
+			"  · 写入开机后台运行（托盘）\n\n"+
+			"现在安装吗？", mbYesNo|mbIconInfo)
+	if choice != idYes {
+		return false
+	}
+
+	args := "-install -autostart"
+	if isAdmin() {
+		// 已是管理员：直接在当前进程内完成
+		if _, err := RunInstall(InstallOptions{Dir: DefaultInstallDir(), Autostart: true}); err != nil {
+			messageBox("安装失败", err.Error(), mbOK|mbIconError)
+			return false
+		}
+	} else {
+		if _, err := elevateAndWait(selfPath(), args); err != nil {
+			messageBox("安装失败", err.Error(), mbOK|mbIconError)
+			return false
+		}
+		// 等提权进程把文件写完（最多 20 秒）
+		for i := 0; i < 40; i++ {
+			if IsInstalled() {
+				break
+			}
+			time.Sleep(500 * time.Millisecond)
+		}
+	}
+
+	if !IsInstalled() {
+		messageBox("安装未完成", "未检测到已安装的文件或卸载登记项。\n请运行安装包里的 install.cmd 重试。", mbOK|mbIconError)
+		return false
+	}
+
+	// 拉起已安装版本，让当前这份退出
+	if err := launchDetached(InstalledExePath(), ""); err != nil {
+		messageBox("启动失败", "已安装，但启动失败："+err.Error()+"\n\n请从开始菜单打开 ProxyPilot。", mbOK|mbIconError)
+	}
+	return false
+}
+
+// selfPath 当前可执行文件绝对路径。
+func selfPath() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	return exe
+}
+
+// samePath 忽略大小写的路径比较。
+func samePath(a, b string) bool {
+	if a == "" || b == "" {
+		return false
+	}
+	return strings.EqualFold(filepath.Clean(a), filepath.Clean(b))
 }

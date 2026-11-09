@@ -83,7 +83,8 @@ func runCLI() {
 	tunSelftest := flag.Bool("tun-selftest", false, "自检：创建网卡并下发路由后立即清理（需要管理员/root）")
 	doInstall := flag.Bool("install", false, "安装：释放驱动、注册虚拟网卡、写入卸载信息（需要管理员）")
 	doUninstall := flag.Bool("uninstall", false, "卸载：移除虚拟网卡与卸载信息（需要管理员）")
-	installDir := flag.String("install-dir", "", "安装目录（默认与 exe 同目录）")
+	installDir := flag.String("install-dir", "", "安装目录（默认 %LOCALAPPDATA%\\Programs\\ProxyPilot）")
+	installAutostart := flag.Bool("autostart", false, "安装时写入开机自启（托盘后台运行）")
 	adapterCheck := flag.Bool("adapter-status", false, "检查虚拟网卡是否已注册")
 	tunSelftestMode := flag.String("tun-selftest-mode", "mesh", "自检接管模式：mesh|full")
 	tunSelftestKeep := flag.Int("tun-selftest-keep", 5, "自检保留秒数（到点自动清理）")
@@ -103,7 +104,7 @@ func runCLI() {
 		configPathOverride = *cfgPath
 	}
 	if *doInstall {
-		runInstallMode(*installDir)
+		runInstallMode(*installDir, *installAutostart)
 		return
 	}
 	if *doUninstall {
@@ -648,11 +649,11 @@ func runTunSelftest(mode TunMode, keepSec int) error {
 }
 
 // runInstallMode 执行安装流程并输出结果。
-func runInstallMode(dir string) {
+func runInstallMode(dir string, autostart bool) {
 	if !runtimeSupportsTun() {
 		log.Fatalf("当前平台不支持安装流程")
 	}
-	res, err := RunInstall(dir)
+	res, err := RunInstall(InstallOptions{Dir: dir, Autostart: autostart})
 	if err != nil {
 		log.Printf("安装失败：%v", err)
 		os.Exit(1)
