@@ -44,7 +44,7 @@ func TestSendRawIPBufferSplitsConcatenatedPackets(t *testing.T) {
 	c := makeIPv4(40, 10, 3)
 	raw := append(append(append([]byte{}, a...), b...), c...)
 
-	sent, bad, leftover := tn.sendRawIPBuffer(raw)
+	sent, bad, leftover, _ := tn.sendRawIPBuffer(raw)
 	if sent != 3 {
 		t.Fatalf("应切出 3 个报文，实际 %d（bad=%d leftover=%d）", sent, bad, leftover)
 	}
@@ -69,7 +69,7 @@ func TestSendRawIPBufferSingle(t *testing.T) {
 		return nil
 	}}
 	pkt := makeIPv4(100, 10, 9)
-	sent, bad, leftover := tn.sendRawIPBuffer(pkt)
+	sent, bad, leftover, _ := tn.sendRawIPBuffer(pkt)
 	if sent != 1 || bad != 0 || leftover != 0 {
 		t.Fatalf("单包处理不对：sent=%d bad=%d leftover=%d", sent, bad, leftover)
 	}
@@ -84,12 +84,12 @@ func TestSendRawIPBufferTruncated(t *testing.T) {
 	tn.conn = &collectConn{onSend: func(p []byte) error { return nil }}
 	pkt := makeIPv4(100, 10, 9)
 	short := pkt[:40] // 只留 40 字节，头里仍声明 120
-	sent, bad, _ := tn.sendRawIPBuffer(short)
+	sent, _, _, partial := tn.sendRawIPBuffer(short)
 	if sent != 0 {
 		t.Fatalf("截断包不应发出，实际 sent=%d", sent)
 	}
-	if bad == 0 {
-		t.Fatal("截断包应计入 bad")
+	if len(partial) == 0 {
+		t.Fatal("截断包应作为残包返回，等下次读补齐")
 	}
 }
 
@@ -105,7 +105,7 @@ func TestSendRawIPBufferPartialTail(t *testing.T) {
 	}}
 	a := makeIPv4(20, 10, 1)
 	raw := append(append([]byte{}, a...), []byte{0x45, 0x00, 0x00}...) // 3 字节残渣
-	sent, _, leftover := tn.sendRawIPBuffer(raw)
+	sent, _, leftover, _ := tn.sendRawIPBuffer(raw)
 	if sent != 1 {
 		t.Fatalf("第一个包应发出，实际 sent=%d", sent)
 	}
@@ -120,7 +120,7 @@ func TestSendRawIPBufferRejectsIPv6(t *testing.T) {
 	tn.conn = &collectConn{onSend: func(p []byte) error { return nil }}
 	v6 := make([]byte, 40)
 	v6[0] = 0x60
-	sent, _, leftover := tn.sendRawIPBuffer(v6)
+	sent, _, leftover, _ := tn.sendRawIPBuffer(v6)
 	if sent != 0 {
 		t.Fatal("IPv6 不应被发出")
 	}

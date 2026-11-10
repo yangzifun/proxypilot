@@ -89,6 +89,11 @@ func (t *Tunnel) pumpUp() {
 	// 一次性交给网卡驱动，单个超级包可达几十 KB；用 2048 去读会被截断，
 	// 我们就发出一堆「IP 头声明 1278 字节、实际只有 40 字节」的残包。
 	buf := make([]byte, maxReadPacket)
+	// carry 保存「上次读到一半的 IP 报文」。
+	// Windows 卸载机制下，一个 IP 报文可能被拆到两次读取里交上来
+	// （表现为「帧 40 字节，IP 头声明 490 字节」），下次读到的数据
+	// 直接接在后面就能拼回完整报文。
+	var carry []byte
 	for {
 		if t.ctx.Err() != nil {
 			return
@@ -108,10 +113,23 @@ func (t *Tunnel) pumpUp() {
 			first = false
 		}
 		raw := buf[:n]
+		if len(carry) > 0 {
+			// 上次的残包 + 本次数据，一起交给切分器
+			merged := make([]byte, 0, len(carry)+len(raw))
+			merged = append(merged, carry...)
+			merged = append(merged, raw...)
+			carry = nil
+			raw = merged
+		}
 
 		// 一次读到的东西可能是「一个包」，也可能是 Windows 卸递交上来的
 		// 「多段合体包」。按 IP 头里的 total length 逐段切开发送。
-		sent, bad, leftover := t.sendRawIPBuffer(raw)
+		sent, bad, leftover, partial := t.sendRawIPBuffer(raw)
+		if len(partial) > 0 {
+			// 报文没读全：留存到下一次读再拼
+			carry = partial
+			bad = 0 // 不是坏包，只是还没到齐
+		}
 		if sent > 0 {
 			t.txPkts.Add(int64(sent))
 		}
@@ -132,32 +150,39 @@ func (t *Tunnel) pumpUp() {
 
 // sendRawIPBuffer 把一次网卡读取的字节按 IP 报文切开逐个送出。
 //
-// 返回：成功发出的包数、判为异常的包数、凑不成完整报文而丢弃的字节数。
-func (t *Tunnel) sendRawIPBuffer(raw []byte) (sent, bad, leftover int) {
+// 返回：成功发出的包数、判为异常的包数、凑不成完整报文而丢弃的字节数，
+// 以及「长度不够、可以等下次读补齐」的残包。
+func (t *Tunnel) sendRawIPBuffer(raw []byte) (sent, bad, leftover int, partial []byte) {
 	off := 0
 	for off < len(raw) {
 		rest := raw[off:]
 		pkt := stripIPv4(rest)
 		if len(pkt) == 0 {
-			return sent, bad, len(rest)
+			return sent, bad, len(rest), nil
 		}
 		skip := len(rest) - len(pkt) // stripIPv4 可能跳过的前导字节
 		total := ipTotalLen(pkt)
-		if total < 20 || total > len(pkt) {
-			return sent, bad + 1, len(pkt)
+		if total < 20 {
+			return sent, bad + 1, len(pkt), nil
+		}
+		if total > len(pkt) {
+			// 还没读全：把这段原样交回去，等下一次读取拼接
+			buf := make([]byte, len(pkt))
+			copy(buf, pkt)
+			return sent, bad, 0, buf
 		}
 		pkt = pkt[:total]
 		if err := t.conn.SendPacket(pkt); err != nil {
 			if t.ctx.Err() == nil {
 				t.fail(fmt.Sprintf("发送失败：%v", err))
 			}
-			return sent, bad, 0
+			return sent, bad, 0, nil
 		}
 		sent++
 		t.txBytes.Add(int64(len(pkt)))
 		off += skip + total
 	}
-	return sent, bad, 0
+	return sent, bad, 0, nil
 }
 
 // pumpDown 收 QUIC DATAGRAM → 写网卡。
