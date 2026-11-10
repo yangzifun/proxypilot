@@ -33,8 +33,31 @@ type datagramConn interface {
 
 type connKey struct{}
 
+// sessionKind 区分同一设备的两条承载通道。
+//
+// 36.0 起数据面双通道：TCP 走可靠流（POST /tunnel），UDP 走 QUIC DATAGRAM（GET /）。
+// 两者属于同一设备、同一个 IP，必须并存而不是互相接管。
+type sessionKind int
+
+const (
+	kindStream   sessionKind = iota + 1 // POST /tunnel 可靠流
+	kindDatagram                        // GET / DATAGRAM
+)
+
+func (k sessionKind) String() string {
+	switch k {
+	case kindStream:
+		return "stream"
+	case kindDatagram:
+		return "datagram"
+	default:
+		return "unknown"
+	}
+}
+
 type session struct {
 	jti     string
+	kind    sessionKind
 	ip      net.IP
 	device  string
 	grantID int64
@@ -56,10 +79,15 @@ type Server struct {
 	dns      *dnsRelay
 
 	mu       sync.Mutex
-	sessions map[string]*session // ip4 -> session
+	sessions map[string]*sessionSet // ip4 -> 双通道会话集合
 
 	srv *http3.Server
 	ln  *quic.EarlyListener
+
+	// udpConn / transport：自建的 UDP socket 与 quic 传输层
+	// （为了放大收发缓冲，并启用批量收发）
+	udpConn   *net.UDPConn
+	transport *quic.Transport
 
 	closeOnce sync.Once
 	done      chan struct{}
@@ -78,12 +106,27 @@ func New(cfg Config, log *slog.Logger) (*Server, error) {
 		cfg:      cfg,
 		log:      log,
 		verifier: v,
-		sessions: make(map[string]*session),
+		sessions: make(map[string]*sessionSet),
 		done:     make(chan struct{}),
 	}, nil
 }
 
 // Run 启动 TUN、QUIC/HTTP3 监听与数据面，阻塞直到 ctx 结束。
+// socketBufferBytes 是 UDP 收发缓冲大小。
+//
+// BDP = 带宽 × RTT。100 Mbps × 150 ms ≈ 1.9 MB，跨境链路留余量给 4 MB。
+// 默认 64 KB 会把吞吐锁在约 3~4 Mbps。
+const socketBufferBytes = 4 << 20
+
+// applySocketBuffer 尽力放大 UDP 收发缓冲（部分系统会截断到上限，不影响正确性）。
+func applySocketBuffer(c *net.UDPConn) {
+	if c == nil {
+		return
+	}
+	_ = c.SetReadBuffer(socketBufferBytes)
+	_ = c.SetWriteBuffer(socketBufferBytes)
+}
+
 func (s *Server) Run(ctx context.Context) error {
 	cert, err := tls.LoadX509KeyPair(s.cfg.CertFile, s.cfg.KeyFile)
 	if err != nil {
@@ -131,8 +174,26 @@ func (s *Server) Run(ctx context.Context) error {
 		InitialConnectionReceiveWindow: 8 << 20,
 		MaxConnectionReceiveWindow:     64 << 20,
 	}
-	ln, err := quic.ListenAddrEarly(s.cfg.Listen, tlsConf, quicConf)
+	// 自建 UDP socket 并放大缓冲：BDP = 带宽 × RTT，
+	// 100Mbps × 150ms ≈ 1.9MB，默认 64KB 会把吞吐锁死在几 Mbps。
+	// 用 quic.Transport 接管后还能启用 Linux 上的 GSO 批量发送与 recvmmsg。
+	udpAddr, aerr := net.ResolveUDPAddr("udp4", s.cfg.Listen)
+	if aerr != nil {
+		_ = dev.Close()
+		return fmt.Errorf("解析监听地址 %s: %w", s.cfg.Listen, aerr)
+	}
+	udpConn, cerr := net.ListenUDP("udp4", udpAddr)
+	if cerr != nil {
+		_ = dev.Close()
+		return fmt.Errorf("监听 %s: %w", s.cfg.Listen, cerr)
+	}
+	applySocketBuffer(udpConn)
+	s.udpConn = udpConn
+	s.transport = &quic.Transport{Conn: udpConn}
+
+	ln, err := s.transport.ListenEarly(tlsConf, quicConf)
 	if err != nil {
+		_ = udpConn.Close()
 		_ = dev.Close()
 		return fmt.Errorf("监听 %s: %w", s.cfg.Listen, err)
 	}
@@ -170,6 +231,12 @@ func (s *Server) Run(ctx context.Context) error {
 func (s *Server) Close() {
 	s.closeOnce.Do(func() {
 		close(s.done)
+		if s.transport != nil {
+			_ = s.transport.Close()
+		}
+		if s.udpConn != nil {
+			_ = s.udpConn.Close()
+		}
 		if s.srv != nil {
 			_ = s.srv.Close()
 		}
@@ -219,8 +286,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sess := &session{
-		jti: claims.JTI, ip: ip, device: claims.Subject, grantID: claims.GrantID,
-		conn: conn, started: time.Now(),
+		jti: claims.JTI, kind: kindDatagram, ip: ip, device: claims.Subject,
+		grantID: claims.GrantID, conn: conn, started: time.Now(),
 	}
 	sess.send = func(p []byte) error { return sess.conn.SendDatagram(p) }
 	sess.closeFn = func() { _ = sess.conn.CloseWithError(0, "session closed") }
@@ -241,31 +308,92 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		"node", claims.NodeID, "remote", r.RemoteAddr)
 }
 
+// sessionSet 是同一设备的两条承载通道。
+//
+// 选路原则：UDP 优先走 DATAGRAM（不被可靠流的队头阻塞拖累），
+// 其余（TCP/ICMP）走可靠流；某一路未建立时**回退**到另一路，
+// 避免静默丢包。
+type sessionSet struct {
+	stream   *session
+	datagram *session
+}
+
+// pick 按内层协议号选通道。
+//
+// proto 取自内层 IPv4 头的协议字段（6=TCP, 17=UDP, 1=ICMP）。
+func (set *sessionSet) pick(proto byte) *session {
+	if set == nil {
+		return nil
+	}
+	if proto == 17 && set.datagram != nil && set.datagram.send != nil {
+		return set.datagram
+	}
+	if set.stream != nil && set.stream.send != nil {
+		return set.stream
+	}
+	if set.datagram != nil && set.datagram.send != nil {
+		return set.datagram
+	}
+	return nil
+}
+
+// slot 返回该 kind 对应的槽位指针（用于写入）。
+func (set *sessionSet) slot(kind sessionKind) **session {
+	if kind == kindDatagram {
+		return &set.datagram
+	}
+	return &set.stream
+}
+
+// empty 表示两条通道都没了。
+func (set *sessionSet) empty() bool {
+	return set == nil || (set.stream == nil && set.datagram == nil)
+}
+
 func (s *Server) register(sess *session) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if cur, ok := s.sessions[sess.ip.String()]; ok {
-		// 同一地址只允许一个活会话；客户端重启后旧会话往往来不及清理（对端进程被杀），
-		// 这里直接接管，否则会一直 409，节点永远连不回来。
-		s.log.Warn("接管组网会话", "ip", sess.ip.String(), "old_device", cur.device,
-			"old_duration", time.Since(cur.started).Round(time.Second))
+	key := sess.ip.String()
+	set := s.sessions[key]
+	if set == nil {
+		set = &sessionSet{}
+		s.sessions[key] = set
+	}
+	// 只替换**同一种承载**的旧会话。
+	// 客户端重启后旧会话往往来不及清理（对端进程被杀），同 kind 直接接管，
+	// 否则会一直 409；不同 kind 必须并存（双通道）。
+	slot := set.slot(sess.kind)
+	if cur := *slot; cur != nil {
+		s.log.Warn("接管同通道旧会话", "ip", key, "kind", sess.kind.String(),
+			"old_device", cur.device, "old_duration", time.Since(cur.started).Round(time.Second))
 		if cur.conn != nil {
 			_ = cur.conn.CloseWithError(0, "session replaced")
 		}
 	}
-	s.sessions[sess.ip.String()] = sess
+	*slot = sess
+	s.log.Info("会话注册", "ip", key, "kind", sess.kind.String())
 	return true
 }
 
 func (s *Server) unregister(sess *session) {
 	s.mu.Lock()
-	if cur, ok := s.sessions[sess.ip.String()]; ok && cur == sess {
-		delete(s.sessions, sess.ip.String())
+	defer s.mu.Unlock()
+	key := sess.ip.String()
+	set := s.sessions[key]
+	if set == nil {
+		return
 	}
-	s.mu.Unlock()
+	// 只清自己那个槽位；另一条通道还在就保留集合
+	slot := set.slot(sess.kind)
+	if *slot == sess {
+		*slot = nil
+	}
+	if set.empty() {
+		delete(s.sessions, key)
+	}
 }
 
-func (s *Server) lookup(ip net.IP) *session {
+func (s *Server) lookup(ip net.IP) *sessionSet {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.sessions[ip.String()]
@@ -350,11 +478,17 @@ func (s *Server) tunLoop() {
 		if srcClient && dstClient && !touchesGateway && !s.cfg.AllowClientToClient {
 			continue
 		}
-		sess := s.lookup(dst)
-		if sess == nil {
+		set := s.lookup(dst)
+		if set == nil {
 			continue
 		}
-		if sess.send == nil {
+		// 按内层协议号选通道：UDP 走 DATAGRAM，其余走可靠流；某一路缺失则回退
+		var proto byte
+		if len(pkt) >= 10 {
+			proto = pkt[9]
+		}
+		sess := set.pick(proto)
+		if sess == nil || sess.send == nil {
 			continue
 		}
 		if err := sess.send(pkt); err != nil {

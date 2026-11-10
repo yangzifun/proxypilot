@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/opt/proxypilot/masque/pp-masque-node -config /etc/proxypilot/masque/config.json
+ExecStart=/opt/proxypilot/tunnel/pp-tunnel-node -config /etc/proxypilot/masque/config.json
 Restart=always
 RestartSec=3
 # TUN/NAT 需要 NET_ADMIN；绑定 443 需要 NET_BIND_SERVICE。

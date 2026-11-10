@@ -42,7 +42,7 @@ type vpnNodeConfig struct {
 
 // POST /api/admin/vpn/nodes/{id}/deploy
 //
-// 通过 Agent 执行一段固定脚本：下载 pp-masque-node、生成自签证书（若缺失）、
+// 通过 Agent 执行一段固定脚本：下载 pp-tunnel-node、生成自签证书（若缺失）、
 // 写配置与 systemd unit、重启服务。属于系统级 exec（system_action=vpn_apply）。
 func (h *handlers) vpnAdminNodeDeploy(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -128,8 +128,8 @@ func (h *handlers) vpnAdminNodeDeploy(w http.ResponseWriter, r *http.Request) {
 	}
 	cfg := vpnNodeConfig{
 		Listen:      fmt.Sprintf("0.0.0.0:%d", node.ListenPort),
-		CertFile:    "/etc/proxypilot/masque/tls/cert.pem",
-		KeyFile:     "/etc/proxypilot/masque/tls/key.pem",
+		CertFile:    "/etc/proxypilot/tunnel/tls/cert.pem",
+		KeyFile:     "/etc/proxypilot/tunnel/tls/key.pem",
 		NodeID:      node.ID,
 		MeshIPv4:    node.MeshIPv4,
 		ClientCIDR:  node.ClientCIDR,
@@ -195,7 +195,7 @@ chmod 600 "$DIR/tls/key.pem"`
 	// MASQUE 节点现在内嵌在 Agent 进程里，不再单独下载二进制：
 	// 只需要把证书与配置写到约定位置，然后重启 Agent 让内嵌节点重新加载。
 	return `set -euo pipefail
-DIR=/etc/proxypilot/masque
+DIR=/etc/proxypilot/tunnel
 AGENT_DIR=/etc/proxypilot/agent
 mkdir -p "$DIR/tls" "$AGENT_DIR"
 

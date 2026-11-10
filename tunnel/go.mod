@@ -1,4 +1,4 @@
-module github.com/yzfn/proxypilot/masque
+module github.com/yzfn/proxypilot/tunnel
 
 go 1.24
 

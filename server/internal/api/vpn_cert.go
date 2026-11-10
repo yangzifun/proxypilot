@@ -534,7 +534,7 @@ func (h *handlers) installLocalCert(cert *storedCert, kind string) (bool, error)
 	dir := "/etc/proxypilot/mesh/tls"
 	service := "proxypilot-mesh"
 	if kind == "vpn" {
-		dir = "/etc/proxypilot/masque/tls"
+		dir = "/etc/proxypilot/tunnel/tls"
 		service = "proxypilot-agent"
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -561,25 +561,25 @@ func certInstallScript(cert *storedCert, label string) string {
 	certB64 := base64.StdEncoding.EncodeToString([]byte(cert.CertPEM + cert.ChainPEM))
 	keyB64 := base64.StdEncoding.EncodeToString([]byte(cert.KeyPEM))
 	return fmt.Sprintf(`set -e
-mkdir -p /etc/proxypilot/masque/tls /etc/proxypilot/agent
-echo '%s' | base64 -d > /etc/proxypilot/masque/tls/cert.pem
-echo '%s' | base64 -d > /etc/proxypilot/masque/tls/key.pem
-chmod 644 /etc/proxypilot/masque/tls/cert.pem
-chmod 600 /etc/proxypilot/masque/tls/key.pem
+mkdir -p /etc/proxypilot/tunnel/tls /etc/proxypilot/agent
+echo '%s' | base64 -d > /etc/proxypilot/tunnel/tls/cert.pem
+echo '%s' | base64 -d > /etc/proxypilot/tunnel/tls/key.pem
+chmod 644 /etc/proxypilot/tunnel/tls/cert.pem
+chmod 600 /etc/proxypilot/tunnel/tls/key.pem
 if [ -f /etc/proxypilot/agent/vpn.json ] && command -v python3 >/dev/null 2>&1; then
 python3 - <<'PY'
 import json
 p='/etc/proxypilot/agent/vpn.json'
 d=json.load(open(p))
-d['cert_file']='/etc/proxypilot/masque/tls/cert.pem'
-d['key_file']='/etc/proxypilot/masque/tls/key.pem'
+d['cert_file']='/etc/proxypilot/tunnel/tls/cert.pem'
+d['key_file']='/etc/proxypilot/tunnel/tls/key.pem'
 json.dump(d,open(p,'w'),indent=2,ensure_ascii=False)
 PY
 fi
 # 重启动作延迟并脱离当前任务（否则 agent 重启会杀掉执行任务的子进程）
 nohup sh -c 'sleep 2; systemctl restart proxypilot-agent' >/dev/null 2>&1 &
 echo "restart scheduled"
-openssl x509 -in /etc/proxypilot/masque/tls/cert.pem -noout -fingerprint -sha256 | sed 's/.*=//'`,
+openssl x509 -in /etc/proxypilot/tunnel/tls/cert.pem -noout -fingerprint -sha256 | sed 's/.*=//'`,
 		certB64, keyB64)
 }
 

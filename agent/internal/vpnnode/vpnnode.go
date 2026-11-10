@@ -7,7 +7,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/yzfn/proxypilot/masque/node"
+	"github.com/yzfn/proxypilot/tunnel/node"
 )
 
 // DefaultConfigPath 是 Agent 内置 VPN 节点配置；不存在则不启用。

@@ -62,3 +62,27 @@ func TestVerifier(t *testing.T) {
 		t.Fatal("错误签名未被拒绝")
 	}
 }
+
+// audience �����ڼ��ݣ�ֻ�� {pp-tunnel, masque-node} ��һ�ԣ�
+// �����κ�ֵ������ܾ���������ڹص� audience У�飩��
+func TestAudienceTransition(t *testing.T) {
+	cases := []struct {
+		got, want string
+		ok        bool
+	}{
+		{"pp-tunnel", "pp-tunnel", true},
+		{"masque-node", "masque-node", true},
+		{"masque-node", "pp-tunnel", true},   // �ɿͻ��˴��½ڵ�
+		{"pp-tunnel", "masque-node", true},   // �¿ͻ��˴�ɽڵ�
+		{"other", "pp-tunnel", false},        // �޹�ֵ����ܾ�
+		{"other", "masque-node", false},      // ���ž���Ҳ����ȫ����
+		{"pp-tunnel", "other", false},
+		{"", "pp-tunnel", false},
+	}
+	for _, c := range cases {
+		if got := audienceAccepted(c.got, c.want); got != c.ok {
+			t.Fatalf("audienceAccepted(%q,%q)=%v������ %v", c.got, c.want, got, c.ok)
+		}
+	}
+}
+// audience 过渡期兼容：只认 {pp-tunnel, masque-node} 这一对，

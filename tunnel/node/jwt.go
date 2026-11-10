@@ -46,6 +46,34 @@ type Verifier struct {
 }
 
 // NewVerifier 用 base64 公钥构造验签器。
+// legacyAudience 是 36.0 之前的 audience 名。
+//
+// 改名（masque-node -> pp-tunnel）必须能平滑：节点同时接受新旧两个值，
+// 这样旧客户端不会因为节点升级而全部鉴权失败。等所有客户端都升到 3.0
+// 之后再把这个兼容项删掉。
+const (
+	// currentAudience 是 36.0 起的正式名称。
+	currentAudience = "pp-tunnel"
+	// legacyAudience 是 36.0 之前的名称，过渡期仍接受。
+	legacyAudience = "masque-node"
+)
+
+// audienceAccepted 判断 audience 是否被接受。
+//
+// 只允许 {新名, 旧名} 这一对互相兼容，其他值一律拒绝 ——
+// 如果写成「等于任一旧名就放行」，那么当节点还配着旧名时，
+// 任何 audience 都会被接受，等于关掉了校验。
+func audienceAccepted(got, want string) bool {
+	if got == want {
+		return true
+	}
+	pair := func(a, b string) bool {
+		return (a == currentAudience && b == legacyAudience) ||
+			(a == legacyAudience && b == currentAudience)
+	}
+	return pair(got, want)
+}
+
 func NewVerifier(pubB64, issuer, audience string) (*Verifier, error) {
 	raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(pubB64))
 	if err != nil {
@@ -96,7 +124,7 @@ func (v *Verifier) Verify(token string) (*Claims, error) {
 	if err := json.Unmarshal(payloadJSON, &c); err != nil {
 		return nil, ErrInvalidToken
 	}
-	if c.Issuer != v.issuer || c.Audience != v.audience {
+	if c.Issuer != v.issuer || !audienceAccepted(c.Audience, v.audience) {
 		return nil, ErrInvalidToken
 	}
 	if c.ExpiresAt <= 0 || v.now().Unix() > c.ExpiresAt+int64(tokenClockSkew.Seconds()) {

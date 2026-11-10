@@ -7,7 +7,7 @@ toolchain go1.27.3
 require (
 	github.com/coder/websocket v1.8.15
 	github.com/creack/pty v1.1.24
-	github.com/yzfn/proxypilot/masque v0.0.0
+	github.com/yzfn/proxypilot/tunnel v0.0.0
 	golang.org/x/net v0.43.0
 )
 
@@ -23,4 +23,4 @@ require (
 	golang.org/x/tools v0.36.0 // indirect
 )
 
-replace github.com/yzfn/proxypilot/masque => ../masque
+replace github.com/yzfn/proxypilot/tunnel => ../tunnel

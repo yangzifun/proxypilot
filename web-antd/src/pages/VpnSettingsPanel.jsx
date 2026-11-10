@@ -49,9 +49,9 @@ export default function VpnSettingsPanel() {
 
   return (
     <PageCard
-      title="VPN（MASQUE / HTTP3）"
+      title="VPN（自研隧道 · HTTP/3）"
       loading={loading}
-      extra={<Tag color="blue">连接令牌 Ed25519 · 用户端与节点端隔离</Tag>}
+      extra={<Tag color="blue">连接令牌 Ed25519 · 用户端与节点端隔离 · 非标准 MASQUE</Tag>}
     >
       <Form form={form} layout="vertical" style={{ maxWidth: 720 }}>
         <Form.Item name="enabled" label="启用 VPN" valuePropName="checked">

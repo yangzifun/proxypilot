@@ -1,4 +1,4 @@
-﻿package main
+package main
 
 import (
 	"context"
@@ -8,14 +8,14 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/yzfn/proxypilot/masque/node"
+	"github.com/yzfn/proxypilot/tunnel/node"
 )
 
 // Version 由构建脚本注入。
 var Version = "1.0.1"
 
 func main() {
-	cfgPath := flag.String("config", "/etc/proxypilot/masque/config.json", "节点配置文件")
+	cfgPath := flag.String("config", "/etc/proxypilot/tunnel/config.json", "节点配置文件")
 	flag.Parse()
 
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -34,7 +34,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	log.Info("pp-masque-node 启动", "version", Version, "config", *cfgPath)
+	log.Info("pp-tunnel-node 启动", "version", Version, "config", *cfgPath)
 	if err := srv.Run(ctx); err != nil {
 		log.Error("节点退出", "err", err)
 		os.Exit(1)

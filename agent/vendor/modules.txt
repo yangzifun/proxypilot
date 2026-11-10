@@ -31,9 +31,9 @@ github.com/quic-go/quic-go/quicvarint
 # github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 ## explicit
 github.com/songgao/water
-# github.com/yzfn/proxypilot/masque v0.0.0 => ../masque
+# github.com/yzfn/proxypilot/tunnel v0.0.0 => ../tunnel
 ## explicit; go 1.24
-github.com/yzfn/proxypilot/masque/node
+github.com/yzfn/proxypilot/tunnel/node
 # golang.org/x/crypto v0.41.0
 ## explicit; go 1.23.0
 golang.org/x/crypto/chacha20
@@ -86,4 +86,4 @@ golang.org/x/tools/internal/gopathwalk
 golang.org/x/tools/internal/imports
 golang.org/x/tools/internal/modindex
 golang.org/x/tools/internal/stdlib
-# github.com/yzfn/proxypilot/masque => ../masque
+# github.com/yzfn/proxypilot/tunnel => ../tunnel
