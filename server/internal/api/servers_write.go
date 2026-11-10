@@ -204,6 +204,13 @@ func (h *handlers) serverGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 补自建组网地址（10.99.0.0/16），与 WARP 的 100.96.x 区分展示
+	{
+		list := []serverRow{row}
+		h.attachMeshInfo(r.Context(), list)
+		row = list[0]
+	}
+
 	metricsRows, err := h.db.QueryContext(r.Context(),
 		`SELECT COALESCE(status,''), COALESCE(latency_ms,0), COALESCE(cpu_percent,0), COALESCE(mem_percent,0),
 		        COALESCE(disk_percent,0), COALESCE(load1,0), COALESCE(created_at,0)

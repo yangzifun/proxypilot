@@ -519,24 +519,50 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
                 label: '内网 / 组网 IP',
                 children: (() => {
                   const lan = String(d.last_ip_private || '').trim();
-                  const m4 = String(d.last_mesh_ip4 || '').trim();
-                  const m6 = String(d.last_mesh_ip6 || '').trim();
-                  if (!lan && !m4 && !m6) return <span className="pp-mono">—</span>;
+                  // 自建组网（10.99.0.0/16）
+                  const mesh4 = String(d.mesh_ip4 || '').trim();
+                  const meshState = String(d.mesh_state || '').trim();
+                  const meshRtt = Number(d.mesh_rtt_ms || 0);
+                  // WARP（100.96.x / 2606:4700:cf1::）
+                  const w4 = String(d.last_mesh_ip4 || '').trim();
+                  const w6 = String(d.last_mesh_ip6 || '').trim();
+                  // 旧数据里 last_ip_private 可能直接就是 10.99.x，避免重复展示
+                  const lanIsMesh = !!lan && !!mesh4 && lan === mesh4;
+                  const showLan = lan && !lanIsMesh;
+                  if (!showLan && !mesh4 && !w4 && !w6) return <span className="pp-mono">—</span>;
+                  const lines = [];
+                  if (showLan) lines.push(<span key="lan">{lan}</span>);
+                  if (mesh4) {
+                    lines.push(
+                      <span key="mesh">
+                        <span className="pp-muted">自建组网 </span>IPv4 {mesh4}
+                        {meshState ? <span className="pp-muted"> · {meshState}</span> : null}
+                        {meshRtt > 0 ? <span className="pp-muted"> · {meshRtt}ms</span> : null}
+                      </span>,
+                    );
+                  }
+                  if (w4) {
+                    lines.push(
+                      <span key="w4">
+                        <span className="pp-muted">WARP </span>IPv4 {w4}
+                      </span>,
+                    );
+                  }
+                  if (w6) {
+                    lines.push(
+                      <span key="w6">
+                        <span className="pp-muted">WARP </span>IPv6 {w6}
+                      </span>,
+                    );
+                  }
                   return (
                     <span className="pp-mono">
-                      {lan ? <span>{lan}</span> : null}
-                      {m4 ? (
-                        <span>
-                          {lan ? <br /> : null}
-                          <span className="pp-muted">WARP </span>IPv4 {m4}
+                      {lines.map((node, i) => (
+                        <span key={i}>
+                          {i > 0 ? <br /> : null}
+                          {node}
                         </span>
-                      ) : null}
-                      {m6 ? (
-                        <span>
-                          {lan || m4 ? <br /> : null}
-                          <span className="pp-muted">WARP </span>IPv6 {m6}
-                        </span>
-                      ) : null}
+                      ))}
                     </span>
                   );
                 })(),

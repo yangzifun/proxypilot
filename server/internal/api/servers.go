@@ -33,6 +33,10 @@ type serverRow struct {
 	LastIPPrivate     string          `json:"last_ip_private"`
 	LastMeshIP4       string          `json:"last_mesh_ip4"`
 	LastMeshIP6       string          `json:"last_mesh_ip6"`
+	// 自建组网（10.99.0.0/16，vpn_mesh_nodes）
+	MeshIP4   string `json:"mesh_ip4"`
+	MeshState string `json:"mesh_state"`
+	MeshRTTMs int64  `json:"mesh_rtt_ms"`
 	SSHGuard          int64           `json:"ssh_guard"`
 	Host              string          `json:"host"`
 	IPCountry         string          `json:"ip_country"`
@@ -137,6 +141,39 @@ func (h *handlers) fetchServerRow(ctx context.Context, id int64) (serverRow, err
 	return scanServerRow(rows)
 }
 
+// attachMeshInfo 把自建组网（vpn_mesh_nodes）的地址与状态合并进服务器列表。
+// 与 WARP（last_mesh_ip4/6，100.96.x）区分开：这里是 10.99.0.0/16。
+func (h *handlers) attachMeshInfo(ctx context.Context, list []serverRow) {
+	rows, err := h.db.QueryContext(ctx,
+		`SELECT server_id, COALESCE(mesh_ip4,''), COALESCE(state,''), COALESCE(rtt_ms,0) FROM vpn_mesh_nodes`)
+	if err != nil {
+		h.log.Error("查询组网成员失败", "err", err)
+		return
+	}
+	defer rows.Close()
+	type mesh struct {
+		ip4   string
+		state string
+		rtt   int64
+	}
+	m := map[int64]mesh{}
+	for rows.Next() {
+		var id, rtt int64
+		var ip4, st string
+		if rows.Scan(&id, &ip4, &st, &rtt) != nil {
+			continue
+		}
+		m[id] = mesh{ip4: ip4, state: st, rtt: rtt}
+	}
+	for i := range list {
+		if v, ok := m[list[i].ID]; ok {
+			list[i].MeshIP4 = v.ip4
+			list[i].MeshState = v.state
+			list[i].MeshRTTMs = v.rtt
+		}
+	}
+}
+
 // serversList 对应 GET /api/servers?q=&status=
 func (h *handlers) serversList(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.QueryContext(r.Context(), serversSelect)
@@ -162,6 +199,8 @@ func (h *handlers) serversList(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "读取服务器数据失败")
 		return
 	}
+
+	h.attachMeshInfo(r.Context(), list)
 
 	q := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
 	wantStatus := strings.TrimSpace(r.URL.Query().Get("status"))
@@ -197,6 +236,9 @@ type serverStatusItem struct {
 	LastIPPrivate  string          `json:"last_ip_private"`
 	LastMeshIP4    string          `json:"last_mesh_ip4"`
 	LastMeshIP6    string          `json:"last_mesh_ip6"`
+	MeshIP4        string          `json:"mesh_ip4"`
+	MeshState      string          `json:"mesh_state"`
+	MeshRTTMs      int64           `json:"mesh_rtt_ms"`
 	LinkMode       string          `json:"link_mode"`
 	AllowExec      bool            `json:"allow_exec"`
 	Status         string          `json:"status"`
