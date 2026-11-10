@@ -89,11 +89,11 @@ func (t *Tunnel) pumpUp() {
 	// 一次性交给网卡驱动，单个超级包可达几十 KB；用 2048 去读会被截断，
 	// 我们就发出一堆「IP 头声明 1278 字节、实际只有 40 字节」的残包。
 	buf := make([]byte, maxReadPacket)
-	// carry 保存「上次读到一半的 IP 报文」。
-	// Windows 卸载机制下，一个 IP 报文可能被拆到两次读取里交上来
-	// （表现为「帧 40 字节，IP 头声明 490 字节」），下次读到的数据
-	// 直接接在后面就能拼回完整报文。
-	var carry []byte
+	// 读长度分布：用来确认 Wintun 到底交上来多大的包。
+	// 实测出现过「只读到 40 字节、IP 头声明 490 字节」，
+	// 但把两次读取拼起来的假设是错的（会把下一个新包一起污染），已回滚。
+	var readHist = map[int]int{}
+	histLogged := 0
 	for {
 		if t.ctx.Err() != nil {
 			return
@@ -113,23 +113,17 @@ func (t *Tunnel) pumpUp() {
 			first = false
 		}
 		raw := buf[:n]
-		if len(carry) > 0 {
-			// 上次的残包 + 本次数据，一起交给切分器
-			merged := make([]byte, 0, len(carry)+len(raw))
-			merged = append(merged, carry...)
-			merged = append(merged, raw...)
-			carry = nil
-			raw = merged
+
+		// 记录读长度分布（只打印前若干次，避免刷屏）
+		readHist[n]++
+		if len(readHist) > 1 && histLogged < 12 {
+			histLogged++
+			log.Printf("数据面：读长度分布 %v", readHist)
 		}
 
 		// 一次读到的东西可能是「一个包」，也可能是 Windows 卸递交上来的
 		// 「多段合体包」。按 IP 头里的 total length 逐段切开发送。
-		sent, bad, leftover, partial := t.sendRawIPBuffer(raw)
-		if len(partial) > 0 {
-			// 报文没读全：留存到下一次读再拼
-			carry = partial
-			bad = 0 // 不是坏包，只是还没到齐
-		}
+		sent, bad, leftover, _ := t.sendRawIPBuffer(raw)
 		if sent > 0 {
 			t.txPkts.Add(int64(sent))
 		}
@@ -166,10 +160,11 @@ func (t *Tunnel) sendRawIPBuffer(raw []byte) (sent, bad, leftover int, partial [
 			return sent, bad + 1, len(pkt), nil
 		}
 		if total > len(pkt) {
-			// 还没读全：把这段原样交回去，等下一次读取拼接
+			// 长度不足：交回残包供调用方记录，但**不做跨读取拼接**
+			// （试过拼接，会把下一个新包一起当成续传，导致 100% 错位）
 			buf := make([]byte, len(pkt))
 			copy(buf, pkt)
-			return sent, bad, 0, buf
+			return sent, bad + 1, 0, buf
 		}
 		pkt = pkt[:total]
 		if err := t.conn.SendPacket(pkt); err != nil {

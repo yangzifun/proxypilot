@@ -84,12 +84,12 @@ func TestSendRawIPBufferTruncated(t *testing.T) {
 	tn.conn = &collectConn{onSend: func(p []byte) error { return nil }}
 	pkt := makeIPv4(100, 10, 9)
 	short := pkt[:40] // 只留 40 字节，头里仍声明 120
-	sent, _, _, partial := tn.sendRawIPBuffer(short)
+	sent, bad, _, _ := tn.sendRawIPBuffer(short)
 	if sent != 0 {
 		t.Fatalf("截断包不应发出，实际 sent=%d", sent)
 	}
-	if len(partial) == 0 {
-		t.Fatal("截断包应作为残包返回，等下次读补齐")
+	if bad == 0 {
+		t.Fatal("截断包应计入 bad")
 	}
 }
 

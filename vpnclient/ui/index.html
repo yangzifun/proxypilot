@@ -496,6 +496,7 @@ function diagText(){
     '上行队列丢包: ' + (st.uplink_dropped == null ? '-' : st.uplink_dropped) + ' 个',
     'QUIC 丢包   : ' + (st.quic_lost == null ? '-' : st.quic_lost + ' / ' + st.quic_sent +
       '（' + (st.quic_loss_pct == null ? '0' : st.quic_loss_pct.toFixed(2)) + '%）'),
+    '内层坏包    : ' + (st.inner_bad == null ? '-' : st.inner_bad) + ' 个',
     '节点数      : ' + (st.nodes_count == null ? '-' : st.nodes_count) +
       (st.nodes_error ? ('（拉取失败：' + st.nodes_error + '）') : ''),
     '错误        : ' + (st.net_error || st.tun_error || st.message || '-'),
