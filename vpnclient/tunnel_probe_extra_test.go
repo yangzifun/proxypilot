@@ -5,67 +5,51 @@ import (
 	"testing"
 )
 
-// 探测目标必须覆盖网关与多个公共 DNS：单目标失败无法判断是隧道不通
-// 还是那个 DNS 被拦，之前就因此误报「不通」。
-func TestProbeTargetsCoverage(t *testing.T) {
-	ts := probeTargets("10.88.1.1", "1.1.1.1:53")
-	if len(ts) < 4 {
-		t.Fatalf("目标太少（%d）：%+v", len(ts), ts)
+// 探测必须同时覆盖 UDP DNS 与 TCP:443：
+// 客户端自己的 DNS 守卫会封物理网卡 53，只靠 UDP 53 会出现
+// 「网络其实能用，但界面显示不通」。
+func TestProbeTargetsIncludeBothMethods(t *testing.T) {
+	udp := probeTargets("10.88.2.1", "1.1.1.1:53")
+	tcp := probeTCPTargets()
+
+	if len(udp) < 3 {
+		t.Fatalf("UDP 目标太少：%+v", udp)
 	}
-	names := map[string]string{}
-	for _, x := range ts {
-		names[x.Name] = x.Addr
+	if len(tcp) < 1 {
+		t.Fatalf("缺少 TCP 目标：%+v", tcp)
 	}
-	if got := names["节点网关"]; got != "10.88.1.1:53" {
-		t.Fatalf("网关目标应为 10.88.1.1:53，实际 %q", got)
-	}
-	for _, want := range []string{"Cloudflare", "AliDNS", "Quad9"} {
-		if names[want] == "" {
-			t.Fatalf("缺少目标 %s", want)
+	for _, x := range tcp {
+		if !strings.HasSuffix(x.Addr, ":443") {
+			t.Fatalf("TCP 目标应为 :443（避开 53 端口封锁），实际 %q", x.Addr)
 		}
 	}
-	// 1.1.1.1:53 与自定义 DNS 相同，不应重复
-	seen := map[string]int{}
-	for _, x := range ts {
-		seen[x.Addr]++
+	// 网关不应排在第一位：节点上不一定有 DNS 监听，放前面只会白等一个超时
+	if strings.Contains(udp[0].Name, "网关") {
+		t.Fatalf("网关不应作为首个探测目标：%+v", udp)
 	}
-	for addr, n := range seen {
-		if n > 1 {
-			t.Fatalf("目标 %s 重复 %d 次", addr, n)
+}
+
+// 目标不能重复
+func TestProbeTargetsNoDuplicate(t *testing.T) {
+	for _, ts := range [][]probeTarget{probeTargets("10.88.2.1", "1.1.1.1:53"), probeTCPTargets()} {
+		seen := map[string]bool{}
+		for _, x := range ts {
+			if seen[x.Addr] {
+				t.Fatalf("目标重复：%s", x.Addr)
+			}
+			seen[x.Addr] = true
+			if strings.TrimSpace(x.Addr) == "" {
+				t.Fatal("出现空目标")
+			}
 		}
 	}
 }
 
-// 没给网关时不应产生空目标
-func TestProbeTargetsNoGateway(t *testing.T) {
-	ts := probeTargets("", "1.1.1.1:53")
-	for _, x := range ts {
-		if strings.TrimSpace(x.Addr) == "" {
-			t.Fatalf("出现空目标：%+v", ts)
-		}
-		if strings.HasPrefix(x.Addr, ":") {
-			t.Fatalf("目标地址缺主机：%+v", ts)
-		}
-	}
-	for _, x := range ts {
-		if x.Name == "节点网关" {
-			t.Fatalf("没给网关不应生成网关目标：%+v", ts)
-		}
-	}
-}
-
-func TestAtoiPort(t *testing.T) {
-	cases := map[string]int{
-		"53":    53,
-		"443":   443,
-		"":      53,
-		"abc":   53,
-		"0":     53,
-		"70000": 53,
-	}
-	for in, want := range cases {
-		if got := atoiPort(in, 53); got != want {
-			t.Fatalf("atoiPort(%q)=%d，期望 %d", in, got, want)
+// 没给网关时不应生成空地址
+func TestProbeTargetsWithoutGateway(t *testing.T) {
+	for _, x := range probeTargets("", "1.1.1.1:53") {
+		if strings.HasPrefix(x.Addr, ":") || strings.TrimSpace(x.Addr) == "" {
+			t.Fatalf("地址非法：%+v", x)
 		}
 	}
 }

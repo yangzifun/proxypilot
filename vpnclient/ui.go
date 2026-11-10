@@ -822,8 +822,10 @@ func (s *uiServer) connect(nodeID int64) error {
 		log.Printf("HTTP/3 鉴权成功：节点分配 %s（SNI=%s）", assigned, sni)
 
 		s.state.set(func(st *sessionState) {
-			st.probeOK = true
-			st.probeInfo = "鉴权通过"
+			// 注意：这里不能把 probeOK 置真 —— 此时只是 HTTP/3 鉴权过了，
+			// 数据面一个包都还没通。真正的判定交给 runTunnelProbe。
+			st.probeOK = false
+			st.probeInfo = "鉴权通过，等待数据面探测"
 			st.message = "鉴权通过，正在建立隧道…"
 		})
 		log.Printf("HTTP/3 鉴权通过，开始建立可靠隧道（固定 DNS=%s）", cfg.DNSAddr)
@@ -863,7 +865,9 @@ func (s *uiServer) connect(nodeID int64) error {
 			}
 		}
 		// 网卡 DNS 固定 1.1.1.1 与 8.8.8.8
-		tunDNS := []string{"1.1.1.1", "8.8.8.8"}
+		// 8.8.8.8 在国内常被拦，客户端刚连上时会先卡在它上面再回退，
+		// 表现为「连上后要等一会才真的能用」。改用 1.1.1.1 + 223.5.5.5。
+		tunDNS := []string{"1.1.1.1", "223.5.5.5"}
 		log.Printf("隧道参数：地址=%s 网关=%s 网段=%s DNS=%v", prof.IP4, gateway, cidr, tunDNS)
 		pc, cleanupStream, serr := openTunnelStream(ctx, pick.Endpoint, sni, prof.Token, skipVerify)
 		if serr != nil {
@@ -923,6 +927,13 @@ func (s *uiServer) connect(nodeID int64) error {
 					st.netOK = ok
 					st.netRTT = int(rtt.Milliseconds())
 					st.netErr = info
+					// 徽章的「数据面正常」以真实探测为准
+					st.probeOK = ok
+					if ok {
+						st.probeInfo = info
+					} else {
+						st.probeInfo = "数据面探测失败"
+					}
 				})
 			})
 			s.state.set(func(st *sessionState) {

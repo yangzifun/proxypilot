@@ -393,9 +393,11 @@ function render(){
   $('stateHint').textContent = st==='connected'?'点击断开':st==='connecting'?'请稍候…':'点击连接';
 
   const badge = $('badge');
-  badge.className = 'badge' + (st==='connected'?' on':st==='connecting'?' busy':st==='error'?' err':'');
+  const probeFailed = st==='connected' && !state.probe_ok && !!state.net_error;
+  badge.className = 'badge' + (st==='connected'?(probeFailed?' err':' on'):st==='connecting'?' busy':st==='error'?' err':'');
   const rttText = state.rtt_ms ? (' · ' + state.rtt_ms + ' ms') : '';
-  $('badgeText').textContent = st==='connected' ? ('已连接 · '+(state.probe_ok?'数据面正常':'探测中') + rttText)
+  $('badgeText').textContent = st==='connected'
+    ? ('已连接 · ' + (state.probe_ok ? '数据面正常' : (probeFailed ? '数据面不通' : '探测中')) + rttText)
     : st==='connecting' ? '正在建立会话' : st==='error' ? '连接异常' : '已断开';
 
   // 节点显示优先级：
@@ -446,6 +448,7 @@ function render(){
 
   const n = $('notice');
   if(st==='error' && state.message){ n.textContent = state.message; }
+  else if(st==='connected' && !state.probe_ok && state.net_error){ n.textContent = '数据面不通：' + state.net_error; }
   else if(st==='connected' && !state.probe_ok){ n.textContent = '会话已建立，正在验证数据面…'; }
   else if(st==='connected' && state.tun_error){ n.textContent = '系统网络未接管：' + state.tun_error; }
   else { n.textContent = ''; }
