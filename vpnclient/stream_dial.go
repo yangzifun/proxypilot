@@ -40,6 +40,11 @@ func openTunnelStream(ctx context.Context, endpoint, sni, token string, insecure
 	// 流控窗口按 BDP 放大：100 Mbps × 400ms ≈ 5 MB。
 	// 默认 512KB 在 380ms 跨境链路上会把单流卡在 ~10 Mbps。
 	quicConf := &quic.Config{
+		// 关键：隧道流这条连接必须自己开启 DATAGRAM。
+		// 之前只有鉴权连接开了，单连接改造后 DATAGRAM 改走这条连接，
+		// 但这里没开 —— ReceiveDatagram 立刻返回 "datagram support disabled"，
+		// datagramLoop 启动即退出，UDP 下行永远是 0。
+		EnableDatagrams: true,
 		KeepAlivePeriod:                10 * time.Second,
 		MaxIdleTimeout:                 120 * time.Second,
 		// 与鉴权连接同理：跨境链路上握手丢一次包就要 PTO 退避，
@@ -53,6 +58,7 @@ func openTunnelStream(ctx context.Context, endpoint, sni, token string, insecure
 	tr := &http3.Transport{
 		TLSClientConfig: tlsConf,
 		QUICConfig:      quicConf,
+		EnableDatagrams: true,
 		Dial: func(ctx context.Context, addr string, t *tls.Config, c *quic.Config) (*quic.Conn, error) {
 			qc, err := quic.DialAddr(ctx, addr, t, c)
 			if err == nil {
