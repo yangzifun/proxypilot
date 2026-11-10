@@ -30,7 +30,7 @@ import (
 )
 
 // Version 是 VPN 客户端版本（V1.x）。
-const Version = "2.20"
+const Version = "2.21"
 
 var caPEM []byte
 
@@ -219,7 +219,7 @@ func runCLI() {
 func listNodes(ctx context.Context, api, token string) ([]node, error) {
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, api+"/api/portal/vpn/nodes", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := panelHTTP.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -242,7 +242,7 @@ func connect(ctx context.Context, api, token string, deviceID, nodeID int64) (*p
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, api+"/api/portal/vpn/connect", bytes.NewBufferString(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := panelHTTP.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -453,7 +453,7 @@ func meshHeartbeat(ctx context.Context, apiBase, token string, interval time.Dur
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 		Transport: &http.Transport{
-			Proxy:                 http.ProxyFromEnvironment,
+			Proxy:                 nil, // 控制面直连，绝不走本地代理
 			MaxIdleConns:          4,
 			MaxIdleConnsPerHost:   2,
 			IdleConnTimeout:       90 * time.Second,

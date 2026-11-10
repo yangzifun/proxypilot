@@ -235,6 +235,8 @@
 .copybtn:hover { opacity: 1; border-color: rgba(148, 163, 184, .8); }
 .copybtn.wide { width: 100%; padding: 9px 10px; margin-top: 10px; }
 .detail-actions { display: flex; flex-direction: column; }
+.nrow.nerr { color: #f43f5e; font-size: 12px; line-height: 1.6; word-break: break-all; }
+.nrow.nacts { display: flex; gap: 8px; padding-top: 4px; }
 .notice, .rows .v, .detail-actions {
   -webkit-user-select: text;
   user-select: text;
@@ -627,11 +629,23 @@ async function poll(){
   }catch(e){}
 }
 
+let lastNodesError = '';
 async function loadNodes(){
   try{
-    const r = await fetch('/api/nodes',{cache:'no-store'}); const d = await r.json();
+    const r = await fetch('/api/nodes',{cache:'no-store'});
+    if(!r.ok){ throw new Error('本机服务返回 HTTP ' + r.status); }
+    const d = await r.json();
     nodes = d.nodes || [];
-    if(!nodes.length){ $('nodes').innerHTML = '<div class="nrow"><span class="nm" style="color:var(--dim)">'+(d.error||'没有可用节点')+'</span></div>'; return; }
+    lastNodesError = nodes.length ? '' : (d.error || '没有可用节点');
+    if(!nodes.length){
+      $('nodes').innerHTML =
+        '<div class="nrow nerr"><span class="nm">' + escapeHtml(lastNodesError) + '</span></div>' +
+        '<div class="nrow nacts"><button class="copybtn" id="nodesRetry">重试</button>' +
+        '<button class="copybtn" id="nodesCopy">复制错误</button></div>';
+      const rb = $('nodesRetry'); if(rb) rb.onclick = ()=> loadNodes().then(renderPicker);
+      const cb = $('nodesCopy'); if(cb) cb.onclick = ()=> copyText(nodeErrorText(), '已复制节点错误');
+      return;
+    }
     $('nodes').innerHTML = nodes.map(n=>`
       <div class="nrow ${n.id===selectedNode?'sel':''}" data-id="${n.id}">
         <span class="st ${n.online?'up':''}"></span>
@@ -639,7 +653,34 @@ async function loadNodes(){
         <span class="ep">${(n.endpoint||'').split(':')[0]}</span>
       </div>`).join('');
     $('nodes').querySelectorAll('.nrow').forEach(el=>el.onclick=()=>{ pickNode(Number(el.dataset.id)); });
-  }catch(e){}
+  }catch(e){
+    lastNodesError = '获取节点失败：' + (e && e.message ? e.message : e);
+    nodes = [];
+    $('nodes').innerHTML =
+      '<div class="nrow nerr"><span class="nm">' + escapeHtml(lastNodesError) + '</span></div>' +
+      '<div class="nrow nacts"><button class="copybtn" id="nodesRetry">重试</button>' +
+      '<button class="copybtn" id="nodesCopy">复制错误</button></div>';
+    const rb = $('nodesRetry'); if(rb) rb.onclick = ()=> loadNodes().then(renderPicker);
+    const cb = $('nodesCopy'); if(cb) cb.onclick = ()=> copyText(nodeErrorText(), '已复制节点错误');
+  }
+}
+
+// 节点获取失败时复制的文本：带上关键上下文，便于定位
+function nodeErrorText(){
+  return [
+    'ProxyPilot 客户端 v' + ((state && state.version) || '?'),
+    '时间     : ' + new Date().toISOString(),
+    '面板     : ' + ((state && state.api) || '-'),
+    '登录     : ' + (state && state.logged_in ? '是' : '否'),
+    '状态     : ' + ((state && state.status) || '-'),
+    '错误     : ' + (lastNodesError || '-'),
+  ].join('\n');
+}
+
+function escapeHtml(s){
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 // 切换节点：写回后端记忆；若正在连接/已连接则自动用新节点重连

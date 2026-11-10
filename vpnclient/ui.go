@@ -686,7 +686,7 @@ func (s *uiServer) releasePanelSession(sessionID int64) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+cfg.Token)
-	resp, err := (&http.Client{Timeout: 8 * time.Second}).Do(req)
+	resp, err := panelHTTP.Do(req)
 	if err != nil {
 		log.Printf("释放面板会话 %d 失败：%v", sessionID, err)
 		return
@@ -1002,7 +1002,7 @@ func connectPortal(ctx context.Context, api, token string, deviceID, nodeID int6
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, api+"/api/portal/vpn/connect", strings.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := panelHTTP.Do(req)
 	if err != nil {
 		return nil, err
 	}

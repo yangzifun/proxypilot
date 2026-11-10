@@ -44,7 +44,7 @@ func fetchPlatformCA(ctx context.Context, apiBase string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := panelHTTP.Do(req)
 	if err != nil {
 		return nil, err
 	}
