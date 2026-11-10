@@ -130,8 +130,8 @@ WS /api/agent/ws?key=<secret>
 ```json
 {
   "listen": "0.0.0.0:443",
-  "cert_file": "/etc/proxypilot/masque/tls/cert.pem",
-  "key_file": "/etc/proxypilot/masque/tls/key.pem",
+  "cert_file": "/etc/proxypilot/tunnel/tls/cert.pem",
+  "key_file": "/etc/proxypilot/tunnel/tls/key.pem",
   "node_id": 3,
   "mesh_ip4": "10.99.0.11",
   "client_cidr4": "10.88.1.0/24",
@@ -142,7 +142,7 @@ WS /api/agent/ws?key=<secret>
   "wan": "",
   "public_key": "<base64 Ed25519>",
   "issuer": "proxypilot",
-  "audience": "masque-node",
+  "audience": "pp-tunnel",
   "dns": ["10.88.1.1"],
   "configure": true
 }

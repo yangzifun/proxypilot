@@ -357,7 +357,7 @@ writeLoop  → 贪心聚合，攒到 64KB 或 2ms 后一次 Write
 RecvPacket → bufio.Reader(64KB) 缓冲读
 ```
 
-**节点**（`masque/node/stream.go`）：同样改为「每会话队列 + 聚合写」，
+**节点**（`tunnel/node/stream.go`）：同样改为「每会话队列 + 聚合写」，
 `tunLoop` 只做入队，不再被单个慢客户端反压。
 
 代价：队列满时丢弃并计数（`DropStats()`），而不是返回错误 —— 返回错误会让

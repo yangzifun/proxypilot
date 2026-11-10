@@ -210,7 +210,7 @@ if srcClient && dstClient && !touchesGateway && !AllowClientToClient {
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | `iss` | string | 固定 `proxypilot` |
-| `aud` | string | 固定 `masque-node` |
+| `aud` | string | 固定 `pp-tunnel` |
 | `sub` | string | `device:<id>` |
 | `uuid` | string | 用户 UUID |
 | `node` | int | 节点 ID，必须与目标节点一致 |

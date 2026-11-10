@@ -157,7 +157,7 @@ proxypilot/
 │   └── dist/                   # 构建产物（会同步进 server/internal/api/assets_web/）
 ├── deploy/                     # 单机安装 / 升级 / 卸载脚本与站点加固
 ├── agent/                      # Go Agent + install.sh + build.sh + dist/
-├── masque/                     # 自研 HTTP/3 隧道节点（包名为历史命名，非 RFC 9484 MASQUE）
+├── tunnel/                     # 自研 HTTP/3 隧道节点（36.0 由 masque/ 更名）
 ├── vpnclient/                  # VPN 客户端（Wails v3 桌面端 + CLI，含组网模式）
 ├── .github/                    # CI：Release 构建与安全扫描
 ├── rule/                       # Clash / Mihomo 模板与规则
