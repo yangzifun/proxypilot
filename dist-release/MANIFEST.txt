@@ -1,23 +1,23 @@
 ProxyPilot 发布包
 面板版本 : V35.4
-Agent    : 2.2.3
-客户端   : 2.37
-构建时间 : 2026-11-10 22:35:36
+Agent    : 2.2.4
+客户端   : 2.38
+构建时间 : 2026-11-10 22:45:12
 
 文件清单：
   DEPLOY-README.md                                       0.0 MB
   install.sh                                             0.0 MB
   maintenance.sh                                         0.0 MB
-  proxypilot-agent-2.2.3-linux-amd64                     9.7 MB
-  proxypilot-agent-2.2.3-linux-arm64                     9.0 MB
+  proxypilot-agent-2.2.4-linux-amd64                     9.7 MB
+  proxypilot-agent-2.2.4-linux-arm64                     9.0 MB
   proxypilot-V35.4-linux-amd64                          18.6 MB
   proxypilot-V35.4-linux-arm64                          17.6 MB
-  proxypilot-vpn-2.37-darwin-amd64                       9.1 MB
-  proxypilot-vpn-2.37-darwin-arm64                       8.5 MB
-  proxypilot-vpn-2.37-linux-amd64                        8.9 MB
-  proxypilot-vpn-2.37-linux-arm64                        8.3 MB
-  proxypilot-vpn-2.37-windows-amd64-cli.exe              9.7 MB
-  proxypilot-vpn-2.37-windows-amd64-install.exe         30.4 MB
+  proxypilot-vpn-2.38-darwin-amd64                       9.1 MB
+  proxypilot-vpn-2.38-darwin-arm64                       8.5 MB
+  proxypilot-vpn-2.38-linux-amd64                        8.9 MB
+  proxypilot-vpn-2.38-linux-arm64                        8.3 MB
+  proxypilot-vpn-2.38-windows-amd64-cli.exe              9.7 MB
+  proxypilot-vpn-2.38-windows-amd64-install.exe         30.4 MB
   uninstall.cmd                                          0.0 MB
   uninstall.ps1                                          0.0 MB
   uninstall.sh                                           0.0 MB
@@ -26,7 +26,7 @@ Agent    : 2.2.3
 安装：
   服务端    sudo ./install.sh --binary ./proxypilot-V35.4-linux-amd64
   升级      sudo ./upgrade.sh --binary ./proxypilot-V35.4-linux-amd64
-  Windows   双击 proxypilot-vpn-2.37-windows-amd64-install.exe（安装程序，只安装不运行）
-            安装后从开始菜单/桌面图标启动 ProxyPilot（客户端 v2.37）
+  Windows   双击 proxypilot-vpn-2.38-windows-amd64-install.exe（安装程序，只安装不运行）
+            安装后从开始菜单/桌面图标启动 ProxyPilot（客户端 v2.38）
             卸载：设置 → 应用 → ProxyPilot VPN，或运行 uninstall.cmd
-  客户端自检 proxypilot-vpn-2.37-windows-amd64-cli.exe -tun-selftest
+  客户端自检 proxypilot-vpn-2.38-windows-amd64-cli.exe -tun-selftest

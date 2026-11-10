@@ -1,6 +1,7 @@
 package node
 
 import (
+	"bufio"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -201,8 +202,15 @@ func (s *Server) readStream(body io.Reader, sess *session) {
 	}()
 	lastStats := time.Now()
 	var hdr [2]byte
+
+	// 上行读取优化：
+	//   1) 用 bufio 包一层，避免每个报文 2 次 syscall
+	//   2) 复用载荷缓冲，避免每包一次 make（高 pps 下 GC 压力明显）
+	br := bufio.NewReaderSize(body, 64*1024)
+	var pktBuf []byte
+
 	for {
-		if _, err := io.ReadFull(body, hdr[:]); err != nil {
+		if _, err := io.ReadFull(br, hdr[:]); err != nil {
 			if err != io.EOF {
 				s.log.Info("流隧道读取结束", "ip", sess.ip.String(), "err", err.Error())
 			}
@@ -213,8 +221,11 @@ func (s *Server) readStream(body io.Reader, sess *session) {
 			s.log.Warn("流隧道帧长度非法", "ip", sess.ip.String(), "len", n)
 			return
 		}
-		buf := make([]byte, n)
-		if _, err := io.ReadFull(body, buf); err != nil {
+		if cap(pktBuf) < n {
+			pktBuf = make([]byte, n)
+		}
+		buf := pktBuf[:n]
+		if _, err := io.ReadFull(br, buf); err != nil {
 			return
 		}
 		frames++
