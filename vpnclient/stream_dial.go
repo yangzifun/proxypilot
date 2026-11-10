@@ -37,6 +37,9 @@ func openTunnelStream(ctx context.Context, endpoint, sni, token string, insecure
 	quicConf := &quic.Config{
 		KeepAlivePeriod:                10 * time.Second,
 		MaxIdleTimeout:                 120 * time.Second,
+		// 与鉴权连接同理：跨境链路上握手丢一次包就要 PTO 退避，
+		// 默认 5s 太紧，放宽到 15s 减少「首次连不上」。
+		HandshakeIdleTimeout:           15 * time.Second,
 		InitialStreamReceiveWindow:     4 << 20,
 		MaxStreamReceiveWindow:         16 << 20,
 		InitialConnectionReceiveWindow: 8 << 20,

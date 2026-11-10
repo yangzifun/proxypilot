@@ -30,7 +30,7 @@ import (
 )
 
 // Version 是 VPN 客户端版本（V1.x）。
-const Version = "3.2"
+const Version = "3.3"
 
 var caPEM []byte
 
@@ -499,7 +499,39 @@ func meshHeartbeat(ctx context.Context, apiBase, token string, interval time.Dur
 	}
 }
 
+// authHTTP3 建立鉴权连接，失败会自动重试。
+//
+// 为什么要内建重试：UDP 443 的握手首个 Initial 包偶发丢失时，quic-go 直接返回
+// 「timeout: no recent network activity」，用户看到的就是「连不上，要连好几次」。
+// 这里做 3 次尝试 + 递增退避，把偶发丢包吃掉，而不是抛给用户去点重试。
 func authHTTP3(ctx context.Context, endpoint, sni, token string, insecure bool) (string, *quic.Conn, error) {
+	const attempts = 3
+	var lastErr error
+	for i := 1; i <= attempts; i++ {
+		assigned, conn, err := authHTTP3Once(ctx, endpoint, sni, token, insecure)
+		if err == nil {
+			return assigned, conn, nil
+		}
+		lastErr = err
+		if ctx.Err() != nil {
+			return "", nil, ctx.Err()
+		}
+		if i < attempts {
+			// 400ms / 800ms 退避：给路径上的状态一次恢复机会
+			wait := time.Duration(400<<uint(i-1)) * time.Millisecond
+			log.Printf("HTTP/3 鉴权失败（第 %d/%d 次，%v 后重试）：%v", i, attempts, wait, err)
+			select {
+			case <-ctx.Done():
+				return "", nil, ctx.Err()
+			case <-time.After(wait):
+			}
+			continue
+		}
+	}
+	return "", nil, lastErr
+}
+
+func authHTTP3Once(ctx context.Context, endpoint, sni, token string, insecure bool) (string, *quic.Conn, error) {
 	var conn *quic.Conn
 	tlsConf := &tls.Config{
 		ServerName:         sni,
@@ -521,6 +553,11 @@ func authHTTP3(ctx context.Context, endpoint, sni, token string, insecure bool) 
 			EnableDatagrams: true,
 			KeepAlivePeriod: 10 * time.Second,
 			MaxIdleTimeout:  60 * time.Second,
+			// 握手超时从默认 5s 放宽到 15s：RTT 150~200ms 的跨境链路上，
+			// 首个 Initial 包丢一次就要等 1s→2s→4s 的 PTO 退避，
+			// 5s 很容易在第二次重传前就判死，表现为
+			// 「timeout: no recent network activity」，用户要连好几次才成功。
+			HandshakeIdleTimeout: 15 * time.Second,
 		},
 		EnableDatagrams: true,
 		Dial: func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (*quic.Conn, error) {
