@@ -189,15 +189,16 @@ func (s *Server) serveStream(w http.ResponseWriter, r *http.Request) {
 
 // readStream 从请求体读报文写入 TUN，直到流结束。
 func (s *Server) readStream(body io.Reader, sess *session) {
+	var badPkt, badSrc, frames int
 	defer func() {
 		s.unregister(sess)
 		if sess.closeFn != nil {
 			sess.closeFn()
 		}
-		s.log.Info("流隧道会话结束", "ip", sess.ip.String(), "rx", sess.rx, "tx", sess.tx,
+		s.log.Info("流隧道会话结束", "ip", sess.ip.String(), "frames", frames, "rx", sess.rx,
+			"tx", sess.tx, "bad_pkt", badPkt, "bad_src", badSrc,
 			"duration", time.Since(sess.started).Round(time.Second))
 	}()
-	var badPkt, badSrc int
 	lastStats := time.Now()
 	var hdr [2]byte
 	for {
@@ -216,9 +217,21 @@ func (s *Server) readStream(body io.Reader, sess *session) {
 		if _, err := io.ReadFull(body, buf); err != nil {
 			return
 		}
+		frames++
 		pkt, src, _, perr := StripPadding(buf)
 		if perr != nil {
 			badPkt++
+			// 前 8 个坏包打印前 32 字节，用来判断到底哪里不像 IP 报文
+			if badPkt <= 8 {
+				n := len(buf)
+				if n > 32 {
+					n = 32
+				}
+				s.log.Warn("流隧道坏包", "ip", sess.ip.String(), "frame_len", len(buf),
+					"hex", fmt.Sprintf("% x", buf[:n]),
+					"ver", buf[0]>>4, "ihl", int(buf[0]&0x0f)*4,
+					"total", int(binary.BigEndian.Uint16(buf[2:4])))
+			}
 			continue
 		}
 		if !src.Equal(sess.ip) {
@@ -234,7 +247,7 @@ func (s *Server) readStream(body io.Reader, sess *session) {
 		}
 		sess.tx++
 		if time.Since(lastStats) > 30*time.Second {
-			s.log.Info("流隧道流量", "ip", sess.ip.String(), "rx", sess.rx, "tx", sess.tx,
+			s.log.Info("流隧道流量", "ip", sess.ip.String(), "frames", frames, "rx", sess.rx, "tx", sess.tx,
 				"bad_pkt", badPkt, "bad_src", badSrc)
 			lastStats = time.Now()
 		}
