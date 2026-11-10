@@ -28,8 +28,9 @@ import {
 import { api } from '../api';
 import { useAsync } from '../hooks';
 import { ErrorBlock, PageCard, Toolbar } from '../components';
+import MailBuiltinGuide from '../components/MailBuiltinGuide';
 
-const SECRETS = ['turnstile_secret', 'smtp_pass', 'oidc_client_secret', 'cloudflare_api_token'];
+const SECRETS = ['turnstile_secret', 'smtp_pass', 'oidc_client_secret', 'cloudflare_api_token', 'mail_dns_token'];
 
 function BoolField({ name, label, extra }) {
   return (
@@ -45,6 +46,7 @@ export default function Settings({ embedded = false }) {
   const mailProvider = Form.useWatch('mail_provider', form);
   const settings = useAsync(() => api('settings'), []);
   const vpnSettings = useAsync(() => api('admin/vpn/settings'), []);
+  const mailGuide = useAsync(() => api('admin/mail/guide'), []);
   const [saving, setSaving] = useState(false);
   const [checking, setChecking] = useState(false);
   const [checkResult, setCheckResult] = useState(null);
@@ -269,16 +271,83 @@ export default function Settings({ embedded = false }) {
                   <Form.Item
                     name="mail_provider"
                     label="通道"
-                    extra="auto：已配置统一 Cloudflare API Token 时优先 Cloudflare，否则 SMTP"
+                    extra="自建直投：面板直接连收件方 MX，只需填域名与发件人；auto：有 Cloudflare Token 走 Cloudflare，否则 SMTP"
                   >
                     <Select
                       options={[
+                        { value: 'builtin', label: '自建直投（不需要第三方）' },
                         { value: 'auto', label: '自动（推荐）' },
                         { value: 'cloudflare', label: 'Cloudflare Email Sending' },
                         { value: 'smtp', label: 'SMTP' },
                       ]}
                     />
                   </Form.Item>
+
+                  {mailProvider === 'builtin' ? (
+                    <>
+                      <Divider orientation="left">自建直投</Divider>
+                      <Form.Item
+                        name="mail_domain"
+                        label="发信域名"
+                        extra="用于 SPF / DKIM / DMARC 与 Message-ID，例如 proxypilot.yangzifun.org"
+                        rules={[
+                          {
+                            pattern: /^[a-z0-9.-]+\.[a-z]{2,}$/i,
+                            message: '请输入合法域名，例如 proxypilot.yangzifun.org',
+                          },
+                        ]}
+                      >
+                        <Input placeholder="proxypilot.yangzifun.org" allowClear />
+                      </Form.Item>
+                      <Form.Item
+                        name="mail_from"
+                        label="发件人邮箱"
+                        extra="必须属于上面的域名，例如 noreply@proxypilot.yangzifun.org"
+                        rules={[{ type: 'email', message: '请输入合法邮箱' }]}
+                      >
+                        <Input placeholder="noreply@proxypilot.yangzifun.org" allowClear />
+                      </Form.Item>
+                      <Form.Item
+                        name="mail_dkim_selector"
+                        label="DKIM selector"
+                        extra="默认 pp，对应 TXT 记录 pp._domainkey.<域名>。改过 selector 后要同步改 DNS。"
+                      >
+                        <Input placeholder="pp" allowClear style={{ width: 200 }} />
+                      </Form.Item>
+                      <Form.Item
+                        name="mail_dns_token"
+                        label="DNS 专用 Token（可选）"
+                        extra={
+                          hasSecret.mail_dns_token
+                            ? '已配置（留空保持不变）。需要 Zone:Read + DNS:Edit 权限，用于「一键写入 DNS 记录」'
+                            : '留空则用上方 Cloudflare 统一 Token；一键写入需要 Zone:Read + DNS:Edit 权限'
+                        }
+                      >
+                        <Input.Password
+                          placeholder={hasSecret.mail_dns_token ? '已配置，留空保持不变' : '仅用于写 DNS 记录的 API Token'}
+                          autoComplete="new-password"
+                        />
+                      </Form.Item>
+                      <Form.Item
+                        name="mail_egress_ip"
+                        label="出口 IP（可选）"
+                        extra="留空自动探测。SPF 里会写成 ip4:<此 IP>，写错会 softfail。"
+                      >
+                        <Input placeholder="自动探测" allowClear style={{ width: 240 }} />
+                      </Form.Item>
+
+                      <Divider orientation="left">配置向导</Divider>
+                      {mailGuide.error ? (
+                        <ErrorBlock error={mailGuide.error} onRetry={mailGuide.reload} />
+                      ) : (
+                        <MailBuiltinGuide
+                          guide={mailGuide.data}
+                          reload={mailGuide.reload}
+                          form={form}
+                        />
+                      )}
+                    </>
+                  ) : null}
 
                   {mailProvider === 'smtp' ? (
                     <>

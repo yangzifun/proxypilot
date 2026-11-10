@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-var errMailNotConfigured = errors.New("邮件服务未配置：请在后台配置 Cloudflare Email Sending 或 SMTP")
+var errMailNotConfigured = errors.New("邮件服务未配置：请在后台配置自建直投 / Cloudflare Email Sending / SMTP")
 
 // sendMail 统一发信入口：按配置选择 Cloudflare Email Sending 或 SMTP。
 func (h *handlers) sendMail(to, subject, htmlBody string) error {
@@ -23,6 +23,8 @@ func (h *handlers) sendMail(to, subject, htmlBody string) error {
 		return h.sendMailCloudflare(mc, to, subject, htmlBody)
 	case "smtp":
 		return h.sendMailSMTP(mc, to, subject, htmlBody)
+	case "builtin":
+		return h.sendMailBuiltin(mc, to, subject, htmlBody)
 	default:
 		return errMailNotConfigured
 	}

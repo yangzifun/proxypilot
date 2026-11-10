@@ -387,6 +387,10 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("PUT /api/attachments/content", h.authed(authOpts{}, h.attachmentsContentSave))
 	mux.HandleFunc("POST /api/cloudflare/check", h.authed(authOpts{superOnly: true}, h.cloudflareCheck))
 
+	mux.HandleFunc("GET /api/admin/mail/guide", h.authed(authOpts{superOnly: true}, h.mailGuideGet))
+	mux.HandleFunc("POST /api/admin/mail/test", h.authed(authOpts{superOnly: true}, h.mailTestSend))
+	mux.HandleFunc("POST /api/admin/mail/dkim", h.authed(authOpts{superOnly: true}, h.mailDKIMRotate))
+	mux.HandleFunc("POST /api/admin/mail/dns/apply", h.authed(authOpts{superOnly: true}, h.mailDNSApply))
 	mux.HandleFunc("GET /api/settings", h.authed(authOpts{superOnly: true}, h.settingsAPI))
 	mux.HandleFunc("PUT /api/settings", h.authed(authOpts{superOnly: true}, h.settingsAPI))
 	mux.HandleFunc("POST /api/settings", h.authed(authOpts{superOnly: true}, h.settingsAPI))

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -112,6 +113,25 @@ func (h *handlers) settingsAPI(w http.ResponseWriter, r *http.Request) {
 					writeError(w, http.StatusBadRequest, "mail_from 不是合法邮箱")
 					return
 				}
+			case settingMailDomain:
+				v = strings.ToLower(strings.TrimSpace(v))
+				v = strings.TrimPrefix(v, "@")
+				if v != "" && (!strings.Contains(v, ".") || strings.ContainsAny(v, " /\\")) {
+					writeError(w, http.StatusBadRequest, "mail_domain 需要是合法域名，例如 proxypilot.yangzifun.org")
+					return
+				}
+			case settingMailDKIMSelect:
+				v = strings.ToLower(strings.TrimSpace(v))
+				if v != "" && strings.ContainsAny(v, " .@/\\") {
+					writeError(w, http.StatusBadRequest, "mail_dkim_selector 只能包含字母数字与短横线")
+					return
+				}
+			case settingMailEgressIP:
+				v = strings.TrimSpace(v)
+				if v != "" && net.ParseIP(v) == nil {
+					writeError(w, http.StatusBadRequest, "mail_egress_ip 不是合法 IP")
+					return
+				}
 			case settingCFFrom:
 				if v != "" && normalizeEmail(v) == "" {
 					writeError(w, http.StatusBadRequest, "cloudflare_from 不是合法邮箱")
@@ -119,8 +139,8 @@ func (h *handlers) settingsAPI(w http.ResponseWriter, r *http.Request) {
 				}
 			case settingMailProvider:
 				v = strings.ToLower(v)
-				if v != "" && v != "auto" && v != "smtp" && v != "cloudflare" {
-					writeError(w, http.StatusBadRequest, "mail_provider 只能是 auto / smtp / cloudflare")
+				if v != "" && v != "auto" && v != "smtp" && v != "cloudflare" && v != "builtin" {
+					writeError(w, http.StatusBadRequest, "mail_provider 只能是 auto / builtin / smtp / cloudflare")
 					return
 				}
 			case "monitor_notify_emails":
