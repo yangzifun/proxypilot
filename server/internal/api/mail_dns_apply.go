@@ -152,14 +152,11 @@ func (h *handlers) mailDNSApply(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "请先生成 DKIM 密钥")
 		return
 	}
-	// 优先用专用的 DNS Token；没有就复用统一 Cloudflare Token
-	dnsToken := strings.TrimSpace(mc.DNSToken)
-	if dnsToken == "" {
-		dnsToken = strings.TrimSpace(mc.CFToken)
-	}
+	// 统一使用「系统设置 → Cloudflare」里的 Token
+	dnsToken := strings.TrimSpace(mc.CFToken)
 	if dnsToken == "" {
 		writeError(w, http.StatusBadRequest,
-			"没有可用的 Cloudflare Token：请在下面填「DNS 专用 Token」，或手动添加下列记录")
+			"未配置 Cloudflare API Token：请到「系统设置 → Cloudflare」填写，或手动添加下列记录")
 		return
 	}
 

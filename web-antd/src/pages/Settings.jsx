@@ -30,7 +30,7 @@ import { useAsync } from '../hooks';
 import { ErrorBlock, PageCard, Toolbar } from '../components';
 import MailBuiltinGuide from '../components/MailBuiltinGuide';
 
-const SECRETS = ['turnstile_secret', 'smtp_pass', 'oidc_client_secret', 'cloudflare_api_token', 'mail_dns_token'];
+const SECRETS = ['turnstile_secret', 'smtp_pass', 'oidc_client_secret', 'cloudflare_api_token'];
 
 function BoolField({ name, label, extra }) {
   return (
@@ -314,20 +314,6 @@ export default function Settings({ embedded = false }) {
                         <Input placeholder="pp" allowClear style={{ width: 200 }} />
                       </Form.Item>
                       <Form.Item
-                        name="mail_dns_token"
-                        label="DNS 专用 Token（可选）"
-                        extra={
-                          hasSecret.mail_dns_token
-                            ? '已配置（留空保持不变）。需要 Zone:Read + DNS:Edit 权限，用于「一键写入 DNS 记录」'
-                            : '留空则用上方 Cloudflare 统一 Token；一键写入需要 Zone:Read + DNS:Edit 权限'
-                        }
-                      >
-                        <Input.Password
-                          placeholder={hasSecret.mail_dns_token ? '已配置，留空保持不变' : '仅用于写 DNS 记录的 API Token'}
-                          autoComplete="new-password"
-                        />
-                      </Form.Item>
-                      <Form.Item
                         name="mail_egress_ip"
                         label="出口 IP（可选）"
                         extra="留空自动探测。SPF 里会写成 ip4:<此 IP>，写错会 softfail。"
@@ -396,13 +382,13 @@ export default function Settings({ embedded = false }) {
                     type="info"
                     showIcon
                     style={{ marginBottom: 12 }}
-                    message="一个 Cloudflare API Token 同时用于 R2 对象存储与 DNS 记录写入"
-                    description="权限需包含：Account → R2 → Object Read & Write；如需「一键写入发信 DNS 记录」，再加 Zone → Zone → Read 与 Zone → DNS → Edit。系统会用 Token 自动换取 R2 的 S3 凭证，无需再填 Access Key / Secret。"
+                    message="统一密钥：只用于「DNS 记录管理」与「R2 对象存储」"
+                    description="权限需包含 Account → R2 → Object Read & Write；如需在发信向导里「一键写入 DNS 记录」，再加 Zone → Zone → Read 与 Zone → DNS → Edit。存储桶（Bucket / Endpoint / CDN）的设置在「附件管理」页面。"
                   />
                   <Form.Item
                     name="cloudflare_api_token"
                     label="Cloudflare API Token"
-                    extra={hasSecret.cloudflare_api_token ? '已配置（留空保持不变）' : 'R2 与 DNS 共用'}
+                    extra={hasSecret.cloudflare_api_token ? '已配置（留空保持不变）' : 'DNS 与 R2 共用'}
                   >
                     <Input.Password
                       placeholder={hasSecret.cloudflare_api_token ? '已配置，留空保持不变' : '粘贴一个 API Token'}
@@ -412,19 +398,13 @@ export default function Settings({ embedded = false }) {
                   <Form.Item name="cloudflare_account_id" label="Account ID">
                     <Input placeholder="9ef942805abcaef4dbf6574131453c58" allowClear />
                   </Form.Item>
-                  <Divider orientation="left">R2 对象存储</Divider>
-                  <Form.Item name="r2_bucket" label="Bucket">
-                    <Input placeholder="proxypilot" allowClear />
-                  </Form.Item>
-                  <Form.Item name="r2_endpoint" label="Endpoint" extra="留空按 Account ID 自动生成">
-                    <Input placeholder="https://<account>.r2.cloudflarestorage.com" allowClear />
-                  </Form.Item>
-                  <Form.Item name="cdn_base_url" label="CDN 公共地址" extra="R2 自定义域名，如 https://cdn.example.com；留空则只用鉴权下载">
-                    <Input placeholder="https://cdn.example.com" allowClear />
-                  </Form.Item>
-                  <Typography.Text type="secondary">
-                    兼容旧配置：如果 Token 为空，仍会回退使用环境变量或旧的 R2 Access Key。
-                  </Typography.Text>
+                  <Alert
+                    type="info"
+                    showIcon
+                    style={{ marginTop: 12 }}
+                    message="存储桶设置已移到「附件管理」"
+                    description="Bucket、Endpoint、CDN 公共地址请在「附件管理 → 对象存储设置」里配置。"
+                  />
                   <Divider orientation="left">密钥检查</Divider>
                   <Space direction="vertical" style={{ width: '100%' }} size={10}>
                     <Space>

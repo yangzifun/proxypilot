@@ -38,7 +38,6 @@ const (
 	settingMailDKIMSelect = "mail_dkim_selector"
 	settingMailDKIMKey    = "mail_dkim_private"
 	settingMailEgressIP   = "mail_egress_ip"
-	settingMailDNSToken   = "mail_dns_token"
 	settingMailDKIMBits   = "mail_dkim_bits"
 	settingR2Account       = "r2_account_id"
 	settingR2Bucket        = "r2_bucket"
@@ -87,7 +86,6 @@ var settingDefs = []settingDef{
 	{Key: settingMailDKIMSelect},
 	{Key: settingMailDKIMKey, Secret: true},
 	{Key: settingMailEgressIP},
-	{Key: settingMailDNSToken, Secret: true},
 	{Key: settingMailDKIMBits},
 	{Key: settingR2Account},
 	{Key: settingR2Bucket},
@@ -155,7 +153,7 @@ func (h *handlers) settingValue(ctx context.Context, key string) string {
 func isSecretSetting(key string) bool {
 	switch key {
 	case settingSMTPPass, settingOIDCSecret, settingTurnstileSecret, settingCFToken, settingR2SecretKey,
-		settingMailDKIMKey, settingMailDNSToken:
+		settingMailDKIMKey:
 		return true
 	}
 	return false
@@ -238,8 +236,6 @@ type mailConfig struct {
 	DKIMPrivate string
 	PublicB64   string
 	EgressIP    string
-	// DNSToken 可选：只有它能写 DNS，避免为了 TXT 记录去放大统一 Token 的权限
-	DNSToken string
 	// DKIMBits 1024 或 2048
 	DKIMBits int
 }
@@ -277,7 +273,6 @@ func (h *handlers) effectiveMail(ctx context.Context) mailConfig {
 		Selector:    h.setting(ctx, settingMailDKIMSelect, dkimDefaultSelector),
 		DKIMPrivate: h.setting(ctx, settingMailDKIMKey, ""),
 		EgressIP:    h.setting(ctx, settingMailEgressIP, ""),
-		DNSToken:    h.setting(ctx, settingMailDNSToken, ""),
 		DKIMBits:    int(intOrJS(h.setting(ctx, settingMailDKIMBits, "2048"), 2048, 1024, 2048)),
 	}
 }

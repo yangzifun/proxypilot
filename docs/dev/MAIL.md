@@ -33,7 +33,6 @@ sendMail(to, subject, html)
 | `mail_dkim_selector` | 默认 `pp`，对应 `pp._domainkey.<域名>` |
 | `mail_dkim_private` | RSA 私钥 PEM（Secret，AES-GCM 存库） |
 | `mail_egress_ip` | 可选，SPF 里的 `ip4:`；留空自动探测 |
-| `mail_dns_token` | 可选，仅用于写 DNS 的 Cloudflare Token（Zone:Read + DNS:Edit） |
 
 ## 3. 必须配置的 DNS
 
@@ -117,5 +116,5 @@ python3 -c "import dkim; print(dkim.verify(open('/tmp/captured.eml','rb').read()
      └─ 不存在 → POST 新建 → created
 ```
 
-需要 Token 具备 `Zone:Read` + `DNS:Edit`。若统一 Token 只有 R2/Email 权限，
-可在设置里单独填 `mail_dns_token`，不必放大原 Token 的权限范围。
+需要 Token 具备 `Zone:Read` + `DNS:Edit`。Token 统一在「系统设置 → Cloudflare」里配置，
+与 R2 对象存储共用同一个；存储桶参数（Bucket / Endpoint / CDN）在「附件管理 → 对象存储设置」。
