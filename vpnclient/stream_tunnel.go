@@ -32,7 +32,12 @@ type packetConn interface {
 const (
 	maxFrame       = 4096        // 单帧上限，防御异常长度
 	sendQueueDepth = 2048        // 队列深度（约 2.8MB），吸收突发
-	batchMaxBytes  = 64 * 1024   // 单次写入的聚合上限
+	// 单次写入的聚合上限。36.1 从 64KB 降到 8KB：
+	// 实测隧道内 QUIC 丢包 5.9%，而 CUBIC 在 162ms RTT 下遇到这个丢包率
+	// 只能跑 4~5 Mbps。64KB 一次写成约 48 个满载 UDP 包背靠背发出，
+	// 这种突发很容易打满路径上浅缓冲的整形器/家用路由器队列；
+	// 降到 8KB（约 6 个包）可以显著削峰，代价是 QUIC 帧头部开销略增。
+	batchMaxBytes = 8 * 1024
 	batchMaxDelay  = 2 * time.Millisecond
 )
 
@@ -128,7 +133,7 @@ func (c *streamPacketConn) writeLoop() {
 			}
 
 			// 队列已空且包数不多时，短暂等一下，让同一批上行流量合并成一次写。
-			if len(buf) < batchMaxBytes/4 {
+			if len(buf) < batchMaxBytes/2 {
 				timer := time.NewTimer(batchMaxDelay)
 			drain:
 				for len(buf) < batchMaxBytes {

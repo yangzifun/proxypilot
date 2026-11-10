@@ -28,7 +28,9 @@ const maxStreamFrame = 4096
 // 改成「每会话有界队列 + 聚合写」，tunLoop 只做入队。
 const (
 	streamQueueDepth = 2048
-	streamBatchMax   = 64 * 1024
+	// 下行同样从 64KB 降到 8KB：突发是双向都会被路径丢弃的，
+	// 下载慢同样要吃这个亏。详见 vpnclient/stream_tunnel.go 的说明。
+	streamBatchMax   = 8 * 1024
 	streamBatchDelay = 2 * time.Millisecond
 )
 
