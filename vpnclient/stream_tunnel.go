@@ -31,7 +31,9 @@ type packetConn interface {
 // 表现为「连上就丢包」。这里改成「有界队列 + 聚合写」，读协程永不阻塞。
 const (
 	maxFrame       = 4096        // 单帧上限，防御异常长度
-	sendQueueDepth = 2048        // 队列深度（约 2.8MB），吸收突发
+	// 队列深度（约 0.7MB）。原来 2048（约 2.8MB）在满载时把延迟推到 1.4 秒，
+	// 降到 512 后满载延迟显著下降；突发容忍度略降，由 TCP 自行重传兜底。
+	sendQueueDepth = 512
 	// 单次写入的聚合上限。36.1 从 64KB 降到 8KB：
 	// 实测隧道内 QUIC 丢包 5.9%，而 CUBIC 在 162ms RTT 下遇到这个丢包率
 	// 只能跑 4~5 Mbps。64KB 一次写成约 48 个满载 UDP 包背靠背发出，
@@ -132,24 +134,15 @@ func (c *streamPacketConn) writeLoop() {
 				break
 			}
 
-			// 队列已空且包数不多时，短暂等一下，让同一批上行流量合并成一次写。
-			if len(buf) < batchMaxBytes/2 {
-				timer := time.NewTimer(batchMaxDelay)
-			drain:
-				for len(buf) < batchMaxBytes {
-					select {
-					case p2 := <-c.q:
-						buf = appendFrame(buf, p2)
-					case <-timer.C:
-						break drain
-					case <-c.done:
-						timer.Stop()
-						_ = flush()
-						return
-					}
-				}
-				timer.Stop()
-			}
+			// 不再「等 2ms 凑批」。
+			//
+			// 原来队列空且不足半个批次时会等 batchMaxDelay(2ms) 再刷出，
+			// 上传 4 Mbps（500 KB/s）时每 2ms 只攒到约 1 KB，
+			// 于是速率被死死钉在 1KB/2ms ≈ 4 Mbps，队列持续堆积，
+			// 实测 uplink_dropped 达到 500 次。
+			//
+			// 现在只要队列里有数据就立刻刷：上面的贪心循环已经把「已就绪」的
+			// 报文全打包了，再等只增加延迟，不会提高吞吐。
 
 			if err := flush(); err != nil {
 				if c.loggedErr.CompareAndSwap(false, true) {
