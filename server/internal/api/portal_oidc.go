@@ -39,7 +39,7 @@ func (h *handlers) portalOIDCLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	// 人机验证可选：配置了 Turnstile 就必须带
 	if err := h.verifyTurnstile(r, r.URL.Query().Get("cf_turnstile_response")); err != nil {
-		http.Redirect(w, r, "/?oidc_error="+url.QueryEscape("turnstile_failed"), http.StatusFound)
+		oidcFail(w, r, oidcModePortal, "turnstile_failed")
 		return
 	}
 	d, err := h.oidcDiscover(r)
@@ -48,8 +48,9 @@ func (h *handlers) portalOIDCLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	verifier := randomVerifier()
-	tx := oidcTx{State: randomState(), Verifier: verifier, Nonce: randomState(), Mode: oidcModePortal}
-	http.SetCookie(w, oidcTxCookie(r, tx, 600))
+	tx := oidcTx{State: oidcState(oidcModePortal), Verifier: verifier, Nonce: randomState(), Mode: oidcModePortal}
+	// 用用户中心专用 cookie 名，避免和管理端的事务互相覆盖
+	http.SetCookie(w, portalOidcTxCookie(r, tx, 600))
 
 	oc := h.effectiveOIDC(r.Context())
 	q := url.Values{}

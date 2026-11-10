@@ -161,16 +161,42 @@ func requestIsHTTPS(r *http.Request) bool {
 	return strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
 }
 
-func oidcTxCookie(r *http.Request, tx oidcTx, maxAge int) *http.Cookie {
+// OIDC 事务 cookie。
+//
+// 两个坑都踩过，务必保持现状：
+//
+//  1. Path 必须是 /api，不能是 /api/oidc。
+//     用户中心的发起端点是 /api/portal/oidc/login，Path=/api/oidc 不是它的前缀，
+//     浏览器会直接丢掉这个 Set-Cookie，回调时 state 对不上（或退化成管理员流程）。
+//  2. 管理端与用户中心用不同 cookie 名。
+//     同一个浏览器可能刚试过管理端 SSO 又来试用户中心，
+//     同名 cookie 互相覆盖会让 mode 串掉。
+const (
+	oidcTxCookieAdmin  = "pp_oidc_tx"
+	oidcTxCookiePortal = "pp_oidc_tx_portal"
+	oidcTxCookiePath   = "/api"
+)
+
+func oidcTxCookieNamed(r *http.Request, name string, tx oidcTx, maxAge int) *http.Cookie {
 	raw, _ := json.Marshal(tx)
 	return &http.Cookie{
-		Name: "pp_oidc_tx", Value: base64.RawURLEncoding.EncodeToString(raw), Path: "/api/oidc",
+		Name: name, Value: base64.RawURLEncoding.EncodeToString(raw), Path: oidcTxCookiePath,
 		HttpOnly: true, Secure: requestIsHTTPS(r), SameSite: http.SameSiteLaxMode, MaxAge: maxAge,
 	}
 }
 
-func readOidcTx(r *http.Request) (oidcTx, bool) {
-	c, err := r.Cookie("pp_oidc_tx")
+// oidcTxCookie 管理端使用。
+func oidcTxCookie(r *http.Request, tx oidcTx, maxAge int) *http.Cookie {
+	return oidcTxCookieNamed(r, oidcTxCookieAdmin, tx, maxAge)
+}
+
+// portalOidcTxCookie 用户中心使用。
+func portalOidcTxCookie(r *http.Request, tx oidcTx, maxAge int) *http.Cookie {
+	return oidcTxCookieNamed(r, oidcTxCookiePortal, tx, maxAge)
+}
+
+func readOidcTxNamed(r *http.Request, name string) (oidcTx, bool) {
+	c, err := r.Cookie(name)
 	if err != nil || c.Value == "" {
 		return oidcTx{}, false
 	}
@@ -183,6 +209,67 @@ func readOidcTx(r *http.Request) (oidcTx, bool) {
 		return oidcTx{}, false
 	}
 	return tx, true
+}
+
+func readOidcTx(r *http.Request) (oidcTx, bool) {
+	return readOidcTxNamed(r, oidcTxCookieAdmin)
+}
+
+// clearOidcTx 清掉两个事务 cookie（成功或失败后都要清）。
+func clearOidcTx(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, oidcTxCookieNamed(r, oidcTxCookieAdmin, oidcTx{}, -1))
+	http.SetCookie(w, oidcTxCookieNamed(r, oidcTxCookiePortal, oidcTx{}, -1))
+}
+
+// pickOidcTx 按 state 从两个 cookie 里挑出匹配的那个事务，
+// 并返回事务自带的渠道（cookie 里显式记的 mode 优先）。
+//
+// 用户中心优先：同一浏览器先后试过两端时，portal 的 state 只可能来自 portal 流程。
+func pickOidcTx(r *http.Request, state string) (oidcTx, string, bool) {
+	if strings.TrimSpace(state) == "" {
+		return oidcTx{}, "", false
+	}
+	for _, name := range []string{oidcTxCookiePortal, oidcTxCookieAdmin} {
+		cand, found := readOidcTxNamed(r, name)
+		if !found || cand.State == "" || cand.State != state {
+			continue
+		}
+		mode := cand.Mode
+		if mode == "" {
+			mode = oidcStateMode(state)
+		}
+		return cand, mode, true
+	}
+	return oidcTx{}, "", false
+}
+
+// oidcState 把渠道编码进 state：回调即使拿不到 cookie，也能知道该回哪个登录页。
+func oidcState(mode string) string {
+	if mode == "" {
+		mode = oidcModeAdmin
+	}
+	return randomState() + "." + mode
+}
+
+// oidcStateMode 从 state 里取渠道；取不到按管理端处理（兼容老链接）。
+func oidcStateMode(state string) string {
+	if i := strings.LastIndex(state, "."); i >= 0 {
+		switch state[i+1:] {
+		case oidcModePortal:
+			return oidcModePortal
+		}
+	}
+	return oidcModeAdmin
+}
+
+// oidcFail 按渠道把失败跳回对应登录页，并清掉事务 cookie。
+func oidcFail(w http.ResponseWriter, r *http.Request, mode, code string) {
+	clearOidcTx(w, r)
+	target := "/login?oidc_error="
+	if mode == oidcModePortal {
+		target = "/?oidc_error="
+	}
+	http.Redirect(w, r, target+url.QueryEscape(code), http.StatusFound)
 }
 
 // GET /api/oidc/status
@@ -202,7 +289,7 @@ func (h *handlers) oidcLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.verifyTurnstile(r, r.URL.Query().Get("cf_turnstile_response")); err != nil {
-		http.Redirect(w, r, "/login?oidc_error="+url.QueryEscape("turnstile_failed"), http.StatusFound)
+		oidcFail(w, r, oidcModeAdmin, "turnstile_failed")
 		return
 	}
 	d, err := h.oidcDiscover(r)
@@ -211,7 +298,7 @@ func (h *handlers) oidcLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	verifier := randomVerifier()
-	tx := oidcTx{State: randomState(), Verifier: verifier, Nonce: randomState(), Mode: oidcModeAdmin}
+	tx := oidcTx{State: oidcState(oidcModeAdmin), Verifier: verifier, Nonce: randomState(), Mode: oidcModeAdmin}
 	http.SetCookie(w, oidcTxCookie(r, tx, 600))
 	oc := h.effectiveOIDC(r.Context())
 	scopes := firstNonEmpty(oc.Scopes, "openid profile email")
@@ -238,23 +325,30 @@ func (h *handlers) oidcCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
+	// 渠道以 state 后缀为准（cookie 丢了也能把错误送回正确的登录页）
+	mode := oidcStateMode(q.Get("state"))
 	if errMsg := q.Get("error"); errMsg != "" {
-		http.Redirect(w, r, "/login?oidc_error="+url.QueryEscape(errMsg), http.StatusFound)
+		oidcFail(w, r, mode, errMsg)
 		return
 	}
-	tx, ok := readOidcTx(r)
-	if !ok || tx.State == "" || tx.State != q.Get("state") {
-		http.Redirect(w, r, "/login?oidc_error=state_mismatch", http.StatusFound)
+
+	state := q.Get("state")
+	tx, pickedMode, ok := pickOidcTx(r, state)
+	if ok && pickedMode != "" {
+		mode = pickedMode
+	}
+	if !ok {
+		oidcFail(w, r, mode, "state_mismatch")
 		return
 	}
 	code := strings.TrimSpace(q.Get("code"))
 	if code == "" {
-		http.Redirect(w, r, "/login?oidc_error=missing_code", http.StatusFound)
+		oidcFail(w, r, mode, "missing_code")
 		return
 	}
 	d, err := h.oidcDiscover(r)
 	if err != nil || d.TokenEndpoint == "" || d.UserinfoEndpoint == "" {
-		http.Redirect(w, r, "/login?oidc_error=discovery_failed", http.StatusFound)
+		oidcFail(w, r, mode, "discovery_failed")
 		return
 	}
 
@@ -274,7 +368,7 @@ func (h *handlers) oidcCallback(w http.ResponseWriter, r *http.Request) {
 	tokenReq.Header.Set("Accept", "application/json")
 	tokenResp, err := client.Do(tokenReq)
 	if err != nil {
-		http.Redirect(w, r, "/login?oidc_error=token_failed", http.StatusFound)
+		oidcFail(w, r, mode, "token_failed")
 		return
 	}
 	defer tokenResp.Body.Close()
@@ -285,21 +379,21 @@ func (h *handlers) oidcCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = json.Unmarshal(tokenBody, &tokenData)
 	if tokenResp.StatusCode >= 400 || tokenData.AccessToken == "" {
-		http.Redirect(w, r, "/login?oidc_error=token_rejected", http.StatusFound)
+		oidcFail(w, r, mode, "token_rejected")
 		return
 	}
 	if tokenData.IDToken == "" {
-		http.Redirect(w, r, "/login?oidc_error=id_token_missing", http.StatusFound)
+		oidcFail(w, r, mode, "id_token_missing")
 		return
 	}
 	jwks, err := h.oidcJWKS(r, d.JWKSUri)
 	if err != nil {
-		http.Redirect(w, r, "/login?oidc_error=jwks_failed", http.StatusFound)
+		oidcFail(w, r, mode, "jwks_failed")
 		return
 	}
 	claims, err := verifyRS256JWT(tokenData.IDToken, jwks, d.Issuer, oc.ClientID, tx.Nonce)
 	if err != nil {
-		http.Redirect(w, r, "/login?oidc_error=id_token_invalid", http.StatusFound)
+		oidcFail(w, r, mode, "id_token_invalid")
 		return
 	}
 
@@ -308,7 +402,7 @@ func (h *handlers) oidcCallback(w http.ResponseWriter, r *http.Request) {
 	uiReq.Header.Set("Accept", "application/json")
 	uiResp, err := client.Do(uiReq)
 	if err != nil {
-		http.Redirect(w, r, "/login?oidc_error=userinfo_failed", http.StatusFound)
+		oidcFail(w, r, mode, "userinfo_failed")
 		return
 	}
 	defer uiResp.Body.Close()
@@ -320,26 +414,25 @@ func (h *handlers) oidcCallback(w http.ResponseWriter, r *http.Request) {
 	_ = json.Unmarshal(uiBody, &info)
 	email := normalizeEmail(firstNonEmpty(info.Email, jsonStr(claims["email"])))
 	if email == "" {
-		http.Redirect(w, r, "/login?oidc_error=email_missing", http.StatusFound)
+		oidcFail(w, r, mode, "email_missing")
 		return
 	}
 	if v, ok := info.EmailVerified.(bool); ok && !v {
-		http.Redirect(w, r, "/login?oidc_error=email_unverified", http.StatusFound)
+		oidcFail(w, r, mode, "email_unverified")
 		return
 	}
 	if v, ok := claims["email_verified"].(bool); ok && !v {
-		http.Redirect(w, r, "/login?oidc_error=email_unverified", http.StatusFound)
+		oidcFail(w, r, mode, "email_unverified")
 		return
 	}
 	// 用户中心登录：换成 portal 令牌后跳回首页
-	if tx.Mode == oidcModePortal {
+	if mode == oidcModePortal || tx.Mode == oidcModePortal {
 		ptoken, uuidVal, reason := h.finishPortalOIDC(r, email)
 		if ptoken == "" {
-			http.SetCookie(w, oidcTxCookie(r, oidcTx{}, -1))
-			http.Redirect(w, r, "/?oidc_error="+url.QueryEscape(reason), http.StatusFound)
+			oidcFail(w, r, oidcModePortal, reason)
 			return
 		}
-		http.SetCookie(w, oidcTxCookie(r, oidcTx{}, -1))
+		clearOidcTx(w, r)
 		h.log.Info("用户中心 SSO 登录成功", "email", emailNormForLog(email), "uuid", uuidVal)
 		http.Redirect(w, r, "/?token="+url.QueryEscape(ptoken), http.StatusFound)
 		return
@@ -348,15 +441,15 @@ func (h *handlers) oidcCallback(w http.ResponseWriter, r *http.Request) {
 	issuer := strings.TrimRight(firstNonEmpty(d.Issuer, oc.Issuer), "/")
 	username, reason := h.resolveOIDCAdmin(r.Context(), issuer, jsonStr(claims["sub"]), email)
 	if username == "" {
-		http.Redirect(w, r, "/login?oidc_error="+url.QueryEscape(reason), http.StatusFound)
+		oidcFail(w, r, mode, reason)
 		return
 	}
 	token, err := auth.IssueAdminTokenTTL(username, h.cfg.JWTSecret, true, h.cfg.AdminTokenTTL)
 	if err != nil {
-		http.Redirect(w, r, "/login?oidc_error=token_sign_failed", http.StatusFound)
+		oidcFail(w, r, mode, "token_sign_failed")
 		return
 	}
-	http.SetCookie(w, oidcTxCookie(r, oidcTx{}, -1))
+	clearOidcTx(w, r)
 	http.Redirect(w, r, "/admin#token="+url.QueryEscape(token), http.StatusFound)
 }
 
