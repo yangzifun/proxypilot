@@ -74,6 +74,13 @@ func StartTunnel(ctx context.Context, opts TunOptions) (*Tunnel, error) {
 // pumpUp 读网卡 → 发 QUIC DATAGRAM。
 func (t *Tunnel) pumpUp() {
 	defer t.wg.Done()
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("数据面（上行）异常退出：%v", r)
+			t.lastErr.Store(fmt.Sprint(r))
+			t.cancel()
+		}
+	}()
 	log.Printf("数据面：网卡→隧道 协程已启动")
 	first := true
 	buf := make([]byte, 2048)
@@ -114,6 +121,13 @@ func (t *Tunnel) pumpUp() {
 // pumpDown 收 QUIC DATAGRAM → 写网卡。
 func (t *Tunnel) pumpDown() {
 	defer t.wg.Done()
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("数据面（下行）异常退出：%v", r)
+			t.lastErr.Store(fmt.Sprint(r))
+			t.cancel()
+		}
+	}()
 	log.Printf("数据面：隧道→网卡 协程已启动")
 	for {
 		if t.ctx.Err() != nil {

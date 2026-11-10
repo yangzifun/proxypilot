@@ -36,7 +36,8 @@ func main() {
 	flag.Parse()
 	startHidden := *background || *trayOnly
 
-	setupFileLog()      // GUI 无控制台，日志落 %LOCALAPPDATA%\ProxyPilot\logs\client.log
+	setupFileLog() // GUI 无控制台，日志落 %LOCALAPPDATA%\ProxyPilot\logs\client.log
+	setupCrashLog() // 致命错误/panic 落 logs\crash.log，便于定位「闪退」
 	cleanStaleTunnel() // 清理上次异常退出残留的路由/网关
 
 	if installerBuild {
