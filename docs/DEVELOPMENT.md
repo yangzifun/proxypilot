@@ -3,8 +3,26 @@
 > 版本：V35.3 / Agent 2.1.1 / 客户端 2.7　最后更新：2026-11
 >
 > 读者：接手后端、前端、Agent、桌面客户端开发的同学。
+> 本文是总览与导航，逐模块细节见第 0 节的子文档。
 > 协议字节级细节见 [readme 的「VPN 与组网协议栈」](../readme.md#vpn-与组网协议栈)；
 > DNS 泄露专题见 [DNS-LEAK.md](DNS-LEAK.md)。
+
+---
+
+
+## 0. 子文档索引
+
+本文件是开发手册的**总览与导航**，细节按主题拆分：
+
+| 文档 | 内容 | 适合谁 |
+|---|---|---|
+| [dev/API.md](dev/API.md) | **367 条路由**全量清单（按模块分组、标注鉴权）+ 接口约定 + 典型调用示例 | 前后端联调 |
+| [dev/DATABASE.md](dev/DATABASE.md) | **61 张表**数据字典（逐表逐字段）+ 关系速查 + 常用 SQL | 后端 / DBA |
+| [dev/PROTOCOL.md](dev/PROTOCOL.md) | 隧道协议字节级实现：连接时序、帧格式、HTTP/3 报文、QUIC 参数、JWT、错误码、抓包、历史坑 | 协议开发 |
+| [dev/AGENT.md](dev/AGENT.md) | Agent 配置、poll/ack 协议、任务类型、内嵌节点、自升级、排障 | 节点侧开发 |
+| [dev/CLIENT.md](dev/CLIENT.md) | 客户端三种形态、状态机、数据面文件、Windows 接管细节、DNS 防护、本地 API | 客户端开发 |
+| [dev/FRONTEND.md](dev/FRONTEND.md) | 构建链路、页面清单、新增页面五步法、组件约定、主题、排障 | 前端开发 |
+| [dev/OPERATIONS.md](dev/OPERATIONS.md) | 部署升级、日常检查、备份恢复、故障处置树、常用 SQL、安全基线 | 运维 |
 
 ---
 
@@ -188,7 +206,7 @@ shell*.go        远程终端（WebSocket + PTY）
 **迁移机制**：`server/migrations/NNNN_name.sql`，启动时按序执行，
 已执行记录在 `schema_migrations`。**只增不改**，历史文件不要编辑。
 
-当前 40 个迁移。线上 48 张表，按域分组：
+当前 40 个迁移。线上 61 张表（含系统表），完整字段见 [dev/DATABASE.md](dev/DATABASE.md)，按域分组：
 
 | 域 | 表 |
 |---|---|
