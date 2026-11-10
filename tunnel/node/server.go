@@ -365,6 +365,23 @@ func (set *sessionSet) slot(kind sessionKind) **session {
 	return &set.stream
 }
 
+// other 返回另一条通道（用于发送失败时回退）。
+func (set *sessionSet) other(s *session) *session {
+	if set == nil {
+		return nil
+	}
+	if s != nil && s.kind == kindDatagram {
+		return set.stream
+	}
+	if s != nil && s.kind == kindStream {
+		return set.datagram
+	}
+	if set.stream != nil {
+		return set.stream
+	}
+	return set.datagram
+}
+
 // empty 表示两条通道都没了。
 func (set *sessionSet) empty() bool {
 	return set == nil || (set.stream == nil && set.datagram == nil)
@@ -520,14 +537,31 @@ func (s *Server) tunLoop() {
 			proto = pkt[9]
 		}
 		sess := set.pick(proto)
-		if sess == nil || sess.send == nil {
-			continue
+		sent := false
+		if sess != nil && sess.send != nil {
+			if err := sess.send(pkt); err == nil {
+				sess.rx++
+				sent = true
+			} else {
+				sess.sendFail.Add(1)
+			}
 		}
-		if err := sess.send(pkt); err != nil {
-			sess.sendFail.Add(1)
-			continue
+		if !sent {
+			// 首选通道发不出去（连接已关闭 / DATAGRAM 缓冲满）时**回退到另一条通道**。
+			// 没有这层回退时，一条通道坏掉就等于下行全黑：
+			// 实测出现过 frames=553 tx=552 但 rx=50 —— 节点把上行都转发进 TUN 了，
+			// 下行却因为 pick() 选中的通道发不出去而几乎全部丢弃，
+			// 客户端表现为「网页打不开、ping 也不通」。
+			alt := set.other(sess)
+			if alt != nil && alt.send != nil {
+				if err := alt.send(pkt); err == nil {
+					alt.rx++
+					sent = true
+				} else {
+					alt.sendFail.Add(1)
+				}
+			}
 		}
-		sess.rx++
 	}
 }
 
