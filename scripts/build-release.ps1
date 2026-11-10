@@ -7,13 +7,17 @@
 #
 #  产物：dist-release/ 下的服务端、Agent、VPN 客户端（Windows/Linux/macOS）、
 #        安装脚本、SHA256SUMS.txt 与 MANIFEST.txt
+#
+#  默认行为：构建完成后自动清理 dist-release 里旧版本的产物，
+#            只保留与本次构建版本一致的文件（服务端/Agent/客户端各一套）。
+#            需要留旧版本对比或分发时加 -KeepOld；
+#            只想看会删什么、不真删时加 -PruneDryRun。
 # =====================================================================
 [CmdletBinding()]
 param(
     [switch]$SkipTests,
-    # 构建后清理 dist-release 里旧版本的产物，只保留本次构建的版本。
-    # 默认关闭，避免误删还要分发的旧安装包。
-    [switch]$Prune,
+    # 保留 dist-release 里的旧版本产物（默认会自动清理）。
+    [switch]$KeepOld,
     # 只报告会删什么，不真删
     [switch]$PruneDryRun
 )
@@ -130,11 +134,11 @@ foreach ($f in @('uninstall.cmd', 'uninstall.ps1')) {
 Ok 'uninstall.cmd / uninstall.ps1 已生成'
 
 # ---- 清理旧版本产物 ----
-# dist-release 之前从不清理，每构建一次就多留一套安装包
-# （客户端 2.14 / 2.15 / 2.16 各约 74 MB），很快堆到几百 MB。
-# 规则：按「产品前缀 + 版本号」分组，只保留本次构建的版本。
-if ($Prune) {
-    Step '清理旧版本产物'
+# 默认执行：每构建一次就多留一套安装包（客户端各版本约 74 MB），
+# 不清理很快堆到几百 MB。规则：按「产品前缀 + 版本号」分组，
+# 只保留本次构建的版本；要保留旧版本时用 -KeepOld。
+if (-not $KeepOld) {
+    Step '清理旧版本产物（保留本次版本，-KeepOld 可关闭）'
     $families = @(
         @{ Name = '客户端'; Pattern = '^proxypilot-vpn-([0-9.]+)-'; Keep = $clientVer },
         @{ Name = 'Agent';  Pattern = '^proxypilot-agent-([0-9.]+)-'; Keep = $agentVer },
