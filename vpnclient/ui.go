@@ -220,6 +220,9 @@ type sessionState struct {
 	netOK        bool
 	netRTT       int
 	netErr       string
+	// 最近一次「拉节点」的结果，进诊断信息，便于区分「面板返回空」与「请求失败」
+	nodesCount int
+	nodesErr   string
 	routes []string
 	tunMode  string
 	tunErr   string
@@ -263,6 +266,8 @@ func (s *sessionState) snapshot() map[string]any {
 		"net_ok":     s.netOK,
 		"net_rtt_ms": s.netRTT,
 		"net_error":  s.netErr,
+		"nodes_count": s.nodesCount,
+		"nodes_error": s.nodesErr,
 		"routes":     append([]string{}, s.routes...),
 		"tun_mode":   s.tunMode,
 		"tun_error":  s.tunErr,
@@ -404,6 +409,15 @@ func runUI(ctx context.Context, addr string, defaults uiSettings, openBrowser, d
 }
 
 func (s *uiServer) validate() error { return s.cfg.validate() }
+
+// tokenHint 返回令牌的尾部片段（日志里用来区分不同账号，不泄露完整令牌）
+func (c uiSettings) tokenHint() string {
+	t := strings.TrimSpace(c.Token)
+	if len(t) < 8 {
+		return "(空)"
+	}
+	return "…" + t[len(t)-6:]
+}
 
 func (c uiSettings) validate() error {
 	if strings.TrimSpace(c.API) == "" {
@@ -589,9 +603,24 @@ func (s *uiServer) handleNodes(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	nodes, err := listNodes(ctx, cfg.API, cfg.Token)
 	if err != nil {
+		log.Printf("拉取节点失败（面板 %s）：%v", cfg.API, err)
+		s.state.set(func(st *sessionState) {
+			st.nodesCount = 0
+			st.nodesErr = err.Error()
+		})
 		writeJSON(w, map[string]any{"nodes": []any{}, "error": err.Error()})
 		return
 	}
+	if len(nodes) == 0 {
+		log.Printf("面板返回 0 个节点（账号=%s 面板=%s）：可能是未授权任何节点，或账号与授权不匹配",
+			cfg.tokenHint(), cfg.API)
+	} else {
+		log.Printf("拉取节点成功：%d 个（%s）", len(nodes), cfg.API)
+	}
+	s.state.set(func(st *sessionState) {
+		st.nodesCount = len(nodes)
+		st.nodesErr = ""
+	})
 	writeJSON(w, map[string]any{"nodes": nodes})
 }
 

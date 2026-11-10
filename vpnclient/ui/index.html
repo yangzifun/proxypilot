@@ -481,6 +481,8 @@ function diagText(){
     '路由        : ' + ((st.routes || []).join(' | ') || '-'),
     '面板        : ' + (st.api || '-'),
     '登录        : ' + (st.logged_in ? ('是（' + (st.token_hint || '') + '）') : '否'),
+    '节点数      : ' + (st.nodes_count == null ? '-' : st.nodes_count) +
+      (st.nodes_error ? ('（拉取失败：' + st.nodes_error + '）') : ''),
     '错误        : ' + (st.net_error || st.tun_error || st.message || '-'),
   ];
   return lines.join('\n');
@@ -638,7 +640,8 @@ async function loadNodes(){
     if(!r.ok){ throw new Error('本机服务返回 HTTP ' + r.status); }
     const d = await r.json();
     nodes = d.nodes || [];
-    lastNodesError = nodes.length ? '' : (d.error || '没有可用节点');
+    lastNodesError = nodes.length ? '' : (d.error ||
+      '面板返回 0 个节点：该账号还没有被授权任何节点，或授权已停用');
     if(!nodes.length){
       $('nodes').innerHTML =
         '<div class="nrow nerr"><span class="nm">' + escapeHtml(lastNodesError) + '</span></div>' +
