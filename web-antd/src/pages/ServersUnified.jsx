@@ -910,7 +910,7 @@ export default function ServersUnified() {
         />
       ) : null}
       <PageCard
-        title={<span className="pp-section-title">服务器概览</span>}
+        title={<span className="pp-section-title">节点服务概览</span>}
         extra={<span className="pp-muted" style={{ fontSize: 12 }}>更新 {fmtTime(updatedAt, '').slice(11, 19) || '—'}</span>}
         bodyStyle={{ padding: 0 }}
       >

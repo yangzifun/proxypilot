@@ -54,7 +54,7 @@ export const PAGE_META = {
     accent: '#f59e0b',
   },
   servers: {
-    title: '服务器',
+    title: '节点服务',
     subtitle: '在线率、资源监控与 Agent 管理',
     icon: <CloudServerOutlined />,
     group: '运维',
@@ -103,8 +103,8 @@ export const PAGE_META = {
     accent: '#22c55e',
   },
   cdnpref: {
-    title: 'CDN 优选',
-    subtitle: 'CDN 节点优选地址池与订阅替换',
+    title: '域名优先',
+    subtitle: '优选域名地址池与订阅替换',
     icon: <GlobalOutlined />,
     group: '节点运维',
     accent: '#0ea5e9',
@@ -124,8 +124,8 @@ export const PAGE_META = {
     accent: '#f97316',
   },
   local: {
-    title: '本机服务器',
-    subtitle: '控制服务器：隧道、端口、进程、文件与终端',
+    title: '本机管理',
+    subtitle: '本机：隧道、端口、进程、文件与终端',
     icon: <CloudServerOutlined />,
     group: '系统',
     accent: '#0ea5e9',
@@ -162,7 +162,7 @@ export const PAGE_META = {
     accent: '#16a34a',
   },
   vpn: {
-    title: '组网',
+    title: '自建组网',
     subtitle: '服务端 ↔ 节点端自建组网状态',
     icon: <GlobalOutlined />,
     group: '节点与网络',

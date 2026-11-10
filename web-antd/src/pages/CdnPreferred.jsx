@@ -226,7 +226,7 @@ export default function CdnPreferred() {
 
   return (
     <PageCard
-      title={<span><CloudDownloadOutlined /> CDN 优选</span>}
+      title={<span><CloudDownloadOutlined /> 域名优先</span>}
       extra={
         <Space wrap>
           <Switch checked={enabled} onChange={toggleGlobal} checkedChildren="替换已启用" unCheckedChildren="替换已关闭" />
