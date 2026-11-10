@@ -135,6 +135,7 @@ func (s *Server) serveStream(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	sess := &session{
+		kind: kindStream,
 		jti: claims.JTI, ip: ip, device: claims.Subject, grantID: claims.GrantID,
 		started: time.Now(),
 	}

@@ -100,7 +100,7 @@ func newTestServer(t *testing.T) (*Server, *fakeTUN) {
 			AllowClientToClient: false,
 		},
 		log:      slog.Default(),
-		sessions: make(map[string]*session),
+		sessions: make(map[string]*sessionSet),
 	}
 	tun := newFakeTUN()
 	srv.tun = tun
@@ -117,7 +117,7 @@ func registerSession(srv *Server, ip string, conn *fakeConn) {
 	srv.mu.Lock()
 	sess := &session{ip: net.ParseIP(ip).To4(), started: time.Now()}
 	sess.send = conn.SendDatagram
-	srv.sessions[ip] = sess
+	srv.sessions[ip] = &sessionSet{stream: sess}
 	srv.mu.Unlock()
 }
 
