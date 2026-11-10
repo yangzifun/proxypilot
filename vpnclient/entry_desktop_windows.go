@@ -89,6 +89,10 @@ func main() {
 			DisableQuitOnLastWindowClosed: true,
 		},
 		OnShutdown: func() {
+			// 退出前先断开隧道（同步等待完成），确保路由/DNS 被清理干净
+			if err := localPost(addr, "/api/disconnect", nil); err != nil {
+				log.Printf("退出前断开失败：%v", err)
+			}
 			cancel()
 		},
 	})
@@ -138,6 +142,11 @@ func main() {
 		window.ExecJS(`location.hash = '#settings'`)
 	})
 	menu.Add("退出").OnClick(func(*application.Context) {
+		// 先同步断开，再退出进程（否则残留 /1 路由会让整机断网）
+		if err := localPost(addr, "/api/disconnect", nil); err != nil {
+			log.Printf("退出前断开失败：%v", err)
+		}
+		time.Sleep(600 * time.Millisecond) // 给清理脚本一点时间
 		cancel()
 		app.Quit()
 	})

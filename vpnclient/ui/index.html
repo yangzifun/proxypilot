@@ -227,6 +227,7 @@
     </div>
     <button class="btn" id="openLogs">打开日志文件夹</button>
     <button class="btn primary" id="save">保存</button>
+    <button class="btn" id="btnRepair">修复网络（清理残留路由/DNS）</button>
     <button class="btn danger" id="btnLogout">退出登录</button>
   </section>
 
@@ -611,6 +612,15 @@ function loginPoll(code){
     }catch(e){}
   }, 2000);
 }
+
+$('btnRepair').onclick = async ()=>{
+  if (!confirm('清理本机残留的隧道路由与 DNS 规则？\n适用于「断开后上不了网」的情况。')) return;
+  try {
+    await fetch('/api/repair', { method:'POST' });
+    await poll();
+    alert('已清理完成，网络应恢复正常。');
+  } catch(e) { alert('修复失败：'+e); }
+};
 
 $('btnLogout').onclick = async ()=>{
   if (!confirm('退出登录？本机保存的门户令牌会被清除。')) return;

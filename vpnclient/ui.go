@@ -279,6 +279,7 @@ func runUI(ctx context.Context, addr string, defaults uiSettings, openBrowser, d
 	mux.HandleFunc("/api/nodes", srv.handleNodes)
 	mux.HandleFunc("/api/select-node", srv.handleSelectNode)
 	mux.HandleFunc("/api/logout", srv.handleLogout)
+	mux.HandleFunc("/api/repair", srv.handleRepair)
 	mux.HandleFunc("/api/connect", srv.handleConnect)
 	mux.HandleFunc("/api/disconnect", srv.handleDisconnect)
 	mux.HandleFunc("/api/logs", srv.handleLogs)
@@ -294,6 +295,11 @@ func runUI(ctx context.Context, addr string, defaults uiSettings, openBrowser, d
 	httpSrv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	go func() {
 		<-ctx.Done()
+		// 关键：进程退出前必须断开隧道并清理网卡/路由/DNS，
+		// 否则用户「退出客户端」后整机流量仍被送进已消失的隧道 → 上不了网。
+		log.Printf("收到退出信号，开始清理隧道…")
+		srv.disconnect("客户端退出")
+		log.Printf("隧道清理完成，正在关闭本地控制台")
 		shutdown, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 		_ = httpSrv.Shutdown(shutdown)
@@ -404,6 +410,20 @@ func (s *uiServer) handleSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("配置已更新：面板=%s dns=%s insecure=%v", cfg.API, cfg.DNSAddr, cfg.Insecure)
 	writeJSON(w, map[string]any{"ok": true})
+}
+
+// POST /api/repair —— 一键修复本机网络：断开隧道并清掉所有残留路由 / DNS 守卫。
+func (s *uiServer) handleRepair(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	log.Printf("收到「修复网络」请求，开始清理…")
+	s.disconnect("手动修复网络")
+	// 再执行一次启动清理，覆盖崩溃残留（适配器地址、持久化网关等）
+	cleanStaleTunnel()
+	log.Printf("网络修复完成")
+	writeJSON(w, map[string]any{"ok": true, "message": "已清理隧道路由与 DNS 规则"})
 }
 
 // POST /api/logout —— 清除本机保存的门户令牌（退出登录）。

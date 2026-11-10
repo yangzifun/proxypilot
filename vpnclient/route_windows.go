@@ -122,7 +122,26 @@ func applyTun(s TunSpec, dev PacketDevice) (TunResult, error) {
 }
 
 // cleanupTun 删除本进程加过的路由并关掉适配器地址。
+//
+// 关键：不能只依赖 res.Routes 记录（连接过程中失败/进程被杀时记录可能不全），
+// 必须按「已知前缀 + 隧道网关」兜底删除，否则残留的 0.0.0.0/1 与 128.0.0.0/1
+// 会把整机流量继续送进已经不存在的隧道 —— 表现就是「断开后电脑上不了网」。
 func cleanupTun(res TunResult) {
+	// 1) 撤销 DNS 守卫（NRPT + 物理网卡 DNS 封禁），否则断开后所有域名解析失败
+	revertDNSGuard()
+
+	// 2) 兜底删除全局接管路由（不依赖记录，幂等）
+	//    0.0.0.0/1 与 128.0.0.0/1 覆盖整个 IPv4 空间，用 mask 精确匹配，不会误删默认路由
+	runWinSilent("route", "delete", "0.0.0.0", "mask", "128.0.0.0")
+	runWinSilent("route", "delete", "128.0.0.0", "mask", "128.0.0.0")
+	// 组网网段
+	runWinSilent("route", "delete", "10.99.0.0", "mask", "255.255.0.0")
+	// 写进网卡的默认路由（ipconfig 里显示的那个网关），必须带网关地址才安全
+	if gw := strings.TrimSpace(res.Gateway); gw != "" {
+		runWinSilent("route", "delete", "0.0.0.0", "mask", "0.0.0.0", gw)
+	}
+
+	// 3) 逐条删除本次记录的路由（含服务器 /32 主机路由）
 	for _, r := range res.Routes {
 		ip := r
 		if i := strings.Index(ip, "("); i > 0 {
@@ -132,20 +151,62 @@ func cleanupTun(res TunResult) {
 			continue
 		}
 		if strings.Contains(ip, "/32") {
-			ip = strings.TrimSuffix(ip, "/32")
-			_, _ = runWin("route", "delete", ip)
+			runWinSilent("route", "delete", strings.TrimSuffix(ip, "/32"))
 			continue
 		}
 		if strings.Contains(ip, "/") {
-			_, _ = runWin("netsh", "interface", "ipv4", "delete", "route", ip, res.Adapter, "store=active")
+			runWinSilent("netsh", "interface", "ipv4", "delete", "route", ip, res.Adapter)
 		}
 	}
-	// 先撤销 DNS 守卫，再清地址（顺序重要：先恢复解析，避免断开后短暂无 DNS）
-	revertDNSGuard()
-	// 只清地址与 DNS，不禁用适配器（保持下次连接可直接复用）
+
+	// 4) 清掉网卡地址与 DNS
 	if res.Adapter != "" {
-		_, _ = runWin("netsh", "interface", "ipv4", "set", "address", "name="+res.Adapter, "source=dhcp")
+		// 先删地址（比 source=dhcp 可靠：Wintun 没有 DHCP，dhcp 模式可能被拒绝）
+		runWinSilent("netsh", "interface", "ipv4", "delete", "address",
+			"name="+res.Adapter, "addr="+res.IP)
+		runWinSilent("netsh", "interface", "ipv4", "set", "address",
+			"name="+res.Adapter, "source=dhcp")
+		runWinSilent("netsh", "interface", "ipv4", "set", "dnsservers",
+			"name="+res.Adapter, "source=dhcp")
 	}
+
+	// 5) 校验：仍存在「经隧道网关」的路由就再删一次，并记录残留
+	if gw := strings.TrimSpace(res.Gateway); gw != "" {
+		if leftover := routesViaGateway(gw); len(leftover) > 0 {
+			logWin("清理后仍有 %d 条路由经过隧道网关 %s：%v", len(leftover), gw, leftover)
+			for _, l := range leftover {
+				runWinSilent("route", "delete", l.dest, "mask", l.mask, gw)
+			}
+			if again := routesViaGateway(gw); len(again) > 0 {
+				logWin("警告：仍有路由残留，请运行「修复网络」：%v", again)
+			}
+		}
+	}
+	logWin("隧道清理完成：适配器=%s 网关=%s", res.Adapter, res.Gateway)
+}
+
+type routeEntry struct{ dest, mask, gw, iface string }
+
+func (r routeEntry) String() string { return r.dest + "/" + r.mask }
+
+// routesViaGateway 从 route print -4 里找出下一跳为 gw 的 IPv4 路由。
+func routesViaGateway(gw string) []routeEntry {
+	out, err := runWin("route", "print", "-4")
+	if err != nil {
+		return nil
+	}
+	var list []routeEntry
+	for _, line := range strings.Split(out, "\n") {
+		f := strings.Fields(strings.TrimSpace(line))
+		if len(f) < 4 {
+			continue
+		}
+		// 典型行： 0.0.0.0  128.0.0.0  10.88.1.1  10.88.1.12  5
+		if f[2] == gw {
+			list = append(list, routeEntry{dest: f[0], mask: f[1], gw: f[2], iface: f[3]})
+		}
+	}
+	return list
 }
 
 // defaultGatewayWin 取默认网关（IPv4）。
