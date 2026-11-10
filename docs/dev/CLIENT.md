@@ -271,6 +271,39 @@ New-NetFirewallRule -DisplayName 'ProxyPilot-KS-dhcp'     -Direction Outbound -A
 
 > Linux/macOS 暂未实现（需 nftables / pf），`killswitch_unix.go` 为空实现。
 
+## 7.9 macOS DNS / IPv6 接管（2.12+）
+
+此前 `route_darwin.go` 只下发路由，**从未改 DNS**，macOS 用户的域名解析全程走
+本地路由器/运营商 DNS（与 Windows 2.6 之前的问题同源）。
+
+### 实现
+
+```bash
+# 找活动网络服务：route -n get default → interface en0
+#   → networksetup -listnetworkserviceorder 里匹配 Device: en0 → "Wi-Fi"
+
+networksetup -setdnsservers "Wi-Fi" 1.1.1.1 8.8.8.8
+networksetup -setv6off "Wi-Fi"
+```
+
+- 断开时按 `~/Library/Application Support/ppvpn/mac-dns.json` 还原：
+  原 DNS 列表（空则 `setdnsservers Empty`）、原 IPv6 状态
+- 启动时 `cleanStaleTunnel()` → `restoreDNSGuardFromMarker()` 还原崩溃残留
+- IPv6 一并处理（同 Windows 2.9 的泄露点）
+
+### 平台差异
+
+| 平台 | DNS 接管 | IPv6 封禁 |
+|---|---|---|
+| Windows | NRPT + 物理网卡 53 封禁 | `Disable-NetAdapterBinding ms_tcpip6` |
+| macOS | `networksetup -setdnsservers` | `networksetup -setv6off` |
+| Linux | `resolvectl dns <if> + domain ~.` | 未实现 |
+
+### 日志编码（2.12+）
+
+日志文件原本是 UTF-8 无 BOM，Windows 记事本 / `Get-Content` 会按 GBK 解码，
+中文显示为乱码。现在文件为空时先写入 `EF BB BF`（UTF-8 BOM），工具能正确识别。
+
 ## 8. 本地控制台 API
 
 `ui.go` 暴露的本地接口（仅 127.0.0.1，不需要鉴权）：

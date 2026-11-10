@@ -103,3 +103,5 @@ func physicalAdapters() []string {
 	}
 	return list
 }
+// restoreDNSGuardFromMarker 非 darwin 平台无需恢复（Windows 由 cleanStaleTunnel 处理）。
+func restoreDNSGuardFromMarker() {}

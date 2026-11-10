@@ -46,6 +46,21 @@ type TunSpec struct {
 	KillSwitch bool
 }
 
+// isIPv4 判断字符串是否是点分十进制 IPv4。
+func isIPv4(s string) bool {
+	parts := strings.Split(s, ".")
+	if len(parts) != 4 {
+		return false
+	}
+	for _, p := range parts {
+		n := 0
+		if _, err := fmt.Sscanf(p, "%d", &n); err != nil || n < 0 || n > 255 {
+			return false
+		}
+	}
+	return true
+}
+
 func (s TunSpec) mtu() int {
 	if s.MTU <= 0 {
 		return 1420

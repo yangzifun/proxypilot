@@ -53,6 +53,12 @@ func applyTun(s TunSpec, dev PacketDevice) (TunResult, error) {
 		}
 		res.Routes = append(res.Routes, r)
 	}
+
+	// DNS 与 IPv6 泄露防护（macOS 无 NRPT，直接改活动网络服务）
+	res.DNSGuard = applyDNSGuard(s.DNS)
+	if len(s.DNS) > 0 {
+		res.DNS = strings.Join(s.DNS, ", ")
+	}
 	return res, nil
 }
 
@@ -73,6 +79,8 @@ func cleanupTun(res TunResult) {
 	run := func(args ...string) {
 		_ = exec.Command(args[0], args[1:]...).Run()
 	}
+	// 先还原 DNS/IPv6，避免断开后解析不可用
+	revertDNSGuard()
 	for _, r := range res.Routes {
 		run("route", "-n", "delete", r)
 	}

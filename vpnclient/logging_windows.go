@@ -40,6 +40,10 @@ func setupFileLog() {
 	if err != nil {
 		return
 	}
+	// 空文件先写 UTF-8 BOM：否则记事本 / PowerShell 会按 GBK 解码，中文全乱码
+	if st, err := f.Stat(); err == nil && st.Size() == 0 {
+		_, _ = f.Write([]byte{0xEF, 0xBB, 0xBF})
+	}
 	log.SetOutput(&multiWriter{file: f, stderr: os.Stderr})
 	log.Printf("==== ProxyPilot %s 启动 %s ====", Version, time.Now().Format("2006-01-02 15:04:05"))
 }

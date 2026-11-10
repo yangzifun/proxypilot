@@ -1,4 +1,4 @@
-//go:build !windows
+//go:build !windows && !darwin
 
 package main
 
@@ -7,3 +7,6 @@ package main
 func applyDNSGuard(dns []string) []string { return nil }
 
 func revertDNSGuard() {}
+
+// restoreDNSGuardFromMarker 非 darwin 平台无需恢复。
+func restoreDNSGuardFromMarker() {}
