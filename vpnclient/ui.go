@@ -1020,6 +1020,17 @@ func (s *uiServer) connect(nodeID int64) error {
 		defer cleanupStream()
 		s.setFor(attempt, func(st *sessionState) { st.message = "隧道流已建立，正在接管系统网络…" })
 
+		// 双通道：UDP 走 QUIC DATAGRAM（不被可靠流的队头阻塞拖累），
+		// TCP/ICMP 仍走可靠流。对端没协商 DATAGRAM 时自动退回单流。
+		var pconn packetConn = pc
+		if supportsDatagrams(conn) {
+			pconn = newDualPacketConn(pc, quicDatagramPeer{conn: conn}, maxDatagramPayload)
+			log.Printf("数据面：双通道已启用（UDP→DATAGRAM，TCP/ICMP→可靠流，DATAGRAM 上限 %d 字节）", maxDatagramPayload)
+		} else {
+			log.Printf("数据面：对端未协商 DATAGRAM，全部走可靠流")
+		}
+		defer pconn.Close()
+
 		// 解析 VPN 服务器地址：这些 IP 必须绕过隧道直连，否则会形成路由环
 		endpointIPs := resolveEndpointIPs(pick.Endpoint)
 		log.Printf("VPN 服务器地址解析：%v（原始 %s）", endpointIPs, pick.Endpoint)
@@ -1046,7 +1057,7 @@ func (s *uiServer) connect(nodeID int64) error {
 				DNS:         tunDNS,
 				KillSwitch:  s.cfg.KillSwitch,
 			},
-			Conn: pc,
+			Conn: pconn,
 			OnStats: func(rx, tx int64) {
 				s.setFor(attempt, func(st *sessionState) { st.rx, st.tx = uint64(rx), uint64(tx) })
 			},
