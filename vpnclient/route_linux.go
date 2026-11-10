@@ -76,6 +76,8 @@ func applyTun(s TunSpec, dev PacketDevice) (TunResult, error) {
 			}
 		}
 	}
+	// IPv6 泄露防护：TUN 只有 IPv4，物理网卡的公网 IPv6 会绕过隧道
+	res.IPv6Disabled = disablePhysicalIPv6()
 	return res, nil
 }
 
@@ -96,6 +98,8 @@ func defaultGateway() string {
 
 // cleanupTun 删除本进程加过的路由与网卡地址（网卡本身由 Close 回收）。
 func cleanupTun(res TunResult) {
+	// 先恢复 IPv6，避免断开后设备没有 IPv6
+	restoreIPv6(res.IPv6Disabled)
 	run := func(args ...string) {
 		_ = exec.Command(args[0], args[1:]...).Run()
 	}

@@ -1,12 +1,11 @@
-//go:build !windows
+//go:build !windows && !linux
 
 package main
 
-// 非 Windows 平台的 IPv6 防护。
+// 非 Windows、非 Linux 平台（macOS）的 IPv6 防护占位。
 //
-// Linux 可用 sysctl net.ipv6.conf.<if>.disable_ipv6，macOS 用 networksetup -setv6off，
-// 但两者都会影响系统网络配置，需要各自做恢复标记，留到后续版本实现。
-// 当前在 Linux/macOS 上不做处理（IPv6 泄露仍存在，客户端界面会显示「未启用」）。
+// macOS 的 IPv6 由 dns_guard_darwin.go 里的 networksetup -setv6off 处理，
+// 这里的 disablePhysicalIPv6 保持空实现（状态行由 DNS/IPv6 守卫汇总展示）。
 
 func disablePhysicalIPv6() []string { return nil }
 

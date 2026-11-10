@@ -55,7 +55,13 @@ func applyTun(s TunSpec, dev PacketDevice) (TunResult, error) {
 	}
 
 	// DNS 与 IPv6 泄露防护（macOS 无 NRPT，直接改活动网络服务）
-	res.DNSGuard = applyDNSGuard(s.DNS)
+	for _, item := range applyDNSGuard(s.DNS) {
+		if v, ok := strings.CutPrefix(item, "IPv6Off:"); ok {
+			res.IPv6Disabled = append(res.IPv6Disabled, v)
+			continue
+		}
+		res.DNSGuard = append(res.DNSGuard, item)
+	}
 	if len(s.DNS) > 0 {
 		res.DNS = strings.Join(s.DNS, ", ")
 	}

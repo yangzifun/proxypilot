@@ -297,12 +297,38 @@ networksetup -setv6off "Wi-Fi"
 |---|---|---|
 | Windows | NRPT + 物理网卡 53 封禁 | `Disable-NetAdapterBinding ms_tcpip6` |
 | macOS | `networksetup -setdnsservers` | `networksetup -setv6off` |
-| Linux | `resolvectl dns <if> + domain ~.` | 未实现 |
+| Linux | `resolvectl dns <if> + domain ~.` | `sysctl net.ipv6.conf.<if>.disable_ipv6=1`（2.13+） |
 
 ### 日志编码（2.12+）
 
 日志文件原本是 UTF-8 无 BOM，Windows 记事本 / `Get-Content` 会按 GBK 解码，
 中文显示为乱码。现在文件为空时先写入 `EF BB BF`（UTF-8 BOM），工具能正确识别。
+
+## 7.10 Linux IPv6 防护（2.13+）
+
+Linux 客户端的 DNS 早就用 `resolvectl dns <if> 1.1.1.1 8.8.8.8` + `resolvectl domain <if> ~.`
+接管，但 IPv6 一直没处理 —— 与 Windows 2.9 之前是同一个漏洞。
+
+### 实现
+
+```bash
+# 找出物理网卡：/sys/class/net/* 且有 device 符号链接（排除 tun/tap/veth/docker/ppvpn…）
+/proc/sys/net/ipv6/conf/<if>/disable_ipv6  → 1
+```
+
+- 原值记录在 `$XDG_CONFIG_HOME/ppvpn/linux-ipv6.json`，断开时逐项写回
+- 启动时 `restoreIPv6FromMarker()` 还原崩溃残留
+- 需要 root（写 /proc/sys），客户端本身以 root 跑 TUN，满足条件
+
+### 三平台现状
+
+| 平台 | DNS | IPv6 |
+|---|---|---|
+| Windows | NRPT + 网卡 53 封禁 | Disable-NetAdapterBinding |
+| macOS | networksetup -setdnsservers | networksetup -setv6off |
+| Linux | resolvectl dns + domain ~. | sysctl disable_ipv6（2.13+） |
+
+> Linux 的 Kill Switch 仍未实现（需 nftables/iptables 规则），作为后续项。
 
 ## 8. 本地控制台 API
 

@@ -6,4 +6,6 @@ package main
 // 但 DNS/IPv6 守卫可能是上次崩溃遗留，需要还原。
 func cleanStaleTunnel() {
 	restoreDNSGuardFromMarker()
+	// Linux 上物理网卡的 IPv6 可能是上次崩溃时留下的禁用状态
+	restoreIPv6FromMarker()
 }
