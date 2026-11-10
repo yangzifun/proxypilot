@@ -295,6 +295,22 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	sess.send = func(p []byte) error { return sess.conn.SendDatagram(p) }
 	sess.closeFn = func() { _ = sess.conn.CloseWithError(0, "session closed") }
+
+	// 面板关掉 DATAGRAM 时**不要注册 datagram 会话**。
+	// 否则 tunLoop 的 pick() 会继续把 UDP 下行塞进 DATAGRAM，
+	// 而客户端此时只读可靠流 —— UDP 回包（DNS 应答）全被静默丢弃，
+	// 表现就是「ICMP 通、网页打不开」。
+	// 不注册后 pick() 自动回退到可靠流，两端行为一致。
+	if !s.cfg.DatagramEnabled {
+		h := w.Header()
+		h.Set("X-VPN-Auth", "Success")
+		h.Set("X-VPN-Assigned-IPv4", ip.String())
+		h.Set("X-VPN-Max-Datagram", "0")
+		h.Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	if !s.register(sess) {
 		http.Error(w, "ip already in use", http.StatusConflict)
 		return
