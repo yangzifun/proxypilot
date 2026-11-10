@@ -26,7 +26,9 @@ type Tunnel struct {
 	txBytes atomic.Int64
 	rxPkts  atomic.Int64
 	txPkts  atomic.Int64
-	lastErr atomic.Value // string
+	// badInner 统计「帧长度 != IP 头声明长度」的报文数（会被节点判为坏包）
+	badInner atomic.Int64
+	lastErr  atomic.Value // string
 }
 
 // Tunnel 数据面使用 packetConn（可靠流实现见 stream_tunnel.go）。
@@ -102,9 +104,17 @@ func (t *Tunnel) pumpUp() {
 			log.Printf("数据面：从网卡读到首个报文（%d 字节）", n)
 			first = false
 		}
-		pkt := stripIPv4(buf[:n])
+		raw := buf[:n]
+		pkt := stripIPv4(raw)
 		if len(pkt) == 0 {
-			log.Printf("数据面：网卡报文无法解析（首字节 0x%02x，长度 %d）", buf[0], n)
+			log.Printf("数据面：网卡报文无法解析（%s）", describeTunRead(raw))
+			continue
+		}
+		// 自检：帧长度必须与 IP 头声明一致，否则节点会判为坏包
+		if msg := checkInnerPacket(pkt); msg != "" {
+			cnt := t.badInner.Add(1)
+			logInnerMismatch(pkt, int(cnt))
+			// 丢掉这个包：发出去也只会被节点丢弃，还会污染统计
 			continue
 		}
 		if err := t.conn.SendPacket(pkt); err != nil {
@@ -248,6 +258,9 @@ func (t *Tunnel) countLog() {
 		}
 	}
 }
+
+// BadInnerPackets 返回「帧长度与 IP 头声明不一致」而被丢弃的报文数。
+func (t *Tunnel) BadInnerPackets() int64 { return t.badInner.Load() }
 
 // PacketStats 返回包数统计。
 func (t *Tunnel) PacketStats() (rxPkts, txPkts int64) {

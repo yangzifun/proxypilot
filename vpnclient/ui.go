@@ -233,6 +233,7 @@ type sessionState struct {
 	pc *streamPacketConn
 	// 从 pc / QUIC 连接刷新出来的实时计数
 	dropUplink uint64
+	innerBad   uint64
 	quicSent   uint64
 	quicRecv   uint64
 	quicLost   uint64
@@ -289,6 +290,7 @@ func (s *sessionState) snapshot() map[string]any {
 			"consecutive_fail": s.qConsecutiveFail,
 		},
 		"uplink_dropped": s.dropUplink,
+		"inner_bad":      s.innerBad,
 		"quic_sent":      s.quicSent,
 		"quic_recv":      s.quicRecv,
 		"quic_lost":      s.quicLost,
@@ -308,6 +310,9 @@ func (s *sessionState) snapshot() map[string]any {
 func (s *sessionState) refreshTunnelStats() {
 	if s.pc != nil {
 		s.dropUplink = s.pc.DropStats()
+	}
+	if s.tun != nil {
+		s.innerBad = uint64(s.tun.BadInnerPackets())
 	}
 	if s.conn != nil {
 		st := s.conn.ConnectionStats()
