@@ -2,7 +2,7 @@ ProxyPilot 发布包
 面板版本 : V35.4
 Agent    : 2.2.1
 客户端   : 2.16
-构建时间 : 2026-11-10 16:55:28
+构建时间 : 2026-11-10 16:59:02
 
 文件清单：
   DEPLOY-README.md                                       0.0 MB
@@ -12,25 +12,12 @@ Agent    : 2.2.1
   proxypilot-agent-2.2.1-linux-arm64                     8.9 MB
   proxypilot-V35.4-linux-amd64                          18.6 MB
   proxypilot-V35.4-linux-arm64                          17.6 MB
-  proxypilot-vpn-2.14-darwin-amd64                       9.1 MB
-  proxypilot-vpn-2.14-darwin-arm64                       8.4 MB
-  proxypilot-vpn-2.14-linux-amd64                        8.9 MB
-  proxypilot-vpn-2.14-linux-arm64                        8.3 MB
-  proxypilot-vpn-2.14-windows-amd64-cli.exe              9.6 MB
-  proxypilot-vpn-2.14-windows-amd64-install.exe         30.3 MB
-  proxypilot-vpn-2.15-darwin-amd64                       9.1 MB
-  proxypilot-vpn-2.15-darwin-arm64                       8.4 MB
-  proxypilot-vpn-2.15-linux-amd64                        8.9 MB
-  proxypilot-vpn-2.15-linux-arm64                        8.3 MB
-  proxypilot-vpn-2.15-windows-amd64-cli.exe              9.6 MB
-  proxypilot-vpn-2.15-windows-amd64-install.exe         30.3 MB
   proxypilot-vpn-2.16-darwin-amd64                       9.1 MB
   proxypilot-vpn-2.16-darwin-arm64                       8.4 MB
   proxypilot-vpn-2.16-linux-amd64                        8.9 MB
   proxypilot-vpn-2.16-linux-arm64                        8.3 MB
   proxypilot-vpn-2.16-windows-amd64-cli.exe              9.6 MB
   proxypilot-vpn-2.16-windows-amd64-install.exe         30.3 MB
-  proxypilot-vpn-2.9-windows-amd64-cli.exe               9.6 MB
   uninstall.cmd                                          0.0 MB
   uninstall.ps1                                          0.0 MB
   uninstall.sh                                           0.0 MB

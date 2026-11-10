@@ -129,36 +129,6 @@ foreach ($f in @('uninstall.cmd', 'uninstall.ps1')) {
 }
 Ok 'uninstall.cmd / uninstall.ps1 已生成'
 
-Step '生成 SHA256SUMS.txt / MANIFEST.txt'
-$files = Get-ChildItem $out -File | Where-Object { $_.Name -notin @('SHA256SUMS.txt', 'MANIFEST.txt') } | Sort-Object Name
-$lines = @()
-foreach ($f in $files) {
-    $h = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.ToLower()
-    $lines += "$h  $($f.Name)"
-}
-[System.IO.File]::WriteAllText((Join-Path $out 'SHA256SUMS.txt'), ($lines -join "`n") + "`n", [System.Text.Encoding]::ASCII)
-
-$manifest = @()
-$manifest += "ProxyPilot 发布包"
-$manifest += "面板版本 : $panelVer"
-$manifest += "Agent    : $agentVer"
-$manifest += "客户端   : $clientVer"
-$manifest += "构建时间 : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
-$manifest += ""
-$manifest += "文件清单："
-foreach ($f in $files) {
-    $manifest += ("  {0,-50} {1,7:N1} MB" -f $f.Name, ($f.Length / 1MB))
-}
-$manifest += ""
-$manifest += "安装："
-$manifest += "  服务端    sudo ./install.sh --binary ./proxypilot-$panelVer-linux-amd64"
-$manifest += "  升级      sudo ./upgrade.sh --binary ./proxypilot-$panelVer-linux-amd64"
-$manifest += "  Windows   双击 proxypilot-vpn-$clientVer-windows-amd64-install.exe（安装程序，只安装不运行）"
-$manifest += "            安装后从开始菜单/桌面图标启动 ProxyPilot（客户端 v$clientVer）"
-$manifest += "            卸载：设置 → 应用 → ProxyPilot VPN，或运行 uninstall.cmd"
-$manifest += "  客户端自检 proxypilot-vpn-$clientVer-windows-amd64-cli.exe -tun-selftest"
-[System.IO.File]::WriteAllText((Join-Path $out 'MANIFEST.txt'), ($manifest -join "`n") + "`n", (New-Object System.Text.UTF8Encoding($false)))
-
 # ---- 清理旧版本产物 ----
 # dist-release 之前从不清理，每构建一次就多留一套安装包
 # （客户端 2.14 / 2.15 / 2.16 各约 74 MB），很快堆到几百 MB。
@@ -196,6 +166,36 @@ if ($Prune) {
         Ok ("{0} {1} 个旧文件，{2:N1} MB" -f $verb, $removed, ($freed / 1MB))
     }
 }
+
+Step '生成 SHA256SUMS.txt / MANIFEST.txt'
+$files = Get-ChildItem $out -File | Where-Object { $_.Name -notin @('SHA256SUMS.txt', 'MANIFEST.txt') } | Sort-Object Name
+$lines = @()
+foreach ($f in $files) {
+    $h = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.ToLower()
+    $lines += "$h  $($f.Name)"
+}
+[System.IO.File]::WriteAllText((Join-Path $out 'SHA256SUMS.txt'), ($lines -join "`n") + "`n", [System.Text.Encoding]::ASCII)
+
+$manifest = @()
+$manifest += "ProxyPilot 发布包"
+$manifest += "面板版本 : $panelVer"
+$manifest += "Agent    : $agentVer"
+$manifest += "客户端   : $clientVer"
+$manifest += "构建时间 : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+$manifest += ""
+$manifest += "文件清单："
+foreach ($f in $files) {
+    $manifest += ("  {0,-50} {1,7:N1} MB" -f $f.Name, ($f.Length / 1MB))
+}
+$manifest += ""
+$manifest += "安装："
+$manifest += "  服务端    sudo ./install.sh --binary ./proxypilot-$panelVer-linux-amd64"
+$manifest += "  升级      sudo ./upgrade.sh --binary ./proxypilot-$panelVer-linux-amd64"
+$manifest += "  Windows   双击 proxypilot-vpn-$clientVer-windows-amd64-install.exe（安装程序，只安装不运行）"
+$manifest += "            安装后从开始菜单/桌面图标启动 ProxyPilot（客户端 v$clientVer）"
+$manifest += "            卸载：设置 → 应用 → ProxyPilot VPN，或运行 uninstall.cmd"
+$manifest += "  客户端自检 proxypilot-vpn-$clientVer-windows-amd64-cli.exe -tun-selftest"
+[System.IO.File]::WriteAllText((Join-Path $out 'MANIFEST.txt'), ($manifest -join "`n") + "`n", (New-Object System.Text.UTF8Encoding($false)))
 
 Step '完成'
 $all = Get-ChildItem $out -File
