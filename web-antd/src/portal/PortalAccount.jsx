@@ -4,9 +4,10 @@
  * ================================================================= */
 import React, { useCallback, useEffect, useState } from 'react';
 import { App as AntdApp, Button, Input, Modal, Skeleton, Space, Tag } from 'antd';
-import { EditOutlined, MailOutlined } from '@ant-design/icons';
+import { EditOutlined, MailOutlined, KeyOutlined } from '@ant-design/icons';
 import { portalReq } from './portalApi';
 import EmailChange from './EmailChange';
+import PasswordChange from './PasswordChange';
 import { CopyText } from '../components';
 import { fmtAgo, fmtNum, fmtTime, shortUuid } from '../format';
 
@@ -19,6 +20,7 @@ const STATUS = {
 export default function PortalAccount({ email, count, uuid, sub, onEmailChanged, only = 'all' }) {
   const { message } = AntdApp.useApp();
   const [mailOpen, setMailOpen] = useState(false);
+  const [pwdOpen, setPwdOpen] = useState(false);
   const [state, setState] = useState({ loading: !!uuid, data: null, error: null });
   const [editing, setEditing] = useState(null);
 
@@ -161,6 +163,23 @@ export default function PortalAccount({ email, count, uuid, sub, onEmailChanged,
         </div>
       </div>
       ) : null}
+
+      {only === 'all' ? (
+        <div className="pp-account-col pp-account-col-pwd">
+          <div className="pp-account-label">登录密码</div>
+          <div className="pp-account-mail">••••••••</div>
+          <div className="pp-account-meta">
+            初始密码由管理员提供；建议改成只有你知道的密码
+          </div>
+          <div className="pp-account-actions">
+            <Button icon={<KeyOutlined />} onClick={() => setPwdOpen(true)}>
+              修改密码
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      <PasswordChange open={pwdOpen} onClose={() => setPwdOpen(false)} />
 
       <EmailChange
         open={mailOpen}

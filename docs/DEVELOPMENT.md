@@ -206,7 +206,7 @@ shell*.go        远程终端（WebSocket + PTY）
 **迁移机制**：`server/migrations/NNNN_name.sql`，启动时按序执行，
 已执行记录在 `schema_migrations`。**只增不改**，历史文件不要编辑。
 
-当前 40 个迁移。线上 61 张表（含系统表），完整字段见 [dev/DATABASE.md](dev/DATABASE.md)，按域分组：
+当前 41 个迁移。线上 61 张表（含系统表），完整字段见 [dev/DATABASE.md](dev/DATABASE.md)，按域分组：
 
 | 域 | 表 |
 |---|---|

@@ -9,6 +9,7 @@ import { Button, Form, Input, List, Toast } from 'antd-mobile';
 import { CopyOutlined, LogoutOutlined } from '@ant-design/icons';
 import { useUuidInfo } from './hooks/usePortalData';
 import EmailChange from './EmailChange';
+import PasswordChange from './PasswordChange';
 import { shortUuid } from '../format';
 
 const STATUS_TEXT = { active: '正常', suspended: '暂停', inactive: '停用' };
@@ -19,6 +20,7 @@ export default function MobileAccount({ email, uuid, onEmailChanged, onLogout })
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
   const [mailOpen, setMailOpen] = useState(false);
+  const [pwdOpen, setPwdOpen] = useState(false);
 
   useEffect(() => {
     if (!data) return;
@@ -137,6 +139,8 @@ export default function MobileAccount({ email, uuid, onEmailChanged, onLogout })
       <div className="macc-foot">
         支持的协议：VMess / VLESS / Trojan / Shadowsocks / Hysteria2 / TUIC / AnyTLS / Snell
       </div>
+
+      <PasswordChange open={pwdOpen} onClose={() => setPwdOpen(false)} />
 
       <EmailChange
         open={mailOpen}

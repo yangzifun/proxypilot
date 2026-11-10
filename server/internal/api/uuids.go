@@ -233,7 +233,19 @@ func (h *handlers) uuidsSave(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "保存失败")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"success": true, "created": true, "uuid": uuid})
+
+	// 新建用户时随机生成初始密码，明文只在这里返回一次给管理员保存。
+	// 没绑邮箱就没有登录主体，跳过。
+	resp := map[string]any{"success": true, "created": true, "uuid": uuid}
+	if strings.TrimSpace(email) != "" {
+		if pw, perr := h.issueInitialPassword(r.Context(), uuid); perr != nil {
+			h.log.Warn("生成初始密码失败", "uuid", uuid, "err", perr)
+		} else {
+			resp["initial_password"] = pw
+			resp["must_change_password"] = true
+		}
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func normalizeUuidStatus(raw string) string {

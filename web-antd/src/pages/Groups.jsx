@@ -2,9 +2,11 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ApartmentOutlined,
   CloudUploadOutlined,
+  CopyOutlined,
   DeleteOutlined,
   EditOutlined,
   EyeOutlined,
+  KeyOutlined,
   LinkOutlined,
   PlusOutlined,
   ReloadOutlined,
@@ -101,10 +103,14 @@ export default function Groups() {
     setSaving(true);
     try {
       const isEdit = compose.mode === 'edit';
-      await api('uuids', { method: isEdit ? 'PUT' : 'POST', body: values });
-      message.success(isEdit ? '用户已更新' : '用户已创建');
+      const res = await api('uuids', { method: isEdit ? 'PUT' : 'POST', body: values });
       setCompose(null);
       reload().catch(() => {});
+      if (!isEdit && res && res.initial_password) {
+        showPassword({ ...res, isNew: true });
+      } else {
+        message.success(isEdit ? '用户已更新' : '用户已创建');
+      }
     } catch (e) {
       message.error(e.message || '保存失败');
     } finally {
