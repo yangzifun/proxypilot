@@ -6,12 +6,17 @@ import (
 	"strings"
 )
 
-// maxTunMTU 是客户端允许使用的最大 MTU。
+// 隧道 MTU 以「管理端配置」为准，客户端只做合法性兜底。
 //
-// 曾经因为「帧 40 字节 / IP 头声明 52 字节」的残包把这里降到 1200，
-// 但后来定位到真因是 wireguard/tun 封装层的 Read（2.35 已改为 Wintun
-// 直连 ring API），与 MTU 无关，所以恢复到 1380。
-const maxTunMTU = 1380
+// 链路：面板「协议管理 → VPN → 隧道 MTU」→ vpn_settings.mtu
+//      → 节点 vpn.json.mtu 与 /api/portal/vpn/connect 响应里的 mtu
+//      → 客户端直接采用。
+// 客户端不再自定上限，管理员调多少就用多少，只在明显非法时回落到默认值。
+const (
+	minTunMTU     = 576  // IPv4 保证最小重组单元
+	maxTunMTU     = 1500 // 以太网标准 MTU
+	defaultTunMTU = 1380 // 管理端未配置时的兜底
+)
 
 // maxReadPacket 是单次网卡读取的缓冲上限。
 // 取 64KB 是为了容纳 Windows 卸载机制递交的「多段合体包」。

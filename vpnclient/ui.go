@@ -983,13 +983,14 @@ func (s *uiServer) connect(nodeID int64) error {
 				}
 			}
 		}
-		// MTU 钳制：节点下发 1380，但实测 Windows 的发送卸载会把
-		// 「带 TCP 选项的 SYN」切成「20 字节 IP 头 + 20 字节 TCP 头」交上来
-		// （帧 40 字节、IP 头声明 52 字节），节点判坏包丢弃。
-		// 段越小越不容易走到卸载路径，这里统一压到 1200。
-		if prof.MTU > maxTunMTU || prof.MTU <= 0 {
-			log.Printf("MTU 由 %d 钳制为 %d（规避 Windows 发送卸载切包）", prof.MTU, maxTunMTU)
-			prof.MTU = maxTunMTU
+		// MTU 由管理端配置，客户端直接采用（见 netdev.go 的说明）。
+		// 这里只做合理性兜底：小于 576 或大于 1500 视为配置错误，回落默认值。
+		if prof.MTU < minTunMTU || prof.MTU > maxTunMTU {
+			log.Printf("管理端下发的 MTU %d 超出合理范围 [%d, %d]，回落到 %d",
+				prof.MTU, minTunMTU, maxTunMTU, defaultTunMTU)
+			prof.MTU = defaultTunMTU
+		} else {
+			log.Printf("采用管理端配置的隧道 MTU：%d", prof.MTU)
 		}
 
 		// 网卡掩码取自节点客户端子网（例如 10.88.1.0/24 → /24）
