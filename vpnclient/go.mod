@@ -7,7 +7,7 @@ require (
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/wailsapp/wails/v3 v3.1.0
 	golang.org/x/sys v0.48.0
-	golang.zx2c4.com/wireguard v0.0.0-20261024220952-b3bc704ef0ee
+	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2
 )
 
 require (
@@ -23,5 +23,4 @@ require (
 	golang.org/x/term v0.46.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
 	golang.org/x/tools v0.49.0 // indirect
-	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 )
