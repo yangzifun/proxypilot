@@ -22,9 +22,40 @@ export default function PortalLogin({ onLoggedIn }) {
   const [err, setErr] = useState('');
   const [countdown, setCountdown] = useState(0);
   const [tsOpen, setTsOpen] = useState(false);
+  // 人机验证通过后要执行的动作：send=发验证码 / sso=跳转单点登录
+  const [pending, setPending] = useState(null);
   // 登录方式：code=邮箱验证码 / password=密码
   const [mode, setMode] = useState('code');
   const [password, setPassword] = useState('');
+  // SSO（与管理端共用同一套 OIDC 配置）
+  const [sso, setSso] = useState({ enabled: false, button_text: '使用 SSO 登录', provider_name: '' });
+
+  useEffect(() => {
+    let alive = true;
+    portalApi('portal/oidc/status', { auth: false })
+      .then((r) => { if (alive && r && r.enabled) setSso(r); })
+      .catch(() => {});
+    // 回调失败时后端会带 ?oidc_error=xxx 跳回来
+    const sp = new URLSearchParams(window.location.search);
+    const oe = sp.get('oidc_error');
+    if (oe) {
+      const map = {
+        turnstile_failed: '人机验证未通过',
+        state_mismatch: '登录状态已失效，请重试',
+        token_failed: '身份提供方返回异常，请重试',
+        token_rejected: '身份提供方返回异常，请重试',
+        id_token_invalid: '身份令牌校验失败',
+        userinfo_failed: '读取用户信息失败',
+        email_missing: '身份提供方未返回邮箱',
+        email_unverified: '该邮箱在身份提供方处未验证',
+        no_uuid_binding: '这个邮箱还没有绑定订阅，请联系管理员',
+        account_disabled: '该账号已被停用',
+      };
+      setErr(map[oe] || ('SSO 登录失败：' + oe));
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+    return () => { alive = false; };
+  }, []);
 
   useEffect(() => {
     if (countdown <= 0) return undefined;
@@ -33,6 +64,12 @@ export default function PortalLogin({ onLoggedIn }) {
   }, [countdown]);
 
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim());
+
+  // 发起 SSO：配置了 Turnstile 时先过验证，再带 token 跳转
+  const startSSO = (tsToken) => {
+    const q = tsToken ? '?cf_turnstile_response=' + encodeURIComponent(tsToken) : '';
+    window.location.href = '/api/portal/oidc/login' + q;
+  };
 
   const doSend = async () => {
     if (!emailOk) {
@@ -66,6 +103,7 @@ export default function PortalLogin({ onLoggedIn }) {
       return;
     }
     if (SITE_KEY && !turnstile.getToken()) {
+      setPending('send');
       setTsOpen(true);
       return;
     }
@@ -74,12 +112,17 @@ export default function PortalLogin({ onLoggedIn }) {
 
   useEffect(() => {
     if (!tsOpen) return;
-    if (turnstile.token) {
-      setTsOpen(false);
-      doSend();
+    if (!turnstile.token) return;
+    setTsOpen(false);
+    const action = pending;
+    setPending(null);
+    if (action === 'sso') {
+      startSSO(turnstile.token);
+      return;
     }
+    doSend();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tsOpen, turnstile.token]);
+  }, [tsOpen, turnstile.token, pending]);
 
   const login = async () => {
     if (!emailOk) {
@@ -289,6 +332,30 @@ export default function PortalLogin({ onLoggedIn }) {
             登录
           </Button>
 
+          {sso.enabled ? (
+            <>
+              <div className="pp-auth-or">或</div>
+              <Button
+                size="large"
+                block
+                icon={<SafetyOutlined />}
+                onClick={() => {
+                  if (SITE_KEY && !turnstile.getToken()) {
+                    setPending('sso');
+                    setTsOpen(true);
+                    return;
+                  }
+                  startSSO(turnstile.getToken());
+                }}
+              >
+                {sso.button_text}
+              </Button>
+              <div className="pp-auth-foot" style={{ marginTop: 8 }}>
+                单点登录同样使用你绑定的邮箱身份，无需密码
+              </div>
+            </>
+          ) : null}
+
           <div className="pp-auth-foot">UUID 由管理员绑定到邮箱，登录后即可查看你的订阅</div>
         </main>
       </div>
@@ -297,6 +364,7 @@ export default function PortalLogin({ onLoggedIn }) {
         open={tsOpen}
         onCancel={() => {
           setTsOpen(false);
+          setPending(null);
           turnstile.reset();
         }}
         footer={null}
@@ -314,7 +382,7 @@ export default function PortalLogin({ onLoggedIn }) {
           </div>
         ) : null}
         <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', marginTop: 10 }}>
-          完成验证后将自动发送验证码
+          {pending === 'sso' ? '完成验证后将跳转到单点登录' : '完成验证后将自动发送验证码'}
         </div>
       </Modal>
     </div>

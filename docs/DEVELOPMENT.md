@@ -618,6 +618,33 @@ refactor(scope): 摘要  重构
 
 ---
 
+## 13.1 用户中心 SSO
+
+用户中心与管理后台共用同一套 OIDC 配置与**同一个回调地址** `/api/oidc/callback`，
+IdP 里只需登记一次 redirect_uri。
+
+区分靠 `pp_oidc_tx` cookie 里的 `mode` 字段：
+
+| mode | 发起入口 | 身份映射 | 签发 |
+|---|---|---|---|
+| `admin` | `GET /api/oidc/login` | `admin_oidc_identities` / 已验证邮箱的管理员 | 管理员 JWT → `/admin#token=` |
+| `portal` | `GET /api/portal/oidc/login` | `uuid_info.email_norm` 必须已绑定 | 用户 JWT → `/?token=` |
+
+用户端映射规则（`finishPortalOIDC`）：
+
+1. 邮箱未绑定 → `no_uuid_binding`（提示联系管理员）
+2. 账号 `inactive` / `suspended` → `account_disabled`
+3. 正常 → 签发用户令牌并跳回首页，前端从 `?token=` 取用后清理地址栏
+
+新建用户（绑邮箱）之后，该邮箱即可用 SSO 登录，也可用初始密码登录。
+Turnstile 已配置时，用户端 SSO 与管理端一致：先过人机验证再跳转。
+
+映射逻辑的集成测试：
+```bash
+PP_TEST_DSN='root:proxypilot@tcp(127.0.0.1:3306)/pp_test?charset=utf8mb4&loc=UTC' \
+  go test -tags integration ./internal/api -run TestIntegrationPortalOIDC -v
+```
+
 ## 14. 安全注意事项
 
 | 项 | 规则 |

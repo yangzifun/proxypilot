@@ -93,6 +93,8 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("POST /api/portal/send-code", h.portalSendCode)
 	mux.HandleFunc("POST /api/portal/login", h.portalLogin)
 	mux.HandleFunc("POST /api/portal/login/password", h.portalLoginPassword)
+	mux.HandleFunc("GET /api/portal/oidc/status", h.portalOIDCStatus)
+	mux.HandleFunc("GET /api/portal/oidc/login", h.portalOIDCLogin)
 	mux.HandleFunc("GET /api/portal/password", h.portalPasswordStatus)
 	mux.HandleFunc("POST /api/portal/password", h.portalPasswordChange)
 	mux.HandleFunc("GET /api/portal/uuids", h.portalUuids)

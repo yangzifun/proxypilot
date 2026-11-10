@@ -111,6 +111,23 @@ export default function PortalApp() {
   const [route, setRoute] = useState(readRoute);
   const [uuids, setUuids] = useState([]);
 
+  /* SSO 回调成功后后端会带 ?token=xxx 跳回首页，这里接住并清理地址栏 */
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const tk = sp.get('token');
+    if (tk) {
+      portalSetToken(tk);
+      setAuthed(true);
+      sp.delete('token');
+      const qs = sp.toString();
+      window.history.replaceState({}, '', window.location.pathname + (qs ? '?' + qs : ''));
+    } else if (sp.get('oidc_error')) {
+      sp.delete('oidc_error');
+      const qs = sp.toString();
+      window.history.replaceState({}, '', window.location.pathname + (qs ? '?' + qs : ''));
+    }
+  }, []);
+
   useEffect(() => {
     const onHash = () => setRoute(readRoute());
     window.addEventListener('hashchange', onHash);

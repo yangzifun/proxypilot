@@ -34,6 +34,8 @@ type oidcTx struct {
 	State    string `json:"state"`
 	Verifier string `json:"verifier"`
 	Nonce    string `json:"nonce"`
+	// Mode 区分管理员登录与用户中心登录（共用同一个回调地址）
+	Mode string `json:"mode,omitempty"`
 }
 
 var (
@@ -209,7 +211,7 @@ func (h *handlers) oidcLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	verifier := randomVerifier()
-	tx := oidcTx{State: randomState(), Verifier: verifier, Nonce: randomState()}
+	tx := oidcTx{State: randomState(), Verifier: verifier, Nonce: randomState(), Mode: oidcModeAdmin}
 	http.SetCookie(w, oidcTxCookie(r, tx, 600))
 	oc := h.effectiveOIDC(r.Context())
 	scopes := firstNonEmpty(oc.Scopes, "openid profile email")
@@ -329,6 +331,20 @@ func (h *handlers) oidcCallback(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login?oidc_error=email_unverified", http.StatusFound)
 		return
 	}
+	// 用户中心登录：换成 portal 令牌后跳回首页
+	if tx.Mode == oidcModePortal {
+		ptoken, uuidVal, reason := h.finishPortalOIDC(r, email)
+		if ptoken == "" {
+			http.SetCookie(w, oidcTxCookie(r, oidcTx{}, -1))
+			http.Redirect(w, r, "/?oidc_error="+url.QueryEscape(reason), http.StatusFound)
+			return
+		}
+		http.SetCookie(w, oidcTxCookie(r, oidcTx{}, -1))
+		h.log.Info("用户中心 SSO 登录成功", "email", emailNormForLog(email), "uuid", uuidVal)
+		http.Redirect(w, r, "/?token="+url.QueryEscape(ptoken), http.StatusFound)
+		return
+	}
+
 	issuer := strings.TrimRight(firstNonEmpty(d.Issuer, oc.Issuer), "/")
 	username, reason := h.resolveOIDCAdmin(r.Context(), issuer, jsonStr(claims["sub"]), email)
 	if username == "" {
