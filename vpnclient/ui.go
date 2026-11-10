@@ -917,11 +917,12 @@ func (s *uiServer) connect(nodeID int64) error {
 			res := tun.Result()
 			log.Printf("系统网络已接管：%s", res.Summary())
 			// 端到端连通性探测：绑定隧道地址发真实 DNS 查询
-			runTunnelProbe(ctx, prof.IP4, defaultDNSAddr, func(ok bool, rtt time.Duration, errMsg string) {
+			// 多目标探测：网关 + 多个公共 DNS，任一可达即视为数据面通
+			runTunnelProbe(ctx, prof.IP4, defaultDNSAddr, res.Gateway, func(ok bool, rtt time.Duration, info string) {
 				s.state.set(func(st *sessionState) {
 					st.netOK = ok
 					st.netRTT = int(rtt.Milliseconds())
-					st.netErr = errMsg
+					st.netErr = info
 				})
 			})
 			s.state.set(func(st *sessionState) {
