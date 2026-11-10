@@ -17,6 +17,9 @@ func cleanStaleTunnel() {
 	// 否则用户会表现为「能上网但所有域名解析失败」。
 	revertDNSGuard()
 
+	// 上次若在连接中断电/强杀，物理网卡的 IPv6 可能仍是禁用状态，先恢复
+	restoreIPv6FromMarker()
+
 	name := defaultTunName()
 	if name == "" {
 		return

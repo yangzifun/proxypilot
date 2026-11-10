@@ -190,7 +190,8 @@ type sessionState struct {
 	routes []string
 	tunMode  string
 	tunErr   string
-	dnsGuard []string
+	dnsGuard  []string
+	ipv6Guard []string
 }
 
 func (s *sessionState) snapshot() map[string]any {
@@ -233,6 +234,7 @@ func (s *sessionState) snapshot() map[string]any {
 		"tun_error":  s.tunErr,
 		"tun_ready":  s.adapter != "",
 		"dns_guard":  append([]string{}, s.dnsGuard...),
+		"ipv6_guard": append([]string{}, s.ipv6Guard...),
 	}
 }
 
@@ -245,6 +247,7 @@ func (s *sessionState) set(fn func(*sessionState)) {
 // ---------- UI 服务 ----------
 
 type uiServer struct {
+	listenPort string // 本地控制台监听端口，用于来源校验
 	demo     bool
 	cfg      uiSettings
 	cfgMu    sync.Mutex
@@ -253,12 +256,61 @@ type uiServer struct {
 	caBundle []byte
 }
 
+// localGuard 给本地控制台加来源校验，防浏览器跨源静默调用。
+//
+// 背景：控制台监听 127.0.0.1，浏览器里的任意网页都能向它发 no-cors 的
+// text/plain POST。若不校验，恶意页面可以静默把「面板地址」改成攻击者服务器
+// （令牌保留），下次连接就把 Bearer 令牌发出去。
+//
+// 规则：
+//   1. Host 必须是 127.0.0.1 / localhost / [::1]，且端口匹配
+//   2. 带 Origin 的请求，Origin 必须与本机控制台同源
+//   3. 写请求带 body 时，Content-Type 必须是 application/json（触发 CORS 预检）
+func (s *uiServer) localGuard(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		host := r.Host
+		if host == "" {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		hostname := host
+		port := ""
+		if h, p, err := net.SplitHostPort(host); err == nil {
+			hostname, port = h, p
+		}
+		isLocal := hostname == "127.0.0.1" || hostname == "localhost" || hostname == "::1" || hostname == "[::1]"
+		if !isLocal || (s.listenPort != "" && port != s.listenPort) {
+			http.Error(w, "forbidden host", http.StatusForbidden)
+			return
+		}
+
+		if origin := r.Header.Get("Origin"); origin != "" {
+			want := "http://" + host
+			if origin != want {
+				http.Error(w, "forbidden origin", http.StatusForbidden)
+				return
+			}
+		}
+
+		if r.Method != http.MethodGet && r.ContentLength > 0 {
+			ct := r.Header.Get("Content-Type")
+			if !strings.HasPrefix(strings.ToLower(ct), "application/json") {
+				http.Error(w, "content-type must be application/json", http.StatusUnsupportedMediaType)
+				return
+			}
+		}
+		next(w, r)
+	}
+}
+
 func runUI(ctx context.Context, addr string, defaults uiSettings, openBrowser, demo bool) error {
 	ring := &logRing{}
 	log.SetOutput(io.MultiWriter(os.Stderr, ring))
 
+	_, listenPort, _ := net.SplitHostPort(addr)
 	srv := &uiServer{
-		demo:  demo,
+		demo:       demo,
+		listenPort: listenPort,
 		cfg:   loadSettings(defaults),
 		state: &sessionState{status: "idle", message: "未连接"},
 		logs:  ring,
@@ -274,23 +326,23 @@ func runUI(ctx context.Context, addr string, defaults uiSettings, openBrowser, d
 
 	mux := http.NewServeMux()
 	mux.Handle("/", http.FileServer(http.FS(sub)))
-	mux.HandleFunc("/api/state", srv.handleState)
-	mux.HandleFunc("/api/settings", srv.handleSettings)
-	mux.HandleFunc("/api/nodes", srv.handleNodes)
-	mux.HandleFunc("/api/select-node", srv.handleSelectNode)
-	mux.HandleFunc("/api/logout", srv.handleLogout)
-	mux.HandleFunc("/api/repair", srv.handleRepair)
-	mux.HandleFunc("/api/connect", srv.handleConnect)
-	mux.HandleFunc("/api/disconnect", srv.handleDisconnect)
-	mux.HandleFunc("/api/logs", srv.handleLogs)
-	mux.HandleFunc("/api/login/start", srv.handleLoginStart)
-	mux.HandleFunc("/api/login/poll", srv.handleLoginPoll)
+	mux.HandleFunc("/api/state", srv.localGuard(srv.handleState))
+	mux.HandleFunc("/api/settings", srv.localGuard(srv.handleSettings))
+	mux.HandleFunc("/api/nodes", srv.localGuard(srv.handleNodes))
+	mux.HandleFunc("/api/select-node", srv.localGuard(srv.handleSelectNode))
+	mux.HandleFunc("/api/logout", srv.localGuard(srv.handleLogout))
+	mux.HandleFunc("/api/repair", srv.localGuard(srv.handleRepair))
+	mux.HandleFunc("/api/connect", srv.localGuard(srv.handleConnect))
+	mux.HandleFunc("/api/disconnect", srv.localGuard(srv.handleDisconnect))
+	mux.HandleFunc("/api/logs", srv.localGuard(srv.handleLogs))
+	mux.HandleFunc("/api/login/start", srv.localGuard(srv.handleLoginStart))
+	mux.HandleFunc("/api/login/poll", srv.localGuard(srv.handleLoginPoll))
 	// 安装向导
-	mux.HandleFunc("/api/install/status", srv.handleInstallStatus)
-	mux.HandleFunc("/api/install/start", srv.handleInstallStart)
-	mux.HandleFunc("/api/install/launch", srv.handleInstallLaunch)
-	mux.HandleFunc("/api/install/exit", srv.handleInstallExit)
-	mux.HandleFunc("/api/logs/open", srv.handleLogsOpen)
+	mux.HandleFunc("/api/install/status", srv.localGuard(srv.handleInstallStatus))
+	mux.HandleFunc("/api/install/start", srv.localGuard(srv.handleInstallStart))
+	mux.HandleFunc("/api/install/launch", srv.localGuard(srv.handleInstallLaunch))
+	mux.HandleFunc("/api/install/exit", srv.localGuard(srv.handleInstallExit))
+	mux.HandleFunc("/api/logs/open", srv.localGuard(srv.handleLogsOpen))
 
 	httpSrv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	go func() {
@@ -547,6 +599,7 @@ func (s *uiServer) disconnect(reason string) {
 	s.state.startedAt = 0
 	s.state.adapter = ""
 	s.state.dnsGuard = nil
+	s.state.ipv6Guard = nil
 	s.state.gateway = ""
 	s.state.netOK = false
 	s.state.netRTT = 0
@@ -784,6 +837,7 @@ func (s *uiServer) connect(nodeID int64) error {
 				st.tun = tun
 				st.adapter = res.Adapter
 		st.dnsGuard = append([]string{}, res.DNSGuard...)
+		st.ipv6Guard = append([]string{}, res.IPv6Disabled...)
 				st.gateway = res.Gateway
 				st.routes = res.Routes
 				st.tunMode = string(res.Mode)

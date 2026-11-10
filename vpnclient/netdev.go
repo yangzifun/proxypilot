@@ -148,6 +148,8 @@ type TunResult struct {
 	DNS     string   // 已写入的 DNS（空=未改）
 	// DNSGuard 记录 DNS 泄露防护已生效的项（NRPT / 防火墙规则）
 	DNSGuard []string
+	// IPv6Disabled 记录被临时关闭 IPv6 的物理网卡（断开时恢复）
+	IPv6Disabled []string
 }
 
 func (r TunResult) Summary() string {

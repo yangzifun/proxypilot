@@ -245,6 +245,7 @@
       <div class="row"><span class="k">接管路由</span><span class="v" id="rRoutes">—</span></div>
       <div class="row"><span class="k">接管状态</span><span class="v" id="rTakeover">—</span></div>
       <div class="row"><span class="k">DNS 泄露防护</span><span class="v" id="rDnsGuard">—</span></div>
+      <div class="row"><span class="k">IPv6 泄露防护</span><span class="v" id="rIPv6Guard">—</span></div>
     </div>
     <div class="notice" id="noticeDetail"></div>
   </section>
@@ -350,6 +351,13 @@ function render(){
     if (items.length) { dg.textContent = '已启用（' + items.length + ' 项）'; dg.className = 'v ok'; }
     else { dg.textContent = st === 'connected' ? '未启用' : '—'; dg.className = 'v'; }
     dg.title = items.join('\n');
+  }
+
+  const v6 = $('rIPv6Guard');
+  if (v6) {
+    const list = state.ipv6_guard || [];
+    if (list.length) { v6.textContent = '已封禁（' + list.join('、') + '）'; v6.className = 'v ok'; }
+    else { v6.textContent = st === 'connected' ? '未封禁' : '—'; v6.className = 'v'; }
   }
 
   const nd = $('noticeDetail');

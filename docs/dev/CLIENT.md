@@ -145,6 +145,60 @@ New-NetFirewallRule -DisplayName 'ProxyPilot-DNS-WLAN-UDP' -Direction Outbound -
 
 撤销按 `DisplayName` 前缀精确清理；启动时也清理一次（崩溃自愈）。
 
+## 7.5 IPv6 泄露防护（2.9+）
+
+问题：TUN 只有 IPv4，接管路由是 `0.0.0.0/1` + `128.0.0.0/1`；
+物理网卡若拿到公网 IPv6（如电信 `240e::/20`）并存在默认路由 `::/0`，
+浏览器访问支持 v6 的站点会**绕过隧道直连**，真实 IPv6 暴露。
+
+实测（修复前）：
+
+```
+curl -6 https://ipv6.icanhazip.com
+→ 240e:46c:8300:47c4:...      ← 家宽真实地址
+```
+
+处理（fail-closed）：
+
+```powershell
+# 连接时：关闭物理网卡的 IPv6 绑定
+Disable-NetAdapterBinding -Name 'WLAN' -ComponentID ms_tcpip6
+# 断开时：按记录恢复
+Enable-NetAdapterBinding  -Name 'WLAN' -ComponentID ms_tcpip6
+```
+
+- 被关闭的网卡列表写入 `%APPDATA%\ppvpn\ipv6-disabled.json`
+- 启动时 `restoreIPv6FromMarker()` 恢复（防崩溃/断电后一直没 v6）
+- 连接详情页显示「IPv6 泄露防护：已封禁（WLAN）」
+
+Linux/macOS 尚未实现（需 `sysctl net.ipv6.conf.<if>.disable_ipv6` 与
+`networksetup -setv6off`），界面上显示「未封禁」。
+
+## 7.6 本地控制台来源校验（2.9+）
+
+本地控制台监听 127.0.0.1，浏览器里任何网页都能向它发 `no-cors` 的
+`text/plain` POST。若不加校验，恶意页面可静默调用 `/api/settings`
+把面板地址改成攻击者服务器（令牌保留），下次连接就把 Bearer 令牌外传。
+
+`localGuard` 三条规则：
+
+| 规则 | 拒绝结果 |
+|---|---|
+| Host 必须是 `127.0.0.1`/`localhost`/`::1` 且端口匹配 | 403 forbidden host |
+| 带 Origin 的请求必须同源 | 403 forbidden origin |
+| 有 body 的写请求 Content-Type 必须是 `application/json` | 415 |
+
+实测：
+
+```
+GET  /api/state                        → 200
+GET  /api/state  Host: evil            → 403
+POST /api/settings Origin: evil        → 403
+POST /api/settings text/plain          → 415
+POST /api/settings 同源 JSON           → 200
+POST /api/disconnect（空 body，托盘）  → 200
+```
+
 ## 8. 本地控制台 API
 
 `ui.go` 暴露的本地接口（仅 127.0.0.1，不需要鉴权）：

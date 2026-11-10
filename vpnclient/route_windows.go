@@ -118,6 +118,10 @@ func applyTun(s TunSpec, dev PacketDevice) (TunResult, error) {
 	// DNS 泄露防护：NRPT 强制走隧道 DNS + 封禁物理网卡的明文 DNS 出站。
 	// Windows 会并行向所有网卡的 DNS 发查询，只配虚拟网卡会漏到运营商 DNS。
 	res.DNSGuard = applyDNSGuard(dns)
+
+	// IPv6 泄露防护：TUN 只有 IPv4，物理网卡的公网 IPv6 会绕过隧道直连。
+	// 连接期间关闭物理网卡的 IPv6 绑定，断开时恢复。
+	res.IPv6Disabled = disablePhysicalIPv6()
 	return res, nil
 }
 
@@ -129,6 +133,9 @@ func applyTun(s TunSpec, dev PacketDevice) (TunResult, error) {
 func cleanupTun(res TunResult) {
 	// 1) 撤销 DNS 守卫（NRPT + 物理网卡 DNS 封禁），否则断开后所有域名解析失败
 	revertDNSGuard()
+
+	// 1.5) 恢复物理网卡 IPv6（可能为空，幂等）
+	restoreIPv6(res.IPv6Disabled)
 
 	// 2) 兜底删除全局接管路由（不依赖记录，幂等）
 	//    0.0.0.0/1 与 128.0.0.0/1 覆盖整个 IPv4 空间，用 mask 精确匹配，不会误删默认路由
