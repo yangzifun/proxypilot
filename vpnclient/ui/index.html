@@ -496,6 +496,11 @@ function diagText(){
     '上行队列丢包: ' + (st.uplink_dropped == null ? '-' : st.uplink_dropped) + ' 个',
     'QUIC 丢包   : ' + (st.quic_lost == null ? '-' : st.quic_lost + ' / ' + st.quic_sent +
       '（' + (st.quic_loss_pct == null ? '0' : st.quic_loss_pct.toFixed(2)) + '%）'),
+    '通道计数    : UDP 发 ' + (st.path_udp_sent == null ? '-' : st.path_udp_sent) +
+      ' / 收 ' + (st.path_udp_recv == null ? '-' : st.path_udp_recv) +
+      '，流 发 ' + (st.path_stream_sent == null ? '-' : st.path_stream_sent) +
+      ' / 收 ' + (st.path_stream_recv == null ? '-' : st.path_stream_recv),
+    '采样通道    : ' + (st.tunnel_quality && st.tunnel_quality.via_tcp ? 'TCP/可靠流（UDP 连续失败后切换）' : 'UDP/DATAGRAM'),
     '内层坏包    : ' + (st.inner_bad == null ? '-' : st.inner_bad) + ' 个',
     '节点数      : ' + (st.nodes_count == null ? '-' : st.nodes_count) +
       (st.nodes_error ? ('（拉取失败：' + st.nodes_error + '）') : ''),

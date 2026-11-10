@@ -1,6 +1,7 @@
 package node
 
 import (
+	"sync/atomic"
 	"context"
 	"crypto/tls"
 	"fmt"
@@ -68,6 +69,9 @@ type session struct {
 	started time.Time
 	tx      uint64
 	rx      uint64
+	// sendFail 统计下行发送失败次数（DATAGRAM 缓冲满/连接关闭等），
+	// 是「节点发了但客户端没收到」的唯一线索。
+	sendFail atomic.Uint64
 }
 
 // Server 是自研 HTTP/3 隧道节点（非标准 MASQUE）。
@@ -412,12 +416,15 @@ func (s *Server) readSession(sess *session) {
 			"duration", time.Since(sess.started).Round(time.Second))
 	}()
 	var badPkt, badSrc int
+	var writeFail int
 	lastStats := time.Now()
 	for {
 		data, err := sess.conn.ReceiveDatagram(sess.conn.Context())
 		if err != nil {
 			s.log.Info("会话数据面结束", "ip", sess.ip.String(), "err", err.Error(),
-				"rx", sess.rx, "tx", sess.tx, "bad_pkt", badPkt, "bad_src", badSrc)
+				"rx", sess.rx, "tx", sess.tx,
+				"dropped", sess.sendFail.Load()+uint64(writeFail),
+				"bad_pkt", badPkt, "bad_src", badSrc)
 			return
 		}
 		pkt, src, _, perr := StripPadding(data)
@@ -436,14 +443,23 @@ func (s *Server) readSession(sess *session) {
 			continue
 		}
 		if time.Since(lastStats) > 30*time.Second {
-			s.log.Info("会话流量", "ip", sess.ip.String(), "rx", sess.rx, "tx", sess.tx,
+			// 命名对齐可靠流那边的「流隧道流量」，方便两侧对照排查：
+			//   tx      上行：客户端发来、已写入 TUN 的包数
+			//   rx      下行：节点发回客户端的包数（由 tunLoop 计数）
+			//   dropped 上行写 TUN 失败 + 下行发送失败
+			s.log.Info("DATAGRAM 流量", "ip", sess.ip.String(),
+				"rx", sess.rx, "tx", sess.tx,
+				"dropped", sess.sendFail.Load()+uint64(writeFail),
 				"bad_pkt", badPkt, "bad_src", badSrc)
 			lastStats = time.Now()
 		}
 		if _, werr := s.tun.Write(pkt); werr != nil {
 			// 单个报文写失败（例如超过 TUN MTU）不能终止会话，
 			// 否则后续所有流量都会被静默丢弃、表现为「已连接但完全不通」。
-			s.log.Warn("写入 TUN 失败", "err", werr, "len", len(pkt), "ip", sess.ip.String())
+			writeFail++
+			if writeFail == 1 {
+				s.log.Warn("写入 TUN 失败", "err", werr, "len", len(pkt), "ip", sess.ip.String())
+			}
 			continue
 		}
 		sess.tx++
@@ -492,6 +508,7 @@ func (s *Server) tunLoop() {
 			continue
 		}
 		if err := sess.send(pkt); err != nil {
+			sess.sendFail.Add(1)
 			continue
 		}
 		sess.rx++

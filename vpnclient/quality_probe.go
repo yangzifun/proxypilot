@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"context"
 	"log"
 	"net"
@@ -24,6 +25,10 @@ const (
 	qualityTimeout = 3 * time.Second
 	// 连续失败到这个次数才判定「不通」，避免单次抖动就翻脸
 	qualityFailThreshold = 5
+	// 连续失败达到这个次数后，下一次改用可靠流探测一次。
+	// 目的有两个：一是自愈（UDP/DATAGRAM 通道坏了不至于一直判不通），
+	// 二是反向证明——TCP 通、UDP 不通，就说明问题在 DATAGRAM 通道。
+	qualityFallbackAfter = 3
 )
 
 // runQualityProbe 持续采样，结果写进 sessionState。
@@ -40,6 +45,8 @@ func (s *uiServer) runQualityProbe(ctx context.Context, attempt int64, localIP, 
 	consecutiveFail := 0
 	// 上一次采样的收发字节数，用来判断「隧道里到底有没有流量」
 	var lastRx, lastTx uint64
+	// 上一次采样用的通道（true=TCP/可靠流），进诊断信息
+	var lastViaTCP bool
 
 	for {
 		select {
@@ -48,17 +55,38 @@ func (s *uiServer) runQualityProbe(ctx context.Context, attempt int64, localIP, 
 		case <-ticker.C:
 		}
 
-		rtt, err := probeTunnelOnce(localIP, target, qualityTimeout)
+		// 默认走 UDP（经 TUN 分流到 DATAGRAM）；连续失败够多就换 TCP 探一次，
+		// TCP 会走可靠流，可用来区分「整体不通」和「DATAGRAM 通道坏了」。
+		useStream := consecutiveFail >= qualityFallbackAfter
+		var (
+			rtt    time.Duration
+			err    error
+			viaTCP bool
+		)
+		if useStream {
+			rtt, err = probeTCPOnce(localIP, target, qualityTimeout)
+			viaTCP = true
+		} else {
+			rtt, err = probeTunnelOnce(localIP, target, qualityTimeout)
+		}
 		ok := err == nil
 
 		var info string
-		if ok {
-			consecutiveFail = 0
+		switch {
+		case ok && viaTCP:
+			info = fmt.Sprintf("隧道往返 %s（TCP/可靠流，UDP 连续失败 %d 次后切换）",
+				rtt.Round(time.Millisecond), consecutiveFail)
+		case ok:
 			info = formatQualityInfo(rtt)
-		} else {
-			consecutiveFail++
+		default:
 			info = err.Error()
 		}
+		if ok {
+			consecutiveFail = 0
+		} else {
+			consecutiveFail++
+		}
+		lastViaTCP = viaTCP
 
 		s.setFor(attempt, func(st *sessionState) {
 			st.qSent++
@@ -72,6 +100,7 @@ func (s *uiServer) runQualityProbe(ctx context.Context, attempt int64, localIP, 
 				st.qLost++
 			}
 			st.qConsecutiveFail = consecutiveFail
+			st.qViaTCP = lastViaTCP
 			st.refreshTunnelStats()
 
 			// 采样包失败 ≠ 隧道不通：满速传输时它会被大流量挤在后面。

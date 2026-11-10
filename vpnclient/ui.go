@@ -228,14 +228,22 @@ type sessionState struct {
 	qSent, qOK, qLost  int
 	qLastRTT, qMaxRTT  int
 	qConsecutiveFail   int
+	// 上一次采样是否走了 TCP/可靠流（区分 UDP 通道故障用）
+	qViaTCP bool
 
 	// 数据面对象：用来取客户端发送队列丢弃数
 	pc *streamPacketConn
+	// dualConn 非空表示启用了双通道，用于取两条通道各自的收发计数
+	dualConn *dualPacketConn
 	// panelBypass 记录已加直连路由的面板 IP（诊断用）
 	panelBypass []string
 	// 从 pc / QUIC 连接刷新出来的实时计数
 	dropUplink uint64
 	innerBad   uint64
+	// 双通道各自收发计数（UDP 走 DATAGRAM，其余走可靠流）
+	pathUDPSent, pathUDPRecv     uint64
+	pathStreamSent, pathStreamRecv uint64
+	fecRecovered, fecDropped     int
 	quicSent   uint64
 	quicRecv   uint64
 	quicLost   uint64
@@ -291,8 +299,15 @@ func (s *sessionState) snapshot() map[string]any {
 			"loss_pct": pct(uint64(s.qLost), uint64(s.qSent)),
 			"last_rtt_ms": s.qLastRTT, "max_rtt_ms": s.qMaxRTT,
 			"consecutive_fail": s.qConsecutiveFail,
+			"via_tcp":          s.qViaTCP,
 		},
 		"uplink_dropped": s.dropUplink,
+		"path_udp_sent":     s.pathUDPSent,
+		"path_udp_recv":     s.pathUDPRecv,
+		"path_stream_sent":  s.pathStreamSent,
+		"path_stream_recv":  s.pathStreamRecv,
+		"fec_recovered":     s.fecRecovered,
+		"fec_dropped":       s.fecDropped,
 		"inner_bad":      s.innerBad,
 		"quic_sent":      s.quicSent,
 		"quic_recv":      s.quicRecv,
@@ -313,6 +328,10 @@ func (s *sessionState) snapshot() map[string]any {
 func (s *sessionState) refreshTunnelStats() {
 	if s.pc != nil {
 		s.dropUplink = s.pc.DropStats()
+	}
+	if s.dualConn != nil {
+		s.pathUDPSent, s.pathUDPRecv, s.pathStreamSent, s.pathStreamRecv = s.dualConn.PathStats()
+		s.fecRecovered, s.fecDropped = s.dualConn.FECStats()
 	}
 	if s.tun != nil {
 		s.innerBad = uint64(s.tun.BadInnerPackets())
@@ -1034,7 +1053,9 @@ func (s *uiServer) connect(nodeID int64) error {
 		case !supportsDatagrams(conn):
 			log.Printf("数据面：对端未协商 DATAGRAM，全部走可靠流")
 		default:
-			pconn = newDualPacketConn(pc, quicDatagramPeer{conn: conn}, maxDatagramPayload, fecGroup)
+			dual := newDualPacketConn(pc, quicDatagramPeer{conn: conn}, maxDatagramPayload, fecGroup)
+			pconn = dual
+			s.setFor(attempt, func(st *sessionState) { st.dualConn = dual })
 			if fecGroup > 1 {
 				log.Printf("数据面：双通道已启用（UDP→DATAGRAM，TCP/ICMP→可靠流），FEC=xor 每组 %d 包", fecGroup)
 			} else {
