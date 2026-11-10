@@ -49,7 +49,21 @@ type Settings struct {
 	MTU                 int           `json:"mtu"`
 	TokenTTL            time.Duration `json:"-"`
 	TokenTTLSeconds     int           `json:"token_ttl_seconds"`
+
+	// 36.0 数据面双通道：UDP 走 QUIC DATAGRAM，TCP/ICMP 走可靠流。
+	// 关闭后全部走可靠流（等同 35.x 行为），出问题可一键回退。
+	DatagramEnabled bool `json:"datagram_enabled"`
+	// DATAGRAM 通道的前向纠错：off 关闭；xor 为分组异或校验。
+	FECMode string `json:"fec_mode"`
+	// FEC 每组包数（1/K 开销），xor 模式下生效。
+	FECGroup int `json:"fec_group"`
 }
+
+// FEC 模式取值。
+const (
+	FECModeOff = "off"
+	FECModeXOR = "xor"
+)
 
 // DefaultSettings 返回与服务端迁移 0032 一致的默认值。
 func DefaultSettings() Settings {
@@ -62,6 +76,9 @@ func DefaultSettings() Settings {
 		MeshCIDR4:           "10.99.0.0/16",
 		ClientCIDR4:         "10.88.0.0/16",
 		MTU:                 1380,
+		DatagramEnabled:     true,
+		FECMode:             FECModeOff,
+		FECGroup:            8,
 		TokenTTL:            10 * time.Minute,
 		TokenTTLSeconds:     600,
 	}
@@ -91,6 +108,12 @@ func (s *Settings) Normalize() error {
 	if s.TokenTTLSeconds == 0 {
 		s.TokenTTLSeconds = def.TokenTTLSeconds
 	}
+	if s.FECMode == "" {
+		s.FECMode = def.FECMode
+	}
+	if s.FECGroup == 0 {
+		s.FECGroup = def.FECGroup
+	}
 	if s.TokenTTL == 0 {
 		s.TokenTTL = time.Duration(s.TokenTTLSeconds) * time.Second
 	}
@@ -114,6 +137,15 @@ func (s Settings) Validate() error {
 	}
 	if s.TokenTTLSeconds < 60 || s.TokenTTLSeconds > 86400 {
 		return fmt.Errorf("token_ttl_seconds %d 超出 60-86400", s.TokenTTLSeconds)
+	}
+	switch s.FECMode {
+	case FECModeOff, FECModeXOR:
+	default:
+		return fmt.Errorf("fec_mode 非法: %q（可选 off / xor）", s.FECMode)
+	}
+	// 分组太小开销会失控（K=2 就是 50% 冗余），太大则抗不住连续丢包
+	if s.FECGroup < 2 || s.FECGroup > 32 {
+		return fmt.Errorf("fec_group %d 超出 2-32", s.FECGroup)
 	}
 	return nil
 }

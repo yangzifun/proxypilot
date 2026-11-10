@@ -31,6 +31,10 @@ type vpnNodeConfig struct {
 	Audience    string   `json:"audience"`
 	DNS         []string `json:"dns"`
 	// 节点在网关 53 上跑轻量 DNS 转发，客户端解析就交给它
+	// 36.0 数据面双通道与 FEC（面板可关，关闭即回退到纯可靠流）
+	DatagramEnabled bool     `json:"datagram_enabled"`
+	FECMode         string   `json:"fec_mode"`
+	FECGroup        int      `json:"fec_group"`
 	DNSRelay    bool     `json:"dns_relay"`
 	DNSUpstream []string `json:"dns_upstream"`
 	Configure   bool     `json:"configure"`
@@ -133,6 +137,9 @@ func (h *handlers) vpnAdminNodeDeploy(w http.ResponseWriter, r *http.Request) {
 		Tun:         "ppvpn0",
 		MTU:         settings.MTU,
 		MaxDatagram: settings.MTU + 80,
+		DatagramEnabled: settings.DatagramEnabled,
+		FECMode:         settings.FECMode,
+		FECGroup:        settings.FECGroup,
 		PublicKey:   base64.StdEncoding.EncodeToString(signer.PublicKey()),
 		Issuer:      "proxypilot",
 		Audience:    "masque-node",

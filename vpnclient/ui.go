@@ -1022,12 +1022,24 @@ func (s *uiServer) connect(nodeID int64) error {
 
 		// 双通道：UDP 走 QUIC DATAGRAM（不被可靠流的队头阻塞拖累），
 		// TCP/ICMP 仍走可靠流。对端没协商 DATAGRAM 时自动退回单流。
+		// 双通道与 FEC 均由面板配置（协议管理 → VPN）下发，客户端不自行决定。
+		fecGroup := 0
+		if prof.FECMode == "xor" && prof.FECGroup > 1 {
+			fecGroup = prof.FECGroup
+		}
 		var pconn packetConn = pc
-		if supportsDatagrams(conn) {
-			pconn = newDualPacketConn(pc, quicDatagramPeer{conn: conn}, maxDatagramPayload, fecGroupSize)
-			log.Printf("数据面：双通道已启用（UDP→DATAGRAM，TCP/ICMP→可靠流，DATAGRAM 上限 %d 字节）", maxDatagramPayload)
-		} else {
+		switch {
+		case !prof.DatagramEnabled:
+			log.Printf("数据面：面板已关闭 DATAGRAM，全部走可靠流")
+		case !supportsDatagrams(conn):
 			log.Printf("数据面：对端未协商 DATAGRAM，全部走可靠流")
+		default:
+			pconn = newDualPacketConn(pc, quicDatagramPeer{conn: conn}, maxDatagramPayload, fecGroup)
+			if fecGroup > 1 {
+				log.Printf("数据面：双通道已启用（UDP→DATAGRAM，TCP/ICMP→可靠流），FEC=xor 每组 %d 包", fecGroup)
+			} else {
+				log.Printf("数据面：双通道已启用（UDP→DATAGRAM，TCP/ICMP→可靠流），FEC 关闭")
+			}
 		}
 		defer pconn.Close()
 

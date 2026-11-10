@@ -47,6 +47,10 @@ type profile struct {
 	Token     string
 	IP4       string `json:"ip4"`
 	MTU       int    `json:"mtu"`
+	// 36.0 数据面双通道（面板可关，关闭即全部走可靠流）
+	DatagramEnabled bool   `json:"datagram_enabled"`
+	FECMode         string `json:"fec_mode"`
+	FECGroup        int    `json:"fec_group"`
 	DNS       []string
 	// 服务端下发的组网网段与节点客户端子网（客户端不自填）
 	MeshCIDR   string `json:"mesh_cidr"`

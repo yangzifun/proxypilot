@@ -29,6 +29,11 @@ type Config struct {
 	TunName     string `json:"tun"`
 	MTU         int    `json:"mtu"`
 	MaxDatagram int    `json:"max_datagram"`
+	// 36.0 双通道：datagram_enabled=false 时客户端应只走可靠流；
+	// fec_mode/fec_group 供节点侧将来做校验帧统计与运维展示。
+	DatagramEnabled bool   `json:"datagram_enabled"`
+	FECMode         string `json:"fec_mode"`
+	FECGroup        int    `json:"fec_group"`
 	WAN         string `json:"wan"` // 出口网卡，如 eth0；为空则自动探测默认路由
 
 	// 连接令牌验签公钥（Ed25519，base64）。

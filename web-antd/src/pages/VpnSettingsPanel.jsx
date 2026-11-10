@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { App as AntdApp, Button, Form, Input, InputNumber, Space, Switch, Tag, Alert } from 'antd';
+import { App as AntdApp, Alert, Button, Form, Input, InputNumber, Select, Space, Switch, Tag } from 'antd';
 import { SaveOutlined } from '@ant-design/icons';
 import { api, apiPut } from '../api';
 import { PageCard } from '../components';
@@ -100,6 +100,58 @@ export default function VpnSettingsPanel() {
             }
           >
             <InputNumber min={60} max={86400} step={60} style={{ width: 160 }} placeholder="600" />
+          </Form.Item>
+        </Space>
+
+        <Form.Item
+          name="datagram_enabled"
+          label="UDP 走 DATAGRAM（双通道）"
+          valuePropName="checked"
+          extra={
+            <span style={{ fontSize: 12 }}>
+              开启后 UDP 流量（DNS、QUIC 网页、视频通话、游戏）走 <b>QUIC DATAGRAM</b>，
+              TCP 仍走可靠流。大流量时小包不再被队头阻塞拖累。
+              关闭即全部走可靠流（等同旧版行为），出问题时可用它一键回退。
+            </span>
+          }
+        >
+          <Switch checkedChildren="开" unCheckedChildren="关" />
+        </Form.Item>
+
+        <Space size={16} wrap align="start">
+          <Form.Item
+            name="fec_mode"
+            label="DATAGRAM 前向纠错"
+            rules={[{ required: true, message: '请选择纠错模式' }]}
+            extra={
+              <span style={{ fontSize: 12 }}>
+                DATAGRAM 不重传，丢了就没了。<b>xor</b> 为分组异或校验：
+                组内丢任意 1 个可无损还原，代价是 1/每组包数 的带宽。
+                仅作用于 DATAGRAM 通道，不影响可靠流。
+              </span>
+            }
+          >
+            <Select style={{ width: 160 }}
+              options={[
+                { value: 'off', label: '关闭' },
+                { value: 'xor', label: 'xor（分组校验）' },
+              ]} />
+          </Form.Item>
+          <Form.Item
+            name="fec_group"
+            label="每组包数"
+            rules={[
+              { required: true, message: '请填写每组包数' },
+              { type: 'number', min: 2, max: 32, message: '每组包数必须在 2 ~ 32 之间' },
+            ]}
+            extra={
+              <span style={{ fontSize: 12 }}>
+                范围 <b>2 ~ 32</b>，默认 <b>8</b>。越小越抗丢包、开销越大
+                （K=4 开销 25%，K=8 开销 12.5%）。仅在纠错开启时生效。
+              </span>
+            }
+          >
+            <InputNumber min={2} max={32} style={{ width: 160 }} placeholder="8" />
           </Form.Item>
         </Space>
 
