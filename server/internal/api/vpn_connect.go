@@ -156,6 +156,10 @@ func (h *handlers) vpnPortalConnect(w http.ResponseWriter, r *http.Request) {
 		"token": token,
 		"ip4":   ip4,
 		"mtu":   settings.MTU,
+		// 36.0 数据面双通道与 FEC（面板可配，客户端不自行决定）
+		"datagram_enabled": settings.DatagramEnabled,
+		"fec_mode":         settings.FECMode,
+		"fec_group":        settings.FECGroup,
 		// 组网网段与节点客户端子网由服务端下发，客户端不再自行填写
 		"mesh_cidr":   settings.MeshCIDR4,
 		"client_cidr": node.ClientCIDR,
