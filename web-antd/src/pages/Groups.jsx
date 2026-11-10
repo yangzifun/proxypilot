@@ -243,7 +243,7 @@ export default function Groups() {
 
       <div style={{ marginTop: 16 }}>
         <PageCard
-          title={<span className="pp-section-title">用户管理</span>}
+          title={<span className="pp-section-title">订阅用户</span>}
           extra={
             <Space>
               <Button icon={<CloudUploadOutlined />} onClick={() => setPushOpen(true)}>

@@ -1079,7 +1079,7 @@ export default function Mihomo({ templatesOnly }) {
           </Form.Item>
           {bindTplMode === 'server' ? (
             <div className="pp-muted" style={{ fontSize: 12, margin: '4px 0 12px' }}>
-              用户授权请在「用户管理 → 详情 → 服务」中勾选该节点；此处只绑定模板与节点信息。
+              用户授权请在「订阅用户 → 详情 → 服务」中勾选该节点；此处只绑定模板与节点信息。
             </div>
           ) : null}
           {bindTplMode !== 'server' ? (

@@ -88,7 +88,7 @@ export default function Dashboard() {
         <Col xs={24} sm={12} xl={6}>
           <StatCard
             icon={<ApartmentOutlined />}
-            label="用户管理"
+            label="订阅用户"
             value={showSkeleton ? '—' : fmtNum(data && data.uuids)}
             accent={chartPalette[0]}
             hint="按 UUID 划分的配置分组"

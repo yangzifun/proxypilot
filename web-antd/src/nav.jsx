@@ -33,8 +33,8 @@ export const PAGE_META = {
     accent: '#4f46e5',
   },
   uuids: {
-    title: '用户管理',
-    subtitle: '按用户管理节点配置、授权与状态',
+    title: '订阅用户',
+    subtitle: '订阅账号的节点配置、授权与状态',
     icon: <TeamOutlined />,
     group: '业务',
     accent: '#06b6d4',
@@ -132,7 +132,7 @@ export const PAGE_META = {
     superOnly: true,
   },
   sysusers: {
-    title: '用户管理',
+    title: '管理账号',
     subtitle: '管理员账号、邮箱与双因素认证',
     icon: <TeamOutlined />,
     group: '系统',

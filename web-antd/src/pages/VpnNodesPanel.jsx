@@ -37,7 +37,7 @@ const EMPTY_NODE = {
   capacity: 500,
 };
 
-// VPN 节点绑定：只负责节点本身；用户授权在「用户管理 → 授权服务」中完成。
+// VPN 节点绑定：只负责节点本身；用户授权在「订阅用户 → 授权服务」中完成。
 export default function VpnNodesPanel() {
   const { message } = AntdApp.useApp();
   const [nodeForm] = Form.useForm();

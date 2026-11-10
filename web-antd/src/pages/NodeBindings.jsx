@@ -265,7 +265,7 @@ export default function NodeBindings() {
           ]}
         />
         <div className="pp-muted" style={{ fontSize: 12, marginTop: 8 }}>
-          MTProto 缺失不会自动创建客户端，请在「用户管理 → 授权节点」中重新勾选该节点。
+          MTProto 缺失不会自动创建客户端，请在「订阅用户 → 授权节点」中重新勾选该节点。
         </div>
       </Modal>
 
