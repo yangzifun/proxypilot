@@ -67,19 +67,55 @@
   .badge.err .dot{background:var(--bad)}
   @keyframes blink{50%{opacity:.2}}
 
-  .picker{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center}
-  .picker[hidden]{display:none!important}
-  .picker-mask{position:absolute;inset:0;background:rgba(4,8,12,.62)}
-  .picker-body{position:relative;width:min(380px,86vw);max-height:70vh;display:flex;flex-direction:column;
-    border:1px solid var(--line2);border-radius:16px;background:#0e1319;box-shadow:0 24px 60px rgba(0,0,0,.5)}
-  .picker-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line)}
-  .picker-close{border:0;background:transparent;color:var(--muted);font-size:12px;cursor:pointer}
-  .picker-list{overflow:auto;padding:8px}
-  .picker-row{display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:10px;cursor:pointer;font-size:13px}
-  .picker-row:hover{background:rgba(56,189,248,.08)}
-  .picker-row.sel{background:rgba(56,189,248,.14);border:1px solid rgba(56,189,248,.35)}
-  .picker-row .pn{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .picker-row .pe{color:var(--dim);font-size:11px;font-family:var(--mono)}
+  /* ---------- 浮层（选择节点 / 对话框 / toast） ---------- */
+  .sheet{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px}
+  .sheet[hidden]{display:none!important}
+  .sheet-mask{position:absolute;inset:0;background:rgba(3,6,10,.68);backdrop-filter:blur(3px);
+    animation:fade-in .16s ease-out}
+  .sheet-body{position:relative;width:min(360px,100%);max-height:min(70vh,520px);display:flex;flex-direction:column;
+    border:1px solid var(--line2);border-radius:18px;background:linear-gradient(180deg,#11161d,#0d1218);
+    box-shadow:0 28px 70px rgba(0,0,0,.62);animation:pop-in .18s cubic-bezier(.2,.9,.3,1.2);overflow:hidden}
+  @keyframes fade-in{from{opacity:0}to{opacity:1}}
+  @keyframes pop-in{from{opacity:0;transform:translateY(10px) scale(.97)}to{opacity:1;transform:none}}
+  .sheet-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;
+    padding:15px 16px 12px;border-bottom:1px solid var(--line)}
+  .sheet-head b{font-size:13.5px}
+  .sheet-sub{font-size:10.5px;color:var(--dim);margin-top:3px}
+  .sheet-close{width:26px;height:26px;flex:0 0 auto;border-radius:8px;border:1px solid var(--line);
+    background:transparent;color:var(--muted);display:grid;place-items:center;cursor:pointer;transition:.15s}
+  .sheet-close:hover{color:var(--txt);background:#1a2029}
+  .sheet-list{overflow:auto;padding:8px;overscroll-behavior:contain}
+  .sheet-row{display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:11px;cursor:pointer;
+    font-size:12.5px;border:1px solid transparent;transition:.14s}
+  .sheet-row:hover{background:rgba(56,189,248,.08)}
+  .sheet-row.sel{background:rgba(56,189,248,.12);border-color:rgba(56,189,248,.34)}
+  .sheet-row .dot{width:6px;height:6px;border-radius:50%;background:var(--dim);flex:0 0 auto}
+  .sheet-row .dot.up{background:var(--ok);box-shadow:0 0 6px rgba(52,211,153,.7)}
+  .sheet-row .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sheet-row .ep{color:var(--dim);font-size:10.5px;font-family:var(--mono)}
+  .sheet-row.sel .nm{color:var(--accent);font-weight:600}
+
+  /* 对话框 */
+  .sheet-body.dialog{align-items:center;text-align:center;padding:24px 20px 18px;max-height:none}
+  .dialog-icon{width:42px;height:42px;border-radius:13px;display:grid;place-items:center;margin-bottom:12px;
+    background:rgba(56,189,248,.11);color:var(--accent);font-size:19px}
+  .dialog-icon.warn{background:rgba(251,191,36,.12);color:var(--warn)}
+  .dialog-icon.danger{background:rgba(251,113,133,.12);color:var(--bad)}
+  .dialog-title{font-size:14px;font-weight:700;margin-bottom:6px}
+  .dialog-text{font-size:12px;color:var(--muted);line-height:1.65;white-space:pre-wrap}
+  .dialog-actions{display:flex;gap:10px;width:100%;margin-top:18px}
+  .dialog-actions .btn{flex:1;width:auto}
+
+  /* toast */
+  .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:10000;
+    padding:10px 16px;border-radius:11px;font-size:12px;font-weight:600;
+    background:rgba(17,23,30,.96);border:1px solid var(--line2);color:var(--txt);
+    box-shadow:0 12px 34px rgba(0,0,0,.5);animation:toast-in .2s ease-out}
+  .toast[hidden]{display:none!important}
+  .toast.ok{border-color:rgba(52,211,153,.4);color:var(--ok)}
+  .toast.err{border-color:rgba(251,113,133,.4);color:var(--bad)}
+  @keyframes toast-in{from{opacity:0;transform:translate(-50%,10px)}to{opacity:1;transform:translate(-50%,0)}
+  }
   .rows{width:100%;border:1px solid var(--line);border-radius:14px;background:var(--card);overflow:hidden}
   .row{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-bottom:1px solid var(--line);font-size:12.5px}
   .row:last-child{border-bottom:0}
@@ -158,6 +194,22 @@
     color:var(--txt);font-size:12.5px;font-weight:600;cursor:pointer}
   .btn.primary{background:var(--accent);border-color:var(--accent);color:#04121c}
   .btn.primary:hover{background:#7dd3fc}
+  /* 设置页分组 */
+  .group{border:1px solid var(--line);border-radius:14px;background:rgba(18,22,28,.55);
+    padding:13px 14px;display:flex;flex-direction:column;gap:10px}
+  .group-title{font-size:10.5px;font-weight:700;letter-spacing:.09em;color:var(--dim);text-transform:uppercase}
+  .group .field label{margin-bottom:5px}
+  .group .row.flat{border-bottom:0;padding:2px 0;font-size:12px}
+  .group .hint2{font-size:10.5px;color:var(--dim);line-height:1.6;margin:-2px 0 0 22px}
+  .btn.ghost{background:rgba(255,255,255,.03);border-color:var(--line)}
+  .btn.ghost:hover{border-color:var(--line2);background:rgba(255,255,255,.06)}
+  .btn:active{transform:translateY(1px)}
+  .check input{width:15px;height:15px;accent-color:var(--accent)}
+  /* 滚动条 */
+  ::-webkit-scrollbar{width:8px;height:8px}
+  ::-webkit-scrollbar-thumb{background:#242c37;border-radius:4px}
+  ::-webkit-scrollbar-thumb:hover{background:#313b48}
+  ::-webkit-scrollbar-track{background:transparent}
   footer{margin-top:14px;display:flex;justify-content:space-between;font-size:10.5px;color:#3f4a58;font-family:var(--mono)}
 </style>
 </head>
@@ -190,13 +242,6 @@
     </div>
     <div class="badge" id="badge"><span class="dot"></span><span id="badgeText">已断开</span></div>
 
-    <div id="nodePicker" class="picker" hidden>
-      <div class="picker-mask"></div>
-      <div class="picker-body">
-        <div class="picker-head"><b>选择节点</b><button class="picker-close" id="pickerClose">关闭</button></div>
-        <div class="picker-list" id="pickerList"></div>
-      </div>
-    </div>
     <div class="rows" style="margin-top:14px">
       <div class="row clickable" id="rowNode"><span class="k">节点</span><span class="v" id="rNode">—</span></div>
       <div class="row"><span class="k">隧道流量</span><span class="v" id="rTraffic">—</span></div>
@@ -217,19 +262,28 @@
       </button>
       <h2>首选项</h2>
     </div>
-    <div class="field"><label>面板地址</label><input id="fAPI" placeholder="https://proxypilot.yangzifun.org"></div>
-    <div class="field"><label>门户令牌</label><input id="fToken" placeholder="粘贴门户登录令牌"></div>
-    <label class="check"><input type="checkbox" id="fInsecure"> 跳过节点证书校验</label>
-    <label class="check"><input type="checkbox" id="fKillSwitch"> 断线保护（连接期间阻断隧道外流量）</label>
-    <div class="hint2" style="margin:-6px 0 4px 22px">开启后若客户端异常退出，会暂时无法上网；重新打开客户端会自动恢复。</div>
-    <div class="row" style="border-bottom:0"><span class="k">当前在线时长</span><span class="v" id="rDur">—</span></div>
-    <div class="field">
-      <label>客户端日志</label>
-      <input id="fLogPath" readonly placeholder="加载中…">
+    <div class="group">
+      <div class="group-title">账号</div>
+      <div class="field"><label>面板地址</label><input id="fAPI" placeholder="https://panel.example.com"></div>
+      <div class="field"><label>门户令牌</label><input id="fToken" placeholder="粘贴门户登录令牌"></div>
+      <div class="row flat"><span class="k">当前在线时长</span><span class="v" id="rDur">—</span></div>
     </div>
-    <button class="btn" id="openLogs">打开日志文件夹</button>
+
+    <div class="group">
+      <div class="group-title">安全</div>
+      <label class="check"><input type="checkbox" id="fInsecure"> 跳过节点证书校验</label>
+      <label class="check"><input type="checkbox" id="fKillSwitch"> 断线保护（阻断隧道外流量）</label>
+      <div class="hint2">开启后若客户端异常退出会暂时无法上网，重新打开客户端会自动恢复。</div>
+    </div>
+
+    <div class="group">
+      <div class="group-title">诊断</div>
+      <div class="field"><label>客户端日志</label><input id="fLogPath" readonly placeholder="加载中…"></div>
+      <button class="btn ghost" id="openLogs">打开日志文件夹</button>
+      <button class="btn ghost" id="btnRepair">修复网络（清理残留路由/DNS）</button>
+    </div>
+
     <button class="btn primary" id="save">保存</button>
-    <button class="btn" id="btnRepair">修复网络（清理残留路由/DNS）</button>
     <button class="btn danger" id="btnLogout">退出登录</button>
   </section>
 
@@ -289,6 +343,38 @@
 
   <footer><span id="footVer">ProxyPilot</span><span id="footAPI"></span></footer>
 </div>
+
+<!-- 所有浮层放在 .app 之外，避免被布局/裁切影响 -->
+<div id="nodePicker" class="sheet" hidden>
+  <div class="sheet-mask" data-close="1"></div>
+  <div class="sheet-body">
+    <div class="sheet-head">
+      <div>
+        <b>选择节点</b>
+        <div class="sheet-sub">连接后切换会立即重连</div>
+      </div>
+      <button class="sheet-close" id="pickerClose" title="关闭">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="sheet-list" id="pickerList"></div>
+  </div>
+</div>
+
+<div id="uiDialog" class="sheet" hidden>
+  <div class="sheet-mask" data-close="1"></div>
+  <div class="sheet-body dialog">
+    <div class="dialog-icon" id="dlgIcon"></div>
+    <div class="dialog-title" id="dlgTitle">提示</div>
+    <div class="dialog-text" id="dlgText"></div>
+    <div class="dialog-actions">
+      <button class="btn" id="dlgCancel">取消</button>
+      <button class="btn primary" id="dlgOk">确定</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -435,20 +521,68 @@ async function pickNode(id){
 }
 
 // 渲染「选择节点」弹层
+// ---------- 页内对话框与提示（替代原生 confirm/alert） ----------
+// 原生 confirm/alert 在窗口隐藏或失焦时可能弹在看不见的地方，用户会以为「点了没反应」。
+let dlgResolve = null;
+function uiDialogOpen({title='提示', text='', okText='确定', cancelText=null, tone=''}){
+  return new Promise((resolve)=>{
+    dlgResolve = resolve;
+    $('dlgTitle').textContent = title;
+    $('dlgText').textContent = text;
+    const icon = $('dlgIcon');
+    icon.className = 'dialog-icon' + (tone ? ' ' + tone : '');
+    icon.textContent = tone === 'danger' ? '!' : tone === 'warn' ? '!' : 'i';
+    $('dlgOk').textContent = okText;
+    const cancel = $('dlgCancel');
+    cancel.hidden = !cancelText;
+    if (cancelText) cancel.textContent = cancelText;
+    $('uiDialog').hidden = false;
+    setTimeout(()=>$('dlgOk').focus(), 30);
+  });
+}
+function uiConfirm(text, {title='确认操作', okText='确定', tone='warn'}={}){
+  return uiDialogOpen({title, text, okText, cancelText:'取消', tone}).then(v=>v===true);
+}
+function uiAlert(text, {title='提示', tone=''}={}){
+  return uiDialogOpen({title, text, okText:'知道了', cancelText:null, tone}).then(()=>true);
+}
+$('dlgOk').onclick = ()=>{ const r = dlgResolve; dlgResolve = null; $('uiDialog').hidden = true; if (r) r(true); };
+$('dlgCancel').onclick = ()=>{ const r = dlgResolve; dlgResolve = null; $('uiDialog').hidden = true; if (r) r(false); };
+document.querySelector('#nodePicker .sheet-mask').onclick = ()=> openPicker(false);
+document.querySelector('#uiDialog .sheet-mask').onclick = ()=>{
+  const r = dlgResolve; dlgResolve = null; $('uiDialog').hidden = true; if (r) r(false);
+};
+window.addEventListener('keydown', (e)=>{
+  if (e.key !== 'Escape') return;
+  if (!$('uiDialog').hidden) { $('dlgCancel').click(); return; }
+  if (!$('nodePicker').hidden) openPicker(false);
+});
+
+let toastTimer = null;
+function uiToast(msg, kind='ok'){
+  const el = $('toast');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'toast ' + kind;
+  el.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>{ el.hidden = true; }, 2600);
+}
+
 function renderPicker(){
   const list = $('pickerList');
   if (!list) return;
   if (!nodes.length) {
-    list.innerHTML = '<div class="picker-row"><span class="pn" style="color:var(--dim)">没有可用节点</span></div>';
+    list.innerHTML = '<div class="sheet-row"><span class="nm" style="color:var(--dim)">没有可用节点</span></div>';
     return;
   }
   list.innerHTML = nodes.map((n)=>`
-    <div class="picker-row ${n.id===selectedNode?'sel':''}" data-id="${n.id}">
-      <span class="st ${n.online?'up':''}"></span>
-      <span class="pn">${n.name||('#'+n.id)}</span>
-      <span class="pe">${(n.endpoint||'').split(':')[0]||''}</span>
+    <div class="sheet-row ${n.id===selectedNode?'sel':''}" data-id="${n.id}">
+      <span class="dot ${n.online?'up':''}"></span>
+      <span class="nm">${n.name||('#'+n.id)}</span>
+      <span class="ep">${(n.endpoint||'').split(':')[0]||''}</span>
     </div>`).join('');
-  list.querySelectorAll('.picker-row[data-id]').forEach((el)=>{
+  list.querySelectorAll('.sheet-row[data-id]').forEach((el)=>{
     el.onclick = async ()=>{ openPicker(false); await pickNode(Number(el.dataset.id)); };
   });
 }
@@ -634,21 +768,24 @@ function loginPoll(code){
 }
 
 $('btnRepair').onclick = async ()=>{
-  if (!confirm('清理本机残留的隧道路由与 DNS 规则？\n适用于「断开后上不了网」的情况。')) return;
+  if (!await uiConfirm('清理本机残留的隧道路由与 DNS 规则？\n适用于「断开后上不了网」的情况。',
+      {title:'修复网络', okText:'开始清理'})) return;
   try {
     await fetch('/api/repair', { method:'POST' });
     await poll();
-    alert('已清理完成，网络应恢复正常。');
-  } catch(e) { alert('修复失败：'+e); }
+    uiToast('已清理完成，网络应恢复正常', 'ok');
+  } catch(e) { uiToast('修复失败：'+e, 'err'); }
 };
 
 $('btnLogout').onclick = async ()=>{
-  if (!confirm('退出登录？本机保存的门户令牌会被清除。')) return;
+  if (!await uiConfirm('退出登录？本机保存的门户令牌会被清除。',
+      {title:'退出登录', okText:'退出', tone:'danger'})) return;
   try {
     await fetch('/api/logout', { method:'POST' });
     await poll();
     closeSettings();
-  } catch(e) { alert('退出失败：'+e); }
+    uiToast('已退出登录', 'ok');
+  } catch(e) { uiToast('退出失败：'+e, 'err'); }
 };
 
 $('btnLogin').onclick = async ()=>{
@@ -667,11 +804,17 @@ $('btnLogin').onclick = async ()=>{
 };
 $('openLogs').onclick = async ()=>{ try{ await fetch('/api/logs/open',{method:'POST'}); }catch(e){} };
 $('save').onclick = async ()=>{
-  await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-    api: $('fAPI').value.trim(), token: $('fToken').value.trim(),
-    insecure: $('fInsecure').checked
-  })});
-  await poll(); closeSettings();
+  try{
+    const r = await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      api: $('fAPI').value.trim(),
+      token: $('fToken').value.trim(),
+      insecure: $('fInsecure').checked,
+      kill_switch: $('fKillSwitch') ? $('fKillSwitch').checked : false
+    })});
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    await poll(); closeSettings();
+    uiToast('设置已保存', 'ok');
+  }catch(e){ uiToast('保存失败：' + (e.message||e), 'err'); }
 };
 
 poll(); loadNodes();

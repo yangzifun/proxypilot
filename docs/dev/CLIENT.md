@@ -330,6 +330,97 @@ Linux 客户端的 DNS 早就用 `resolvectl dns <if> 1.1.1.1 8.8.8.8` + `resolv
 
 > Linux 的 Kill Switch 仍未实现（需 nftables/iptables 规则），作为后续项。
 
+## 7.11 丢包与吞吐优化（2.14+）
+
+### 问题
+
+连接后丢包严重、速度上不去。根因是**读网卡的协程被写流阻塞**：
+
+```
+pumpUp: dev.Read(buf) → conn.SendPacket(pkt)  ← 同步写，等流控
+```
+
+当 QUIC 因丢包重传导致发送窗口耗尽时，`SendPacket` 阻塞，
+`dev.Read` 随之停摆，Wintun 环形缓冲（4MB）被填满，
+**驱动开始丢包** —— 这就是用户感知到的「连上就丢包」。
+
+次要问题是每个报文一次 `Write`（节点侧还是「写头 + 写体 + Flush」三次），
+小包场景下 QUIC 帧开销是有效载荷的数倍，pps 上不去。
+
+### 修复
+
+**客户端**（`stream_tunnel.go`）：
+
+```
+SendPacket → 有界队列（2048 帧，约 2.8MB）  ← 永不阻塞
+writeLoop  → 贪心聚合，攒到 64KB 或 2ms 后一次 Write
+RecvPacket → bufio.Reader(64KB) 缓冲读
+```
+
+**节点**（`masque/node/stream.go`）：同样改为「每会话队列 + 聚合写」，
+`tunLoop` 只做入队，不再被单个慢客户端反压。
+
+代价：队列满时丢弃并计数（`DropStats()`），而不是返回错误 —— 返回错误会让
+上层把整条隧道判死；丢一个包让 TCP 自己重传，对 VPN 更合适。
+
+### 效果
+
+| 指标 | 修复前 | 修复后 |
+|---|---|---|
+| 每 64KB 数据的 QUIC STREAM 帧 | 约 47 个（按 1400B 分包） | 1 个 |
+| 节点侧每包系统调用/语句 | 3（头 + 体 + Flush） | 约 1/47 |
+| 网卡读协程被流控阻塞 | 会 | 不会 |
+
+### 调参
+
+| 参数 | 位置 | 默认 |
+|---|---|---|
+| `sendQueueDepth` / `streamQueueDepth` | 各自模块 | 2048 帧 |
+| `batchMaxBytes` / `streamBatchMax` | 各自模块 | 64 KB |
+| `batchMaxDelay` / `streamBatchDelay` | 各自模块 | 2 ms |
+
+> 2ms 是延迟与吞吐的折中：实时性要求更高的场景可降到 500µs，
+> 纯下载场景可提到 5ms。
+
+## 7.12 窗口与托盘（2.14+ 修复）
+
+### 托盘左键点按无效
+
+原实现用 `tray.ToggleWindow()`，但该方法依赖 `tray.AttachWindow()` 挂接的窗口：
+
+```go
+func (s *SystemTray) ToggleWindow() {
+    if s.attachedWindow.Window == nil { return }   // ← 没挂接就静默返回
+    ...
+}
+```
+
+本项目从未调用 `AttachWindow`，所以点托盘**完全没反应**。
+修复：改成显式判断可见性后 Show/Hide。
+
+### 菜单「显示窗口」点了不出现
+
+只调 `Show()` 在三种情况下无效：窗口被最小化、WebView 因效率模式挂起、窗口在屏幕外。
+修复为固定顺序：
+
+```go
+if window.IsMinimised() { window.UnMinimise() }
+window.Restore()
+window.Show()
+if !centered { window.Center(); centered = true }
+window.SetAlwaysOnTop(true); window.SetAlwaysOnTop(false)  // 抢前台
+window.Focus()
+```
+
+### 弹窗被遮挡
+
+两个原因，都已修：
+
+1. **节点选择层原来嵌在 `<main>` 里**，切到设置/详情页时 `main` 被 `display:none`，
+   弹层跟着消失；且父容器可能裁切。现已移到 `<body>` 直属，`z-index:9999`。
+2. **原生 `confirm()` / `alert()` 在窗口隐藏或失焦时可能弹在看不见的地方**，
+   同时阻塞 JS（用户以为卡死）。已替换为页内对话框 `uiConfirm` / `uiAlert` + `uiToast`。
+
 ## 8. 本地控制台 API
 
 `ui.go` 暴露的本地接口（仅 127.0.0.1，不需要鉴权）：

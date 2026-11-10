@@ -113,9 +113,29 @@ func main() {
 	tray.SetTooltip("ProxyPilot VPN")
 
 	menu := app.NewMenu()
-	menu.Add("显示窗口").OnClick(func(*application.Context) {
+	// showWindow 统一的「把窗口带到前台」逻辑。
+	//
+	// 只调 Show() 在三种情况下无效：窗口被最小化、WebView 因效率模式挂起、
+	// 以及窗口在屏幕外。这里依次做 还原 → 显示 → 居中(首次) → 置顶抖一下 → 聚焦。
+	var centered bool
+	showWindow := func() {
+		if window.IsMinimised() {
+			window.UnMinimise()
+		}
+		window.Restore()
 		window.Show()
+		if !centered {
+			window.Center()
+			centered = true
+		}
+		// Windows 前台锁：先置顶再取消，强制把窗口提到最前
+		window.SetAlwaysOnTop(true)
+		window.SetAlwaysOnTop(false)
 		window.Focus()
+	}
+
+	menu.Add("显示窗口").OnClick(func(*application.Context) {
+		showWindow()
 	})
 	menu.Add("隐藏到托盘").OnClick(func(*application.Context) {
 		window.Hide()
@@ -126,7 +146,7 @@ func main() {
 			log.Printf("托盘连接失败：%v", err)
 			return
 		}
-		window.Show()
+		showWindow()
 	})
 	menu.Add("断开").OnClick(func(*application.Context) {
 		if err := localPost(addr, "/api/disconnect", nil); err != nil {
@@ -136,8 +156,7 @@ func main() {
 	})
 	menu.AddSeparator()
 	menu.Add("打开设置").OnClick(func(*application.Context) {
-		window.Show()
-		window.Focus()
+		showWindow()
 		// 前端监听 hash 变化切到首选项
 		window.ExecJS(`location.hash = '#settings'`)
 	})
@@ -152,15 +171,22 @@ func main() {
 	})
 	tray.SetMenu(menu)
 
-	// 左键单击托盘：切换窗口显示
+	// 左键单击托盘：切换窗口显示。
+	//
+	// 不用 tray.ToggleWindow()：它依赖 tray.AttachWindow() 挂接的窗口，
+	// 未挂接时 attachedWindow.Window == nil，函数直接 return —— 表现为「点了没反应」。
 	tray.OnClick(func() {
-		tray.ToggleWindow()
+		if window.IsVisible() && !window.IsMinimised() {
+			window.Hide()
+			return
+		}
+		showWindow()
 	})
 
 	// 关闭窗口 = 隐藏到托盘（不退出进程）
 	hideOnClose := func(e *application.WindowEvent) {
+		e.Cancel()   // 先取消关闭，保持窗口对象存活
 		window.Hide()
-		e.Cancel()
 	}
 	window.OnWindowEvent(events.Common.WindowClosing, hideOnClose)
 	window.OnWindowEvent(events.Windows.WindowClosing, hideOnClose)

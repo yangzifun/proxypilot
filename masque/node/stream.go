@@ -19,6 +19,18 @@ import (
 
 const maxStreamFrame = 4096
 
+// 下行发送批量聚合参数。
+//
+// 原来每个报文要写两次（长度头 + 载荷）并显式 Flush 一次，
+// 小包场景下 QUIC 帧数量与唤醒次数是有效载荷的数倍，pps 上不去；
+// 写阻塞时还会反压 tunLoop，让所有会话一起卡住。
+// 改成「每会话有界队列 + 聚合写」，tunLoop 只做入队。
+const (
+	streamQueueDepth = 2048
+	streamBatchMax   = 64 * 1024
+	streamBatchDelay = 2 * time.Millisecond
+)
+
 // serveStream 处理 POST /tunnel：鉴权后把该流作为隧道数据面。
 func (s *Server) serveStream(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -49,37 +61,110 @@ func (s *Server) serveStream(w http.ResponseWriter, r *http.Request) {
 	flusher, _ := w.(http.Flusher)
 	var wmu sync.Mutex
 	closed := false
+	q := make(chan []byte, streamQueueDepth)
+	done := make(chan struct{})
+	var closeOnce sync.Once
+	var dropped uint64
+
+	// 下行写协程：聚合多帧后一次 Write，显著减少 QUIC 帧数量。
+	go func() {
+		buf := make([]byte, 0, streamBatchMax)
+		appendFrame := func(pkt []byte) {
+			var hdr [2]byte
+			binary.BigEndian.PutUint16(hdr[:], uint16(len(pkt)))
+			buf = append(buf, hdr[:]...)
+			buf = append(buf, pkt...)
+		}
+		flush := func() bool {
+			if len(buf) == 0 {
+				return true
+			}
+			wmu.Lock()
+			ok := !closed
+			if ok {
+				if _, err := w.Write(buf); err != nil {
+					s.log.Warn("流隧道写回失败", "err", err)
+					ok = false
+				} else if flusher != nil {
+					flusher.Flush()
+				}
+			}
+			wmu.Unlock()
+			buf = buf[:0]
+			return ok
+		}
+		for {
+			select {
+			case <-done:
+				flush()
+				return
+			case pkt := <-q:
+				appendFrame(pkt)
+				for len(buf) < streamBatchMax {
+					select {
+					case p2 := <-q:
+						appendFrame(p2)
+						continue
+					default:
+					}
+					break
+				}
+				if len(buf) < streamBatchMax/4 {
+					timer := time.NewTimer(streamBatchDelay)
+				drain:
+					for len(buf) < streamBatchMax {
+						select {
+						case p2 := <-q:
+							appendFrame(p2)
+						case <-timer.C:
+							break drain
+						case <-done:
+							timer.Stop()
+							flush()
+							return
+						}
+					}
+					timer.Stop()
+				}
+				if !flush() {
+					return
+				}
+			}
+		}
+	}()
 
 	sess := &session{
 		jti: claims.JTI, ip: ip, device: claims.Subject, grantID: claims.GrantID,
 		started: time.Now(),
 	}
+	// send 只做入队，绝不阻塞 tunLoop（否则所有会话一起反压）。
 	sess.send = func(pkt []byte) error {
-		wmu.Lock()
-		defer wmu.Unlock()
-		if closed {
-			return io.ErrClosedPipe
-		}
 		if len(pkt) == 0 || len(pkt) > maxStreamFrame {
 			return fmt.Errorf("报文长度非法：%d", len(pkt))
 		}
-		var hdr [2]byte
-		binary.BigEndian.PutUint16(hdr[:], uint16(len(pkt)))
-		if _, err := w.Write(hdr[:]); err != nil {
-			return err
+		if closed {
+			return io.ErrClosedPipe
 		}
-		if _, err := w.Write(pkt); err != nil {
-			return err
+		cp := make([]byte, len(pkt))
+		copy(cp, pkt)
+		select {
+		case q <- cp:
+			return nil
+		default:
+			dropped++
+			if dropped%1000 == 1 {
+				s.log.Warn("下行发送队列已满，丢弃报文", "ip", ip.String(), "dropped", dropped)
+			}
+			return nil
 		}
-		if flusher != nil {
-			flusher.Flush()
-		}
-		return nil
 	}
 	sess.closeFn = func() {
-		wmu.Lock()
-		closed = true
-		wmu.Unlock()
+		closeOnce.Do(func() {
+			wmu.Lock()
+			closed = true
+			wmu.Unlock()
+			close(done)
+		})
 	}
 
 	if !s.register(sess) {
