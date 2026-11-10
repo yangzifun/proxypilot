@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/x509"
 	"context"
 	"fmt"
 	"io"
@@ -10,6 +11,25 @@ import (
 	"strings"
 	"time"
 )
+
+// rootPoolWithPlatformCA 返回「系统根证书 + 平台内部 CA」组成的信任池。
+//
+// 之前是把 RootCAs 直接替换成「只含平台 CA」的新池子，后果是：
+// 一旦客户端拉过内部 CA（连过 internal_ca 节点），再连 ACME 节点就会报
+//   x509: certificate signed by unknown authority
+// 因为系统根证书被整个丢掉了。正确做法是追加，而不是替换。
+func rootPoolWithPlatformCA() (*x509.CertPool, error) {
+	pool, err := x509.SystemCertPool()
+	if err != nil || pool == nil {
+		pool = x509.NewCertPool()
+	}
+	if len(caPEM) > 0 {
+		if !pool.AppendCertsFromPEM(caPEM) {
+			return nil, fmt.Errorf("CA 证书无效")
+		}
+	}
+	return pool, nil
+}
 
 // fetchPlatformCA 拉取平台内部 CA 证书（公开接口，无需登录）。
 func fetchPlatformCA(ctx context.Context, apiBase string) ([]byte, error) {

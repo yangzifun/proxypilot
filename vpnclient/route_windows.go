@@ -125,7 +125,7 @@ func applyTun(s TunSpec, dev PacketDevice) (TunResult, error) {
 
 	// 断线保护：默认阻断出站 + 白名单（放行隧道/端点/回环/DHCP）
 	if s.KillSwitch {
-		if rules, err := enableKillSwitch(s.EndpointIPs, dev.Name()); err != nil {
+		if rules, err := enableKillSwitch(s.endpointIPs(), dev.Name()); err != nil {
 			logWin("断线保护未启用：%v", err)
 		} else {
 			res.KillSwitchRules = rules

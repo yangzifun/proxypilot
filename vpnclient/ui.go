@@ -634,6 +634,7 @@ func writeJSON(w http.ResponseWriter, v any) {
 func (s *uiServer) disconnect(reason string) {
 	s.state.mu.Lock()
 	cancel := s.state.cancel
+	sessionID := s.state.sessionID
 	conn := s.state.conn
 	tun := s.state.tun
 	s.state.cancel = nil
@@ -662,6 +663,37 @@ func (s *uiServer) disconnect(reason string) {
 	if conn != nil {
 		_ = conn.CloseWithError(0, "client disconnect")
 	}
+	// 通知面板结束会话：否则服务端要等僵尸回收（实测两小时以上），
+	// 期间会话一直算「进行中」，流量统计与并发数都会失真。
+	if sessionID > 0 {
+		go s.releasePanelSession(sessionID)
+	}
+}
+
+// releasePanelSession 调 /api/portal/vpn/disconnect 关闭服务端会话。
+func (s *uiServer) releasePanelSession(sessionID int64) {
+	cfg := s.currentSettings()
+	if strings.TrimSpace(cfg.API) == "" || strings.TrimSpace(cfg.Token) == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	body := fmt.Sprintf("{\"session_id\":%d}", sessionID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		strings.TrimRight(cfg.API, "/")+"/api/portal/vpn/disconnect", strings.NewReader(body))
+	if err != nil {
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+cfg.Token)
+	resp, err := (&http.Client{Timeout: 8 * time.Second}).Do(req)
+	if err != nil {
+		log.Printf("释放面板会话 %d 失败：%v", sessionID, err)
+		return
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+	log.Printf("已释放面板会话 %d（HTTP %d）", sessionID, resp.StatusCode)
 }
 
 func (s *uiServer) connect(nodeID int64) error {
@@ -751,6 +783,11 @@ func (s *uiServer) connect(nodeID int64) error {
 		if sni == "" {
 			sni = strings.Split(pick.Endpoint, ":")[0]
 		}
+		// 每次连接都重置平台 CA：caPEM 是包级变量，若不清空，
+		// 连过 internal_ca 节点后再连 ACME 节点会带着旧 CA，
+		// 表现为「证书由未知机构签发」。
+		caPEM = nil
+
 		// 证书校验策略：
 		//   selfsigned → 跳过校验（节点自签，无信任锚）
 		//   internal_ca → 自动拉取平台 CA（/api/vpn/ca.crt）并严格校验
@@ -840,6 +877,13 @@ func (s *uiServer) connect(nodeID int64) error {
 		endpointIPs := resolveEndpointIPs(pick.Endpoint)
 		log.Printf("VPN 服务器地址解析：%v（原始 %s）", endpointIPs, pick.Endpoint)
 
+		// 面板（控制面）同样加直连主机路由：客户端拉节点、续期、断开都靠它，
+		// 不能让这些请求走进隧道。
+		controlIPs := resolveEndpointIPs(cfg.API)
+		if len(controlIPs) > 0 {
+			log.Printf("控制面地址解析：%v（原始 %s），已排除出隧道", controlIPs, cfg.API)
+		}
+
 		tun, terr := StartTunnel(ctx, TunOptions{
 			Spec: TunSpec{
 				Name:        cfg.TunName,
@@ -849,6 +893,7 @@ func (s *uiServer) connect(nodeID int64) error {
 				Mode:        mode,
 				Endpoint:    pick.Endpoint,
 				EndpointIPs: endpointIPs,
+				ControlIPs:  controlIPs,
 				Gateway:     gateway,
 				PrefixLen:   prefixLen,
 				DNS:         tunDNS,

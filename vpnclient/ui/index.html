@@ -398,14 +398,30 @@ function render(){
   $('badgeText').textContent = st==='connected' ? ('已连接 · '+(state.probe_ok?'数据面正常':'探测中') + rttText)
     : st==='connecting' ? '正在建立会话' : st==='error' ? '连接异常' : '已断开';
 
-  // 已连接显示实际会话节点；未连接显示当前选中的节点（切换后立即生效）
+  // 节点显示优先级：
+  //   1. 选中的节点就是当前会话节点 → 显示真实节点 + MTU
+  //   2. 已选中别的节点（连接中/已连接）→ 立刻显示「待切换」，不必等点了连接
+  //   3. 未连接 → 显示选中的节点「待连接」
+  //   4. 都没有 → 兜底显示会话节点
   const pickedNode = nodes.find((x) => x.id === selectedNode);
-  if (state.node_name) {
+  const activeNodeId = Number(state.node_id) || 0;
+  const live = (st === 'connected' || st === 'connecting');
+  const pickedName = pickedNode ? (pickedNode.name || ('#' + pickedNode.id)) : '';
+  if (live && selectedNode && selectedNode !== activeNodeId) {
+    $('rNode').textContent = pickedName + '（待切换）';
+    $('rNode').className = 'v warn';
+  } else if (state.node_name && (!selectedNode || selectedNode === activeNodeId)) {
     $('rNode').textContent = state.node_name + (state.mtu ? (' · MTU ' + state.mtu) : '');
+    $('rNode').className = 'v';
   } else if (pickedNode) {
-    $('rNode').textContent = (pickedNode.name || ('#' + pickedNode.id)) + '（待连接）';
+    $('rNode').textContent = pickedName + '（待连接）';
+    $('rNode').className = 'v';
+  } else if (state.node_name) {
+    $('rNode').textContent = state.node_name + (state.mtu ? (' · MTU ' + state.mtu) : '');
+    $('rNode').className = 'v';
   } else {
     $('rNode').textContent = '—';
+    $('rNode').className = 'v';
   }
   $('rIP').textContent = state.ip4 || '—';
   $('rDur').textContent = state.duration ? fmtDur(state.duration) : '—';
@@ -512,12 +528,23 @@ $('backDetail').onclick = ()=> closeSettings();
 
 async function pickNode(id){
   if(!id) return;
-  // 只更新选择与显示：不自动重连、不刷新页面，真正生效要点「连接」按钮
+  if (id === selectedNode) return;
+  const wasLive = (state.status==='connected' || state.status==='connecting');
   selectedNode = id;
-  render();
+  render();                       // 先刷新界面，用户立刻看到「待切换」
   try{
     await fetch('/api/select-node',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({node_id:id})});
   }catch(e){ /* 记忆失败不影响本次选择 */ }
+  // 已连接状态下切换节点 → 自动切到新节点，不用再点「连接」
+  if (wasLive) {
+    uiToast('正在切换到 ' + ((nodes.find(x=>x.id===id)||{}).name || ('#'+id)) + '…', 'info');
+    try{
+      const res = await fetch('/api/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({node_id:id})});
+      const j = await res.json().catch(()=>({}));
+      if (j && j.ok === false) uiToast('切换失败：' + (j.error||'未知错误'), 'error');
+    }catch(e){ uiToast('切换失败：' + e.message, 'error'); }
+    setTimeout(poll, 250);
+  }
 }
 
 // 渲染「选择节点」弹层

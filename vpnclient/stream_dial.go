@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"crypto/x509"
 	"fmt"
 	"io"
 	"net/http"
@@ -25,9 +24,9 @@ func openTunnelStream(ctx context.Context, endpoint, sni, token string, insecure
 		InsecureSkipVerify: insecure,
 	}
 	if len(caPEM) > 0 {
-		pool := x509.NewCertPool()
-		if !pool.AppendCertsFromPEM(caPEM) {
-			return nil, nil, fmt.Errorf("CA 证书无效")
+		pool, perr := rootPoolWithPlatformCA()
+		if perr != nil {
+			return nil, nil, perr
 		}
 		tlsConf.RootCAs = pool
 		tlsConf.InsecureSkipVerify = false

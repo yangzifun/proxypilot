@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	"crypto/x509"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -31,7 +30,7 @@ import (
 )
 
 // Version 是 VPN 客户端版本（V1.x）。
-const Version = "2.14"
+const Version = "2.15"
 
 var caPEM []byte
 
@@ -503,9 +502,9 @@ func authHTTP3(ctx context.Context, endpoint, sni, token string, insecure bool) 
 		InsecureSkipVerify: insecure,
 	}
 	if len(caPEM) > 0 {
-		pool := x509.NewCertPool()
-		if !pool.AppendCertsFromPEM(caPEM) {
-			return "", nil, fmt.Errorf("CA 证书无效")
+		pool, perr := rootPoolWithPlatformCA()
+		if perr != nil {
+			return "", nil, perr
 		}
 		tlsConf.RootCAs = pool
 		tlsConf.InsecureSkipVerify = false

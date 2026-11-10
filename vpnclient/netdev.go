@@ -40,6 +40,10 @@ type TunSpec struct {
 	Gateway string
 	// EndpointIPs 是 VPN 服务器已解析出的 IPv4 地址，必须绕过隧道直连。
 	EndpointIPs []string
+	// ControlIPs 是面板/控制面的 IPv4 地址，同样必须直连。
+	// 客户端自己拉节点、续期会话、上报状态都走面板；若这些流量被塞进隧道，
+	// 一旦隧道出问题客户端就再也连不上面板，只能手动断开重来。
+	ControlIPs []string
 	// DNS 是要写入该网卡的 DNS 服务器列表（默认 1.1.1.1 与 8.8.8.8）。
 	DNS []string
 	// KillSwitch 开启断线保护（默认关闭，需用户在设置页开启）。
@@ -182,7 +186,8 @@ func (r TunResult) Summary() string {
 func (s TunSpec) endpointIPs() []string {
 	out := []string{}
 	seen := map[string]bool{}
-	for _, ip := range s.EndpointIPs {
+	// 节点端点 + 面板控制面，两者都要直连
+	for _, ip := range append(append([]string{}, s.EndpointIPs...), s.ControlIPs...) {
 		ip = strings.TrimSpace(ip)
 		if v4 := net.ParseIP(ip); v4 != nil && v4.To4() != nil && !seen[ip] {
 			seen[ip] = true
