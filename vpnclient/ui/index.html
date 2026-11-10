@@ -642,32 +642,12 @@ async function loadNodes(){
     nodes = d.nodes || [];
     lastNodesError = nodes.length ? '' : (d.error ||
       '面板返回 0 个节点：该账号还没有被授权任何节点，或授权已停用');
-    if(!nodes.length){
-      $('nodes').innerHTML =
-        '<div class="nrow nerr"><span class="nm">' + escapeHtml(lastNodesError) + '</span></div>' +
-        '<div class="nrow nacts"><button class="copybtn" id="nodesRetry">重试</button>' +
-        '<button class="copybtn" id="nodesCopy">复制错误</button></div>';
-      const rb = $('nodesRetry'); if(rb) rb.onclick = ()=> loadNodes().then(renderPicker);
-      const cb = $('nodesCopy'); if(cb) cb.onclick = ()=> copyText(nodeErrorText(), '已复制节点错误');
-      return;
-    }
-    $('nodes').innerHTML = nodes.map(n=>`
-      <div class="nrow ${n.id===selectedNode?'sel':''}" data-id="${n.id}">
-        <span class="st ${n.online?'up':''}"></span>
-        <span class="nm">${n.name||n.id}</span>
-        <span class="ep">${(n.endpoint||'').split(':')[0]}</span>
-      </div>`).join('');
-    $('nodes').querySelectorAll('.nrow').forEach(el=>el.onclick=()=>{ pickNode(Number(el.dataset.id)); });
   }catch(e){
-    lastNodesError = '获取节点失败：' + (e && e.message ? e.message : e);
     nodes = [];
-    $('nodes').innerHTML =
-      '<div class="nrow nerr"><span class="nm">' + escapeHtml(lastNodesError) + '</span></div>' +
-      '<div class="nrow nacts"><button class="copybtn" id="nodesRetry">重试</button>' +
-      '<button class="copybtn" id="nodesCopy">复制错误</button></div>';
-    const rb = $('nodesRetry'); if(rb) rb.onclick = ()=> loadNodes().then(renderPicker);
-    const cb = $('nodesCopy'); if(cb) cb.onclick = ()=> copyText(nodeErrorText(), '已复制节点错误');
+    lastNodesError = '获取节点失败：' + (e && e.message ? e.message : e);
   }
+  // 渲染统一交给 renderPicker：节点列表只存在于弹层里（#pickerList）
+  renderPicker();
 }
 
 // 节点获取失败时复制的文本：带上关键上下文，便于定位
@@ -768,12 +748,20 @@ function uiToast(msg, kind='ok'){
 }
 
 function renderPicker(){
-  const list = $('pickerList');
-  if (!list) return;
-  if (!nodes.length) {
-    list.innerHTML = '<div class="sheet-row"><span class="nm" style="color:var(--dim)">没有可用节点</span></div>';
-    return;
-  }
+    const list = $('pickerList');
+    if (!list) return;
+    if (!nodes.length) {
+      const msg = lastNodesError || '没有可用节点';
+      list.innerHTML =
+        '<div class="sheet-row" style="display:block"><span class="nm" style="color:#f43f5e;line-height:1.6">'
+        + escapeHtml(msg) + '</span></div>'
+        + '<div class="sheet-row nacts">'
+        + '<button class="copybtn" id="nodesRetry">重试</button>'
+        + '<button class="copybtn" id="nodesCopy">复制错误</button></div>';
+      const rb = $('nodesRetry'); if(rb) rb.onclick = ()=> { rb.textContent = '重试中…'; loadNodes(); };
+      const cb = $('nodesCopy'); if(cb) cb.onclick = ()=> copyText(nodeErrorText(), '已复制节点错误');
+      return;
+    }
   list.innerHTML = nodes.map((n)=>`
     <div class="sheet-row ${n.id===selectedNode?'sel':''}" data-id="${n.id}">
       <span class="dot ${n.online?'up':''}"></span>
@@ -789,7 +777,7 @@ function openPicker(on){
   const box = $('nodePicker');
   if (!box) return;
   box.hidden = !on;
-  if (on) { renderPicker(); loadNodes().then(renderPicker); }
+  if (on) { renderPicker(); loadNodes(); }
 }
 
 async function toggle(){
