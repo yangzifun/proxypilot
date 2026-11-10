@@ -864,10 +864,15 @@ func (s *uiServer) connect(nodeID int64) error {
 				}
 			}
 		}
-		// 网卡 DNS 固定 1.1.1.1 与 8.8.8.8
-		// 8.8.8.8 在国内常被拦，客户端刚连上时会先卡在它上面再回退，
-		// 表现为「连上后要等一会才真的能用」。改用 1.1.1.1 + 223.5.5.5。
-		tunDNS := []string{"1.1.1.1", "223.5.5.5"}
+		// DNS 选择：
+		//   1. 优先用节点网关（节点内置轻量 DNS 转发，就近解析、少一跳 NAT）
+		//   2. 网关不可用时回落到公共 DNS
+		// 8.8.8.8 在国内常被拦，用它会「连上后先卡几秒再回退」，故不使用。
+		tunDNS := make([]string, 0, 3)
+		if gw := strings.TrimSpace(gateway); gw != "" {
+			tunDNS = append(tunDNS, gw)
+		}
+		tunDNS = append(tunDNS, "1.1.1.1", "223.5.5.5")
 		log.Printf("隧道参数：地址=%s 网关=%s 网段=%s DNS=%v", prof.IP4, gateway, cidr, tunDNS)
 		pc, cleanupStream, serr := openTunnelStream(ctx, pick.Endpoint, sni, prof.Token, skipVerify)
 		if serr != nil {

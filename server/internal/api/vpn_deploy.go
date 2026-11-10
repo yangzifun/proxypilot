@@ -30,6 +30,9 @@ type vpnNodeConfig struct {
 	Issuer      string   `json:"issuer"`
 	Audience    string   `json:"audience"`
 	DNS         []string `json:"dns"`
+	// 节点在网关 53 上跑轻量 DNS 转发，客户端解析就交给它
+	DNSRelay    bool     `json:"dns_relay"`
+	DNSUpstream []string `json:"dns_upstream"`
 	Configure   bool     `json:"configure"`
 }
 
@@ -134,6 +137,10 @@ func (h *handlers) vpnAdminNodeDeploy(w http.ResponseWriter, r *http.Request) {
 		Issuer:      "proxypilot",
 		Audience:    "masque-node",
 		DNS:         []string{cidrGateway(node.ClientCIDR)},
+		// 客户端把 DNS 指向节点网关，节点必须真的在那里应答，
+		// 否则客户端连上后所有域名解析都会超时。
+		DNSRelay:    true,
+		DNSUpstream: []string{"1.1.1.1", "223.5.5.5"},
 		Configure:   true,
 	}
 	cfgJSON, err := json.MarshalIndent(cfg, "", "  ")

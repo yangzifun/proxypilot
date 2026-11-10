@@ -38,6 +38,13 @@ type Config struct {
 
 	DNS []string `json:"dns"`
 
+	// DNSRelay 在内网网关（Gateway4）的 53 端口启动轻量 DNS 转发。
+	// 为 nil 时按「Configure 为真则开启」自动决定。
+	DNSRelay *bool `json:"dns_relay"`
+
+	// DNSUpstream 上游解析器；留空用 1.1.1.1 / 223.5.5.5。
+	DNSUpstream []string `json:"dns_upstream"`
+
 	// Configure 为 true 时自动配置 TUN 地址/MTU、ip_forward 与 NAT/隔离规则。
 	Configure bool `json:"configure"`
 
@@ -104,6 +111,11 @@ func (c *Config) Normalize() error {
 	}
 	if c.CertFile == "" || c.KeyFile == "" {
 		return fmt.Errorf("cert_file 与 key_file 必填")
+	}
+	// DNS 转发：默认在网关 53 上开（客户端配置里 dns 声明的就是这个地址）
+	if c.DNSRelay == nil {
+		on := c.Configure
+		c.DNSRelay = &on
 	}
 	return nil
 }

@@ -8,16 +8,82 @@ github.com/coder/websocket/internal/wsjs
 # github.com/creack/pty v1.1.24
 ## explicit; go 1.18
 github.com/creack/pty
-# golang.org/x/net v0.38.0
+# github.com/quic-go/qpack v0.5.1
+## explicit; go 1.22
+github.com/quic-go/qpack
+# github.com/quic-go/quic-go v0.55.0
+## explicit; go 1.24
+github.com/quic-go/quic-go
+github.com/quic-go/quic-go/http3
+github.com/quic-go/quic-go/internal/ackhandler
+github.com/quic-go/quic-go/internal/congestion
+github.com/quic-go/quic-go/internal/flowcontrol
+github.com/quic-go/quic-go/internal/handshake
+github.com/quic-go/quic-go/internal/monotime
+github.com/quic-go/quic-go/internal/protocol
+github.com/quic-go/quic-go/internal/qerr
+github.com/quic-go/quic-go/internal/utils
+github.com/quic-go/quic-go/internal/utils/linkedlist
+github.com/quic-go/quic-go/internal/utils/ringbuffer
+github.com/quic-go/quic-go/internal/wire
+github.com/quic-go/quic-go/logging
+github.com/quic-go/quic-go/quicvarint
+# github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
+## explicit
+github.com/songgao/water
+# github.com/yzfn/proxypilot/masque v0.0.0 => ../masque
+## explicit; go 1.24
+github.com/yzfn/proxypilot/masque/node
+# golang.org/x/crypto v0.41.0
 ## explicit; go 1.23.0
+golang.org/x/crypto/chacha20
+golang.org/x/crypto/chacha20poly1305
+golang.org/x/crypto/hkdf
+golang.org/x/crypto/internal/alias
+golang.org/x/crypto/internal/poly1305
+# golang.org/x/mod v0.27.0
+## explicit; go 1.23.0
+golang.org/x/mod/internal/lazyregexp
+golang.org/x/mod/module
+golang.org/x/mod/semver
+# golang.org/x/net v0.43.0
+## explicit; go 1.23.0
+golang.org/x/net/bpf
 golang.org/x/net/http/httpguts
 golang.org/x/net/http2
 golang.org/x/net/http2/hpack
 golang.org/x/net/idna
 golang.org/x/net/internal/httpcommon
-# golang.org/x/text v0.23.0
+golang.org/x/net/internal/iana
+golang.org/x/net/internal/socket
+golang.org/x/net/ipv4
+golang.org/x/net/ipv6
+# golang.org/x/sync v0.16.0
+## explicit; go 1.23.0
+golang.org/x/sync/errgroup
+# golang.org/x/sys v0.35.0
+## explicit; go 1.23.0
+golang.org/x/sys/cpu
+golang.org/x/sys/unix
+golang.org/x/sys/windows
+golang.org/x/sys/windows/registry
+# golang.org/x/text v0.28.0
 ## explicit; go 1.23.0
 golang.org/x/text/secure/bidirule
 golang.org/x/text/transform
 golang.org/x/text/unicode/bidi
 golang.org/x/text/unicode/norm
+# golang.org/x/tools v0.36.0
+## explicit; go 1.23.0
+golang.org/x/tools/go/ast/astutil
+golang.org/x/tools/imports
+golang.org/x/tools/internal/event
+golang.org/x/tools/internal/event/core
+golang.org/x/tools/internal/event/keys
+golang.org/x/tools/internal/event/label
+golang.org/x/tools/internal/gocommand
+golang.org/x/tools/internal/gopathwalk
+golang.org/x/tools/internal/imports
+golang.org/x/tools/internal/modindex
+golang.org/x/tools/internal/stdlib
+# github.com/yzfn/proxypilot/masque => ../masque

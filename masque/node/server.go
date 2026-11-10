@@ -53,6 +53,7 @@ type Server struct {
 	log      *slog.Logger
 	verifier *Verifier
 	tun      tunDevice
+	dns      *dnsRelay
 
 	mu       sync.Mutex
 	sessions map[string]*session // ip4 -> session
@@ -100,6 +101,18 @@ func (s *Server) Run(ctx context.Context) error {
 			return fmt.Errorf("配置 TUN/NAT: %w", err)
 		}
 		defer cleanupTUN(s.cfg)
+	}
+
+	// ---- 轻量 DNS 转发：监听网关 53，供客户端把域名解析交给节点 ----
+	if s.cfg.DNSRelay == nil || *s.cfg.DNSRelay {
+		relay := newDNSRelay(net.JoinHostPort(s.cfg.Gateway4, "53"), s.cfg.DNSUpstream, s.log)
+		if err := relay.Start(); err != nil {
+			// 不致命：DNS 转发起不来不该让整条隧道失效，客户端还能用公共 DNS
+			s.log.Warn("DNS 转发启动失败，客户端将回退到公共 DNS", "err", err)
+		} else {
+			s.dns = relay
+			defer relay.Close()
+		}
 	}
 
 	tlsConf := &tls.Config{
