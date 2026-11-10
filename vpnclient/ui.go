@@ -1023,11 +1023,11 @@ func (s *uiServer) fail(cancel context.CancelFunc, attempt int64, stage string, 
 
 // connectPortal 调 /api/portal/vpn/connect 换连接票据。
 func connectPortal(ctx context.Context, api, token string, deviceID, nodeID int64) (*profile, error) {
-	body := fmt.Sprintf(`{"device_id":%d,"node_id":%d}`, deviceID, nodeID)
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, api+"/api/portal/vpn/connect", strings.NewReader(body))
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := panelHTTP.Do(req)
+	body := []byte(fmt.Sprintf(`{"device_id":%d,"node_id":%d}`, deviceID, nodeID))
+	url := strings.TrimRight(api, "/") + "/api/portal/vpn/connect"
+	resp, err := panelDo(ctx, func(c context.Context) (*http.Request, error) {
+		return panelRequest(c, http.MethodPost, url, body, token)
+	}, 3)
 	if err != nil {
 		return nil, err
 	}

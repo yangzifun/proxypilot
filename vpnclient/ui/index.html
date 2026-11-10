@@ -540,7 +540,7 @@ function render(){
     $('rNode').textContent = state.node_name + (state.mtu ? (' · MTU ' + state.mtu) : '');
     $('rNode').className = 'v';
   } else {
-    $('rNode').textContent = '—';
+    $('rNode').textContent = state.logged_in ? '点击选择' : '未登录';
     $('rNode').className = 'v';
   }
   $('rIP').textContent = state.ip4 || '—';
@@ -555,9 +555,11 @@ function render(){
 
   const fmtBytes = (n)=>{ n=Number(n||0); if(n<1024) return n+' B'; if(n<1048576) return (n/1024).toFixed(1)+' KB'; return (n/1048576).toFixed(2)+' MB'; };
   $('rTraffic').textContent = (state.rx||state.tx) ? ('↓'+fmtBytes(state.rx)+' ↑'+fmtBytes(state.tx)) : '—';
-  if(state.net_ok){ $('rNet').textContent = '通 · ' + state.net_rtt_ms + ' ms'; $('rNet').className = 'v ok'; }
-  else if(state.net_error){ $('rNet').textContent = '不通'; $('rNet').className = 'v bad'; $('rNet').title = state.net_error; }
-  else { $('rNet').textContent = '检测中…'; $('rNet').className = 'v'; }
+  const netRow = $('rNet');
+  if(st === 'idle'){ netRow.textContent = '—'; netRow.className = 'v'; netRow.title = ''; }
+  else if(state.net_ok){ netRow.textContent = '通 · ' + state.net_rtt_ms + ' ms'; netRow.className = 'v ok'; netRow.title = state.probe_info || ''; }
+  else if(state.net_error){ netRow.textContent = '不通'; netRow.className = 'v bad'; netRow.title = state.net_error; }
+  else { netRow.textContent = '检测中…'; netRow.className = 'v'; netRow.title = ''; }
   $('rAdapter').textContent = state.adapter || (state.tun_error ? '接管失败' : '—');
   $('rAdapter').className = 'v' + (state.adapter ? ' ok' : state.tun_error ? ' bad' : '');
   const routes = state.routes || [];

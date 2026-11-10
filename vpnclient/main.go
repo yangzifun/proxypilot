@@ -30,7 +30,7 @@ import (
 )
 
 // Version 是 VPN 客户端版本（V1.x）。
-const Version = "2.22"
+const Version = "2.23"
 
 var caPEM []byte
 
@@ -217,9 +217,11 @@ func runCLI() {
 }
 
 func listNodes(ctx context.Context, api, token string) ([]node, error) {
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, api+"/api/portal/vpn/nodes", nil)
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := panelHTTP.Do(req)
+	url := strings.TrimRight(api, "/") + "/api/portal/vpn/nodes"
+	// 弱网下重试两次：一次失败就报「加载不出节点」体验太差
+	resp, err := panelDo(ctx, func(c context.Context) (*http.Request, error) {
+		return panelRequest(c, http.MethodGet, url, nil, token)
+	}, 3)
 	if err != nil {
 		return nil, err
 	}
