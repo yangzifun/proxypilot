@@ -9,7 +9,14 @@
 #        安装脚本、SHA256SUMS.txt 与 MANIFEST.txt
 # =====================================================================
 [CmdletBinding()]
-param([switch]$SkipTests)
+param(
+    [switch]$SkipTests,
+    # 构建后清理 dist-release 里旧版本的产物，只保留本次构建的版本。
+    # 默认关闭，避免误删还要分发的旧安装包。
+    [switch]$Prune,
+    # 只报告会删什么，不真删
+    [switch]$PruneDryRun
+)
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
@@ -151,6 +158,44 @@ $manifest += "            安装后从开始菜单/桌面图标启动 ProxyPilot
 $manifest += "            卸载：设置 → 应用 → ProxyPilot VPN，或运行 uninstall.cmd"
 $manifest += "  客户端自检 proxypilot-vpn-$clientVer-windows-amd64-cli.exe -tun-selftest"
 [System.IO.File]::WriteAllText((Join-Path $out 'MANIFEST.txt'), ($manifest -join "`n") + "`n", (New-Object System.Text.UTF8Encoding($false)))
+
+# ---- 清理旧版本产物 ----
+# dist-release 之前从不清理，每构建一次就多留一套安装包
+# （客户端 2.14 / 2.15 / 2.16 各约 74 MB），很快堆到几百 MB。
+# 规则：按「产品前缀 + 版本号」分组，只保留本次构建的版本。
+if ($Prune) {
+    Step '清理旧版本产物'
+    $families = @(
+        @{ Name = '客户端'; Pattern = '^proxypilot-vpn-([0-9.]+)-'; Keep = $clientVer },
+        @{ Name = 'Agent';  Pattern = '^proxypilot-agent-([0-9.]+)-'; Keep = $agentVer },
+        @{ Name = '面板';   Pattern = '^proxypilot-(V[0-9.]+)-linux-'; Keep = $panelVer },
+        @{ Name = '桌面壳'; Pattern = '^pp-app-([0-9.]+)[.]exe$'; Keep = $clientVer }
+    )
+    $removed = 0
+    $freed = 0
+    foreach ($fam in $families) {
+        foreach ($f in Get-ChildItem $out -File) {
+            $m = [regex]::Match($f.Name, $fam.Pattern)
+            if (-not $m.Success) { continue }
+            $ver = $m.Groups[1].Value
+            if ($ver -eq $fam.Keep) { continue }
+            $freed += $f.Length
+            $removed++
+            if ($PruneDryRun) {
+                Write-Host ("   [dry] 将删除 {0}（{1} {2}）" -f $f.Name, $fam.Name, $ver) -ForegroundColor DarkYellow
+            } else {
+                Remove-Item $f.FullName -Force
+                Write-Host ("   已删除 {0}（{1} {2}）" -f $f.Name, $fam.Name, $ver) -ForegroundColor DarkYellow
+            }
+        }
+    }
+    if ($removed -eq 0) {
+        Ok '没有需要清理的旧版本'
+    } else {
+        $verb = if ($PruneDryRun) { '可释放' } else { '已释放' }
+        Ok ("{0} {1} 个旧文件，{2:N1} MB" -f $verb, $removed, ($freed / 1MB))
+    }
+}
 
 Step '完成'
 $all = Get-ChildItem $out -File
