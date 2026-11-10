@@ -85,7 +85,10 @@ func (t *Tunnel) pumpUp() {
 	}()
 	log.Printf("数据面：网卡→隧道 协程已启动")
 	first := true
-	buf := make([]byte, 2048)
+	// 读缓冲必须是 64KB 级别：Windows 的发送卸载（GSO/LSO）会把多个分段
+	// 一次性交给网卡驱动，单个超级包可达几十 KB；用 2048 去读会被截断，
+	// 我们就发出一堆「IP 头声明 1278 字节、实际只有 40 字节」的残包。
+	buf := make([]byte, maxReadPacket)
 	for {
 		if t.ctx.Err() != nil {
 			return
@@ -105,27 +108,56 @@ func (t *Tunnel) pumpUp() {
 			first = false
 		}
 		raw := buf[:n]
-		pkt := stripIPv4(raw)
+
+		// 一次读到的东西可能是「一个包」，也可能是 Windows 卸递交上来的
+		// 「多段合体包」。按 IP 头里的 total length 逐段切开发送。
+		sent, bad, leftover := t.sendRawIPBuffer(raw)
+		if sent > 0 {
+			t.txPkts.Add(int64(sent))
+		}
+		if bad > 0 {
+			cnt := t.badInner.Add(int64(bad))
+			if int(cnt) <= 8 {
+				logInnerMismatch(raw, int(cnt))
+			}
+		}
+		if leftover > 0 && t.ctx.Err() == nil {
+			// IPv6 背景流量（MLD/NS）也会走到这里，按次数限流打印
+			if n := t.badInner.Load(); n <= 8 {
+				log.Printf("数据面：缓冲尾部 %d 字节凑不成完整 IP 报文，已丢弃", leftover)
+			}
+		}
+	}
+}
+
+// sendRawIPBuffer 把一次网卡读取的字节按 IP 报文切开逐个送出。
+//
+// 返回：成功发出的包数、判为异常的包数、凑不成完整报文而丢弃的字节数。
+func (t *Tunnel) sendRawIPBuffer(raw []byte) (sent, bad, leftover int) {
+	off := 0
+	for off < len(raw) {
+		rest := raw[off:]
+		pkt := stripIPv4(rest)
 		if len(pkt) == 0 {
-			log.Printf("数据面：网卡报文无法解析（%s）", describeTunRead(raw))
-			continue
+			return sent, bad, len(rest)
 		}
-		// 自检：帧长度必须与 IP 头声明一致，否则节点会判为坏包
-		if msg := checkInnerPacket(pkt); msg != "" {
-			cnt := t.badInner.Add(1)
-			logInnerMismatch(pkt, int(cnt))
-			// 丢掉这个包：发出去也只会被节点丢弃，还会污染统计
-			continue
+		skip := len(rest) - len(pkt) // stripIPv4 可能跳过的前导字节
+		total := ipTotalLen(pkt)
+		if total < 20 || total > len(pkt) {
+			return sent, bad + 1, len(pkt)
 		}
+		pkt = pkt[:total]
 		if err := t.conn.SendPacket(pkt); err != nil {
 			if t.ctx.Err() == nil {
 				t.fail(fmt.Sprintf("发送失败：%v", err))
 			}
-			return
+			return sent, bad, 0
 		}
+		sent++
 		t.txBytes.Add(int64(len(pkt)))
-		t.txPkts.Add(1)
+		off += skip + total
 	}
+	return sent, bad, 0
 }
 
 // pumpDown 收 QUIC DATAGRAM → 写网卡。

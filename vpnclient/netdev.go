@@ -6,6 +6,10 @@ import (
 	"strings"
 )
 
+// maxReadPacket 是单次网卡读取的缓冲上限。
+// 取 64KB 是为了容纳 Windows 卸载机制递交的「多段合体包」。
+const maxReadPacket = 64 * 1024
+
 // PacketDevice 抽象各平台的虚拟网卡（Linux/macOS: /dev/net/tun；Windows: Wintun）。
 type PacketDevice interface {
 	// Name 返回系统里看到的网卡名（Windows 为适配器名称）。
