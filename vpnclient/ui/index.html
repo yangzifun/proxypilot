@@ -220,6 +220,8 @@
     <div class="field"><label>面板地址</label><input id="fAPI" placeholder="https://proxypilot.yangzifun.org"></div>
     <div class="field"><label>门户令牌</label><input id="fToken" placeholder="粘贴门户登录令牌"></div>
     <label class="check"><input type="checkbox" id="fInsecure"> 跳过节点证书校验</label>
+    <label class="check"><input type="checkbox" id="fKillSwitch"> 断线保护（连接期间阻断隧道外流量）</label>
+    <div class="hint2" style="margin:-6px 0 4px 22px">开启后若客户端异常退出，会暂时无法上网；重新打开客户端会自动恢复。</div>
     <div class="row" style="border-bottom:0"><span class="k">当前在线时长</span><span class="v" id="rDur">—</span></div>
     <div class="field">
       <label>客户端日志</label>
@@ -246,6 +248,7 @@
       <div class="row"><span class="k">接管状态</span><span class="v" id="rTakeover">—</span></div>
       <div class="row"><span class="k">DNS 泄露防护</span><span class="v" id="rDnsGuard">—</span></div>
       <div class="row"><span class="k">IPv6 泄露防护</span><span class="v" id="rIPv6Guard">—</span></div>
+      <div class="row"><span class="k">断线保护</span><span class="v" id="rKillSwitch">—</span></div>
     </div>
     <div class="notice" id="noticeDetail"></div>
   </section>
@@ -360,6 +363,14 @@ function render(){
     else { v6.textContent = st === 'connected' ? '未封禁' : '—'; v6.className = 'v'; }
   }
 
+  const ks = $('rKillSwitch');
+  if (ks) {
+    const rules = state.kill_switch_rules || [];
+    if (rules.length) { ks.textContent = '已启用（' + rules.length + ' 条白名单）'; ks.className = 'v ok'; }
+    else if (state.kill_switch) { ks.textContent = st === 'connected' ? '未生效' : '未连接'; ks.className = 'v'; }
+    else { ks.textContent = '未开启'; ks.className = 'v'; }
+  }
+
   const nd = $('noticeDetail');
   if (nd) nd.textContent = (st === 'error' && state.message) ? state.message : '';
 
@@ -465,6 +476,7 @@ function openSettings(){
   $('fToken').value = '';
   $('fToken').placeholder = state.logged_in ? ('已保存：'+state.token_hint) : '粘贴门户登录令牌';
   $('fInsecure').checked = !!state.insecure;
+  if ($('fKillSwitch')) $('fKillSwitch').checked = !!state.kill_switch;
   $('fLogPath').value = state.log_path || '';
 }
 function closeSettings(){

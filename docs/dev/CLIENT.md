@@ -228,6 +228,49 @@ POST /api/disconnect（空 body，托盘）  → 200
 
 Linux/macOS 暂无等价实现（`secret_unix.go` 直通，文件权限 0600）。
 
+## 7.8 断线保护 / Kill Switch（2.11+）
+
+目标：连接期间除「隧道内流量」与「到节点的 QUIC」外，禁止一切出站，
+防止隧道中断瞬间流量裸奔。
+
+### 为什么不能用「阻断物理网卡 + 放行端点」
+
+Windows 防火墙里 **Block 规则优先级高于 Allow**，一旦对物理网卡下 Block，
+到节点的 QUIC 也会被拦，隧道直接断。
+
+### 实现：默认出站阻断 + 白名单
+
+```powershell
+# 1) 三个 profile 默认出站改 Block（记录原值）
+Set-NetFirewallProfile -Profile Domain,Private,Public -DefaultOutboundAction Block
+
+# 2) 白名单
+New-NetFirewallRule -DisplayName 'ProxyPilot-KS-loopback' -Direction Outbound -Action Allow -RemoteAddress 127.0.0.0/8,::1
+New-NetFirewallRule -DisplayName 'ProxyPilot-KS-tun'      -Direction Outbound -Action Allow -InterfaceAlias 'ProxyPilot VPN'
+New-NetFirewallRule -DisplayName 'ProxyPilot-KS-ep-*'     -Direction Outbound -Action Allow -Protocol Any -RemoteAddress <节点IP>/32
+New-NetFirewallRule -DisplayName 'ProxyPilot-KS-dhcp'     -Direction Outbound -Action Allow -Protocol UDP -RemotePort 67 -RemoteAddress 255.255.255.255
+```
+
+顺序很重要：**先白名单，最后切默认动作**；切换失败立刻回滚（删除规则 + 还原 Allow），
+避免把机器切成断网状态。
+
+### 恢复
+
+| 场景 | 行为 |
+|---|---|
+| 用户断开 | `cleanupTun` → `disableKillSwitch()` 删规则 + 还原默认动作 |
+| 退出客户端 | 先 `/api/disconnect` 再退出（2.7 起） |
+| 崩溃/断电 | 标记文件 `%APPDATA%\ppvpn\killswitch.json` 记录原 profile 值，启动时 `restoreKillSwitchFromMarker()` 还原 |
+
+### 开关
+
+设置页「断线保护（连接期间阻断隧道外流量）」，默认**关闭**。
+开启后异常退出会暂时无法上网，重新打开客户端即恢复 —— 这是 fail-closed 的代价。
+
+详情页显示：`断线保护  已启用（6 条白名单）`。
+
+> Linux/macOS 暂未实现（需 nftables / pf），`killswitch_unix.go` 为空实现。
+
 ## 8. 本地控制台 API
 
 `ui.go` 暴露的本地接口（仅 127.0.0.1，不需要鉴权）：

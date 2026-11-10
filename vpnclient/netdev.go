@@ -42,6 +42,8 @@ type TunSpec struct {
 	EndpointIPs []string
 	// DNS 是要写入该网卡的 DNS 服务器列表（默认 1.1.1.1 与 8.8.8.8）。
 	DNS []string
+	// KillSwitch 开启断线保护（默认关闭，需用户在设置页开启）。
+	KillSwitch bool
 }
 
 func (s TunSpec) mtu() int {
@@ -150,6 +152,8 @@ type TunResult struct {
 	DNSGuard []string
 	// IPv6Disabled 记录被临时关闭 IPv6 的物理网卡（断开时恢复）
 	IPv6Disabled []string
+	// KillSwitchRules 记录断线保护下发过的防火墙规则（断开时删除）
+	KillSwitchRules []string
 }
 
 func (r TunResult) Summary() string {

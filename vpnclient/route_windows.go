@@ -122,6 +122,15 @@ func applyTun(s TunSpec, dev PacketDevice) (TunResult, error) {
 	// IPv6 泄露防护：TUN 只有 IPv4，物理网卡的公网 IPv6 会绕过隧道直连。
 	// 连接期间关闭物理网卡的 IPv6 绑定，断开时恢复。
 	res.IPv6Disabled = disablePhysicalIPv6()
+
+	// 断线保护：默认阻断出站 + 白名单（放行隧道/端点/回环/DHCP）
+	if s.KillSwitch {
+		if rules, err := enableKillSwitch(s.EndpointIPs, dev.Name()); err != nil {
+			logWin("断线保护未启用：%v", err)
+		} else {
+			res.KillSwitchRules = rules
+		}
+	}
 	return res, nil
 }
 
@@ -133,6 +142,9 @@ func applyTun(s TunSpec, dev PacketDevice) (TunResult, error) {
 func cleanupTun(res TunResult) {
 	// 1) 撤销 DNS 守卫（NRPT + 物理网卡 DNS 封禁），否则断开后所有域名解析失败
 	revertDNSGuard()
+
+	// 1.4) 关闭断线保护（先恢复出站，避免清理过程中断网）
+	disableKillSwitch()
 
 	// 1.5) 恢复物理网卡 IPv6（可能为空，幂等）
 	restoreIPv6(res.IPv6Disabled)

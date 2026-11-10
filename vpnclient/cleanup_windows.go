@@ -20,6 +20,9 @@ func cleanStaleTunnel() {
 	// 上次若在连接中断电/强杀，物理网卡的 IPv6 可能仍是禁用状态，先恢复
 	restoreIPv6FromMarker()
 
+	// 断线保护同理：默认阻断出站必须还原，否则整机联网失败
+	restoreKillSwitchFromMarker()
+
 	name := defaultTunName()
 	if name == "" {
 		return

@@ -102,6 +102,8 @@ type uiSettings struct {
 	TunName string `json:"tun_name"`
 	// 是否把系统 DNS 指到隧道内（留空=不改）
 	SetDNS bool `json:"set_dns"`
+	// KillSwitch 连接期间阻断隧道外流量（断线保护）
+	KillSwitch bool `json:"kill_switch"`
 	// 组网网段（默认 10.99.0.0/16）
 	MeshCIDR string `json:"mesh_cidr"`
 }
@@ -219,7 +221,8 @@ type sessionState struct {
 	tunMode  string
 	tunErr   string
 	dnsGuard  []string
-	ipv6Guard []string
+	ipv6Guard      []string
+	killSwitchRules []string
 }
 
 func (s *sessionState) snapshot() map[string]any {
@@ -263,6 +266,7 @@ func (s *sessionState) snapshot() map[string]any {
 		"tun_ready":  s.adapter != "",
 		"dns_guard":  append([]string{}, s.dnsGuard...),
 		"ipv6_guard": append([]string{}, s.ipv6Guard...),
+		"kill_switch_rules": append([]string{}, s.killSwitchRules...),
 	}
 }
 
@@ -448,6 +452,7 @@ func (s *uiServer) handleState(w http.ResponseWriter, r *http.Request) {
 	payload["platform"] = runtime.GOOS
 	payload["token_hint"] = maskToken(cfg.Token)
 	payload["secret_storage"] = secretStorageKind
+	payload["kill_switch"] = cfg.KillSwitch
 	payload["version"] = Version
 	payload["selected_node"] = cfg.SelectedNode
 	writeJSON(w, payload)
@@ -488,6 +493,7 @@ func (s *uiServer) handleSettings(w http.ResponseWriter, r *http.Request) {
 	if body.Token != "" {
 		s.cfg.Token = strings.TrimSpace(body.Token)
 	}
+	s.cfg.KillSwitch = body.KillSwitch
 	// DNS 探测地址、接管范围、网卡名一律使用固定值，不接受客户端提交
 	s.cfg.TunMode = string(TunModeFull)
 	s.cfg.TunName = ""
@@ -639,6 +645,7 @@ func (s *uiServer) disconnect(reason string) {
 	s.state.adapter = ""
 	s.state.dnsGuard = nil
 	s.state.ipv6Guard = nil
+	s.state.killSwitchRules = nil
 	s.state.gateway = ""
 	s.state.netOK = false
 	s.state.netRTT = 0
@@ -845,6 +852,7 @@ func (s *uiServer) connect(nodeID int64) error {
 				Gateway:     gateway,
 				PrefixLen:   prefixLen,
 				DNS:         tunDNS,
+				KillSwitch:  s.cfg.KillSwitch,
 			},
 			Conn: pc,
 			OnStats: func(rx, tx int64) {
@@ -877,6 +885,7 @@ func (s *uiServer) connect(nodeID int64) error {
 				st.adapter = res.Adapter
 		st.dnsGuard = append([]string{}, res.DNSGuard...)
 		st.ipv6Guard = append([]string{}, res.IPv6Disabled...)
+		st.killSwitchRules = append([]string{}, res.KillSwitchRules...)
 				st.gateway = res.Gateway
 				st.routes = res.Routes
 				st.tunMode = string(res.Mode)
