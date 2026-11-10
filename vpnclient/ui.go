@@ -231,6 +231,8 @@ type sessionState struct {
 
 	// 数据面对象：用来取客户端发送队列丢弃数
 	pc *streamPacketConn
+	// panelBypass 记录已加直连路由的面板 IP（诊断用）
+	panelBypass []string
 	// 从 pc / QUIC 连接刷新出来的实时计数
 	dropUplink uint64
 	innerBad   uint64
@@ -281,7 +283,8 @@ func (s *sessionState) snapshot() map[string]any {
 		"net_ok":     s.netOK,
 		"net_rtt_ms": s.netRTT,
 		"net_error":  s.netErr,
-		"nodes_count": s.nodesCount,
+		"panel_bypass": append([]string{}, s.panelBypass...),
+		"nodes_count":  s.nodesCount,
 		"nodes_error": s.nodesErr,
 		"tunnel_quality": map[string]any{
 			"sent": s.qSent, "ok": s.qOK, "lost": s.qLost,
@@ -754,6 +757,42 @@ func (s *uiServer) disconnect(reason string) {
 	}
 }
 
+// keepPanelBypassed 周期性重解析面板域名，把新出现的 IP 补成 /32 直连。
+//
+// 事故背景：面板在 Cloudflare 后面有两个 A 记录（如 172.67.138.128 /
+// 104.21.64.253）。连接时只给当时解析到的那个加了直连路由，Cloudflare
+// 轮换到另一个时，面板请求就被塞进隧道；隧道一抖就报
+// net/http: TLS handshake timeout。
+func (s *uiServer) keepPanelBypassed(ctx context.Context, attempt int64, apiBase string, known []string) {
+	seen := map[string]bool{}
+	for _, ip := range known {
+		seen[ip] = true
+	}
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+		for _, ip := range resolveEndpointIPs(apiBase) {
+			if seen[ip] {
+				continue
+			}
+			seen[ip] = true
+			if err := addBypassHostRoute(ip); err != nil {
+				log.Printf("面板直连路由补充失败（%s）：%v", ip, err)
+				continue
+			}
+			log.Printf("面板新增 IP %s，已补 /32 直连路由", ip)
+			s.setFor(attempt, func(st *sessionState) {
+				st.panelBypass = append(st.panelBypass, ip)
+			})
+		}
+	}
+}
+
 // releasePanelSession 调 /api/portal/vpn/disconnect 关闭服务端会话。
 func (s *uiServer) releasePanelSession(sessionID int64) {
 	cfg := s.currentSettings()
@@ -1041,6 +1080,8 @@ func (s *uiServer) connect(nodeID int64) error {
 			})
 			// 启动隧道质量采样（每 2 秒一次，持续到断开）
 			go s.runQualityProbe(ctx, attempt, prof.IP4, res.Gateway)
+			// 面板域名会轮换 IP，定期补 /32 直连路由，避免面板请求漏进隧道
+			go s.keepPanelBypassed(ctx, attempt, cfg.API, controlIPs)
 
 			s.setFor(attempt, func(st *sessionState) {
 				st.status = "connected"

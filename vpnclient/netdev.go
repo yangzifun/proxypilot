@@ -7,9 +7,11 @@ import (
 )
 
 // maxTunMTU 是客户端允许使用的最大 MTU。
-// 调到 1200 是为了避开 Windows 的发送卸载：MTU 1380 时会出现
-// 「帧 40 字节 / IP 头声明 52 字节」这种被切掉 TCP 选项的残包。
-const maxTunMTU = 1200
+//
+// 曾经因为「帧 40 字节 / IP 头声明 52 字节」的残包把这里降到 1200，
+// 但后来定位到真因是 wireguard/tun 封装层的 Read（2.35 已改为 Wintun
+// 直连 ring API），与 MTU 无关，所以恢复到 1380。
+const maxTunMTU = 1380
 
 // maxReadPacket 是单次网卡读取的缓冲上限。
 // 取 64KB 是为了容纳 Windows 卸载机制递交的「多段合体包」。
