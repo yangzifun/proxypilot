@@ -1,8 +1,8 @@
 ProxyPilot 发布包
-面板版本 : V35.3
+面板版本 : V35.4
 Agent    : 2.2.0
 客户端   : 2.13
-构建时间 : 2026-11-10 12:19:17
+构建时间 : 2026-11-10 12:35:34
 
 文件清单：
   DEPLOY-README.md                                       0.0 MB
@@ -10,8 +10,8 @@ Agent    : 2.2.0
   maintenance.sh                                         0.0 MB
   proxypilot-agent-2.2.0-linux-amd64                     9.7 MB
   proxypilot-agent-2.2.0-linux-arm64                     8.9 MB
-  proxypilot-V35.3-linux-amd64                          18.4 MB
-  proxypilot-V35.3-linux-arm64                          17.4 MB
+  proxypilot-V35.4-linux-amd64                          18.4 MB
+  proxypilot-V35.4-linux-arm64                          17.4 MB
   proxypilot-vpn-2.13-darwin-amd64                       9.0 MB
   proxypilot-vpn-2.13-darwin-arm64                       8.4 MB
   proxypilot-vpn-2.13-linux-amd64                        8.8 MB
@@ -25,8 +25,8 @@ Agent    : 2.2.0
   upgrade.sh                                             0.0 MB
 
 安装：
-  服务端    sudo ./install.sh --binary ./proxypilot-V35.3-linux-amd64
-  升级      sudo ./upgrade.sh --binary ./proxypilot-V35.3-linux-amd64
+  服务端    sudo ./install.sh --binary ./proxypilot-V35.4-linux-amd64
+  升级      sudo ./upgrade.sh --binary ./proxypilot-V35.4-linux-amd64
   Windows   双击 proxypilot-vpn-2.13-windows-amd64-install.exe（安装程序，只安装不运行）
             安装后从开始菜单/桌面图标启动 ProxyPilot（客户端 v2.13）
             卸载：设置 → 应用 → ProxyPilot VPN，或运行 uninstall.cmd
