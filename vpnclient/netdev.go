@@ -6,6 +6,11 @@ import (
 	"strings"
 )
 
+// maxTunMTU 是客户端允许使用的最大 MTU。
+// 调到 1200 是为了避开 Windows 的发送卸载：MTU 1380 时会出现
+// 「帧 40 字节 / IP 头声明 52 字节」这种被切掉 TCP 选项的残包。
+const maxTunMTU = 1200
+
 // maxReadPacket 是单次网卡读取的缓冲上限。
 // 取 64KB 是为了容纳 Windows 卸载机制递交的「多段合体包」。
 const maxReadPacket = 64 * 1024

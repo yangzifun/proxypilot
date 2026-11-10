@@ -93,7 +93,7 @@ func (t *Tunnel) pumpUp() {
 	// 实测出现过「只读到 40 字节、IP 头声明 490 字节」，
 	// 但把两次读取拼起来的假设是错的（会把下一个新包一起污染），已回滚。
 	var readHist = map[int]int{}
-	histLogged := 0
+	lastHist := time.Now()
 	for {
 		if t.ctx.Err() != nil {
 			return
@@ -114,11 +114,12 @@ func (t *Tunnel) pumpUp() {
 		}
 		raw := buf[:n]
 
-		// 记录读长度分布（只打印前若干次，避免刷屏）
+		// 读长度分布：每 10 秒汇总一次。
+		// 之前只打前 12 次，看到的全是连接建立期的小包，没意义。
 		readHist[n]++
-		if len(readHist) > 1 && histLogged < 12 {
-			histLogged++
-			log.Printf("数据面：读长度分布 %v", readHist)
+		if time.Since(lastHist) >= 10*time.Second {
+			log.Printf("数据面：读长度分布（近 10 秒累计）%v", readHist)
+			lastHist = time.Now()
 		}
 
 		// 一次读到的东西可能是「一个包」，也可能是 Windows 卸递交上来的

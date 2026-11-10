@@ -944,6 +944,15 @@ func (s *uiServer) connect(nodeID int64) error {
 				}
 			}
 		}
+		// MTU 钳制：节点下发 1380，但实测 Windows 的发送卸载会把
+		// 「带 TCP 选项的 SYN」切成「20 字节 IP 头 + 20 字节 TCP 头」交上来
+		// （帧 40 字节、IP 头声明 52 字节），节点判坏包丢弃。
+		// 段越小越不容易走到卸载路径，这里统一压到 1200。
+		if prof.MTU > maxTunMTU || prof.MTU <= 0 {
+			log.Printf("MTU 由 %d 钳制为 %d（规避 Windows 发送卸载切包）", prof.MTU, maxTunMTU)
+			prof.MTU = maxTunMTU
+		}
+
 		// 网卡掩码取自节点客户端子网（例如 10.88.1.0/24 → /24）
 		prefixLen := 0
 		if prof.ClientCIDR != "" {
