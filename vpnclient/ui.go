@@ -1033,7 +1033,7 @@ var attemptSeq atomic.Int64
 // 请求随之被 cancel，它会立刻 fail() 写一条「拉取节点失败：context canceled」，
 // 把新尝试的状态覆盖成 error —— 用户看到的就是「明明在连，却报 context canceled」。
 func (s *uiServer) setFor(attempt int64, fn func(*sessionState)) {
-	s.setFor(attempt, func(st *sessionState) {
+	s.state.set(func(st *sessionState) {
 		if attempt != 0 && st.attempt != attempt {
 			return
 		}
