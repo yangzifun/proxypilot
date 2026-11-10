@@ -349,6 +349,8 @@
       <div class="row"><span class="k">DNS 泄露防护</span><span class="v" id="rDnsGuard">—</span></div>
       <div class="row"><span class="k">IPv6 泄露防护</span><span class="v" id="rIPv6Guard">—</span></div>
       <div class="row"><span class="k">断线保护</span><span class="v" id="rKillSwitch">—</span></div>
+      <div class="row"><span class="k">隧道采样</span><span class="v" id="rQuality">—</span></div>
+      <div class="row"><span class="k">丢包计数</span><span class="v" id="rLoss">—</span></div>
     </div>
     <div class="notice" id="noticeDetail"></div>
     <div class="detail-actions">
@@ -458,6 +460,15 @@ async function copyText(text, okMsg){
   }
 }
 
+function fmtQuality(st){
+  const q = st.tunnel_quality;
+  if (!q || !q.sent) return '-';
+  return q.ok + '/' + q.sent + ' 成功，丢 ' + q.lost +
+    '（' + (q.loss_pct == null ? 0 : q.loss_pct.toFixed(1)) + '%）' +
+    '，最近 ' + (q.last_rtt_ms || '-') + ' ms，最大 ' + (q.max_rtt_ms || '-') + ' ms' +
+    (q.consecutive_fail ? ('，连续失败 ' + q.consecutive_fail) : '');
+}
+
 function diagText(){
   const st = state || {};
   const lines = [
@@ -481,6 +492,10 @@ function diagText(){
     '路由        : ' + ((st.routes || []).join(' | ') || '-'),
     '面板        : ' + (st.api || '-'),
     '登录        : ' + (st.logged_in ? ('是（' + (st.token_hint || '') + '）') : '否'),
+    '隧道采样    : ' + fmtQuality(st),
+    '上行队列丢包: ' + (st.uplink_dropped == null ? '-' : st.uplink_dropped) + ' 个',
+    'QUIC 丢包   : ' + (st.quic_lost == null ? '-' : st.quic_lost + ' / ' + st.quic_sent +
+      '（' + (st.quic_loss_pct == null ? '0' : st.quic_loss_pct.toFixed(2)) + '%）'),
     '节点数      : ' + (st.nodes_count == null ? '-' : st.nodes_count) +
       (st.nodes_error ? ('（拉取失败：' + st.nodes_error + '）') : ''),
     '错误        : ' + (st.net_error || st.tun_error || st.message || '-'),
@@ -564,6 +579,12 @@ function render(){
   else { netRow.textContent = '检测中…'; netRow.className = 'v'; netRow.title = ''; }
   $('rAdapter').textContent = state.adapter || (state.tun_error ? '接管失败' : '—');
   $('rAdapter').className = 'v' + (state.adapter ? ' ok' : state.tun_error ? ' bad' : '');
+  if ($('rQuality')) $('rQuality').textContent = fmtQuality(state);
+  if ($('rLoss')) {
+    const d = (state.uplink_dropped == null) ? '-' : state.uplink_dropped;
+    const ql = (state.quic_lost == null) ? '-' : state.quic_lost;
+    $('rLoss').textContent = st === 'connected' ? ('队列丢 ' + d + ' · QUIC 丢 ' + ql) : '—';
+  }
   const routes = state.routes || [];
   $('rRoutes').textContent = routes.length ? (routes.length + ' 条：' + routes.slice(0,3).join('、') + (routes.length>3?' …':'')) : '—';
   $('rRoutes').title = routes.join('\n');

@@ -223,6 +223,19 @@ type sessionState struct {
 	// 最近一次「拉节点」的结果，进诊断信息，便于区分「面板返回空」与「请求失败」
 	nodesCount int
 	nodesErr   string
+
+	// 隧道质量采样（每 2 秒一次，见 quality_probe.go）
+	qSent, qOK, qLost  int
+	qLastRTT, qMaxRTT  int
+	qConsecutiveFail   int
+
+	// 数据面对象：用来取客户端发送队列丢弃数
+	pc *streamPacketConn
+	// 从 pc / QUIC 连接刷新出来的实时计数
+	dropUplink uint64
+	quicSent   uint64
+	quicRecv   uint64
+	quicLost   uint64
 	routes []string
 	tunMode  string
 	tunErr   string
@@ -234,6 +247,7 @@ type sessionState struct {
 func (s *sessionState) snapshot() map[string]any {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.refreshTunnelStats()
 	duration := int64(0)
 	if s.startedAt > 0 && s.status == "connected" {
 		duration = int64(time.Since(time.UnixMilli(s.startedAt)).Seconds())
@@ -268,6 +282,17 @@ func (s *sessionState) snapshot() map[string]any {
 		"net_error":  s.netErr,
 		"nodes_count": s.nodesCount,
 		"nodes_error": s.nodesErr,
+		"tunnel_quality": map[string]any{
+			"sent": s.qSent, "ok": s.qOK, "lost": s.qLost,
+			"loss_pct": pct(uint64(s.qLost), uint64(s.qSent)),
+			"last_rtt_ms": s.qLastRTT, "max_rtt_ms": s.qMaxRTT,
+			"consecutive_fail": s.qConsecutiveFail,
+		},
+		"uplink_dropped": s.dropUplink,
+		"quic_sent":      s.quicSent,
+		"quic_recv":      s.quicRecv,
+		"quic_lost":      s.quicLost,
+		"quic_loss_pct":  pct(s.quicLost, s.quicSent),
 		"routes":     append([]string{}, s.routes...),
 		"tun_mode":   s.tunMode,
 		"tun_error":  s.tunErr,
@@ -276,6 +301,28 @@ func (s *sessionState) snapshot() map[string]any {
 		"ipv6_guard": append([]string{}, s.ipv6Guard...),
 		"kill_switch_rules": append([]string{}, s.killSwitchRules...),
 	}
+}
+
+// refreshTunnelStats 刷新「客户端发送队列丢弃数」与 QUIC 底层丢包计数。
+// 调用方需已持有 s.mu（在 set/setFor 回调里调用）。
+func (s *sessionState) refreshTunnelStats() {
+	if s.pc != nil {
+		s.dropUplink = s.pc.DropStats()
+	}
+	if s.conn != nil {
+		st := s.conn.ConnectionStats()
+		s.quicSent = st.PacketsSent
+		s.quicRecv = st.PacketsReceived
+		s.quicLost = st.PacketsLost
+	}
+}
+
+// pct 计算百分比（分母为 0 时返回 0）。
+func pct(part, total uint64) float64 {
+	if total <= 0 {
+		return 0
+	}
+	return float64(part) * 100 / float64(total)
 }
 
 func (s *sessionState) set(fn func(*sessionState)) {
@@ -978,9 +1025,13 @@ func (s *uiServer) connect(nodeID int64) error {
 					}
 				})
 			})
+			// 启动隧道质量采样（每 2 秒一次，持续到断开）
+			go s.runQualityProbe(ctx, attempt, prof.IP4, res.Gateway)
+
 			s.setFor(attempt, func(st *sessionState) {
 				st.status = "connected"
 				st.tun = tun
+				st.pc = pc
 				st.adapter = res.Adapter
 		st.dnsGuard = append([]string{}, res.DNSGuard...)
 		st.ipv6Guard = append([]string{}, res.IPv6Disabled...)
