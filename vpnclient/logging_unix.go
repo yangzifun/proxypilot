@@ -3,6 +3,7 @@
 package main
 
 import (
+	"io"
 	"fmt"
 	"log"
 	"os"
@@ -16,6 +17,9 @@ func setupFileLog() {
 }
 
 func logFilePath() string { return "" }
+
+// logSink 非 Windows 平台没有文件日志，返回空写入器。
+func logSink() io.Writer { return io.Discard }
 
 func diagReport(routes []string) string {
 	exe, _ := os.Executable()

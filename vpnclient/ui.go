@@ -397,7 +397,7 @@ func (s *uiServer) localGuard(next http.HandlerFunc) http.HandlerFunc {
 
 func runUI(ctx context.Context, addr string, defaults uiSettings, openBrowser, demo bool) error {
 	ring := &logRing{}
-	log.SetOutput(io.MultiWriter(os.Stderr, ring))
+	log.SetOutput(io.MultiWriter(logSink(), os.Stderr, ring))
 
 	_, listenPort, _ := net.SplitHostPort(addr)
 	srv := &uiServer{

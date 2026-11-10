@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -15,6 +16,9 @@ import (
 // 便于用户直接发文件排查（超过 2MB 自动滚动一次）。
 
 var logMu sync.Mutex
+
+// logFileOut 是当前日志文件句柄（setupFileLog 设置）。
+var logFileOut *os.File
 
 func logDir() string {
 	base := os.Getenv("LOCALAPPDATA")
@@ -44,8 +48,21 @@ func setupFileLog() {
 	if st, err := f.Stat(); err == nil && st.Size() == 0 {
 		_, _ = f.Write([]byte{0xEF, 0xBB, 0xBF})
 	}
+	logFileOut = f
 	log.SetOutput(&multiWriter{file: f, stderr: os.Stderr})
 	log.Printf("==== ProxyPilot %s 启动 %s ====", Version, time.Now().Format("2006-01-02 15:04:05"))
+}
+
+// logSink 供其他包在重设 log 输出时把文件一起接上。
+//
+// 事故：runUI 里把 log 输出改成了 io.MultiWriter(os.Stderr, ring)，
+// 文件 sink 被丢掉，于是启动横幅之后的所有日志（连接过程、数据面、
+// 自检）全都写到了不存在的 stderr —— 客户端日志永远是空的。
+func logSink() io.Writer {
+	if logFileOut == nil {
+		return io.Discard
+	}
+	return logFileOut
 }
 
 type multiWriter struct {

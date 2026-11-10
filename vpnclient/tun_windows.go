@@ -66,5 +66,10 @@ func openTUN(name string) (PacketDevice, error) {
 	if nameErr != nil || strings.TrimSpace(realName) == "" {
 		realName = name
 	}
+	// 关掉网卡的发送卸载：开了 LSO 之后 Windows 会把「大段」交给网卡去切分，
+	// 交上来的报文 IP 头声明长度远大于实际字节数（实测差值 9/12/205 不等），
+	// 我们把它当普通报文发出去，对端就会判为坏包丢弃 —— 表现为 25% 丢包。
+	disableTunOffload(realName)
+
 	return &wintunDevice{dev: dev, name: realName, bufs: make([][]byte, 1), szs: make([]int, 1)}, nil
 }
