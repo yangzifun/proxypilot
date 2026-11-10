@@ -52,10 +52,9 @@ type Config struct {
 	LoginAlertEmail   string
 	// MailProvider 发信通道：auto / smtp / cloudflare（默认 auto）。
 	MailProvider string
-	// Cloudflare Email Sending（REST API，不依赖 Workers 绑定）。
+	// Cloudflare 相关配置（R2 与 DNS 记录写入）。
 	CloudflareAPIToken  string
 	CloudflareAccountID string
-	CloudflareFrom      string
 	// OIDCDisablePassword 为 true 时禁用密码登录（与 Worker 的 OIDC_DISABLE_PASSWORD 对应）。
 	OIDCDisablePassword bool
 	OIDCIssuer          string
@@ -116,8 +115,7 @@ func Load() (Config, error) {
 		MailProvider:        firstNonEmpty(os.Getenv("PP_MAIL_PROVIDER"), "auto"),
 		CloudflareAPIToken:  firstNonEmpty(os.Getenv("PP_CLOUDFLARE_API_TOKEN"), os.Getenv("CLOUDFLARE_API_TOKEN")),
 		CloudflareAccountID: firstNonEmpty(os.Getenv("PP_CLOUDFLARE_ACCOUNT_ID"), os.Getenv("CLOUDFLARE_ACCOUNT_ID")),
-		CloudflareFrom:      strings.TrimSpace(os.Getenv("PP_CLOUDFLARE_FROM")),
-		// 兼容 Worker 的环境变量名，便于直接沿用线上配置
+			// 兼容 Worker 的环境变量名，便于直接沿用线上配置
 		OIDCDisablePassword: envBool("PP_OIDC_DISABLE_PASSWORD", envBool("OIDC_DISABLE_PASSWORD", false)),
 		OIDCIssuer:          firstNonEmpty(os.Getenv("PP_OIDC_ISSUER"), os.Getenv("OIDC_ISSUER")),
 		OIDCClientID:        firstNonEmpty(os.Getenv("PP_OIDC_CLIENT_ID"), os.Getenv("OIDC_CLIENT_ID")),

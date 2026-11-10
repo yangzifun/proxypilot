@@ -25,15 +25,28 @@ import (
 
 const dkimDefaultSelector = "pp"
 
+// dkimMaxSingleString 是 DNS TXT 单个字符-字符串的上限（RFC 1035）。
+// 超过就会被拆段，个别收件方只读首段 → DKIM 校验失败。
+const dkimMaxSingleString = 255
+
 // dkimKeyPair 是生成结果：私钥存库（加密），公钥拼进 DNS TXT。
 type dkimKeyPair struct {
 	PrivatePEM string
 	PublicB64  string
+	Bits       int
 }
 
-// generateDKIMKey 生成 2048 位 RSA 密钥。
-func generateDKIMKey() (dkimKeyPair, error) {
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
+// generateDKIMKey 生成 RSA 密钥。
+//
+// bits=2048 是安全推荐；bits=1024 用于「兼容模式」——
+// 2048 位公钥 base64 后约 360 字符，TXT 记录会被拆成 2 个字符-字符串，
+// 部分收件方（例如某些国内邮件网关）只读第一个 255 字节段，导致
+// 「DKIM signature error」。1024 位整条记录约 233 字符，能放进单段。
+func generateDKIMKey(bits int) (dkimKeyPair, error) {
+	if bits != 1024 && bits != 2048 {
+		bits = 2048
+	}
+	key, err := rsa.GenerateKey(rand.Reader, bits)
 	if err != nil {
 		return dkimKeyPair{}, fmt.Errorf("生成 DKIM 私钥失败：%w", err)
 	}
@@ -45,6 +58,7 @@ func generateDKIMKey() (dkimKeyPair, error) {
 	return dkimKeyPair{
 		PrivatePEM: string(privPEM),
 		PublicB64:  base64.StdEncoding.EncodeToString(pubDER),
+		Bits:       bits,
 	}, nil
 }
 

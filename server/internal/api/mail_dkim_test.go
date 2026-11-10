@@ -13,7 +13,7 @@ import (
 // 自签名后按 RFC 6376 重新计算摘要，验证 DKIM 签名能被正确校验。
 // 这能防止「签名写了但算错」——那种情况对端只会静默判 spam，本地看不到任何报错。
 func TestDKIMSignVerifiable(t *testing.T) {
-	kp, err := generateDKIMKey()
+	kp, err := generateDKIMKey(2048)
 	if err != nil {
 		t.Fatalf("生成密钥失败：%v", err)
 	}
@@ -111,7 +111,7 @@ func TestDKIMSignVerifiable(t *testing.T) {
 
 // 公钥字符串要能还原成 PKCS#1 RSA 公钥（DNS 记录里就是这个）。
 func TestDKIMPublicKeyRoundTrip(t *testing.T) {
-	kp, err := generateDKIMKey()
+	kp, err := generateDKIMKey(2048)
 	if err != nil {
 		t.Fatalf("生成密钥失败：%v", err)
 	}

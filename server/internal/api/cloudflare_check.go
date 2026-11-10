@@ -1,11 +1,7 @@
 package api
 
 import (
-	"bytes"
-	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -18,7 +14,7 @@ type cloudflareCheckItem struct {
 	Detail string `json:"detail"`
 }
 
-// POST /api/cloudflare/check —— 检查统一 Cloudflare Token、R2 读写与 Email Sending 权限
+// POST /api/cloudflare/check —— 检查统一 Cloudflare Token 与 R2 读写权限
 func (h *handlers) cloudflareCheck(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	token := strings.TrimSpace(h.setting(ctx, settingCFToken, h.cfg.CloudflareAPIToken))
@@ -72,15 +68,6 @@ func (h *handlers) cloudflareCheck(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if token == "" {
-		add("email", "Email Sending", false, "未配置 Token")
-	} else if cfg.AccountID == "" {
-		add("email", "Email Sending", false, "缺少 Account ID")
-	} else {
-		ok, detail := checkCloudflareEmailPermission(ctx, token, cfg.AccountID)
-		add("email", "Email Sending", ok, detail)
-	}
-
 	overall := len(items) > 0
 	for _, it := range items {
 		if !it.OK {
@@ -96,37 +83,3 @@ func (h *handlers) cloudflareCheck(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func checkCloudflareEmailPermission(ctx context.Context, token, accountID string) (bool, string) {
-	// 空 JSON 不会真正发信：有权限时通常返回 400/422 参数错误，无权限时返回 401/403。
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		fmt.Sprintf(cloudflareEmailEndpoint, accountID), bytes.NewReader([]byte("{}")))
-	if err != nil {
-		return false, err.Error()
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := (&http.Client{Timeout: 15 * time.Second}).Do(req)
-	if err != nil {
-		return false, "请求 Cloudflare Email Sending 失败：" + err.Error()
-	}
-	defer resp.Body.Close()
-	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-	var cf struct {
-		Errors []struct {
-			Message string `json:"message"`
-		} `json:"errors"`
-	}
-	_ = json.Unmarshal(raw, &cf)
-	msg := ""
-	if len(cf.Errors) > 0 {
-		msg = cf.Errors[0].Message
-	}
-	switch resp.StatusCode {
-	case http.StatusBadRequest, http.StatusUnprocessableEntity:
-		return true, "Token 具备 Email Sending 权限（接口返回参数校验错误，非鉴权错误）"
-	case http.StatusUnauthorized, http.StatusForbidden:
-		return false, "Token 缺少 Email Sending Edit 权限" + firstNonEmpty("："+msg, "")
-	default:
-		return resp.StatusCode >= 200 && resp.StatusCode < 300, fmt.Sprintf("HTTP %d %s", resp.StatusCode, msg)
-	}
-}

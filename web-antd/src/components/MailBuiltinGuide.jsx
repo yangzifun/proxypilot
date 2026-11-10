@@ -95,10 +95,10 @@ export default function MailBuiltinGuide({ guide, reload }) {
     }
   };
 
-  const regen = async () => {
+  const regen = async (bits) => {
     setBusy(true);
     try {
-      const r = await apiPost('admin/mail/dkim', {});
+      const r = await apiPost('admin/mail/dkim', bits ? { bits } : {});
       message.success(r?.message || '已生成新的 DKIM 密钥');
       setEdits({});
       reload();
@@ -236,7 +236,11 @@ export default function MailBuiltinGuide({ guide, reload }) {
             <Tag color="cyan">发件人 {guide.from || '—'}</Tag>
             <Tag color="geekblue">selector {guide.selector}</Tag>
             <Tag color={guide.egress_ip ? 'green' : 'orange'}>出口 IP {guide.egress_ip || '未探测到'}</Tag>
-            {guide.has_dkim ? <Tag color="success">DKIM 已生成</Tag> : <Tag color="error">DKIM 未生成</Tag>}
+            {guide.has_dkim ? (
+              <Tag color="success">DKIM {guide.dkim_bits || 2048} 位 · {guide.dkim_record_len} 字符</Tag>
+            ) : (
+              <Tag color="error">DKIM 未生成</Tag>
+            )}
           </Space>
 
           {missing > 0 ? (
@@ -271,6 +275,27 @@ export default function MailBuiltinGuide({ guide, reload }) {
             }}
           />
 
+          {guide.dkim_record_len && !guide.dkim_single_ok ? (
+            <Alert
+              type="warning"
+              showIcon
+              message={`DKIM 记录长 ${guide.dkim_record_len} 字符，超过 DNS 单段 255 字节上限`}
+              description={
+                <span>
+                  记录会被拆成多段。绝大多数邮件服务能正确拼接，但<b>部分网关只读第一段</b>，
+                  表现为发信被拒：「DKIM signature error」。
+                  遇到这种情况，点下面的按钮换成 1024 位密钥（整条约 233 字符，单段即可），
+                  生成后重新把新的 TXT 值填进 DNS。
+                </span>
+              }
+              action={
+                <Button size="small" danger loading={busy} onClick={() => regen(1024)}>
+                  换成 1024 位
+                </Button>
+              }
+            />
+          ) : null}
+
           <Space size={8} wrap>
             <Button
               type="primary"
@@ -287,8 +312,8 @@ export default function MailBuiltinGuide({ guide, reload }) {
             <Button icon={<ReloadOutlined />} onClick={reload}>
               重新校验
             </Button>
-            <Button onClick={regen} loading={busy} danger={guide.has_dkim}>
-              {guide.has_dkim ? '轮换 DKIM 密钥' : '生成 DKIM 密钥'}
+            <Button onClick={() => regen()} loading={busy} danger={guide.has_dkim}>
+              {guide.has_dkim ? `轮换 DKIM 密钥（${guide.dkim_bits || 2048} 位）` : '生成 DKIM 密钥'}
             </Button>
           </Space>
 

@@ -33,13 +33,13 @@ const (
 	settingMailProvider    = "mail_provider"
 	settingCFToken         = "cloudflare_api_token"
 	settingCFAccount       = "cloudflare_account_id"
-	settingCFFrom          = "cloudflare_from"
 	// 自建直投（builtin）
 	settingMailDomain     = "mail_domain"
 	settingMailDKIMSelect = "mail_dkim_selector"
 	settingMailDKIMKey    = "mail_dkim_private"
 	settingMailEgressIP   = "mail_egress_ip"
 	settingMailDNSToken   = "mail_dns_token"
+	settingMailDKIMBits   = "mail_dkim_bits"
 	settingR2Account       = "r2_account_id"
 	settingR2Bucket        = "r2_bucket"
 	settingR2AccessKey     = "r2_access_key_id"
@@ -83,12 +83,12 @@ var settingDefs = []settingDef{
 	{Key: settingMailProvider},
 	{Key: settingCFToken, Secret: true},
 	{Key: settingCFAccount},
-	{Key: settingCFFrom},
 	{Key: settingMailDomain},
 	{Key: settingMailDKIMSelect},
 	{Key: settingMailDKIMKey, Secret: true},
 	{Key: settingMailEgressIP},
 	{Key: settingMailDNSToken, Secret: true},
+	{Key: settingMailDKIMBits},
 	{Key: settingR2Account},
 	{Key: settingR2Bucket},
 	{Key: settingR2AccessKey},
@@ -231,7 +231,7 @@ func (h *handlers) emailCodeLoginEnabled(ctx context.Context) bool {
 type mailConfig struct {
 	Provider                     string
 	Addr, User, Pass, From       string
-	CFToken, CFAccountID, CFFrom string
+	CFToken, CFAccountID string
 	// 自建直投
 	Domain      string
 	Selector    string
@@ -240,6 +240,8 @@ type mailConfig struct {
 	EgressIP    string
 	// DNSToken 可选：只有它能写 DNS，避免为了 TXT 记录去放大统一 Token 的权限
 	DNSToken string
+	// DKIMBits 1024 或 2048
+	DKIMBits int
 }
 
 func (m mailConfig) dkimSelector() string {
@@ -271,31 +273,28 @@ func (h *handlers) effectiveMail(ctx context.Context) mailConfig {
 		From:        h.setting(ctx, settingMailFrom, strings.TrimSpace(h.cfg.MailFrom)),
 		CFToken:     h.setting(ctx, settingCFToken, strings.TrimSpace(h.cfg.CloudflareAPIToken)),
 		CFAccountID: h.setting(ctx, settingCFAccount, strings.TrimSpace(h.cfg.CloudflareAccountID)),
-		CFFrom:      h.setting(ctx, settingCFFrom, strings.TrimSpace(h.cfg.CloudflareFrom)),
 		Domain:      h.setting(ctx, settingMailDomain, ""),
 		Selector:    h.setting(ctx, settingMailDKIMSelect, dkimDefaultSelector),
 		DKIMPrivate: h.setting(ctx, settingMailDKIMKey, ""),
 		EgressIP:    h.setting(ctx, settingMailEgressIP, ""),
 		DNSToken:    h.setting(ctx, settingMailDNSToken, ""),
+		DKIMBits:    int(intOrJS(h.setting(ctx, settingMailDKIMBits, "2048"), 2048, 1024, 2048)),
 	}
 }
 
 func (m mailConfig) SMTPReady() bool { return m.Addr != "" && (m.From != "") }
-func (m mailConfig) CloudflareReady() bool {
-	return m.CFToken != "" && m.CFAccountID != "" && m.CFFrom != ""
-}
-
 // ResolvedProvider 决定实际发信通道；auto 优先 Cloudflare，其次 SMTP。
 func (m mailConfig) ResolvedProvider() string {
 	if m.Provider == "builtin" && m.BuiltinReady() {
 		return "builtin"
 	}
 	switch m.Provider {
-	case "smtp", "cloudflare":
+	case "smtp", "builtin":
 		return m.Provider
 	}
-	if m.CloudflareReady() {
-		return "cloudflare"
+	// auto：优先自建直投（无需第三方），否则 SMTP
+	if m.BuiltinReady() && strings.TrimSpace(m.DKIMPrivate) != "" {
+		return "builtin"
 	}
 	if m.SMTPReady() {
 		return "smtp"
@@ -362,8 +361,6 @@ func (h *handlers) settingDefault(key string) string {
 		return firstNonEmpty(strings.TrimSpace(h.cfg.MailProvider), "auto")
 	case settingCFAccount:
 		return strings.TrimSpace(h.cfg.CloudflareAccountID)
-	case settingCFFrom:
-		return strings.TrimSpace(h.cfg.CloudflareFrom)
 	case settingTurnstileSite:
 		return strings.TrimSpace(h.cfg.TurnstileSiteKey)
 	case settingOIDCIssuer:

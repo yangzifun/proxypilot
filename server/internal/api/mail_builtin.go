@@ -75,6 +75,29 @@ func resolveMX(domain string) ([]mxHost, error) {
 	return nil, fmt.Errorf("%s 没有可用的 MX 记录", domain)
 }
 
+// buildSignedMessage 组装 MIME 并在需要时补 DKIM 签名。
+// SMTP 与自建直投共用，保证两条通道产出的报文一致。
+func buildSignedMessage(mc mailConfig, to, subject, htmlBody string) ([]byte, error) {
+	from := strings.TrimSpace(mc.From)
+	fromAddr, fromDomain, err := splitMailAddress(from)
+	if err != nil {
+		return nil, err
+	}
+	_ = fromAddr
+	raw := buildMIMEMessage(mc.From, to, subject, htmlBody, mc)
+
+	// 只有 From 域与配置的发信域一致时才签，否则签名会因 d= 不匹配失效
+	if strings.TrimSpace(mc.DKIMPrivate) != "" && strings.TrimSpace(mc.Domain) != "" &&
+		strings.EqualFold(fromDomain, strings.TrimSpace(mc.Domain)) {
+		signed, serr := dkimSign(raw, mc.Domain, mc.dkimSelector(), mc.DKIMPrivate)
+		if serr != nil {
+			return raw, serr
+		}
+		return signed, nil
+	}
+	return raw, nil
+}
+
 // sendMailBuiltin 直连收件方 MX 投递。
 func (h *handlers) sendMailBuiltin(mc mailConfig, to, subject, htmlBody string) error {
 	if !mc.BuiltinReady() {
@@ -90,16 +113,9 @@ func (h *handlers) sendMailBuiltin(mc mailConfig, to, subject, htmlBody string) 
 		return fmt.Errorf("收件人地址无效：%w", err)
 	}
 
-	raw := buildMIMEMessage(from, to, subject, htmlBody, mc)
-
-	// DKIM 签名（有私钥才签）
-	if strings.TrimSpace(mc.DKIMPrivate) != "" && mc.Domain != "" {
-		signed, serr := dkimSign(raw, mc.Domain, mc.dkimSelector(), mc.DKIMPrivate)
-		if serr != nil {
-			h.log.Warn("DKIM 签名失败，改为未签名投递", "err", serr)
-		} else {
-			raw = signed
-		}
+	raw, serr := buildSignedMessage(mc, to, subject, htmlBody)
+	if serr != nil {
+		h.log.Warn("DKIM 签名失败，改为未签名投递", "err", serr)
 	}
 
 	mxs, err := resolveMX(toDomain)

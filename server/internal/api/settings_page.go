@@ -49,7 +49,6 @@ a{color:var(--pri);text-decoration:none}
 <div class="row"><label>通道</label><input type="text" data-key="mail_provider" placeholder="auto / smtp / cloudflare"></div>
 <div class="row"><label>Cloudflare API Token</label><input type="password" data-key="cloudflare_api_token" data-secret="1" placeholder="留空保持不变"></div>
 <div class="row"><label>Cloudflare Account ID</label><input type="text" data-key="cloudflare_account_id" placeholder="9ef942805abcaef4dbf6574131453c58"></div>
-<div class="row"><label>Cloudflare 发件地址</label><input type="text" data-key="cloudflare_from" placeholder="welcome@yourdomain.com"></div>
 </div>
 
 <div class="card"><h2>邮件（SMTP）</h2>

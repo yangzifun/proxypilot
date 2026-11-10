@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -45,12 +46,26 @@ func (h *handlers) mailGuideGet(w http.ResponseWriter, r *http.Request) {
 		"ready":           mc.BuiltinReady() && publicB64 != "",
 		"records":         records,
 		"public_key_hint": shortText(publicB64, 40),
+		"dkim_bits":       mc.DKIMBits,
+		"dkim_record_len": len(dkimDNSRecord(publicB64)),
+		"dkim_single_ok":  len(dkimDNSRecord(publicB64)) <= dkimMaxSingleString,
 	})
 }
 
 // POST /api/admin/mail/dkim —— 生成 / 轮换 DKIM 密钥
+// body: {"bits": 2048|1024}，缺省用当前设置值
 func (h *handlers) mailDKIMRotate(w http.ResponseWriter, r *http.Request) {
-	kp, err := generateDKIMKey()
+	var body struct {
+		Bits int `json:"bits"`
+	}
+	_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024)).Decode(&body)
+	if body.Bits == 0 {
+		body.Bits = h.effectiveMail(r.Context()).DKIMBits
+	}
+	if body.Bits != 1024 && body.Bits != 2048 {
+		body.Bits = 2048
+	}
+	kp, err := generateDKIMKey(body.Bits)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -59,11 +74,15 @@ func (h *handlers) mailDKIMRotate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "保存私钥失败："+err.Error())
 		return
 	}
-	h.invalidateSettings()
 	h.log.Info("已重新生成 DKIM 密钥")
+	if err := h.saveSetting(r.Context(), settingMailDKIMBits, fmt.Sprint(body.Bits)); err != nil {
+		h.log.Warn("保存 DKIM 位数失败", "err", err)
+	}
+	h.invalidateSettings()
 	writeJSON(w, http.StatusOK, map[string]any{
 		"success":    true,
 		"public_b64": kp.PublicB64,
+		"bits":       body.Bits,
 		"message":    "已生成新的 DKIM 密钥，请把新的 TXT 记录更新到 DNS",
 	})
 }

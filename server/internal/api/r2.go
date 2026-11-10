@@ -41,7 +41,7 @@ func (h *handlers) effectiveR2(ctx context.Context) r2Config {
 		h.setting(ctx, settingR2Account, strings.TrimSpace(h.cfg.R2AccountID)),
 	)
 
-	// 统一凭证：R2 与 Email Sending 共用 cloudflare_api_token。
+	// 统一凭证：R2 与发信 DNS 写入共用 cloudflare_api_token。
 	// Cloudflare API Token 的 S3 凭证规则：Access Key ID = Token ID，Secret = SHA256(Token)。
 	token := strings.TrimSpace(h.setting(ctx, settingCFToken, h.cfg.CloudflareAPIToken))
 	if token != "" {

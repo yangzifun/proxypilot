@@ -132,15 +132,10 @@ func (h *handlers) settingsAPI(w http.ResponseWriter, r *http.Request) {
 					writeError(w, http.StatusBadRequest, "mail_egress_ip 不是合法 IP")
 					return
 				}
-			case settingCFFrom:
-				if v != "" && normalizeEmail(v) == "" {
-					writeError(w, http.StatusBadRequest, "cloudflare_from 不是合法邮箱")
-					return
-				}
 			case settingMailProvider:
 				v = strings.ToLower(v)
-				if v != "" && v != "auto" && v != "smtp" && v != "cloudflare" && v != "builtin" {
-					writeError(w, http.StatusBadRequest, "mail_provider 只能是 auto / builtin / smtp / cloudflare")
+				if v != "" && v != "auto" && v != "smtp" && v != "builtin" {
+					writeError(w, http.StatusBadRequest, "mail_provider 只能是 auto / builtin / smtp")
 					return
 				}
 			case "monitor_notify_emails":
@@ -207,9 +202,6 @@ func (h *handlers) settingsAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		if v, ok := changes[settingCFAccount]; ok {
 			mail.CFAccountID = v
-		}
-		if v, ok := changes[settingCFFrom]; ok {
-			mail.CFFrom = v
 		}
 		mailConfigured := mail.Ready()
 		oidcOn := h.settingBool(ctx, settingOIDCEnabled, true)

@@ -70,6 +70,41 @@ Cloudflare 会报「记录内容的引用方式不正确」。需要 BIND 片段
 
 任何一步失败都会让 CI 红，避免「签了但算错」。
 
+## 5.1 密钥位数与 554 DKIM 错误
+
+实测某邮件网关会返回：
+
+```
+554 5.7.1 DKIM signature error: <域名>:s=pp
+```
+
+但同一封报文的**线上字节**用 dkimpy 验签是 PASS，DNS 里的公钥也与面板私钥匹配。
+根因是 **TXT 记录被拆成多段**：
+
+| 密钥 | 记录长度 | DNS 分段 | 结果 |
+|---|---|---|---|
+| RSA-2048 | 378 字符 | 2 段（255 + 123） | 只读首段的网关 → 校验失败 |
+| RSA-1024 | 206 字符 | 1 段 | 所有实现都能正确读取 |
+
+所以向导会在 `dkim_record_len > 255` 时提示，并提供「换成 1024 位」按钮。
+1024 位安全性弱于 2048，但对 DKIM 场景仍是行业常见做法（Gmail / Outlook 均接受）。
+
+设置项 `mail_dkim_bits` 记录当前位数，默认 2048。
+
+## 5.2 校验方法
+
+签名是否正确，本地就能证明，不必依赖收件方回信：
+
+```bash
+# 1) 起一个本地 SMTP sink 抓真实字节
+# 2) 把 mail_provider 临时设为 smtp、smtp_addr 指向 sink
+# 3) 用 dkimpy 验签
+python3 -c "import dkim; print(dkim.verify(open('/tmp/captured.eml','rb').read(), dnsfunc=...))"
+```
+
+`mail_wire_test.go` 与 `mail_dkim_dump_test.go` 就是这条链路的固化：
+设置 `DKIM_WIRE` / `DKIM_DUMP` 环境变量后会写出可外部验签的报文。
+
 ## 6. Cloudflare 一键写入
 
 `POST /api/admin/mail/dns/apply`：

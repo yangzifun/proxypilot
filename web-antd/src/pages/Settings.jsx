@@ -271,13 +271,12 @@ export default function Settings({ embedded = false }) {
                   <Form.Item
                     name="mail_provider"
                     label="通道"
-                    extra="自建直投：面板直接连收件方 MX，只需填域名与发件人；auto：有 Cloudflare Token 走 Cloudflare，否则 SMTP"
+                    extra="自建直投：面板直接连收件方 MX，只需填域名与发件人；auto：自建直投可用则用它，否则 SMTP"
                   >
                     <Select
                       options={[
                         { value: 'builtin', label: '自建直投（不需要第三方）' },
                         { value: 'auto', label: '自动（推荐）' },
-                        { value: 'cloudflare', label: 'Cloudflare Email Sending' },
                         { value: 'smtp', label: 'SMTP' },
                       ]}
                     />
@@ -397,13 +396,13 @@ export default function Settings({ embedded = false }) {
                     type="info"
                     showIcon
                     style={{ marginBottom: 12 }}
-                    message="一个 Cloudflare API Token 同时用于 R2 对象存储与 Email Sending"
-                    description="权限需包含：Account → R2 → Object Read & Write；Account → Email Sending → Edit。系统会用 Token 自动换取 R2 的 S3 凭证，无需再填 Access Key / Secret。"
+                    message="一个 Cloudflare API Token 同时用于 R2 对象存储与 DNS 记录写入"
+                    description="权限需包含：Account → R2 → Object Read & Write；如需「一键写入发信 DNS 记录」，再加 Zone → Zone → Read 与 Zone → DNS → Edit。系统会用 Token 自动换取 R2 的 S3 凭证，无需再填 Access Key / Secret。"
                   />
                   <Form.Item
                     name="cloudflare_api_token"
                     label="Cloudflare API Token"
-                    extra={hasSecret.cloudflare_api_token ? '已配置（留空保持不变）' : 'R2 + Email Sending 共用'}
+                    extra={hasSecret.cloudflare_api_token ? '已配置（留空保持不变）' : 'R2 与 DNS 共用'}
                   >
                     <Input.Password
                       placeholder={hasSecret.cloudflare_api_token ? '已配置，留空保持不变' : '粘贴一个 API Token'}
@@ -412,9 +411,6 @@ export default function Settings({ embedded = false }) {
                   </Form.Item>
                   <Form.Item name="cloudflare_account_id" label="Account ID">
                     <Input placeholder="9ef942805abcaef4dbf6574131453c58" allowClear />
-                  </Form.Item>
-                  <Form.Item name="cloudflare_from" label="邮件发件地址" rules={[{ type: 'email', message: '请输入合法邮箱' }]}>
-                    <Input placeholder="notice@yourdomain.com" allowClear />
                   </Form.Item>
                   <Divider orientation="left">R2 对象存储</Divider>
                   <Form.Item name="r2_bucket" label="Bucket">
@@ -435,7 +431,7 @@ export default function Settings({ embedded = false }) {
                       <Button icon={<SafetyCertificateOutlined />} loading={checking} onClick={checkCloudflare}>
                         检查已保存的 Cloudflare 配置
                       </Button>
-                      <Typography.Text type="secondary">检查 Token、R2 读写与 Email Sending 权限</Typography.Text>
+                      <Typography.Text type="secondary">检查 Token 与 R2 读写权限</Typography.Text>
                     </Space>
                     {checkResult ? (
                       <Alert

@@ -1,26 +1,21 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"mime"
 	"net"
 	"net/smtp"
 	"strings"
-	"time"
 )
 
-var errMailNotConfigured = errors.New("邮件服务未配置：请在后台配置自建直投 / Cloudflare Email Sending / SMTP")
+var errMailNotConfigured = errors.New("邮件服务未配置：请在后台选择「自建直投」或填写 SMTP")
 
-// sendMail 统一发信入口：按配置选择 Cloudflare Email Sending 或 SMTP。
+// sendMail 统一发信入口：按配置选择自建直投（builtin）或 SMTP。
 func (h *handlers) sendMail(to, subject, htmlBody string) error {
 	mc := h.effectiveMail(context.Background())
 	switch mc.ResolvedProvider() {
-	case "cloudflare":
-		return h.sendMailCloudflare(mc, to, subject, htmlBody)
 	case "smtp":
 		return h.sendMailSMTP(mc, to, subject, htmlBody)
 	case "builtin":
@@ -40,15 +35,11 @@ func (h *handlers) sendMailSMTP(mc mailConfig, to, subject, htmlBody string) err
 		host = mc.Addr
 	}
 
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "From: %s\r\n", mc.From)
-	fmt.Fprintf(&buf, "To: %s\r\n", to)
-	fmt.Fprintf(&buf, "Subject: %s\r\n", mime.QEncoding.Encode("utf-8", subject))
-	fmt.Fprintf(&buf, "Date: %s\r\n", time.Now().Format(time.RFC1123Z))
-	buf.WriteString("MIME-Version: 1.0\r\n")
-	buf.WriteString("Content-Type: text/html; charset=UTF-8\r\n")
-	buf.WriteString("Content-Transfer-Encoding: 8bit\r\n\r\n")
-	buf.WriteString(htmlBody)
+	// 与 builtin 共用同一套组装 + DKIM 签名
+	payload, serr := buildSignedMessage(mc, to, subject, htmlBody)
+	if serr != nil {
+		return fmt.Errorf("组装邮件失败：%w", serr)
+	}
 
 	c, err := smtp.Dial(mc.Addr)
 	if err != nil {
@@ -76,7 +67,7 @@ func (h *handlers) sendMailSMTP(mc mailConfig, to, subject, htmlBody string) err
 	if err != nil {
 		return fmt.Errorf("SMTP DATA 失败: %w", err)
 	}
-	if _, err := w.Write(buf.Bytes()); err != nil {
+	if _, err := w.Write(payload); err != nil {
 		return fmt.Errorf("写入邮件正文失败: %w", err)
 	}
 	if err := w.Close(); err != nil {
