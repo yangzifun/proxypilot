@@ -9,6 +9,7 @@ package main
 import (
 	"context"
 		"embed"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -85,8 +86,10 @@ func (r *logRing) current() int64 {
 // ---------- 设置 ----------
 
 type uiSettings struct {
-	API      string `json:"api"`
-	Token    string `json:"token"`
+	API string `json:"api"`
+	// Token 只在内存中使用；落盘时写入 TokenEnc（DPAPI 密文），不写明文。
+	Token   string `json:"token,omitempty"`
+	TokenEnc string `json:"token_enc,omitempty"`
 	Insecure bool   `json:"insecure"`
 	DNSAddr  string `json:"dns_addr"`
 	NodeID int64
@@ -142,6 +145,18 @@ func loadSettings(defaults uiSettings) uiSettings {
 	if json.Unmarshal(raw, &s) != nil {
 		return defaults
 	}
+	// 优先解密 token_enc；若只有旧版明文 token，则迁移为密文后重写文件
+	if s.TokenEnc != "" {
+		if plain, err := unprotectSecret(decodeB64(s.TokenEnc)); err == nil {
+			s.Token = string(plain)
+		} else {
+			log.Printf("读取令牌失败（可能换了 Windows 用户或机器）：%v，需要重新登录", err)
+		}
+		s.TokenEnc = ""
+	} else if s.Token != "" {
+		log.Printf("检测到旧版明文令牌，正在加密存储")
+		_ = saveSettings(s)
+	}
 	if s.API == "" {
 		s.API = defaults.API
 	}
@@ -156,8 +171,21 @@ func saveSettings(s uiSettings) error {
 	if err != nil {
 		return err
 	}
+	// 落盘前把明文令牌换成 DPAPI 密文
+	if s.Token != "" {
+		if enc, err := protectSecret([]byte(s.Token)); err == nil {
+			s.TokenEnc = encodeB64(enc)
+			s.Token = ""
+		} else {
+			log.Printf("加密令牌失败（将以明文保存）：%v", err)
+		}
+	}
 	raw, _ := json.MarshalIndent(s, "", "  ")
-	return os.WriteFile(path, raw, 0o600)
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		return err
+	}
+	secureFileAcl(path)
+	return nil
 }
 
 // ---------- 连接引擎 ----------
@@ -419,9 +447,20 @@ func (s *uiServer) handleState(w http.ResponseWriter, r *http.Request) {
 	payload["log_dir"] = filepathDir(logFilePath())
 	payload["platform"] = runtime.GOOS
 	payload["token_hint"] = maskToken(cfg.Token)
+	payload["secret_storage"] = secretStorageKind
 	payload["version"] = Version
 	payload["selected_node"] = cfg.SelectedNode
 	writeJSON(w, payload)
+}
+
+func encodeB64(b []byte) string { return base64.StdEncoding.EncodeToString(b) }
+
+func decodeB64(s string) []byte {
+	b, err := base64.StdEncoding.DecodeString(s)
+	if err != nil {
+		return nil
+	}
+	return b
 }
 
 func maskToken(t string) string {

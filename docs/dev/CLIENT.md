@@ -199,6 +199,35 @@ POST /api/settings 同源 JSON           → 200
 POST /api/disconnect（空 body，托盘）  → 200
 ```
 
+## 7.7 令牌加密存储（2.10+）
+
+问题：`%APPDATA%\ppvpn\config.json` 里是**明文 JWT**（168 字符），
+且 `os.WriteFile(..., 0o600)` 在 Windows 上权限位无效（走继承 ACL），
+任何以当前用户身份运行的程序都能读走令牌。
+
+处理：Windows 用 DPAPI（`CryptProtectData`，当前用户作用域）加密：
+
+```json
+{ "api": "https://...", "token_enc": "AQAAANCMnd8BFdERjHoAwE/Cl+...", ... }
+```
+
+- 落盘只有 `token_enc`，内存中才有明文 `Token`
+- 换 Windows 用户或换机器无法解密（读不出来会提示重新登录）
+- 旧版明文配置在启动时自动迁移：读 → 加密 → 重写
+- 写完后 `icacls /inheritance:r /grant:r "%USERNAME%":F` 收紧 ACL
+- `/api/state` 新增 `secret_storage: "dpapi"` 便于排查
+
+实测（隔离配置目录）：
+
+```
+迁移前字段: api, token, ...
+迁移后字段: api, token_enc（520 字符 base64）, ...   token 明文长度 0
+/api/state: logged_in=true, token_hint=eyJh…nPnE, secret_storage=dpapi
+重启后再查: logged_in 仍为 true（密文可解密）
+```
+
+Linux/macOS 暂无等价实现（`secret_unix.go` 直通，文件权限 0600）。
+
 ## 8. 本地控制台 API
 
 `ui.go` 暴露的本地接口（仅 127.0.0.1，不需要鉴权）：
