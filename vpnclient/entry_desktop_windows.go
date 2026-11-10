@@ -231,8 +231,7 @@ func localPost(addr, path string, body map[string]any) error {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := loopbackHTTP.Do(req)
 	if err != nil {
 		return err
 	}

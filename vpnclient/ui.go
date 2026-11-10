@@ -23,6 +23,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/quic-go/quic-go"
@@ -194,6 +195,8 @@ func saveSettings(s uiSettings) error {
 
 type sessionState struct {
 	mu        sync.Mutex
+	// attempt 是连接尝试的序号：旧尝试的 goroutine 不许覆盖新尝试的状态
+	attempt int64
 	status string // idle | connecting | connected | error
 	message string
 	nodeID int64
@@ -699,6 +702,7 @@ func (s *uiServer) releasePanelSession(sessionID int64) {
 func (s *uiServer) connect(nodeID int64) error {
 	cfg := s.currentSettings()
 	if err := cfg.validate(); err != nil {
+		// 还没领序号，直接写（这是最新一次调用的校验失败）
 		s.state.set(func(st *sessionState) {
 			st.status = "error"
 			st.message = err.Error()
@@ -707,8 +711,12 @@ func (s *uiServer) connect(nodeID int64) error {
 	}
 	s.disconnect("重新连接")
 
+	// 每次连接领一个新序号：旧尝试的 goroutine 到此为止不许再改状态
+	attempt := attemptSeq.Add(1)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	s.state.set(func(st *sessionState) {
+		st.attempt = attempt
 		st.status = "connecting"
 		st.message = "正在拉取节点…"
 		st.cancel = cancel
@@ -726,18 +734,18 @@ func (s *uiServer) connect(nodeID int64) error {
 		defer func() {
 			if r := recover(); r != nil {
 				log.Printf("连接流程异常：%v", r)
-				s.state.set(func(st *sessionState) { st.status = "error"; st.message = fmt.Sprint(r) })
+				s.setFor(attempt, func(st *sessionState) { st.status = "error"; st.message = fmt.Sprint(r) })
 				cancel()
 			}
 		}()
 
 		nodes, err := listNodes(ctx, cfg.API, cfg.Token)
 		if err != nil {
-			s.fail(cancel, "拉取节点失败", err)
+			s.fail(cancel, attempt, "拉取节点失败", err)
 			return
 		}
 		if len(nodes) == 0 {
-			s.fail(cancel, "没有可用节点", fmt.Errorf("账号未绑定节点或资格无效"))
+			s.fail(cancel, attempt, "没有可用节点", fmt.Errorf("账号未绑定节点或资格无效"))
 			return
 		}
 		pick := nodes[0]
@@ -746,7 +754,7 @@ func (s *uiServer) connect(nodeID int64) error {
 				pick = n
 			}
 		}
-		s.state.set(func(st *sessionState) {
+		s.setFor(attempt, func(st *sessionState) {
 			st.nodeID = pick.ID
 			st.nodeName = pick.Name
 			st.nodeHost = pick.Endpoint
@@ -763,15 +771,15 @@ func (s *uiServer) connect(nodeID int64) error {
 
 		devID, derr := s.resolveDevice(ctx, cfg)
 		if derr != nil {
-			s.fail(cancel, "获取设备失败", derr)
+			s.fail(cancel, attempt, "获取设备失败", derr)
 			return
 		}
 		prof, err := connectPortal(ctx, cfg.API, cfg.Token, devID, pick.ID)
 		if err != nil {
-			s.fail(cancel, "连接接口失败", err)
+			s.fail(cancel, attempt, "连接接口失败", err)
 			return
 		}
-		s.state.set(func(st *sessionState) {
+		s.setFor(attempt, func(st *sessionState) {
 			st.sessionID = prof.SessionID
 			st.ip4 = prof.IP4
 			st.mtu = prof.MTU
@@ -811,17 +819,17 @@ func (s *uiServer) connect(nodeID int64) error {
 		assigned, conn, err := authHTTP3(ctx, pick.Endpoint, sni, prof.Token, skipVerify)
 		_ = conn // 仅用于鉴权；数据面走可靠流
 		if err != nil {
-			s.fail(cancel, "HTTP/3 鉴权失败", err)
+			s.fail(cancel, attempt, "HTTP/3 鉴权失败", err)
 			return
 		}
-		s.state.set(func(st *sessionState) {
+		s.setFor(attempt, func(st *sessionState) {
 			st.sni = sni
 			st.conn = conn
 			st.message = "鉴权通过，正在做 DNS 探测…"
 		})
 		log.Printf("HTTP/3 鉴权成功：节点分配 %s（SNI=%s）", assigned, sni)
 
-		s.state.set(func(st *sessionState) {
+		s.setFor(attempt, func(st *sessionState) {
 			// 注意：这里不能把 probeOK 置真 —— 此时只是 HTTP/3 鉴权过了，
 			// 数据面一个包都还没通。真正的判定交给 runTunnelProbe。
 			st.probeOK = false
@@ -876,11 +884,11 @@ func (s *uiServer) connect(nodeID int64) error {
 		log.Printf("隧道参数：地址=%s 网关=%s 网段=%s DNS=%v", prof.IP4, gateway, cidr, tunDNS)
 		pc, cleanupStream, serr := openTunnelStream(ctx, pick.Endpoint, sni, prof.Token, skipVerify)
 		if serr != nil {
-			s.fail(cancel, "建立隧道流失败", serr)
+			s.fail(cancel, attempt, "建立隧道流失败", serr)
 			return
 		}
 		defer cleanupStream()
-		s.state.set(func(st *sessionState) { st.message = "隧道流已建立，正在接管系统网络…" })
+		s.setFor(attempt, func(st *sessionState) { st.message = "隧道流已建立，正在接管系统网络…" })
 
 		// 解析 VPN 服务器地址：这些 IP 必须绕过隧道直连，否则会形成路由环
 		endpointIPs := resolveEndpointIPs(pick.Endpoint)
@@ -910,13 +918,13 @@ func (s *uiServer) connect(nodeID int64) error {
 			},
 			Conn: pc,
 			OnStats: func(rx, tx int64) {
-				s.state.set(func(st *sessionState) { st.rx, st.tx = uint64(rx), uint64(tx) })
+				s.setFor(attempt, func(st *sessionState) { st.rx, st.tx = uint64(rx), uint64(tx) })
 			},
 		})
 
 		if terr != nil {
 			log.Printf("系统网络接管失败：%v", terr)
-			s.state.set(func(st *sessionState) {
+			s.setFor(attempt, func(st *sessionState) {
 				st.status = "connected"
 				st.tunErr = terr.Error()
 				st.startedAt = time.Now().UnixMilli()
@@ -928,7 +936,7 @@ func (s *uiServer) connect(nodeID int64) error {
 			// 端到端连通性探测：绑定隧道地址发真实 DNS 查询
 			// 多目标探测：网关 + 多个公共 DNS，任一可达即视为数据面通
 			runTunnelProbe(ctx, prof.IP4, defaultDNSAddr, res.Gateway, func(ok bool, rtt time.Duration, info string) {
-				s.state.set(func(st *sessionState) {
+				s.setFor(attempt, func(st *sessionState) {
 					st.netOK = ok
 					st.netRTT = int(rtt.Milliseconds())
 					st.netErr = info
@@ -941,7 +949,7 @@ func (s *uiServer) connect(nodeID int64) error {
 					}
 				})
 			})
-			s.state.set(func(st *sessionState) {
+			s.setFor(attempt, func(st *sessionState) {
 				st.status = "connected"
 				st.tun = tun
 				st.adapter = res.Adapter
@@ -966,12 +974,12 @@ func (s *uiServer) connect(nodeID int64) error {
 				return
 			case <-ticker.C:
 				if stats := conn.ConnectionStats(); stats.SmoothedRTT > 0 {
-					s.state.set(func(st *sessionState) { st.rttMs = int(stats.SmoothedRTT.Milliseconds()) })
+					s.setFor(attempt, func(st *sessionState) { st.rttMs = int(stats.SmoothedRTT.Milliseconds()) })
 				}
 				if tun != nil {
 					if e := tun.Err(); e != "" {
 						rx, tx := tun.Stats()
-						s.state.set(func(st *sessionState) {
+						s.setFor(attempt, func(st *sessionState) {
 							st.status = "error"
 							st.message = "隧道中断：" + e
 							st.tunErr = e
@@ -987,9 +995,26 @@ func (s *uiServer) connect(nodeID int64) error {
 	return nil
 }
 
-func (s *uiServer) fail(cancel context.CancelFunc, stage string, err error) {
-	log.Printf("%s：%v", stage, err)
-	s.state.set(func(st *sessionState) {
+// attemptSeq 单调递增，用来区分「同一时刻只有最新一次连接尝试算数」。
+var attemptSeq atomic.Int64
+
+// setFor 只在「当前尝试序号」匹配时才写状态。
+//
+// 背景：切换节点时 connect() 会先 disconnect 再发起新尝试，旧 goroutine 的
+// 请求随之被 cancel，它会立刻 fail() 写一条「拉取节点失败：context canceled」，
+// 把新尝试的状态覆盖成 error —— 用户看到的就是「明明在连，却报 context canceled」。
+func (s *uiServer) setFor(attempt int64, fn func(*sessionState)) {
+	s.setFor(attempt, func(st *sessionState) {
+		if attempt != 0 && st.attempt != attempt {
+			return
+		}
+		fn(st)
+	})
+}
+
+func (s *uiServer) fail(cancel context.CancelFunc, attempt int64, stage string, err error) {
+	log.Printf("%s（尝试 %d）：%v", stage, attempt, err)
+	s.setFor(attempt, func(st *sessionState) {
 		st.status = "error"
 		st.message = stage + "：" + err.Error()
 	})
@@ -1085,7 +1110,7 @@ func (s *uiServer) panelJSON(ctx context.Context, method, path string, body any,
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	resp, err := (&http.Client{Timeout: 15 * time.Second}).Do(req)
+	resp, err := panelHTTP.Do(req)
 	if err != nil {
 		return nil, err
 	}

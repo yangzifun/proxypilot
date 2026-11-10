@@ -33,3 +33,15 @@ var panelHTTP = &http.Client{
 		ForceAttemptHTTP2:     true,
 	},
 }
+// loopbackHTTP 用于访问本机 UI 服务（127.0.0.1:xxxx）。
+// 同样必须绕开代理：否则本地代理一挂，连自己的界面接口都调不通。
+var loopbackHTTP = &http.Client{
+	Timeout: 5 * time.Second,
+	Transport: &http.Transport{
+		Proxy: nil,
+		DialContext: (&net.Dialer{
+			Timeout:   3 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+	},
+}
