@@ -58,6 +58,7 @@
 - [Go Agent](#go-agent)
 - [API 概览](#api-概览)
 - [开发与测试](#开发与测试)
+- [开发文档（docs/DEVELOPMENT.md）](docs/DEVELOPMENT.md)
 - [故障排查](#故障排查)
 - [安全说明](#安全说明)
 - [许可证](#许可证)
