@@ -20,6 +20,12 @@ const (
 
 // maxReadPacket 是单次网卡读取的缓冲上限。
 // 取 64KB 是为了容纳 Windows 卸载机制递交的「多段合体包」。
+// socketBufferBytes 是 UDP 收发缓冲大小。
+//
+// BDP = 带宽 × RTT，100 Mbps × 145 ms ≈ 1.8 MB，默认 64KB 会锁死吞吐，
+// 这里给 4 MB 留余量。
+const socketBufferBytes = 4 << 20
+
 const maxReadPacket = 64 * 1024
 
 // PacketDevice 抽象各平台的虚拟网卡（Linux/macOS: /dev/net/tun；Windows: Wintun）。

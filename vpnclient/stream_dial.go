@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"time"
 
@@ -45,8 +46,8 @@ func openTunnelStream(ctx context.Context, endpoint, sni, token string, insecure
 		// 但这里没开 —— ReceiveDatagram 立刻返回 "datagram support disabled"，
 		// datagramLoop 启动即退出，UDP 下行永远是 0。
 		EnableDatagrams: true,
-		KeepAlivePeriod:                10 * time.Second,
-		MaxIdleTimeout:                 120 * time.Second,
+		KeepAlivePeriod: 10 * time.Second,
+		MaxIdleTimeout:  120 * time.Second,
 		// 与鉴权连接同理：跨境链路上握手丢一次包就要 PTO 退避，
 		// 默认 5s 太紧，放宽到 15s 减少「首次连不上」。
 		HandshakeIdleTimeout:           15 * time.Second,
@@ -55,12 +56,29 @@ func openTunnelStream(ctx context.Context, endpoint, sni, token string, insecure
 		InitialConnectionReceiveWindow: 8 << 20,
 		MaxConnectionReceiveWindow:     64 << 20,
 	}
+	// 自建 UDP socket 并放大收发缓冲。
+	//
+	// BDP = 带宽 × RTT。100 Mbps × 145 ms ≈ 1.8 MB；
+	// 用默认 64KB 缓冲时，单流吞吐会被压在十几 Mbps 量级。
+	// 交给 quic.Transport 接管后还能启用批量收发（Linux GSO / recvmmsg）。
+	udpConn, uerr := net.ListenUDP("udp4", nil)
+	if uerr != nil {
+		return nil, nil, nil, fmt.Errorf("创建 UDP socket 失败：%w", uerr)
+	}
+	_ = udpConn.SetReadBuffer(socketBufferBytes)
+	_ = udpConn.SetWriteBuffer(socketBufferBytes)
+	qtr := &quic.Transport{Conn: udpConn}
+
 	tr := &http3.Transport{
 		TLSClientConfig: tlsConf,
 		QUICConfig:      quicConf,
 		EnableDatagrams: true,
 		Dial: func(ctx context.Context, addr string, t *tls.Config, c *quic.Config) (*quic.Conn, error) {
-			qc, err := quic.DialAddr(ctx, addr, t, c)
+			ua, rerr := net.ResolveUDPAddr("udp4", addr)
+			if rerr != nil {
+				return nil, rerr
+			}
+			qc, err := qtr.Dial(ctx, ua, t, c)
 			if err == nil {
 				conn = qc
 			}
@@ -92,6 +110,12 @@ func openTunnelStream(ctx context.Context, endpoint, sni, token string, insecure
 			_ = conn.CloseWithError(0, "tunnel closed")
 		}
 		tr.Close()
+		if qtr != nil {
+			_ = qtr.Close()
+		}
+		if udpConn != nil {
+			_ = udpConn.Close()
+		}
 	}
 	pc := newStreamPacketConn(pw, resp.Body)
 	return pc, conn, cleanup, nil

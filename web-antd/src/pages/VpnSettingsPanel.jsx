@@ -23,6 +23,11 @@ export default function VpnSettingsPanel() {
         mtu: d.mtu || 1280,
         token_ttl_seconds: d.token_ttl_seconds || 600,
         client_cidr4: d.client_cidr4 || '10.88.0.0/16',
+        // 这三个字段之前漏了回填，下拉/输入框显示空白，
+        // 而它们是必填项 —— 空白时点保存会被校验拦住，用户根本改不了配置。
+        datagram_enabled: d.datagram_enabled !== false,
+        fec_mode: d.fec_mode || 'off',
+        fec_group: d.fec_group || 8,
       });
     } catch (e) {
       message.error(e.message || '加载 VPN 配置失败');
