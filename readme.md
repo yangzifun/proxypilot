@@ -11,7 +11,12 @@
 - **本机服务器独立存储**：迁移到 local_server 表，不再与节点混用 servers。
 - **证书管理页**：本站 CA + 功能证书签发/下发/下载。
 - **用户详情标签页**：节点配置 → 代理配置、授权服务 → 代理授权，VPN 授权独立子页面。
-- **客户端 2.3**：切换节点立即生效并自动重连、圆角图标、连接动画修正。
+- **客户端 2.4 → 2.7**：
+  - 2.4 切换节点不再误触重连；主页面精简，新增「连接详情」子页面
+  - 2.5 延迟并入状态徽章、在线时长移入设置页
+  - 2.6 **DNS 泄露防护**：NRPT 强制所有域名走隧道 DNS + 封禁物理网卡明文 DNS（详见 `docs/DNS-LEAK.md`）
+  - 2.7 **退出/断开彻底清理**：托盘退出、窗口关闭、系统注销前同步断开，清理 `/1` 路由与 DNS 规则；
+    新增「修复网络」按钮，杜绝「断开后整机上不了网」
 
 - **桌面客户端**：新增 Wails v3（WebView2）原生窗口版 `ProxyPilot.exe`，界面与网页控制台一致，按用户安装（`install.cmd`，免管理员），图标取自站点 favicon。
 - **客户端网页登录**：客户端点「使用浏览器登录」→ 浏览器完成邮箱验证并授权 → 客户端自动拿到令牌，无需手工粘贴。
@@ -23,8 +28,8 @@
   自动配置地址/MTU 并按模式下发路由：「仅组网网段」或「接管全部流量」；断开时自动删除路由并关闭网卡。
   Windows 版以管理员身份运行（清单 `requireAdministrator`），驱动随安装包内置，无需单独安装。
 - **证书管理页**：管理后台新增「证书管理」（`#certs`）—— 本站内部 CA（ECDSA P-256，10 年，加密存库）与站点功能证书（Cloudflare DNS-01 通配），支持一键签发/续签、下发到组网中心与全部节点、下载证书/链/私钥。
-- **协议栈**：新增「VPN 与组网协议栈」章节 —— VPN 走 QUIC 可靠流（`[2字节长度][IP报文]` 分帧 + `0.0.0.0/1` 双半区路由 + 服务器 `/32` 直连防环），组网走同一套 HTTP/3 隧道（`10.99.0.0/16`、无 NAT、允许互访）。
-- **版本号**：服务端 V35.3 / Agent 2.1.1 / 客户端 2.3。
+- **协议栈（详细版）**：「VPN 与组网协议栈」章节已扩充为 12 小节 —— 分层封装图、客户端数据面路径、`[2B长度][IP报文]` 字节级帧格式、HTTP/3 请求/响应头逐项说明、QUIC 传输参数与 1-RTT 短包结构、TLS 三种证书模式、JWT 声明表、一次 ping 的完整字节流与封装开销计算、组网（Mesh）心跳报文、Wireshark/tcpdump 过滤表达式、性能调优参数表。
+- **版本号**：服务端 V35.3 / Agent 2.1.1 / 客户端 2.7。
 ## 目录
 
 - [架构总览](#架构总览)
@@ -35,6 +40,18 @@
 - [功能总览](#功能总览)
 - [协议与端口](#协议与端口)
 - [VPN 与组网协议栈](#vpn-与组网协议栈)
+  - [1. 分层封装总览](#1-分层封装总览)
+  - [2. 客户端数据面内部路径](#2-客户端数据面内部路径)
+  - [3. 隧道帧格式（字节级）](#3-隧道帧格式字节级)
+  - [4. HTTP/3 报文内容](#4-http3-报文内容)
+  - [5. QUIC 传输层](#5-quic-传输层)
+  - [6. TLS 与证书模式](#6-tls-与证书模式)
+  - [7. JWT 令牌结构](#7-jwt-令牌结构)
+  - [8. 一次 ping 的完整字节流](#8-一次-ping-1111-的完整字节流)
+  - [9. 组网（Mesh）](#9-组网mesh)
+  - [10. 抓包与调试](#10-抓包与调试)
+  - [11. 性能与调优要点](#11-性能与调优要点)
+  - [12. 版本对应](#12-版本对应2026-11)
 - [权限模型](#权限模型)
 - [生产部署](#生产部署单机直接安装)
 - [使用指南](#使用指南)
@@ -227,97 +244,312 @@ proxypilot/
 
 ## VPN 与组网协议栈
 
-面板里有两套基于 QUIC 的自研网络，**都不经过 sing-box**，由 Agent 内嵌的 HTTP/3 隧道节点承载：
+> 术语：面板里的「组网」早期按 MASQUE 命名（目录 `masque/`、JWT `aud=masque-node`），
+> 但实现是**自研的 HTTP/3 可靠流隧道**，不实现 RFC 9484 CONNECT-IP 与 RFC 9297 HTTP Datagram。
+> 下文统一称「隧道」，并在末尾说明与标准 MASQUE 的差异。
 
-- **VPN**：终端用户电脑接入公网（节点做 NAT 出口）
-- **组网**：服务器之间组成内网（10.99.0.0/16，节点间可互访）
+### 1. 分层封装总览
 
-### VPN 协议栈（客户端 → 节点 → 公网）
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│ 应用层     浏览器 / 任意 App                                     │
-├─────────────────────────────────────────────────────────────────┤
-│ IP 层      10.88.x.y/24  （节点分配的客户端子网）                 │
-│            路由：0.0.0.0/1 + 128.0.0.0/1 → 虚拟网卡（接管公网）    │
-│                  节点公网 IP/32 → 原网关（防路由环，直连）        │
-├─────────────────────────────────────────────────────────────────┤
-│ 隧道层     [2 字节长度][IP 报文] 分帧，跑在 HTTP/3 双向流上        │
-│            客户端 POST /tunnel，响应体即下行通道                  │
-├─────────────────────────────────────────────────────────────────┤
-│ 传输层     QUIC v1（UDP 443，TLS 1.3，ALPN=h3）                  │
-│            keepalive 10s / idle 120s                             │
-├─────────────────────────────────────────────────────────────────┤
-│ 鉴权       面板签发 JWT（Ed25519），Bearer 头                     │
-│            声明：uuid / node / grant / ipv4 / jti / exp          │
-├─────────────────────────────────────────────────────────────────┤
-│ 节点侧     自研 HTTP/3 隧道节点（Agent 内嵌）                     │
-│            TUN ppvpn0 = 10.88.x.1/24                             │
-│            ip_forward=1 + iptables MASQUERADE → 出口网卡 eth0     │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-关键参数：
-
-| 项 | 值 | 来源 |
-| --- | --- | --- |
-| 监听 | `0.0.0.0:443/udp` | `vpn_nodes.endpoint` |
-| 客户端子网 | 每节点独立，如 `10.88.1.0/24` | `vpn_nodes.client_cidr4` |
-| 网卡地址 | 子网内分配，如 `10.88.1.12` | 面板 `AllocateIP` |
-| 网关 | 子网 .1，如 `10.88.1.1` | 节点 `gateway_ip4` |
-| MTU | 1280 | `vpn_settings.mtu` |
-| DNS | 固定 `1.1.1.1`、`8.8.8.8` | 客户端内置 |
-| 令牌有效期 | 默认 20 分钟 | `vpn_settings.token_ttl_seconds` |
-
-连接建立顺序：
+一次上网请求在客户端与节点之间会叠成 6 层，任何一层出问题都会表现为"连不上/很慢"：
 
 ```
-客户端                         面板                        节点
-  │  POST /api/portal/vpn/connect │                          │
-  │ ─────────────────────────────▶│  校验授权/配额/并发       │
-  │ ◀──── JWT + ip4 + mtu + dns ──│  创建会话、分配 IP        │
-  │                                                          │
-  │  HTTP/3 GET /  (Bearer JWT)                              │
-  │ ────────────────────────────────────────────────────────▶│ 验签 + 校验 node/网段
-  │ ◀────────────────── 200 X-VPN-Auth: Success ─────────────│ 注册会话
-  │                                                          │
-  │  HTTP/3 POST /tunnel  (Bearer JWT)                       │
-  │ ═════════ 双向流：[len][IP] … ═══════════════════════════▶│ 写入 TUN → NAT
-  │ ◀═════════════ [len][IP] …（下行）═══════════════════════│
+      客户端                                          节点
+┌──────────────────┐                        ┌──────────────────┐
+│ 应用数据          │                        │                  │
+│   ↓ socket       │                        │ 内核转发          │
+│ IP 报文 (L3)      │                        │   ↓              │
+│   ↓ Wintun TUN   │                        │ TUN ppvpn0       │
+│ 隧道帧 [2B][IP]   │                        │   ↑              │
+│   ↓               │   HTTP/3 双向流        │ 隧道帧 [2B][IP]   │
+│ HTTP/3 DATA 帧    │ ═══════════════════▶  │   ↑              │
+│   ↓               │                        │                  │
+│ QUIC 1-RTT 包     │   UDP/443 + QUIC       │                  │
+│   ↓               │ ◀═══════════════════  │                  │
+│ UDP + IP + 以太网 │                        │                  │
+└──────────────────┘                        └──────────────────┘
 ```
 
-> 早期版本用 QUIC DATAGRAM 承载报文，因 DATAGRAM 不重传、跨境丢包即永久丢失，
-> 已改为**可靠流**（`v1.3+`）。`GET /` 仅用于鉴权与探测，实际数据走 `POST /tunnel`。
+| 层次 | 协议/格式 | 由谁负责 |
+|---|---|---|
+| 应用层 | 任意 TCP/UDP 应用 | 用户程序 |
+| 网络层 | IPv4 报文（IPv6 暂不支持） | 系统内核 → TUN |
+| 隧道层 | `[2 字节大端长度][IP 报文]` | 客户端 `streamPacketConn` / 节点 `readStream` |
+| 应用协议 | HTTP/3：`GET /` 鉴权、`POST /tunnel` 数据面 | `http3.Server` / `http3.Transport` |
+| 传输层 | QUIC v1（TLS 1.3，ALPN `h3`） | `quic-go` |
+| 承载层 | UDP 443 + IP | 操作系统 |
 
-### 组网协议栈（服务器 ↔ 服务器）
+### 2. 客户端数据面内部路径
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│ IP 层      10.99.0.x/16（中心固定 10.99.0.1）                     │
-│            路由：10.99.0.0/16 → 组网网卡                          │
-├─────────────────────────────────────────────────────────────────┤
-│ 隧道层     与 VPN 同一套 HTTP/3 隧道代码                          │
-│            节点配置 disable_nat=true、allow_client_to_client=true │
-├─────────────────────────────────────────────────────────────────┤
-│ 传输层     QUIC / HTTP/3（UDP 443，中心 vpncenter.yzfn.top）      │
-├─────────────────────────────────────────────────────────────────┤
-│ 鉴权       组网 JWT（-mesh-token，/etc/proxypilot/mesh.token）    │
-├─────────────────────────────────────────────────────────────────┤
-│ 心跳       POST /api/portal/vpn/mesh/heartbeat                   │
-│            上报 rtt_ms / transport / state / endpoint / last_error│
-└─────────────────────────────────────────────────────────────────┘
+[上行] 应用 → 系统路由(0.0.0.0/1) → Wintun 适配器
+        → pumpUp() 读到一个 IP 报文
+        → streamPacketConn.SendPacket()
+        → 写 io.Pipe → http3.Transport 的请求体
+        → QUIC STREAM(DATA) 帧 → UDP 443 → 节点
+
+[下行] 节点 QUIC STREAM → http3 响应体 → resp.Body
+        → streamPacketConn.RecvPacket()
+        → pumpDown() 写入 Wintun
+        → 系统按 IP 头投递给应用
 ```
+
+关键代码位置：
+
+| 环节 | 文件 |
+|---|---|
+| 建流与 HTTP/3 客户端 | `vpnclient/stream_dial.go`（`POST /tunnel`） |
+| 分帧收发 | `vpnclient/stream_tunnel.go`（`SendPacket`/`RecvPacket`） |
+| 网卡与路由 | `vpnclient/route_windows.go` |
+| 节点侧收流 | `masque/node/stream.go`（`readStream`） |
+| 节点侧回写 | `masque/node/server.go`（`tunLoop`） |
+
+### 3. 隧道帧格式（字节级）
+
+每个 IP 报文前加 **2 字节大端长度**，无填充、无校验和（QUIC 已有 AEAD）：
+
+```
+ 0                   1                   2                   3
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++----------------+------------------------------------------------...
+|   Length (2B)  |              IP Packet (Length 字节)            ...
++----------------+------------------------------------------------...
+```
+
+以 `ping 1.1.1.1`（ICMP 32 字节负载）为例，帧内容：
+
+```
+00 3C                          ← Length = 60（IP 报文总长）
+45 00 00 3C 1A 2B 00 00        ← IPv4 头：版本4/IHL5、TOS0、总长60、ID、Flags
+40 01 F2 9E                    ← TTL 64、协议 1(ICMP)、头校验和
+0A 58 01 0C 01 01 01 01        ← 源 10.88.1.12 → 目的 1.1.1.1
+08 00 4D 5A 00 01 00 01        ← ICMP Echo Request：类型8/代码0/校验和/标识/序号
+... 32 字节 payload ...        ← 实际 ping 数据
+```
+
+约束：
+
+| 项 | 值 | 说明 |
+|---|---|---|
+| 长度字段 | 无符号 16 位大端 | 只表示 IP 报文长度，不含这 2 字节本身 |
+| 单帧上限 | 4096 字节 | 防异常长度（`maxFrame`） |
+| 帧边界 | 严格按长度切分 | 一条流里连续排列，无分隔符 |
+| 校验 | 无 | 依赖 QUIC 的 AEAD 与 TCP/ICMP 自身校验 |
+
+> 为什么不直接在流里裸写 IP 报文？因为 TCP/QUIC 是**字节流**，没有消息边界，
+> 必须自带长度前缀才能切包。若改用 HTTP Datagram（RFC 9297）可省掉这 2 字节，但会失去重传保证。
+
+### 4. HTTP/3 报文内容
+
+#### 4.1 鉴权请求（GET /）
+
+客户端在建立数据面前先做一次普通 HTTP/3 请求，用于验签与分配地址：
+
+```
+:method: GET
+:scheme: https
+:authority: taipei-node.yzfn.top:443      （SNI 与 :authority 一致）
+:path: /
+authorization: Bearer eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9....
+```
+
+节点校验通过后返回：
+
+```
+:status: 200
+x-vpn-auth: Success
+x-vpn-assigned-ipv4: 10.88.1.12
+x-vpn-max-datagram: 1360                  （历史字段，DATAGRAM 时代遗留）
+cache-control: no-store
+```
+
+失败分支：
+
+| 状态码 | 响应体 | 原因 |
+|---|---|---|
+| 401 | `unauthorized` | 缺 Bearer / 签名无效 / 过期 |
+| 403 | `wrong node` | JWT 里的 `node` 与节点 ID 不符 |
+| 403 | `ip not in client cidr` | JWT 里的 `ip4` 不在节点客户端子网 |
+| 409 | `ip already in use` | 同一地址已有活跃会话 |
+
+#### 4.2 数据面（POST /tunnel）
+
+```
+:method: POST
+:scheme: https
+:authority: taipei-node.yzfn.top:443
+:path: /tunnel
+authorization: Bearer eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9....
+content-type: application/octet-stream
+```
+
+- **请求体**：上行，持续写入 `[2B][IP]` 帧，一直到断开
+- **响应体**：下行，节点持续写入同格式帧
+- 响应头（在鉴权通过后立即返回，随后开始双向流）：
+
+```
+:status: 200
+x-vpn-auth: Success
+x-vpn-assigned-ipv4: 10.88.1.12
+cache-control: no-store
+content-type: application/octet-stream
+```
+
+- 这是**长连接**：一条流同时承载上下行，直到客户端断开或空闲超时
+- 没有 `content-length`：长度未知，靠流结束（FIN）标识终止
+
+#### 4.3 为什么用 POST 而不是 CONNECT
+
+标准 MASQUE 用 HTTP/3 扩展 `CONNECT` + `:protocol=connect-ip`：
+报文走 HTTP Datagram，地址路由用 Capsule 协商。
+本项目用普通 `POST /tunnel`：报文作为**可靠流**传输，地址与路由由面板 JSON 下发。
+好处是能复用现有 HTTP/3 基础设施与面板授权体系，代价是失去与标准 MASQUE 客户端的互通性。
+
+### 5. QUIC 传输层
 
 | 项 | 值 |
-| --- | --- |
+|---|---|
+| 版本 | QUIC v1（RFC 9000） |
+| 承载 | UDP 443（可配 `listen_port`） |
+| TLS | 1.3，ALPN = `h3` |
+| 握手 | 1-RTT（首连），支持会话票据复用 |
+| keepalive | 客户端 10s / 节点 15s |
+| 空闲超时 | 120s（两端） |
+| 拥塞控制 | Cubic（quic-go 未内置 BBR） |
+| 流控窗口 | 初值 512 KB，单流上限 6 MB，连接上限 15 MB（quic-go 默认） |
+
+**1-RTT 短包结构**（数据面每个报文都套这一层）：
+
+```
++--------+----------------+----------+-------------------+
+| 1B 头  | DCID (8B)      | PN(1-2B) | AEAD 密文 + 16B 标签 |
++--------+----------------+----------+-------------------+
+   ↑ 短包头     ↑ 连接 ID        ↑ 包号
+```
+
+**流控与 RTT 的关系**（决定单流吞吐上限）：
+
+```
+吞吐上限 ≈ 接收窗口 / RTT
+```
+
+实测（2026-11）：
+
+| 节点 | RTT | 当前窗口下理论单流上限 |
+|---|---|---|
+| 台北 `82.152.91.4` | 376 ms | 512KB / 0.376s ≈ **10.9 Mbps** |
+| 香港2 `38.147.187.60` | 119 ms | 512KB / 0.119s ≈ **34.4 Mbps** |
+
+→ 跨高 RTT 链路时，**接收窗口是首要瓶颈**，可按 BDP 放大：
+
+```go
+quicConf := &quic.Config{
+    InitialStreamReceiveWindow:     4 << 20,  // 4 MB
+    MaxStreamReceiveWindow:         16 << 20,
+    InitialConnectionReceiveWindow: 8 << 20,
+    MaxConnectionReceiveWindow:     64 << 20,
+    KeepAlivePeriod:                10 * time.Second,
+    MaxIdleTimeout:                 120 * time.Second,
+}
+```
+
+### 6. TLS 与证书模式
+
+| 模式 | 节点使用什么证书 | 客户端校验策略 |
+|---|---|---|
+| `selfsigned` | 节点本地 `openssl` 自签 | **跳过校验**（无信任锚，仅兜底） |
+| `internal_ca` | 平台 CA 现场签发（90 天） | 自动拉 `/api/vpn/ca.crt` 后**严格校验** |
+| `acme` | 「证书管理」里已签发的通配证书（如 `*.yzfn.top`） | 系统根证书**严格校验** |
+
+内部 CA 的信任链：
+
+```
+面板启动生成 CA（ECDSA P-256，10 年，私钥 AES-GCM 存库）
+        ↓ 节点部署时签发 CN=<节点域名> 的 90 天证书
+节点 TLS 1.3 握手出示该证书
+        ↓
+客户端 GET /api/vpn/ca.crt 拉取 CA 并缓存到 %APPDATA%\ProxyPilot\ca.pem
+        ↓ 作为 RootCAs 严格校验
+```
+
+ACME 模式下部署会先校验通配证书是否覆盖节点域名，不覆盖直接报错，避免"部署了但客户端握手失败"。
+
+### 7. JWT 令牌结构
+
+面板签发（Ed25519），节点用公钥验签：
+
+```json
+{
+  "alg": "EdDSA",
+  "typ": "JWT"
+}
+{
+  "iss": "proxypilot",
+  "aud": "masque-node",
+  "sub": "device:3",
+  "uuid": "528a6d92-8112-4f6a-90c9-...",
+  "node": 3,
+  "grant": 42,
+  "ip4": "10.88.1.12",
+  "net": "10.88.1.0/24",
+  "iat": 1794219956,
+  "exp": 1794221156,
+  "jti": "c1f3..."
+}
+```
+
+| 声明 | 用途 |
+|---|---|
+| `node` | 与节点 ID 比对，防止拿 A 节点令牌连 B 节点 |
+| `ip4` | 分配地址，同时用于会话源地址校验（防地址伪造） |
+| `jti` | 会话唯一标识，用于并发去重与审计 |
+| `exp` | 默认 20 分钟，过期需重新换票 |
+
+### 8. 一次 `ping 1.1.1.1` 的完整字节流
+
+以 MTU 1280、无丢包为例：
+
+| 阶段 | 内容 | 字节数 |
+|---|---|---|
+| ① 应用生成 ICMP | 20B IP 头 + 8B ICMP 头 + 32B 负载 | 60 |
+| ② 隧道分帧 | 追加 2B 长度 | 62 |
+| ③ HTTP/3 DATA 帧 | 帧类型 + varint 长度 | +3 ≈ 65 |
+| ④ QUIC STREAM 帧 | 帧类型 + 流 ID + 偏移 + 长度 | +6 ≈ 71 |
+| ⑤ QUIC 1-RTT 包 | 短包头 + DCID + PN + AEAD 标签(16B) | +27 ≈ 98 |
+| ⑥ UDP 头 | 源/目的端口 + 长度 + 校验和 | +8 = 106 |
+| ⑦ IP 头 | 20B（IPv4） | **+20 = 126** |
+
+**封装开销约 110%**（60 → 126 字节）。这解释了两件事：
+
+1. 小包场景（游戏、DNS、TCP ACK）**隧道内开销远大于有效载荷**，pps 是瓶颈而不是带宽
+2. 满 MTU 报文（1280B）时开销仅约 8%，所以大流量下载会更"划算"
+
+节点侧转发路径：
+
+```
+readStream 收到 62B 帧 → StripPadding 校验长度与源地址
+        ↓ 写入 TUN ppvpn0
+内核路由 → iptables MASQUERADE（10.88.1.0/24 → eth0）
+        ↓
+1.1.1.1 回 ICMP Echo Reply
+        ↓ 按 conntrack 回到 TUN
+tunLoop 读到 → 查会话表 → sess.send() 写回 QUIC 流
+```
+
+### 9. 组网（Mesh）
+
+用于**服务器之间**互通（运维面、内部服务调用），与终端用户的 VPN 是两套独立配置。
+
+| 项 | 值 |
+|---|---|
 | 网段 | `10.99.0.0/16`（`vpn_settings.mesh_cidr4`） |
 | 中心 | `vpncenter.yzfn.top:443`，网卡 `ppmesh0` = `10.99.0.1/16` |
-| 成员 | 每台服务器一个固定地址（如 `10.99.0.11`），写入成员表 |
-| 互访 | 允许（组网模式不做客户端隔离） |
-| NAT | 不做（纯内部互通） |
-| 部署 | 面板一键下发 systemd 单元 `pp-mesh-client` |
+| 成员 | 每台服务器一个固定地址（`10.99.0.x`），写入成员表 |
+| 节点模型 | `disable_nat=true`（只配 TUN 地址，不做 NAT） |
+| 互访 | `allow_client_to_client=true`（不做客户端隔离） |
+| 心跳 | `POST /api/portal/vpn/mesh/heartbeat` → `rtt_ms` / `transport` / `state` / `endpoint` / `last_error` |
+| 部署 | 面板下发 systemd 单元 `pp-mesh-client` |
 
-组网客户端使用的就是同一个客户端二进制，以 CLI 组网模式启动：
+启动命令（与 VPN 客户端同一二进制，走 CLI 组网模式）：
 
 ```bash
 pp-mesh-client -mesh-token "$(cat /etc/proxypilot/mesh.token)" \
@@ -325,47 +557,90 @@ pp-mesh-client -mesh-token "$(cat /etc/proxypilot/mesh.token)" \
   -mesh-endpoint vpncenter.yzfn.top:443 -mesh-sni vpncenter.yzfn.top
 ```
 
-### 和标准 MASQUE 的关系
-
-**这套自研隧道不是严格意义上的 MASQUE**，虽然包名沿用了 `masque`。
-
-| 标准 MASQUE（RFC 9484 CONNECT-IP / RFC 9297 HTTP Datagram） | 本项目自研隧道 |
-| --- | --- |
-| HTTP/3 **扩展 CONNECT**，`:protocol = connect-ip` | 普通 **POST `/tunnel`** |
-| 地址/路由通过 Capsule（`ADDRESS_ASSIGN` / `ROUTE_ADVERTISEMENT`）协商 | 面板 `/api/portal/vpn/connect` 返回 JSON（ip4 / mtu / dns / 网段） |
-| 报文走 HTTP Datagram（不可靠）或 Capsule（可靠） | 自定义 `[2 字节长度][IP 报文]` 分帧，跑在 HTTP/3 流上 |
-| 鉴权多为 HTTP Basic / Proxy-Authorization | 面板签发 JWT，`Authorization: Bearer` |
-| 客户端：sing-box / mihomo 等标准栈 | 仅本项目客户端 `vpnclient` |
-
-相同点：都跑在 **HTTP/3（QUIC + TLS 1.3，ALPN=h3）** 之上，都是 **IP-in-HTTP** 形态的隧道，都靠节点侧 TUN + NAT 出口。
-
-仓库里另外两处「MASQUE」是真协议，别和本节混了：
-
-- 订阅模板里的 `masque-server`（sing-box ≥ 1.15，端口 13707/13708）——CONNECT-IP，标准 MASQUE
-- **WARP** 页面的 `#masque`——Cloudflare WARP 接入参数
-
-`masque/` 目录与 `pp-masque-node` 二进制保留旧名只是历史原因（`Audience=masque-node`、
-`/etc/proxypilot/masque/` 仍在用）。要互通标准客户端需补扩展 CONNECT + `connect-ip` Capsule
-与 HTTP Datagram；当前选「可靠流 + JWT」是为了跨境链路稳定并复用面板授权体系。
-
-### 两套网络的差异
+组网与 VPN 的帧格式、HTTP/3 语义**完全相同**，差别只在节点配置：
 
 | 维度 | VPN | 组网 |
-| --- | --- | --- |
+|---|---|---|
 | 服务对象 | 终端用户 | 服务器之间 |
 | 网段 | 每节点独立 `10.88.x.0/24` | 统一 `10.99.0.0/16` |
-| 出口 | 节点 NAT 上网 | 不出口，纯互通 |
-| 隔离 | 客户端之间禁止互访 | 允许互访 |
-| 配置入口 | 客户端界面 | 面板「组网」页一键下发 |
-| 心跳 | 面板会话表 | `/api/portal/vpn/mesh/heartbeat` |
+| NAT | 开（`MASQUERADE`） | 关 |
+| 客户端隔离 | 开（C2C 丢弃） | 关（允许互访） |
+| 地址下发 | 面板 `/api/portal/vpn/connect` | 面板成员表 + `mesh.token` |
 
-### 版本对应
+#### 组网心跳报文
+
+```
+POST /api/portal/vpn/mesh/heartbeat
+content-type: application/json
+
+{
+  "rtt_ms": 157,
+  "transport": "masque",
+  "state": "up",
+  "endpoint": "vpncenter.yzfn.top:443",
+  "last_error": ""
+}
+```
+
+面板据此在「组网」页展示 RTT 与状态，并可用于告警。
+
+### 10. 抓包与调试
+
+**Wireshark 过滤**
+
+```
+udp.port == 443                      # 只看隧道承载
+quic                                 # QUIC 握手与连接
+http3                                # HTTP/3 帧（需开启 TLS 解密）
+http3.headers                       # 只看头部：可见 GET / 与 POST /tunnel
+tls.handshake.extensions_alpn       # 确认 ALPN=h3
+```
+
+**节点侧**
+
+```bash
+# 抓 QUIC 流量（QUIC 加密，只能看包长与时序）
+tcpdump -ni eth0 'udp port 443' -c 200 -vv
+
+# 看 TUN 上的明文 IP 报文（能直接看到 ICMP/TCP 头）
+tcpdump -ni ppvpn0 -c 50 -vv
+
+# 会话日志
+journalctl -u proxypilot-agent -f | grep -E '流隧道|会话'
+```
+
+**客户端日志**
+
+`%LOCALAPPDATA%\ProxyPilot\logs\client.log`，关键字：
+
+```
+数据面：从网卡读到首个报文
+数据面：首个报文已写入隧道流
+隧道流量：网卡→隧道 N 包，隧道→网卡 M 包
+隧道连通性：正常（xx ms）
+DNS 守卫：已强制所有域名走 1.1.1.1, 8.8.8.8
+```
+
+### 11. 性能与调优要点
+
+| 参数 | 当前 | 建议（高 RTT 链路） | 说明 |
+|---|---|---|---|
+| 隧道 MTU | 1280 | 1380 | 1280 时包量多约 8%；1420 在内层封装后接近 1500，遇 PPPoE 易黑洞 |
+| 流控窗口 | 512KB / 6MB / 15MB | 4MB / 16MB / 64MB | 按 BDP = 带宽 × RTT 计算 |
+| 拥塞控制 | Cubic | 节点出口开 BBR | 隧道本身仍是 Cubic |
+| 节点内核 | 默认 | `fq` + `bbr` + 16MB 缓冲 | 影响节点出口的真实 TCP 连接 |
+| 节点选择 | 取列表第一个 | 按实测 RTT | 台北 376ms vs 香港 119ms，差 3.2 倍 |
+
+> 详细优化方案见 [docs/DNS-LEAK.md](docs/DNS-LEAK.md)（DNS 泄露）与本节「性能与调优要点」。
+
+### 12. 版本对应（2026-11）
 
 | 组件 | 版本 | 说明 |
-| --- | --- | --- |
-| 面板 | V35.3 | 签发令牌、分配 IP、会话治理 |
-| Agent | 2.1.1 | 内嵌 HTTP/3 隧道节点（可靠流） |
-| 客户端 | 2.3 | Windows/macOS/Linux 桌面端 |
+|---|---|---|
+| 面板 | **V35.3** | 签发令牌、分配 IP、会话治理、证书管理 |
+| Agent | **2.1.1** | 内嵌 HTTP/3 隧道节点 |
+| 客户端（桌面） | **2.7** | DNS 泄露防护、退出自动清理、连接详情页 |
+| 隧道协议 | 可靠流 v1 | `[2B len][IP]` over HTTP/3 stream |
 
 ---
 
