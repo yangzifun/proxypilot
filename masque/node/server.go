@@ -61,6 +61,11 @@ type Server struct {
 	srv *http3.Server
 	ln  *quic.EarlyListener
 
+	// udpConn / transport：自建的 UDP socket 与 quic 传输层
+	// （为了放大收发缓冲，并启用批量收发）
+	udpConn   *net.UDPConn
+	transport *quic.Transport
+
 	closeOnce sync.Once
 	done      chan struct{}
 }
@@ -84,6 +89,21 @@ func New(cfg Config, log *slog.Logger) (*Server, error) {
 }
 
 // Run 启动 TUN、QUIC/HTTP3 监听与数据面，阻塞直到 ctx 结束。
+// socketBufferBytes 是 UDP 收发缓冲大小。
+//
+// BDP = 带宽 × RTT。100 Mbps × 150 ms ≈ 1.9 MB，跨境链路留余量给 4 MB。
+// 默认 64 KB 会把吞吐锁在约 3~4 Mbps。
+const socketBufferBytes = 4 << 20
+
+// applySocketBuffer 尽力放大 UDP 收发缓冲（部分系统会截断到上限，不影响正确性）。
+func applySocketBuffer(c *net.UDPConn) {
+	if c == nil {
+		return
+	}
+	_ = c.SetReadBuffer(socketBufferBytes)
+	_ = c.SetWriteBuffer(socketBufferBytes)
+}
+
 func (s *Server) Run(ctx context.Context) error {
 	cert, err := tls.LoadX509KeyPair(s.cfg.CertFile, s.cfg.KeyFile)
 	if err != nil {
@@ -131,8 +151,26 @@ func (s *Server) Run(ctx context.Context) error {
 		InitialConnectionReceiveWindow: 8 << 20,
 		MaxConnectionReceiveWindow:     64 << 20,
 	}
-	ln, err := quic.ListenAddrEarly(s.cfg.Listen, tlsConf, quicConf)
+	// 自建 UDP socket 并放大缓冲：BDP = 带宽 × RTT，
+	// 100Mbps × 150ms ≈ 1.9MB，默认 64KB 会把吞吐锁死在几 Mbps。
+	// 用 quic.Transport 接管后还能启用 Linux 上的 GSO 批量发送与 recvmmsg。
+	udpAddr, aerr := net.ResolveUDPAddr("udp4", s.cfg.Listen)
+	if aerr != nil {
+		_ = dev.Close()
+		return fmt.Errorf("解析监听地址 %s: %w", s.cfg.Listen, aerr)
+	}
+	udpConn, cerr := net.ListenUDP("udp4", udpAddr)
+	if cerr != nil {
+		_ = dev.Close()
+		return fmt.Errorf("监听 %s: %w", s.cfg.Listen, cerr)
+	}
+	applySocketBuffer(udpConn)
+	s.udpConn = udpConn
+	s.transport = &quic.Transport{Conn: udpConn}
+
+	ln, err := s.transport.ListenEarly(tlsConf, quicConf)
 	if err != nil {
+		_ = udpConn.Close()
 		_ = dev.Close()
 		return fmt.Errorf("监听 %s: %w", s.cfg.Listen, err)
 	}
@@ -170,6 +208,12 @@ func (s *Server) Run(ctx context.Context) error {
 func (s *Server) Close() {
 	s.closeOnce.Do(func() {
 		close(s.done)
+		if s.transport != nil {
+			_ = s.transport.Close()
+		}
+		if s.udpConn != nil {
+			_ = s.udpConn.Close()
+		}
 		if s.srv != nil {
 			_ = s.srv.Close()
 		}
