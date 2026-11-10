@@ -15,7 +15,12 @@ import (
 // openTunnelStream 建立一条可靠的 HTTP/3 双向流作为隧道数据面。
 //
 // 返回的 pw 写「2 字节长度 + IP 报文」，响应体读同样格式的下行报文。
-func openTunnelStream(ctx context.Context, endpoint, sni, token string, insecure bool) (*streamPacketConn, func(), error) {
+// openTunnelStream 建立隧道数据面。
+//
+// 返回值里额外带上底层 QUIC 连接：DATAGRAM 必须走**同一条连接**，
+// 否则它会挂在那条空闲的鉴权连接上（cwnd 极小、甚至连接已被回收），
+// 表现为「客户端发出 343 个、节点只收到 129 个，双方都没有错误计数」。
+func openTunnelStream(ctx context.Context, endpoint, sni, token string, insecure bool) (*streamPacketConn, *quic.Conn, func(), error) {
 	var conn *quic.Conn
 	tlsConf := &tls.Config{
 		ServerName:         sni,
@@ -26,7 +31,7 @@ func openTunnelStream(ctx context.Context, endpoint, sni, token string, insecure
 	if len(caPEM) > 0 {
 		pool, perr := rootPoolWithPlatformCA()
 		if perr != nil {
-			return nil, nil, perr
+			return nil, nil, nil, perr
 		}
 		tlsConf.RootCAs = pool
 		tlsConf.InsecureSkipVerify = false
@@ -60,18 +65,18 @@ func openTunnelStream(ctx context.Context, endpoint, sni, token string, insecure
 	pr, pw := io.Pipe()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://"+endpoint+"/tunnel", pr)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/octet-stream")
 
 	resp, err := tr.RoundTrip(req)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if got := resp.Header.Get("X-VPN-Auth"); got != "Success" {
 		_ = resp.Body.Close()
-		return nil, nil, fmt.Errorf("X-VPN-Auth=%q status=%d", got, resp.StatusCode)
+		return nil, nil, nil, fmt.Errorf("X-VPN-Auth=%q status=%d", got, resp.StatusCode)
 	}
 
 	cleanup := func() {
@@ -83,5 +88,5 @@ func openTunnelStream(ctx context.Context, endpoint, sni, token string, insecure
 		tr.Close()
 	}
 	pc := newStreamPacketConn(pw, resp.Body)
-	return pc, cleanup, nil
+	return pc, conn, cleanup, nil
 }

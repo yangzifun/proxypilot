@@ -1031,7 +1031,7 @@ func (s *uiServer) connect(nodeID int64) error {
 		}
 		tunDNS = append(tunDNS, "1.1.1.1", "223.5.5.5")
 		log.Printf("隧道参数：地址=%s 网关=%s 网段=%s DNS=%v", prof.IP4, gateway, cidr, tunDNS)
-		pc, cleanupStream, serr := openTunnelStream(ctx, pick.Endpoint, sni, prof.Token, skipVerify)
+		pc, streamConn, cleanupStream, serr := openTunnelStream(ctx, pick.Endpoint, sni, prof.Token, skipVerify)
 		if serr != nil {
 			s.fail(cancel, attempt, "建立隧道流失败", serr)
 			return
@@ -1042,6 +1042,9 @@ func (s *uiServer) connect(nodeID int64) error {
 		// 双通道：UDP 走 QUIC DATAGRAM（不被可靠流的队头阻塞拖累），
 		// TCP/ICMP 仍走可靠流。对端没协商 DATAGRAM 时自动退回单流。
 		// 双通道与 FEC 均由面板配置（协议管理 → VPN）下发，客户端不自行决定。
+		// 注意：DATAGRAM 必须走 streamConn（隧道流那条连接），不能用鉴权连接 ——
+		// 鉴权连接在 GET / 之后就没有流量了，cwnd 极小甚至已被回收，
+		// 实测会出现「发出 343 个、对端只收到 129 个」的静默丢包。
 		fecGroup := 0
 		if prof.FECMode == "xor" && prof.FECGroup > 1 {
 			fecGroup = prof.FECGroup
@@ -1050,10 +1053,10 @@ func (s *uiServer) connect(nodeID int64) error {
 		switch {
 		case !prof.DatagramEnabled:
 			log.Printf("数据面：面板已关闭 DATAGRAM，全部走可靠流")
-		case !supportsDatagrams(conn):
+		case !supportsDatagrams(streamConn):
 			log.Printf("数据面：对端未协商 DATAGRAM，全部走可靠流")
 		default:
-			dual := newDualPacketConn(pc, quicDatagramPeer{conn: conn}, maxDatagramPayload, fecGroup)
+			dual := newDualPacketConn(pc, quicDatagramPeer{conn: streamConn}, maxDatagramPayload, fecGroup)
 			pconn = dual
 			s.setFor(attempt, func(st *sessionState) { st.dualConn = dual })
 			if fecGroup > 1 {

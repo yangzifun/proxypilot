@@ -171,6 +171,31 @@ func (s *Server) serveStream(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	// 双通道（36.3 起）：DATAGRAM 与隧道流**共用这条连接**。
+	//
+	// 之前 DATAGRAM 走的是 GET / 那条鉴权连接，它在鉴权返回后就没有流量了，
+	// cwnd 回落到初始值、连接也可能已被回收，而 UDP 没有 FIN，
+	// SendDatagram 在本地排队即成功 —— 实测「客户端发出 343 个、节点只收到
+	// 129 个，双方都没有错误计数」。绑到隧道流这条连接后，DATAGRAM 与流
+	// 共享同一个 cwnd 与存活状态。
+	//
+	// 注意：这条会话与流共享连接，绝不能在自己的清理里关闭连接，
+	// 否则会把隧道流一起弄断（closeFn 置为空实现）。
+	if s.cfg.DatagramEnabled {
+		if conn, _ := r.Context().Value(connKey{}).(*quic.Conn); conn != nil {
+			dsess := &session{
+				jti: claims.JTI, kind: kindDatagram, ip: ip, device: claims.Subject,
+				grantID: claims.GrantID, conn: conn, started: time.Now(),
+			}
+			dsess.send = func(p []byte) error { return dsess.conn.SendDatagram(p) }
+			dsess.closeFn = func() {} // 共享连接，不在这里关闭
+			if s.register(dsess) {
+				s.log.Info("单连接双通道", "ip", ip.String(), "remote", r.RemoteAddr)
+				go s.readSession(dsess)
+			}
+		}
+	}
+
 	if !s.register(sess) {
 		http.Error(w, "ip already in use", http.StatusConflict)
 		return
