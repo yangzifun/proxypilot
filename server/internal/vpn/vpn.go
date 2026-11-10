@@ -61,7 +61,7 @@ func DefaultSettings() Settings {
 		ServerMeshDomain:    "vpncenter.yzfn.top",
 		MeshCIDR4:           "10.99.0.0/16",
 		ClientCIDR4:         "10.88.0.0/16",
-		MTU:                 1280,
+		MTU:                 1380,
 		TokenTTL:            10 * time.Minute,
 		TokenTTLSeconds:     600,
 	}

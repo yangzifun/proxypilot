@@ -107,11 +107,16 @@ func (s *Server) Run(ctx context.Context) error {
 		MinVersion:   tls.VersionTLS13,
 		NextProtos:   []string{"h3"},
 	}
+	// 与客户端保持一致的流控窗口（接收方窗口才决定吞吐上限）
 	quicConf := &quic.Config{
-		EnableDatagrams:      true,
-		HandshakeIdleTimeout: 10 * time.Second,
-		MaxIdleTimeout:       120 * time.Second,
-		KeepAlivePeriod:      15 * time.Second,
+		EnableDatagrams:                true,
+		HandshakeIdleTimeout:           10 * time.Second,
+		MaxIdleTimeout:                 120 * time.Second,
+		KeepAlivePeriod:                15 * time.Second,
+		InitialStreamReceiveWindow:     4 << 20,
+		MaxStreamReceiveWindow:         16 << 20,
+		InitialConnectionReceiveWindow: 8 << 20,
+		MaxConnectionReceiveWindow:     64 << 20,
 	}
 	ln, err := quic.ListenAddrEarly(s.cfg.Listen, tlsConf, quicConf)
 	if err != nil {

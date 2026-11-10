@@ -33,9 +33,15 @@ func openTunnelStream(ctx context.Context, endpoint, sni, token string, insecure
 		tlsConf.InsecureSkipVerify = false
 	}
 
+	// 流控窗口按 BDP 放大：100 Mbps × 400ms ≈ 5 MB。
+	// 默认 512KB 在 380ms 跨境链路上会把单流卡在 ~10 Mbps。
 	quicConf := &quic.Config{
-		KeepAlivePeriod: 10 * time.Second,
-		MaxIdleTimeout:  120 * time.Second,
+		KeepAlivePeriod:                10 * time.Second,
+		MaxIdleTimeout:                 120 * time.Second,
+		InitialStreamReceiveWindow:     4 << 20,
+		MaxStreamReceiveWindow:         16 << 20,
+		InitialConnectionReceiveWindow: 8 << 20,
+		MaxConnectionReceiveWindow:     64 << 20,
 	}
 	tr := &http3.Transport{
 		TLSClientConfig: tlsConf,
