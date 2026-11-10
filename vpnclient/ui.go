@@ -1024,7 +1024,7 @@ func (s *uiServer) connect(nodeID int64) error {
 		// TCP/ICMP 仍走可靠流。对端没协商 DATAGRAM 时自动退回单流。
 		var pconn packetConn = pc
 		if supportsDatagrams(conn) {
-			pconn = newDualPacketConn(pc, quicDatagramPeer{conn: conn}, maxDatagramPayload)
+			pconn = newDualPacketConn(pc, quicDatagramPeer{conn: conn}, maxDatagramPayload, fecGroupSize)
 			log.Printf("数据面：双通道已启用（UDP→DATAGRAM，TCP/ICMP→可靠流，DATAGRAM 上限 %d 字节）", maxDatagramPayload)
 		} else {
 			log.Printf("数据面：对端未协商 DATAGRAM，全部走可靠流")

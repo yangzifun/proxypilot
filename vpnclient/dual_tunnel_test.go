@@ -126,7 +126,7 @@ func makeIPPacket(proto byte, size int) []byte {
 func TestDualSendRouting(t *testing.T) {
 	st := newFakeStream()
 	dg := newFakeDatagram()
-	c := newDualPacketConn(st, dg, 1400)
+	c := newDualPacketConn(st, dg, 1400, 0)
 
 	if err := c.SendPacket(makeIPPacket(udpProto, 60)); err != nil {
 		t.Fatalf("UDP 发送失败：%v", err)
@@ -155,7 +155,7 @@ func TestDualSendFallbackOnDatagramError(t *testing.T) {
 	st := newFakeStream()
 	dg := newFakeDatagram()
 	dg.failue = true
-	c := newDualPacketConn(st, dg, 1400)
+	c := newDualPacketConn(st, dg, 1400, 0)
 
 	if err := c.SendPacket(makeIPPacket(udpProto, 60)); err != nil {
 		t.Fatalf("回退后不应报错：%v", err)
@@ -169,7 +169,7 @@ func TestDualSendFallbackOnDatagramError(t *testing.T) {
 func TestDualSendOversizeToStream(t *testing.T) {
 	st := newFakeStream()
 	dg := newFakeDatagram()
-	c := newDualPacketConn(st, dg, 200)
+	c := newDualPacketConn(st, dg, 200, 0)
 
 	if err := c.SendPacket(makeIPPacket(udpProto, 800)); err != nil {
 		t.Fatalf("超大包发送失败：%v", err)
@@ -186,7 +186,7 @@ func TestDualSendOversizeToStream(t *testing.T) {
 func TestDualRecvMergesBothPaths(t *testing.T) {
 	st := newFakeStream()
 	dg := newFakeDatagram()
-	c := newDualPacketConn(st, dg, 1400)
+	c := newDualPacketConn(st, dg, 1400, 0)
 
 	fromStream := makeIPPacket(tcpProto, 40)
 	fromDatagram := makeIPPacket(udpProto, 50)
@@ -214,7 +214,7 @@ func TestDualRecvMergesBothPaths(t *testing.T) {
 func TestDualRecvFailsWhenStreamDies(t *testing.T) {
 	st := newFakeStream()
 	dg := newFakeDatagram()
-	c := newDualPacketConn(st, dg, 1400)
+	c := newDualPacketConn(st, dg, 1400, 0)
 
 	st.mu.Lock()
 	st.recvErr = errors.New("流已断")

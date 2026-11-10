@@ -34,6 +34,11 @@ const (
 	// maxDatagramPayload 是单条 DATAGRAM 的载荷上限。
 	// 节点侧 max_datagram = MTU+80，内层报文不超过 MTU，留一点余量。
 	maxDatagramPayload = 1400
+
+	// fecGroupSize 是 DATAGRAM 通道的分组大小：0 或 1 表示关闭 FEC。
+	// 8 表示每 8 个包加 1 个校验包（12.5% 开销），可还原组内任意 1 个丢包。
+	// 面板开关接入后改为从配置读。
+	fecGroupSize = 0
 )
 
 // datagramPeer 是 QUIC 连接上需要用到的方法子集（便于测试替身）。
@@ -60,6 +65,10 @@ type dualPacketConn struct {
 	errMu   sync.Mutex
 	lastErr error
 
+	// FEC 只作用于 DATAGRAM 通道；nil 表示未启用
+	fecEnc *fecEncoder
+	fecDec *fecDecoder
+
 	dropped    atomic.Uint64
 	udpSent    atomic.Uint64
 	udpRecv    atomic.Uint64
@@ -67,7 +76,8 @@ type dualPacketConn struct {
 	streamRecv atomic.Uint64
 }
 
-func newDualPacketConn(stream packetConn, dg datagramPeer, maxDatagram int) *dualPacketConn {
+// newDualPacketConn 建立双通道；fecGroup > 1 时在 DATAGRAM 通道启用分组 FEC。
+func newDualPacketConn(stream packetConn, dg datagramPeer, maxDatagram, fecGroup int) *dualPacketConn {
 	if maxDatagram <= 0 {
 		maxDatagram = 1400
 	}
@@ -77,6 +87,10 @@ func newDualPacketConn(stream packetConn, dg datagramPeer, maxDatagram int) *dua
 		maxDatagram: maxDatagram,
 		q:           make(chan []byte, dualQueueDepth),
 		done:        make(chan struct{}),
+	}
+	if fecGroup > 1 && dg != nil {
+		c.fecEnc = newFECEncoder(fecGroup)
+		c.fecDec = newFECDecoder()
 	}
 	c.wg.Add(2)
 	go c.streamLoop()
@@ -97,8 +111,16 @@ func (c *dualPacketConn) SendPacket(pkt []byte) error {
 	proto := innerProto(pkt)
 	// 只有 UDP 且长度在上限内才走 DATAGRAM
 	if proto == udpProto && c.dg != nil && len(pkt) <= c.maxDatagram {
-		if err := c.dg.SendDatagram(pkt); err == nil {
+		frame, parity := pkt, []byte(nil)
+		if c.fecEnc != nil {
+			frame, parity = c.fecEnc.Encode(pkt)
+		}
+		if err := c.dg.SendDatagram(frame); err == nil {
 			c.udpSent.Add(1)
+			if len(parity) > 0 {
+				// 校验帧发失败不影响数据帧，丢包由上层重试
+				_ = c.dg.SendDatagram(parity)
+			}
 			return nil
 		}
 		// DATAGRAM 发不出去（对端不支持 / 缓冲满）时回退到可靠流
@@ -145,8 +167,19 @@ func (c *dualPacketConn) datagramLoop() {
 			return
 		}
 		c.udpRecv.Add(1)
-		if !c.push(pkt) {
-			return
+		pkts := [][]byte{pkt}
+		if c.fecDec != nil {
+			decoded, derr := c.fecDec.Decode(pkt)
+			if derr != nil {
+				log.Printf("数据面：FEC 解码失败，按原始包处理（%v）", derr)
+			} else {
+				pkts = decoded
+			}
+		}
+		for _, one := range pkts {
+			if !c.push(one) {
+				return
+			}
 		}
 	}
 }
@@ -223,6 +256,14 @@ func (c *dualPacketConn) Close() error {
 
 // DropStats 合并队列溢出数（用于诊断）。
 func (c *dualPacketConn) DropStats() uint64 { return c.dropped.Load() }
+
+// FECStats 返回 FEC 还原/放弃计数（诊断用）。
+func (c *dualPacketConn) FECStats() (recovered, dropped int) {
+	if c.fecDec == nil {
+		return 0, 0
+	}
+	return c.fecDec.FECStats()
+}
 
 // PathStats 返回两条通道各自的收发计数（诊断用）。
 func (c *dualPacketConn) PathStats() (udpSent, udpRecv, streamSent, streamRecv uint64) {
