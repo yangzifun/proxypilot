@@ -27,8 +27,7 @@ const maxStreamFrame = 4096
 // 写阻塞时还会反压 tunLoop，让所有会话一起卡住。
 // 改成「每会话有界队列 + 聚合写」，tunLoop 只做入队。
 const (
-	// 队列深度从 2048 降到 512：满载延迟由 1.4s 降到 0.3s 量级
-	streamQueueDepth = 512
+	streamQueueDepth = 2048
 	// 下行同样从 64KB 降到 8KB：突发是双向都会被路径丢弃的，
 	// 下载慢同样要吃这个亏。详见 vpnclient/stream_tunnel.go 的说明。
 	streamBatchMax   = 8 * 1024
@@ -113,9 +112,23 @@ func (s *Server) serveStream(w http.ResponseWriter, r *http.Request) {
 					}
 					break
 				}
-				// 不再等 2ms 凑批：等批会把下行速率钉在
-				// 「每 2ms 攒到的字节数」上（实测下载只有 4 Mbps，
-				// 满载延迟被推到 1.4 秒），而贪心循环已经打包了所有就绪报文。
+				if len(buf) < streamBatchMax/4 {
+					timer := time.NewTimer(streamBatchDelay)
+				drain:
+					for len(buf) < streamBatchMax {
+						select {
+						case p2 := <-q:
+							appendFrame(p2)
+						case <-timer.C:
+							break drain
+						case <-done:
+							timer.Stop()
+							flush()
+							return
+						}
+					}
+					timer.Stop()
+				}
 				if !flush() {
 					return
 				}
