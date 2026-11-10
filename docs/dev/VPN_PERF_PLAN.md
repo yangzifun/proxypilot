@@ -159,4 +159,33 @@ shard = fnv32a(五元组) % N
 3. 只有前两期都到位、仍不满意时，才动**三期换 BBR**
 
 理由：一期可能直接把问题解决（如果瓶颈确实是 socket 缓冲），
-成本最低且不引入任何协议变更。
+成本最低且不引入任何协议变更。---
+
+## 7. 附录：当前实现有多路复用吗（2026-11-10 核对）
+
+**没有。** 只有「一个设备一条流」。
+
+| 位置 | 事实 |
+|---|---|
+| `vpnclient/ui.go:1015` / `main.go:416` | `openTunnelStream` 每次连接只调用一次，一条 `POST /tunnel` 流承载该设备的全部 IP 包 |
+| `masque/node/stream.go:171` | `serveStream` 按设备 IP 注册一个 session |
+| `masque/node/server.go:244` | `register()` 以 IP 为 key，**同 IP 新流会「接管」旧流**（`CloseWithError(0,"session replaced")`），不并存 |
+| `main.go:517` / `server.go:125` | QUIC DATAGRAM 仍开启，但只服务于旧的组网/管理通道，数据面不走它 |
+
+也就是说：QUIC 协议本身多路复用，我们只用了其中一条流；
+设备之间是并发的（各自一条流），设备内部所有流量挤在一条流上。
+
+### 二期必须同时改的一处（否则多流立刻互相踢掉）
+
+`masque/node/server.go:244` 的 `register` 现在是：
+
+```go
+if cur, ok := s.sessions[sess.ip.String()]; ok {
+    cur.conn.CloseWithError(0, "session replaced")   // 同 IP 直接踢掉旧流
+}
+s.sessions[sess.ip.String()] = sess
+```
+
+多流分片后同一设备会有 N 条流，这个「同 IP 接管」策略会把前面 N-1 条全踢掉。
+二期需要同步改成 `map[ip][]*session`（或 key 用 `ip/shard`），
+并把 `unregister`、`lookup`、`tunLoop` 的下发逻辑一并改成「按 shard 选流」。
