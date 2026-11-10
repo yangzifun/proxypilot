@@ -78,12 +78,13 @@ func (c *streamPacketConn) SendPacket(pkt []byte) error {
 	if c.closed.Load() {
 		return fmt.Errorf("流已关闭")
 	}
-	buf := make([]byte, 2+len(pkt))
-	binary.BigEndian.PutUint16(buf, uint16(len(pkt)))
-	copy(buf[2:], pkt)
+	// 只入队「原始 IP 包」：分帧统一由 writeLoop 的 appendFrame 负责。
+	// （这里曾经自己又加了一次长度头，导致双重分帧，数据面全废。）
+	pktCopy := make([]byte, len(pkt))
+	copy(pktCopy, pkt)
 
 	select {
-	case c.q <- buf:
+	case c.q <- pktCopy:
 		return nil
 	default:
 		if c.dropped.Add(1)%1000 == 1 {
