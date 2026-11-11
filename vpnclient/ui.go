@@ -200,7 +200,7 @@ func saveSettings(s uiSettings) error {
 // 那样开 lane 反而会把主可靠流顶掉 —— 所以在节点改造完成前固定为 0。
 // 客户端基础设施（flowLane / laneLoop / openTunnelStreamLane）已就绪，
 // 节点上线后把这里改成 3 即可，无需再改其他地方。
-const multiLaneCount = 3
+const multiLaneCount = 0
 
 type sessionState struct {
 	mu sync.Mutex
@@ -1255,6 +1255,12 @@ func (s *uiServer) fail(cancel context.CancelFunc, attempt int64, stage string, 
 		st.message = stage + "：" + err.Error()
 	})
 	cancel()
+	// 失败必须把已接管的网络还原。
+	//
+	// 实测故障：数据面报 session replaced 后状态变 error，但 0.0.0.0/1 与
+	// 128.0.0.0/1 两条隧道路由仍在（metric 10，压过 LAN 默认路由 35），
+	// 整个 IPv4 被黑洞 —— 连面板都打不开，表现就是「网络不可用」。
+	go s.disconnect("连接失败，还原网络")
 }
 
 // connectPortal 调 /api/portal/vpn/connect 换连接票据。
