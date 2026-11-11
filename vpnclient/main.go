@@ -30,7 +30,7 @@ import (
 )
 
 // Version 是 VPN 客户端版本（V1.x）。
-const Version = "3.12"
+const Version = "3.13"
 
 var caPEM []byte
 
@@ -564,7 +564,8 @@ func authHTTP3Once(ctx context.Context, endpoint, sni, token string, insecure bo
 		},
 		EnableDatagrams: true,
 		Dial: func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (*quic.Conn, error) {
-			c, err := quic.DialAddr(ctx, addr, tlsCfg, cfg)
+			// 优先用连接前缓存好的 IP，避免在「系统 DNS 已被隧道接管/刚断开」的时间窗里解析失败
+	c, err := quic.DialAddr(ctx, dialAddrWithCache(addr), tlsCfg, cfg)
 			if err == nil {
 				conn = c
 			}

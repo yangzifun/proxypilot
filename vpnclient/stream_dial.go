@@ -83,7 +83,8 @@ func openTunnelStreamLane(ctx context.Context, endpoint, sni, token string, inse
 		QUICConfig:      quicConf,
 		EnableDatagrams: true,
 		Dial: func(ctx context.Context, addr string, t *tls.Config, c *quic.Config) (*quic.Conn, error) {
-			ua, rerr := net.ResolveUDPAddr("udp4", addr)
+			// 同鉴权连接：用缓存的 IP 直连，绕开当时的系统解析器
+			ua, rerr := net.ResolveUDPAddr("udp4", dialAddrWithCache(addr))
 			if rerr != nil {
 				return nil, rerr
 			}

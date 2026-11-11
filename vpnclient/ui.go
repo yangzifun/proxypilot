@@ -964,6 +964,15 @@ func (s *uiServer) connect(nodeID int64) error {
 			skipVerify = true
 			log.Printf("节点证书模式为 %s，本次连接跳过证书校验", prof.TLS.Mode)
 		}
+		// 在接管系统 DNS 之前先解析并记住节点 IP。
+		// 否则断开后 DNS 还指向隧道网关时，下一次连接会在 Dial 阶段
+		// 解析失败（lookup xxx: no such host），表现为「突然连不上」。
+		{
+			host, _, herr := net.SplitHostPort(pick.Endpoint)
+			if herr == nil {
+				rememberEndpointIP(host)
+			}
+		}
 		assigned, conn, err := authHTTP3(ctx, pick.Endpoint, sni, prof.Token, skipVerify)
 		_ = conn // 仅用于鉴权；数据面走可靠流
 		if err != nil {
