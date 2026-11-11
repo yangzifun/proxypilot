@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   CheckCircleOutlined,
   KeyOutlined,
@@ -187,7 +187,7 @@ export default function Security() {
             </div>
             <div style={{ marginTop: 10, fontSize: 12, color: '#94a3b8' }}>
               当前账号：<b style={{ color: '#334155' }}>{user || '—'}</b>
-              {user === superAdmin ? '（超级管理员）' : ''}
+              {user === superAdmin ? '（超级管理员）' : '（管理员）'}
             </div>
           </PageCard>
         </Col>

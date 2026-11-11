@@ -106,7 +106,7 @@ export default function Backup() {
   return (
     <PageCard
       title={<span><DatabaseOutlined /> 备份管理</span>}
-      extra={<Tag color="blue">仅超级管理员</Tag>}
+
     >
       <Alert
         type="warning"

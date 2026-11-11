@@ -129,7 +129,7 @@ export const PAGE_META = {
     icon: <CloudServerOutlined />,
     group: '系统',
     accent: '#0ea5e9',
-    superOnly: true,
+
   },
   sysusers: {
     title: '管理账号',
@@ -145,7 +145,7 @@ export const PAGE_META = {
     icon: <SettingOutlined />,
     group: '系统',
     accent: '#f43f5e',
-    superOnly: true,
+
   },
   attachments: {
     title: '附件管理',
@@ -174,7 +174,7 @@ export const PAGE_META = {
     icon: <SafetyCertificateOutlined />,
     group: '系统',
     accent: '#0ea5e9',
-    superOnly: true,
+
   },
   sec: {
     title: '安全中心',

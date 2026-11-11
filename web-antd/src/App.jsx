@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { applyTheme, getTheme, subscribeTheme, THEME_TOKENS } from './theme';
 import { ConfigProvider } from 'antd';
 import { Button, Result } from 'antd';
@@ -80,8 +80,8 @@ export default function App() {
     body = (
       <Result
         status="403"
-        title="仅超级管理员可访问"
-        subTitle={`系统管理只对「${superAdmin}」这类超级管理员账号开放，请用超管账号登录。`}
+        title="仅超级管理员可访问此页面"
+        subTitle={`「管理账号」只对「${superAdmin}」这类超级管理员账号开放；其余管理后台功能对普通管理员均可用。`}
         extra={
           <Button type="primary" onClick={() => navigate('dash')}>
             返回系统概览
