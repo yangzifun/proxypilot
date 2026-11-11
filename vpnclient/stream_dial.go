@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"time"
@@ -21,7 +22,7 @@ import (
 // 返回值里额外带上底层 QUIC 连接：DATAGRAM 必须走**同一条连接**，
 // 否则它会挂在那条空闲的鉴权连接上（cwnd 极小、甚至连接已被回收），
 // 表现为「客户端发出 343 个、节点只收到 129 个，双方都没有错误计数」。
-func openTunnelStream(ctx context.Context, endpoint, sni, token string, insecure bool) (*streamPacketConn, *quic.Conn, func(), error) {
+func openTunnelStream(ctx context.Context, endpoint, sni, token string, insecure bool) (*streamPacketConn, *quic.Conn, bool, func(), error) {
 	var conn *quic.Conn
 	tlsConf := &tls.Config{
 		ServerName:         sni,
@@ -32,7 +33,7 @@ func openTunnelStream(ctx context.Context, endpoint, sni, token string, insecure
 	if len(caPEM) > 0 {
 		pool, perr := rootPoolWithPlatformCA()
 		if perr != nil {
-			return nil, nil, nil, perr
+			return nil, nil, false, nil, perr
 		}
 		tlsConf.RootCAs = pool
 		tlsConf.InsecureSkipVerify = false
@@ -63,7 +64,7 @@ func openTunnelStream(ctx context.Context, endpoint, sni, token string, insecure
 	// 交给 quic.Transport 接管后还能启用批量收发（Linux GSO / recvmmsg）。
 	udpConn, uerr := net.ListenUDP("udp4", nil)
 	if uerr != nil {
-		return nil, nil, nil, fmt.Errorf("创建 UDP socket 失败：%w", uerr)
+		return nil, nil, false, nil, fmt.Errorf("创建 UDP socket 失败：%w", uerr)
 	}
 	_ = udpConn.SetReadBuffer(socketBufferBytes)
 	_ = udpConn.SetWriteBuffer(socketBufferBytes)
@@ -89,19 +90,29 @@ func openTunnelStream(ctx context.Context, endpoint, sni, token string, insecure
 	pr, pw := io.Pipe()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://"+endpoint+"/tunnel", pr)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, false, nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/octet-stream")
+	// 能力协商（参考 MASQUE / RFC 9297）：
+	// 声明本端支持 capsule 与 HTTP Datagram，便于节点回同样的能力位。
+	// 之前两端各开各的，任一侧缺失都表现为「静默丢包」。
+	req.Header.Set("Capsule-Protocol", "?1")
+	req.Header.Set("Connect-Protocol", "connect-ip")
+	req.Header.Set("H3-Datagram", "?1")
 
 	resp, err := tr.RoundTrip(req)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, false, nil, err
 	}
 	if got := resp.Header.Get("X-VPN-Auth"); got != "Success" {
 		_ = resp.Body.Close()
-		return nil, nil, nil, fmt.Errorf("X-VPN-Auth=%q status=%d", got, resp.StatusCode)
+		return nil, nil, false, nil, fmt.Errorf("X-VPN-Auth=%q status=%d", got, resp.StatusCode)
 	}
+	// 节点是否确认支持 HTTP Datagram。只有它回了 H3-Datagram，客户端才启用双通道；
+	// 否则即使本地 EnableDatagrams=true，对端也可能根本不发 datagram。
+	serverDatagram := resp.Header.Get("H3-Datagram") != ""
+	log.Printf("数据面：隧道流已建立（节点 Datagram 能力=%v）", serverDatagram)
 
 	cleanup := func() {
 		_ = pw.Close()
@@ -118,5 +129,5 @@ func openTunnelStream(ctx context.Context, endpoint, sni, token string, insecure
 		}
 	}
 	pc := newStreamPacketConn(pw, resp.Body)
-	return pc, conn, cleanup, nil
+	return pc, conn, serverDatagram, cleanup, nil
 }

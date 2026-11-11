@@ -1031,7 +1031,7 @@ func (s *uiServer) connect(nodeID int64) error {
 		}
 		tunDNS = append(tunDNS, "1.1.1.1", "223.5.5.5")
 		log.Printf("隧道参数：地址=%s 网关=%s 网段=%s DNS=%v", prof.IP4, gateway, cidr, tunDNS)
-		pc, streamConn, cleanupStream, serr := openTunnelStream(ctx, pick.Endpoint, sni, prof.Token, skipVerify)
+		pc, streamConn, nodeHasDatagram, cleanupStream, serr := openTunnelStream(ctx, pick.Endpoint, sni, prof.Token, skipVerify)
 		if serr != nil {
 			s.fail(cancel, attempt, "建立隧道流失败", serr)
 			return
@@ -1053,7 +1053,7 @@ func (s *uiServer) connect(nodeID int64) error {
 		switch {
 		case !prof.DatagramEnabled:
 			log.Printf("数据面：面板已关闭 DATAGRAM，全部走可靠流")
-		case !supportsDatagrams(streamConn):
+		case !nodeHasDatagram || !supportsDatagrams(streamConn):
 			log.Printf("数据面：对端未协商 DATAGRAM，全部走可靠流")
 		default:
 			dual := newDualPacketConn(pc, quicDatagramPeer{conn: streamConn}, maxDatagramPayload, fecGroup)

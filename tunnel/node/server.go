@@ -205,6 +205,10 @@ func (s *Server) Run(ctx context.Context) error {
 	s.srv = &http3.Server{
 		TLSConfig:  tlsConf,
 		QUICConfig: quicConf,
+		// HTTP/3 层必须显式开启 datagram，否则不协商 SETTINGS_H3_DATAGRAM，
+		// 客户端 ReceiveDatagram 一律返回 "datagram support disabled"。
+		// 光设 quic.Config.EnableDatagrams 不够（quic-go http3/server.go:137）。
+		EnableDatagrams: true,
 		Handler:    s,
 		ConnContext: func(ctx context.Context, c *quic.Conn) context.Context {
 			return context.WithValue(ctx, connKey{}, c)
@@ -320,6 +324,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.Set("X-VPN-Auth", "Success")
 	h.Set("X-VPN-Assigned-IPv4", ip.String())
 	h.Set("X-VPN-Max-Datagram", fmt.Sprintf("%d", s.cfg.MaxDatagram))
+	h.Set("Capsule-Protocol", "?1")
+	h.Set("H3-Datagram", "?1")
 	h.Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
 

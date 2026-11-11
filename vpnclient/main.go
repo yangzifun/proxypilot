@@ -30,7 +30,7 @@ import (
 )
 
 // Version 是 VPN 客户端版本（V1.x）。
-const Version = "3.8"
+const Version = "3.9"
 
 var caPEM []byte
 
@@ -418,7 +418,7 @@ func meshDataPlane(ctx context.Context, endpoints []string, sni, token, localIP,
 			mode = TunModeMesh
 		}
 		pc, cleanupStream, serr := func() (*streamPacketConn, func(), error) {
-			c, _, cl, e := openTunnelStream(ctx, ep, sni, token, insecure)
+			c, _, _, cl, e := openTunnelStream(ctx, ep, sni, token, insecure)
 			return c, cl, e
 		}()
 		if serr != nil {
