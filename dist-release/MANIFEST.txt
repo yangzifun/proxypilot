@@ -1,8 +1,8 @@
 ProxyPilot 发布包
 面板版本 : V36.1
 Agent    : 3.12
-客户端   : 3.10
-构建时间 : 2026-11-11 16:43:52
+客户端   : 3.11
+构建时间 : 2026-11-11 16:59:44
 
 文件清单：
   DEPLOY-README.md                                       0.0 MB
@@ -12,12 +12,12 @@ Agent    : 3.12
   proxypilot-agent-3.12-linux-arm64                      9.0 MB
   proxypilot-V36.1-linux-amd64                          18.6 MB
   proxypilot-V36.1-linux-arm64                          17.6 MB
-  proxypilot-vpn-3.10-darwin-amd64                       9.2 MB
-  proxypilot-vpn-3.10-darwin-arm64                       8.5 MB
-  proxypilot-vpn-3.10-linux-amd64                        8.9 MB
-  proxypilot-vpn-3.10-linux-arm64                        8.4 MB
-  proxypilot-vpn-3.10-windows-amd64-cli.exe              9.7 MB
-  proxypilot-vpn-3.10-windows-amd64-install.exe         30.4 MB
+  proxypilot-vpn-3.11-darwin-amd64                       9.2 MB
+  proxypilot-vpn-3.11-darwin-arm64                       8.5 MB
+  proxypilot-vpn-3.11-linux-amd64                        8.9 MB
+  proxypilot-vpn-3.11-linux-arm64                        8.4 MB
+  proxypilot-vpn-3.11-windows-amd64-cli.exe              9.7 MB
+  proxypilot-vpn-3.11-windows-amd64-install.exe         30.4 MB
   uninstall.cmd                                          0.0 MB
   uninstall.ps1                                          0.0 MB
   uninstall.sh                                           0.0 MB
@@ -26,7 +26,7 @@ Agent    : 3.12
 安装：
   服务端    sudo ./install.sh --binary ./proxypilot-V36.1-linux-amd64
   升级      sudo ./upgrade.sh --binary ./proxypilot-V36.1-linux-amd64
-  Windows   双击 proxypilot-vpn-3.10-windows-amd64-install.exe（安装程序，只安装不运行）
-            安装后从开始菜单/桌面图标启动 ProxyPilot（客户端 v3.10）
+  Windows   双击 proxypilot-vpn-3.11-windows-amd64-install.exe（安装程序，只安装不运行）
+            安装后从开始菜单/桌面图标启动 ProxyPilot（客户端 v3.11）
             卸载：设置 → 应用 → ProxyPilot VPN，或运行 uninstall.cmd
-  客户端自检 proxypilot-vpn-3.10-windows-amd64-cli.exe -tun-selftest
+  客户端自检 proxypilot-vpn-3.11-windows-amd64-cli.exe -tun-selftest

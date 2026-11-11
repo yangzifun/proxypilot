@@ -8,7 +8,7 @@ package main
 
 import (
 	"context"
-		"embed"
+	"embed"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -89,14 +89,14 @@ func (r *logRing) current() int64 {
 type uiSettings struct {
 	API string `json:"api"`
 	// Token 只在内存中使用；落盘时写入 TokenEnc（DPAPI 密文），不写明文。
-	Token   string `json:"token,omitempty"`
+	Token    string `json:"token,omitempty"`
 	TokenEnc string `json:"token_enc,omitempty"`
 	Insecure bool   `json:"insecure"`
 	DNSAddr  string `json:"dns_addr"`
-	NodeID int64
+	NodeID   int64
 	// SelectedNode 记住用户在客户端里选中的节点，重启后仍然生效
 	SelectedNode int64 `json:"selected_node"`
-	DeviceID int64  `json:"device_id"`
+	DeviceID     int64 `json:"device_id"`
 	// 接管系统网络：mesh=仅组网网段，full=接管全部流量
 	TunMode string
 	// 虚拟网卡名（留空用默认）
@@ -194,40 +194,40 @@ func saveSettings(s uiSettings) error {
 // ---------- 连接引擎 ----------
 
 type sessionState struct {
-	mu        sync.Mutex
+	mu sync.Mutex
 	// attempt 是连接尝试的序号：旧尝试的 goroutine 不许覆盖新尝试的状态
-	attempt int64
-	status string // idle | connecting | connected | error
-	message string
-	nodeID int64
-	nodeName string
-	nodeHost string
-	ip4 string
-	sni string
-	mtu int
+	attempt   int64
+	status    string // idle | connecting | connected | error
+	message   string
+	nodeID    int64
+	nodeName  string
+	nodeHost  string
+	ip4       string
+	sni       string
+	mtu       int
 	sessionID int64
-	probeOK bool
+	probeOK   bool
 	probeInfo string
-	rttMs int
+	rttMs     int
 	startedAt int64
 	cancel    context.CancelFunc
 	conn      *quic.Conn
 	tun       *Tunnel
 	rx        uint64
 	tx        uint64
-	adapter string
-	gateway string
-	netOK        bool
-	netRTT       int
-	netErr       string
+	adapter   string
+	gateway   string
+	netOK     bool
+	netRTT    int
+	netErr    string
 	// 最近一次「拉节点」的结果，进诊断信息，便于区分「面板返回空」与「请求失败」
 	nodesCount int
 	nodesErr   string
 
 	// 隧道质量采样（每 2 秒一次，见 quality_probe.go）
-	qSent, qOK, qLost  int
-	qLastRTT, qMaxRTT  int
-	qConsecutiveFail   int
+	qSent, qOK, qLost int
+	qLastRTT, qMaxRTT int
+	qConsecutiveFail  int
 	// 上一次采样是否走了 TCP/可靠流（区分 UDP 通道故障用）
 	qViaTCP bool
 
@@ -241,18 +241,18 @@ type sessionState struct {
 	dropUplink uint64
 	innerBad   uint64
 	// 双通道各自收发计数（UDP 走 DATAGRAM，其余走可靠流）
-	pathUDPSent, pathUDPRecv     uint64
+	pathUDPSent, pathUDPRecv       uint64
 	pathStreamSent, pathStreamRecv uint64
-	fecRecovered, fecDropped     int
-	quicSent   uint64
-	quicRecv   uint64
-	quicLost   uint64
-	routes []string
-	tunMode  string
-	tunErr   string
-	dnsGuard  []string
-	ipv6Guard      []string
-	killSwitchRules []string
+	fecRecovered, fecDropped       int
+	quicSent                       uint64
+	quicRecv                       uint64
+	quicLost                       uint64
+	routes                         []string
+	tunMode                        string
+	tunErr                         string
+	dnsGuard                       []string
+	ipv6Guard                      []string
+	killSwitchRules                []string
 }
 
 func (s *sessionState) snapshot() map[string]any {
@@ -270,55 +270,55 @@ func (s *sessionState) snapshot() map[string]any {
 		}
 	}
 	return map[string]any{
-		"status":     s.status,
-		"message":    s.message,
-		"node_id":    s.nodeID,
-		"node_name":  s.nodeName,
-		"node_host":  s.nodeHost,
-		"ip4":        s.ip4,
-		"sni":        s.sni,
-		"mtu":        s.mtu,
-		"session_id": s.sessionID,
-		"probe_ok":   s.probeOK,
-		"probe_info": s.probeInfo,
-		"rtt_ms":     rtt,
-		"duration":   duration,
-		"rx":         s.rx,
-		"tx":         s.tx,
-		"started_at": s.startedAt,
-		"adapter":    s.adapter,
-		"gateway":    s.gateway,
-		"net_ok":     s.netOK,
-		"net_rtt_ms": s.netRTT,
-		"net_error":  s.netErr,
+		"status":       s.status,
+		"message":      s.message,
+		"node_id":      s.nodeID,
+		"node_name":    s.nodeName,
+		"node_host":    s.nodeHost,
+		"ip4":          s.ip4,
+		"sni":          s.sni,
+		"mtu":          s.mtu,
+		"session_id":   s.sessionID,
+		"probe_ok":     s.probeOK,
+		"probe_info":   s.probeInfo,
+		"rtt_ms":       rtt,
+		"duration":     duration,
+		"rx":           s.rx,
+		"tx":           s.tx,
+		"started_at":   s.startedAt,
+		"adapter":      s.adapter,
+		"gateway":      s.gateway,
+		"net_ok":       s.netOK,
+		"net_rtt_ms":   s.netRTT,
+		"net_error":    s.netErr,
 		"panel_bypass": append([]string{}, s.panelBypass...),
 		"nodes_count":  s.nodesCount,
-		"nodes_error": s.nodesErr,
+		"nodes_error":  s.nodesErr,
 		"tunnel_quality": map[string]any{
 			"sent": s.qSent, "ok": s.qOK, "lost": s.qLost,
-			"loss_pct": pct(uint64(s.qLost), uint64(s.qSent)),
+			"loss_pct":    pct(uint64(s.qLost), uint64(s.qSent)),
 			"last_rtt_ms": s.qLastRTT, "max_rtt_ms": s.qMaxRTT,
 			"consecutive_fail": s.qConsecutiveFail,
 			"via_tcp":          s.qViaTCP,
 		},
-		"uplink_dropped": s.dropUplink,
+		"uplink_dropped":    s.dropUplink,
 		"path_udp_sent":     s.pathUDPSent,
 		"path_udp_recv":     s.pathUDPRecv,
 		"path_stream_sent":  s.pathStreamSent,
 		"path_stream_recv":  s.pathStreamRecv,
 		"fec_recovered":     s.fecRecovered,
 		"fec_dropped":       s.fecDropped,
-		"inner_bad":      s.innerBad,
-		"quic_sent":      s.quicSent,
-		"quic_recv":      s.quicRecv,
-		"quic_lost":      s.quicLost,
-		"quic_loss_pct":  pct(s.quicLost, s.quicSent),
-		"routes":     append([]string{}, s.routes...),
-		"tun_mode":   s.tunMode,
-		"tun_error":  s.tunErr,
-		"tun_ready":  s.adapter != "",
-		"dns_guard":  append([]string{}, s.dnsGuard...),
-		"ipv6_guard": append([]string{}, s.ipv6Guard...),
+		"inner_bad":         s.innerBad,
+		"quic_sent":         s.quicSent,
+		"quic_recv":         s.quicRecv,
+		"quic_lost":         s.quicLost,
+		"quic_loss_pct":     pct(s.quicLost, s.quicSent),
+		"routes":            append([]string{}, s.routes...),
+		"tun_mode":          s.tunMode,
+		"tun_error":         s.tunErr,
+		"tun_ready":         s.adapter != "",
+		"dns_guard":         append([]string{}, s.dnsGuard...),
+		"ipv6_guard":        append([]string{}, s.ipv6Guard...),
 		"kill_switch_rules": append([]string{}, s.killSwitchRules...),
 	}
 }
@@ -362,12 +362,12 @@ func (s *sessionState) set(fn func(*sessionState)) {
 
 type uiServer struct {
 	listenPort string // 本地控制台监听端口，用于来源校验
-	demo     bool
-	cfg      uiSettings
-	cfgMu    sync.Mutex
-	state    *sessionState
-	logs     *logRing
-	caBundle []byte
+	demo       bool
+	cfg        uiSettings
+	cfgMu      sync.Mutex
+	state      *sessionState
+	logs       *logRing
+	caBundle   []byte
 }
 
 // localGuard 给本地控制台加来源校验，防浏览器跨源静默调用。
@@ -425,9 +425,9 @@ func runUI(ctx context.Context, addr string, defaults uiSettings, openBrowser, d
 	srv := &uiServer{
 		demo:       demo,
 		listenPort: listenPort,
-		cfg:   loadSettings(defaults),
-		state: &sessionState{status: "idle", message: "未连接"},
-		logs:  ring,
+		cfg:        loadSettings(defaults),
+		state:      &sessionState{status: "idle", message: "未连接"},
+		logs:       ring,
 	}
 	if err := srv.cfg.validate(); err != nil {
 		log.Printf("配置提示：%v", err)
@@ -1064,6 +1064,25 @@ func (s *uiServer) connect(nodeID int64) error {
 			} else {
 				log.Printf("数据面：双通道已启用（UDP→DATAGRAM，TCP/ICMP→可靠流），FEC 关闭")
 			}
+			// 每 30 秒打一行 FEC / 双通道统计 —— 之前只有快照接口能看到
+			// fec_recovered，日志里完全没有，导致没法判断 FEC 到底有没有生效。
+			if fecGroup > 1 {
+				go func(d *dualPacketConn) {
+					tk := time.NewTicker(30 * time.Second)
+					defer tk.Stop()
+					for {
+						select {
+						case <-ctx.Done():
+							return
+						case <-tk.C:
+							rec, drop := d.FECStats()
+							us, ur, ss, sr := d.PathStats()
+							log.Printf("数据面：FEC 还原 %d / 放弃 %d；UDP 发/收 %d/%d；流 发/收 %d/%d",
+								rec, drop, us, ur, ss, sr)
+						}
+					}
+				}(dual)
+			}
 		}
 		defer pconn.Close()
 
@@ -1136,9 +1155,9 @@ func (s *uiServer) connect(nodeID int64) error {
 				st.tun = tun
 				st.pc = pc
 				st.adapter = res.Adapter
-		st.dnsGuard = append([]string{}, res.DNSGuard...)
-		st.ipv6Guard = append([]string{}, res.IPv6Disabled...)
-		st.killSwitchRules = append([]string{}, res.KillSwitchRules...)
+				st.dnsGuard = append([]string{}, res.DNSGuard...)
+				st.ipv6Guard = append([]string{}, res.IPv6Disabled...)
+				st.killSwitchRules = append([]string{}, res.KillSwitchRules...)
 				st.gateway = res.Gateway
 				st.routes = res.Routes
 				st.tunMode = string(res.Mode)
@@ -1248,7 +1267,6 @@ func openInBrowser(url string) {
 		log.Printf("打开浏览器失败（请手动访问 %s）：%v", url, err)
 	}
 }
-
 
 // ---------- 演示数据（-ui-demo：用于预览界面，不发起真实连接） ----------
 
