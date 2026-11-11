@@ -403,6 +403,14 @@ func (h *handlers) serverDelete(w http.ResponseWriter, r *http.Request) {
 	// 于是「节点删了，但授权给用户的服务器还在」。
 	// 必须排在删 servers 之前，否则 server_id 已经无主、无法定位。
 	for _, q := range []string{
+		// 订阅侧授权：删除服务器前先清掉该服务器上的 sing-box / mihomo / MTProto 节点绑定，
+		// 以及用户在订阅里由这些节点生成的配置（configs.singbox_node_id 指向它们）。
+		// 之前只删 node_configs，于是「代理授权」里会残留已删除服务器的节点，
+		// 表现为一行没有名字、却还显示「N 个服务」的授权。
+		`DELETE c FROM configs c JOIN singbox_nodes n ON n.id = c.singbox_node_id WHERE n.server_id = ?`,
+		`DELETE FROM singbox_nodes WHERE server_id = ?`,
+		`DELETE FROM mihomo_nodes WHERE server_id = ?`,
+		`DELETE FROM mtproto_nodes WHERE server_id = ?`,
 		`DELETE g FROM vpn_node_grants g JOIN vpn_nodes n ON n.id = g.node_id WHERE n.server_id = ?`,
 		`DELETE s FROM vpn_sessions s JOIN vpn_nodes n ON n.id = s.node_id WHERE n.server_id = ?`,
 		`DELETE FROM vpn_nodes WHERE server_id = ?`,
