@@ -67,20 +67,6 @@ func TestProxyNotUsedForPages(t *testing.T) {
 	}
 }
 
-func TestAPIKeyRejectedOnRouteOutsideWhitelist(t *testing.T) {
-	h := handlerWith(config.Config{})
-	req := httptest.NewRequest(http.MethodGet, "/api/servers", nil)
-	req.Header.Set("X-API-Key", "pk_test")
-	rr := httptest.NewRecorder()
-	h.ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusForbidden {
-		t.Fatalf("状态码 = %d，期望 403", rr.Code)
-	}
-	if !strings.Contains(rr.Body.String(), "API 密钥不可访问") {
-		t.Fatalf("响应 = %s", rr.Body.String())
-	}
-}
 
 func TestLoginDisabledWhenOIDCOnly(t *testing.T) {
 	h := handlerWith(config.Config{OIDCDisablePassword: true})

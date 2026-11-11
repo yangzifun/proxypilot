@@ -22,11 +22,7 @@ type authOpts struct {
 // authed 校验 Bearer JWT 并按 opts 做角色/超管判定。
 func (h *handlers) authed(opts authOpts, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// API 密钥优先：Worker 的语义是 X-API-Key 走独立白名单与权限位
-		if key := strings.TrimSpace(r.Header.Get("X-API-Key")); key != "" {
-			h.serveAPIKey(w, r, key, opts, next)
-			return
-		}
+
 		raw := strings.TrimSpace(r.Header.Get("Authorization"))
 		if !strings.HasPrefix(raw, "Bearer ") {
 			writeError(w, http.StatusUnauthorized, "未授权")

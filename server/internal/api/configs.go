@@ -195,8 +195,9 @@ func (h *handlers) uuidConfigsAdd(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "字段缺失")
 		return
 	}
-	if !h.uuidExistsForManagement(r.Context(), uuid) && !h.hasAPIGroupWrite(r) {
-		writeError(w, http.StatusForbidden, "API 密钥权限不足（需要 groups:write 才能为新 UUID 添加配置）")
+	// API 密钥功能已移除：能走到这里的都是已通过 authed 的管理员。
+	if !h.uuidExistsForManagement(r.Context(), uuid) {
+		writeError(w, http.StatusForbidden, "UUID 不存在")
 		return
 	}
 	n, err := h.insertConfigLines(r.Context(), uuid, req.ConfigData)

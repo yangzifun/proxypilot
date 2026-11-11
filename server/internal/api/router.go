@@ -42,11 +42,6 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("POST /api/admin/users", h.authed(authOpts{superOnly: true}, h.adminUsersDispatch))
 	mux.HandleFunc("PUT /api/admin/users", h.authed(authOpts{superOnly: true}, h.adminUsersDispatch))
 	mux.HandleFunc("DELETE /api/admin/users", h.authed(authOpts{superOnly: true}, h.adminUsersDispatch))
-	mux.HandleFunc("GET /api/apikeys", h.authed(authOpts{}, h.apiKeysDispatch))
-	mux.HandleFunc("POST /api/apikeys", h.authed(authOpts{}, h.apiKeysDispatch))
-	mux.HandleFunc("PUT /api/apikeys/{id}", h.authed(authOpts{}, h.apiKeyItemDispatch))
-	mux.HandleFunc("DELETE /api/apikeys/{id}", h.authed(authOpts{}, h.apiKeyItemDispatch))
-	mux.HandleFunc("POST /api/apikeys/{id}/rotate", h.authed(authOpts{}, h.apiKeyRotate))
 
 	// VPN 管理（节点 / 绑定 / 用户资格 / 设置）
 	mux.HandleFunc("GET /api/admin/vpn/settings", h.authed(authOpts{}, h.vpnAdminSettings))
