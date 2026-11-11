@@ -887,7 +887,47 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
             <InputNumber min={1} max={100} value={trafficForm.warn_percent} style={{ width: 90, margin: '0 8px' }} onChange={(v) => setTrafficForm((f) => ({ ...f, warn_percent: v }))} /> %
           </div>
         </div>
-      </Modal>    </Drawer>
+      </Modal>
+      <Modal
+        title="删除服务器？"
+        open={delOpen}
+        onCancel={() => setDelOpen(false)}
+        okText="确认删除"
+        okButtonProps={{ danger: true }}
+        confirmLoading={busy === 'delete'}
+        onOk={removeServer}
+        destroyOnClose
+      >
+        <p style={{ marginTop: 0 }}>
+          即将删除 <b>{d ? d.name : ''}</b>，以下内容会<b>一并解绑或删除</b>：
+        </p>
+        {delBindings === null ? (
+          <div style={{ padding: '8px 0', color: '#888' }}>正在检查绑定…</div>
+        ) : delBindings.error ? (
+          <Alert type="error" showIcon message={delBindings.error} />
+        ) : (
+          <div style={{ fontSize: 13 }}>
+            <div style={{ marginBottom: 6 }}>
+              VPN 节点：{(delBindings.vpn_nodes || []).length} 个
+              {(delBindings.vpn_grants || 0) > 0 ? `（连带 ${delBindings.vpn_grants} 条用户授权）` : ''}
+            </div>
+            {(delBindings.vpn_nodes || []).length > 0 ? (
+              <ul style={{ margin: '0 0 8px 18px', padding: 0 }}>
+                {delBindings.vpn_nodes.map((n) => (
+                  <li key={n.id}>{n.name} <span style={{ color: '#999' }}>{n.detail}</span></li>
+                ))}
+              </ul>
+            ) : null}
+            <div style={{ marginBottom: 6 }}>sing-box 节点：{(delBindings.singbox || []).length} 个</div>
+            <div style={{ marginBottom: 6 }}>下发配置：{delBindings.node_configs || 0} 条</div>
+            <div style={{ marginBottom: 6 }}>VPN 会话记录：{delBindings.vpn_sessions || 0} 条</div>
+            <p style={{ color: '#cf1322', marginBottom: 0 }}>
+              删除后这些 VPN 节点的用户授权会一起消失，且无法恢复。
+            </p>
+          </div>
+        )}
+      </Modal>
+    </Drawer>
   );
 }
 
@@ -1171,45 +1211,6 @@ function TasksModal({ row, onClose }) {
           },
         ]}
       />
-      <Modal
-        title="删除服务器？"
-        open={delOpen}
-        onCancel={() => setDelOpen(false)}
-        okText="确认删除"
-        okButtonProps={{ danger: true }}
-        confirmLoading={busy === 'delete'}
-        onOk={removeServer}
-        destroyOnClose
-      >
-        <p style={{ marginTop: 0 }}>
-          即将删除 <b>{d ? d.name : ''}</b>，以下内容会<b>一并解绑或删除</b>：
-        </p>
-        {delBindings === null ? (
-          <div style={{ padding: '8px 0', color: '#888' }}>正在检查绑定…</div>
-        ) : delBindings.error ? (
-          <Alert type="error" showIcon message={delBindings.error} />
-        ) : (
-          <div style={{ fontSize: 13 }}>
-            <div style={{ marginBottom: 6 }}>
-              VPN 节点：{(delBindings.vpn_nodes || []).length} 个
-              {(delBindings.vpn_grants || 0) > 0 ? `（连带 ${delBindings.vpn_grants} 条用户授权）` : ''}
-            </div>
-            {(delBindings.vpn_nodes || []).length > 0 ? (
-              <ul style={{ margin: '0 0 8px 18px', padding: 0 }}>
-                {delBindings.vpn_nodes.map((n) => (
-                  <li key={n.id}>{n.name} <span style={{ color: '#999' }}>{n.detail}</span></li>
-                ))}
-              </ul>
-            ) : null}
-            <div style={{ marginBottom: 6 }}>sing-box 节点：{(delBindings.singbox || []).length} 个</div>
-            <div style={{ marginBottom: 6 }}>下发配置：{delBindings.node_configs || 0} 条</div>
-            <div style={{ marginBottom: 6 }}>VPN 会话记录：{delBindings.vpn_sessions || 0} 条</div>
-            <p style={{ color: '#cf1322', marginBottom: 0 }}>
-              删除后这些 VPN 节点的用户授权会一起消失，且无法恢复。
-            </p>
-          </div>
-        )}
-      </Modal>
     </Modal>
   );
 }
