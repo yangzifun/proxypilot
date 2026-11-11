@@ -396,7 +396,16 @@ func (h *handlers) serverDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback()
+	// 先清理这台服务器关联的 VPN 节点及其授权/会话。
+	//
+	// 之前删服务器只清了 node_configs / metrics / push_logs，
+	// VPN 节点（vpn_nodes.server_id 指向它）原样留着，
+	// 于是「节点删了，但授权给用户的服务器还在」。
+	// 必须排在删 servers 之前，否则 server_id 已经无主、无法定位。
 	for _, q := range []string{
+		`DELETE g FROM vpn_node_grants g JOIN vpn_nodes n ON n.id = g.node_id WHERE n.server_id = ?`,
+		`DELETE s FROM vpn_sessions s JOIN vpn_nodes n ON n.id = s.node_id WHERE n.server_id = ?`,
+		`DELETE FROM vpn_nodes WHERE server_id = ?`,
 		`DELETE FROM node_configs WHERE server_id = ?`,
 		`DELETE FROM server_metrics WHERE server_id = ?`,
 		`DELETE FROM node_push_logs WHERE server_id = ?`,
@@ -414,7 +423,7 @@ func (h *handlers) serverDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"success": true,
-		"message": "服务器及其节点配置 / 监控数据已删除",
+		"message": "服务器及其节点配置 / VPN 节点与授权 / 监控数据已删除",
 	})
 }
 

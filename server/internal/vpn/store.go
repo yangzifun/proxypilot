@@ -246,9 +246,37 @@ func (s *Store) UpdateNode(ctx context.Context, n NodeRecord) error {
 	return nil
 }
 
-// DeleteNode 删除节点。
+// deleteNodeStatements 返回删除节点时要执行的 SQL。
+//
+// 顺序有意义：必须先删引用方（vpn_node_grants / vpn_sessions），
+// 再删 vpn_nodes，否则会留下指向不存在节点的孤儿行 ——
+// 这正是「节点删了但授权还在」的成因。
+func deleteNodeStatements() []string {
+	return []string{
+		`DELETE FROM vpn_node_grants WHERE node_id = ?`,
+		`DELETE FROM vpn_sessions WHERE node_id = ?`,
+		`DELETE FROM vpn_nodes WHERE id = ?`,
+	}
+}
+// DeleteNode 删除节点，并级联清理引用该节点的数据。
+//
+// 之前只删 vpn_nodes，节点没了但 vpn_node_grants（授权关系）与 vpn_sessions
+// （会话记录）还留着 —— 管理端「授权」列表会继续出现这台已不存在的节点，
+// 形成悬挂数据。这里用事务保证三张表同时清理。
 func (s *Store) DeleteNode(ctx context.Context, id int64) error {
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM vpn_nodes WHERE id = ?`, id); err != nil {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("删除节点: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	// 先子表后主表，顺序反了会留下孤儿行
+	for _, q := range deleteNodeStatements() {
+		if _, err := tx.ExecContext(ctx, q, id); err != nil {
+			return fmt.Errorf("删除节点: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("删除节点: %w", err)
 	}
 	return nil
