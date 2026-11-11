@@ -42,6 +42,11 @@ type Config struct {
 	Services []string // 需要上报 systemd 状态的服务名
 	Insecure bool     // 跳过 TLS 证书校验（仅排查用）
 	AllowURLMigration bool // 允许按服务端下发的 agent_access_url 自动迁移
+
+	// 节点维护：每日定时重启（错峰）。默认开启，04:00 起随机延后。
+	RebootEnabled   bool
+	RebootTime      string // HH:MM，默认 04:00
+	RebootDelaySec  int    // 随机延后上限（秒），默认 2700 = 45 分钟
 }
 
 // Defaults 返回默认配置（未读取任何文件）。
@@ -52,6 +57,9 @@ func Defaults() Config {
 		StateDir: DefaultStateDir,
 		Services: append([]string(nil), DefaultServices...),
 		AllowURLMigration: true,
+		RebootEnabled:     true,
+		RebootTime:        "04:00",
+		RebootDelaySec:    2700,
 	}
 }
 
@@ -106,6 +114,16 @@ func Parse(text string) Config {
 			c.AllowURLMigration = truthy(val)
 		case "PROXYPILOT_INSECURE", "INSECURE":
 			c.Insecure = truthy(val)
+		case "REBOOT_ENABLED", "PROXYPILOT_REBOOT_ENABLED", "DAILY_REBOOT":
+			c.RebootEnabled = truthy(val)
+		case "REBOOT_TIME", "PROXYPILOT_REBOOT_TIME":
+			if val != "" {
+				c.RebootTime = val
+			}
+		case "REBOOT_DELAY_SEC", "PROXYPILOT_REBOOT_DELAY_SEC":
+			if n, err := strconv.Atoi(val); err == nil && n >= 0 {
+				c.RebootDelaySec = n
+			}
 		}
 	}
 	return c
@@ -182,6 +200,15 @@ func (c Config) String() string {
 	if c.Insecure {
 		b.WriteString("PROXYPILOT_INSECURE=1\n")
 	}
+	// 节点维护：每日错峰重启（默认开启，04:00 起随机延后 45 分钟）
+	b.WriteString("\n# 节点维护：每日定时重启（多机通过随机延后错开，避免同时掉线）\n")
+	if c.RebootEnabled {
+		b.WriteString("REBOOT_ENABLED=1\n")
+	} else {
+		b.WriteString("REBOOT_ENABLED=0\n")
+	}
+	b.WriteString("REBOOT_TIME=\"" + firstNonEmpty(c.RebootTime, "04:00") + "\"\n")
+	b.WriteString("REBOOT_DELAY_SEC=" + strconv.Itoa(c.RebootDelaySec) + "\n")
 	return b.String()
 }
 
@@ -241,4 +268,14 @@ func validServiceName(v string) bool {
 		}
 	}
 	return true
+}
+
+// firstNonEmpty 返回第一个非空值。
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }

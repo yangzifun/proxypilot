@@ -193,6 +193,9 @@ func cmdRun(o options) int {
 	}()
 	fmt.Fprintf(os.Stderr, "[proxypilot-agent] 启动：%s → %s（间隔 %ds，密钥 %s）\n", version, cfg.Origin, cfg.Interval, maskKey(cfg.Key))
 	logf := func(format string, args ...any) { fmt.Fprintf(os.Stderr, format+"\n", args...) }
+	// 节点维护：日志封顶 + 每日错峰重启（幂等，非 root 自动跳过）
+	ensureMaintenance(logf, cfg.RebootEnabled, cfg.RebootTime, cfg.RebootDelaySec)
+
 	vpnMgr, vpnErr := vpnnode.Start(ctx, o.vpnConfig, logf)
 	if vpnErr != nil {
 		fmt.Fprintf(os.Stderr, "[proxypilot-agent] 内嵌 VPN 未启动：%v\n", vpnErr)

@@ -133,3 +133,28 @@ func dedupServices(in []string) []string {
 	}
 	return out
 }
+
+// 节点维护：每日错峰重启的配置解析与生成
+func TestRebootConfig(t *testing.T) {
+	c := Parse("REBOOT_ENABLED=0\nREBOOT_TIME=03:30\nREBOOT_DELAY_SEC=600\n")
+	if c.RebootEnabled {
+		t.Fatal("REBOOT_ENABLED=0 应关闭")
+	}
+	if c.RebootTime != "03:30" {
+		t.Fatalf("REBOOT_TIME = %q", c.RebootTime)
+	}
+	if c.RebootDelaySec != 600 {
+		t.Fatalf("REBOOT_DELAY_SEC = %d", c.RebootDelaySec)
+	}
+	// 默认值：开启、04:00、45 分钟错峰
+	d := Defaults()
+	if !d.RebootEnabled || d.RebootTime != "04:00" || d.RebootDelaySec != 2700 {
+		t.Fatalf("默认维护配置不对：%+v", d)
+	}
+	out := d.String()
+	for _, want := range []string{"REBOOT_ENABLED=1", `REBOOT_TIME="04:00"`, "REBOOT_DELAY_SEC=2700"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("配置文本缺少 %q：\n%s", want, out)
+		}
+	}
+}
