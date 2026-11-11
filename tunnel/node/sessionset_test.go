@@ -15,6 +15,15 @@ func newSessionSetTestServer() *Server {
 	}
 }
 
+// mkPkt 造一个最小 IPv4 报文（20 字节头 + 8 字节头），
+// 只为了让 pick() 能读到协议号与端口做选路。
+func mkPkt(proto byte) []byte {
+	p := make([]byte, 28)
+	p[0] = 0x45
+	p[9] = proto
+	return p
+}
+
 func newTestSession(ip net.IP, kind sessionKind) *session {
 	return &session{
 		kind: kind,
@@ -56,13 +65,13 @@ func TestSessionSetPick(t *testing.T) {
 	ssess := newTestSession(ip, kindStream)
 	set := &sessionSet{stream: ssess, datagram: dsess}
 
-	if got := set.pick(17); got != dsess {
+	if got := set.pick(mkPkt(17)); got != dsess {
 		t.Fatal("UDP 应走 datagram")
 	}
-	if got := set.pick(6); got != ssess {
+	if got := set.pick(mkPkt(6)); got != ssess {
 		t.Fatal("TCP 应走 stream")
 	}
-	if got := set.pick(1); got != ssess {
+	if got := set.pick(mkPkt(1)); got != ssess {
 		t.Fatal("ICMP 应走 stream")
 	}
 }
@@ -73,17 +82,17 @@ func TestSessionSetFallback(t *testing.T) {
 	ssess := newTestSession(ip, kindStream)
 
 	onlyStream := &sessionSet{stream: ssess}
-	if got := onlyStream.pick(17); got != ssess {
+	if got := onlyStream.pick(mkPkt(17)); got != ssess {
 		t.Fatal("datagram 缺失时 UDP 应回退到 stream")
 	}
 
 	dsess := newTestSession(ip, kindDatagram)
 	onlyDatagram := &sessionSet{datagram: dsess}
-	if got := onlyDatagram.pick(6); got != dsess {
+	if got := onlyDatagram.pick(mkPkt(6)); got != dsess {
 		t.Fatal("stream 缺失时应回退到 datagram")
 	}
 
-	if got := (*sessionSet)(nil).pick(6); got != nil {
+	if got := (*sessionSet)(nil).pick(mkPkt(6)); got != nil {
 		t.Fatal("空集合应返回 nil")
 	}
 }

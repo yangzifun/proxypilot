@@ -3,6 +3,7 @@ package node
 import (
 	"bufio"
 	"encoding/binary"
+	"strconv"
 	"fmt"
 	"io"
 	"net"
@@ -136,8 +137,16 @@ func (s *Server) serveStream(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
+	// 多路复用：客户端在主可靠流之外开附加流时带 X-VPN-Lane。
+	// lane=0（缺省）就是主可靠流，行为与以前完全一致。
+	lane := 0
+	if v := r.Header.Get("X-VPN-Lane"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 64 {
+			lane = n
+		}
+	}
 	sess := &session{
-		kind: kindStream,
+		kind: kindStream, lane: lane,
 		jti: claims.JTI, ip: ip, device: claims.Subject, grantID: claims.GrantID,
 		started: time.Now(),
 	}

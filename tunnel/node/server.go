@@ -59,6 +59,8 @@ func (k sessionKind) String() string {
 type session struct {
 	jti     string
 	kind    sessionKind
+	// lane 是客户端多路复用时的流编号：0 = 主可靠流，>0 = 附加独立流。
+	lane    int
 	ip      net.IP
 	device  string
 	grantID int64
@@ -342,17 +344,28 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 type sessionSet struct {
 	stream   *session
 	datagram *session
+	// lanes 是多路复用的附加可靠流（lane>=1），与主可靠流互相独立：
+	// 每条都是独立 QUIC 流，各有自己的流控与重传队列，一条丢包不连累其他。
+	lanes map[int]*session
 }
 
 // pick 按内层协议号选通道。
 //
 // proto 取自内层 IPv4 头的协议字段（6=TCP, 17=UDP, 1=ICMP）。
-func (set *sessionSet) pick(proto byte) *session {
+func (set *sessionSet) pick(pkt []byte) *session {
 	if set == nil {
 		return nil
 	}
+	proto := innerProto(pkt)
 	if proto == 17 && set.datagram != nil && set.datagram.send != nil {
 		return set.datagram
+	}
+	// 多路复用：按五元组哈希选 lane，与客户端的 flowLane 完全一致，
+	// 保证「下行回包写回客户端发它时用的那条流」。
+	if len(set.lanes) > 0 {
+		if s := set.lanes[flowLane(pkt, multiLaneCount)]; s != nil && s.send != nil {
+			return s
+		}
 	}
 	if set.stream != nil && set.stream.send != nil {
 		return set.stream
@@ -417,6 +430,35 @@ func (s *Server) writeDatagramToTun(sess *session, data []byte, badPkt, badSrc, 
 	}
 	sess.tx++
 }
+// multiLaneCount 必须与客户端 vpnclient.multiLaneCount 保持一致。
+const multiLaneCount = 3
+
+// innerProto 取内层 IPv4 头的协议号；取不到返回 0。
+func innerProto(pkt []byte) byte {
+	if len(pkt) < 20 || pkt[0]>>4 != 4 {
+		return 0
+	}
+	return pkt[9]
+}
+
+// flowLane 与客户端同算法：同一条内层连接永远落在同一条 lane 上。
+func flowLane(pkt []byte, n int) int {
+	if n <= 1 || len(pkt) < 20 || pkt[0]>>4 != 4 {
+		return 0
+	}
+	ihl := int(pkt[0]&0x0f) * 4
+	h := uint32(2166136261)
+	for _, b := range pkt[12:16] {
+		h = (h ^ uint32(b)) * 16777619
+	}
+	if len(pkt) >= ihl+4 {
+		for _, b := range pkt[ihl : ihl+4] {
+			h = (h ^ uint32(b)) * 16777619
+		}
+	}
+	return int(h % uint32(n))
+}
+
 // isDNSPacket 判断是否为 DNS 报文（UDP 且源/目的端口为 53）。
 //
 // 与客户端 vpnclient/dual_tunnel.go 的同名函数保持一致的判定，
@@ -458,7 +500,7 @@ func (s *Server) dropDatagramChannel(ip net.IP) {
 }
 // empty 表示两条通道都没了。
 func (set *sessionSet) empty() bool {
-	return set == nil || (set.stream == nil && set.datagram == nil)
+	return set == nil || (set.stream == nil && set.datagram == nil && len(set.lanes) == 0)
 }
 
 func (s *Server) register(sess *session) bool {
@@ -469,6 +511,17 @@ func (s *Server) register(sess *session) bool {
 	if set == nil {
 		set = &sessionSet{}
 		s.sessions[key] = set
+	}
+	if sess.kind == kindStream && sess.lane > 0 {
+		if set.lanes == nil {
+			set.lanes = make(map[int]*session)
+		}
+		if cur := set.lanes[sess.lane]; cur != nil && cur.conn != nil {
+			_ = cur.conn.CloseWithError(0, "lane replaced")
+		}
+		set.lanes[sess.lane] = sess
+		s.log.Info("lane 会话注册", "ip", key, "lane", sess.lane)
+		return true
 	}
 	// 只替换**同一种承载**的旧会话。
 	// 客户端重启后旧会话往往来不及清理（对端进程被杀），同 kind 直接接管，
@@ -492,6 +545,15 @@ func (s *Server) unregister(sess *session) {
 	key := sess.ip.String()
 	set := s.sessions[key]
 	if set == nil {
+		return
+	}
+	if sess.kind == kindStream && sess.lane > 0 {
+		if set.lanes != nil && set.lanes[sess.lane] == sess {
+			delete(set.lanes, sess.lane)
+		}
+		if set.empty() {
+			delete(s.sessions, key)
+		}
 		return
 	}
 	// 只清自己那个槽位；另一条通道还在就保留集合
@@ -610,13 +672,9 @@ func (s *Server) tunLoop() {
 			continue
 		}
 		// 按内层协议号选通道：UDP 走 DATAGRAM，其余走可靠流；某一路缺失则回退
-		var proto byte
-		if len(pkt) >= 10 {
-			proto = pkt[9]
-		}
 		// DNS 固定走可靠流：DATAGRAM 不重传，实测 81% 的 UDP 回包丢失，
 		// 而 DNS 客户端 2 秒超时，丢了就是用户等好几秒。其余 UDP 仍走 DATAGRAM。
-		sess := set.pick(proto)
+		sess := set.pick(pkt)
 		if isDNSPacket(pkt) {
 			if set.stream != nil && set.stream.send != nil {
 				sess = set.stream

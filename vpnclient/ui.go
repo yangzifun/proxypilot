@@ -200,7 +200,7 @@ func saveSettings(s uiSettings) error {
 // 那样开 lane 反而会把主可靠流顶掉 —— 所以在节点改造完成前固定为 0。
 // 客户端基础设施（flowLane / laneLoop / openTunnelStreamLane）已就绪，
 // 节点上线后把这里改成 3 即可，无需再改其他地方。
-const multiLaneCount = 0
+const multiLaneCount = 3
 
 type sessionState struct {
 	mu sync.Mutex
