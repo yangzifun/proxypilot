@@ -388,6 +388,29 @@ func (set *sessionSet) other(s *session) *session {
 	return set.datagram
 }
 
+// dropDatagramChannel 清掉某设备的 datagram 槽位。
+//
+// 用于「客户端明确不支持 DATAGRAM」时：必须让 pick() 回退到可靠流，
+// 否则节点会继续把 UDP 下行塞进 DATAGRAM，而客户端不读 datagram，
+// 回包直接消失 —— 实测表现为 nslookup 全部超时、ping 公网 IP 正常。
+func (s *Server) dropDatagramChannel(ip net.IP) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	key := ip.String()
+	set := s.sessions[key]
+	if set == nil || set.datagram == nil {
+		return
+	}
+	cur := set.datagram
+	set.datagram = nil
+	if set.empty() {
+		delete(s.sessions, key)
+	}
+	if cur.conn != nil {
+		_ = cur.conn.CloseWithError(0, "client datagram unsupported")
+	}
+	s.log.Info("已停用 DATAGRAM 通道", "ip", key, "reason", "客户端未声明支持")
+}
 // empty 表示两条通道都没了。
 func (set *sessionSet) empty() bool {
 	return set == nil || (set.stream == nil && set.datagram == nil)

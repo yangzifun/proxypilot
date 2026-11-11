@@ -204,6 +204,20 @@ func (s *Server) serveStream(w http.ResponseWriter, r *http.Request) {
 	h := w.Header()
 	h.Set("X-VPN-Auth", "Success")
 	h.Set("X-VPN-Assigned-IPv4", ip.String())
+
+	// 能力协商（MASQUE/RFC 9297 风格）：客户端在请求头声明是否支持 HTTP Datagram。
+	// 只有双方都支持，才允许这条会话走 DATAGRAM 下行；否则把 datagram 槽位清掉，
+	// 让 tunLoop 的 pick() 回退到可靠流 —— 否则节点继续用 DATAGRAM 发 UDP，
+	// 而客户端根本不读 datagram，回包就静默消失（表现为 DNS 完全不通）。
+	clientDatagram := r.Header.Get("H3-Datagram") != ""
+	useDatagram := s.cfg.DatagramEnabled && clientDatagram
+	if !clientDatagram {
+		s.dropDatagramChannel(ip)
+	}
+	if useDatagram {
+		h.Set("Capsule-Protocol", "?1")
+		h.Set("H3-Datagram", "?1")
+	}
 	h.Set("Cache-Control", "no-store")
 	h.Set("Content-Type", "application/octet-stream")
 	w.WriteHeader(http.StatusOK)
