@@ -4068,3 +4068,17 @@ h3 { font-size: 14px; }
 .pp-auth-tabs .ant-tabs-nav {
   margin-bottom: 12px;
 }
+
+/* ---------------- 管理后台不做移动端适配 ---------------- */
+/* 这是桌面端工具：窗口再窄也不折叠导航、不切移动端布局，
+   而是让页面整体横向滚动。之前按 innerWidth<1100 自动折叠，
+   侧边栏会退化成只有图标的窄栏 + 悬浮子菜单，难认也难点。 */
+.pp-admin {
+  min-width: 1180px;
+}
+.pp-admin > .ant-layout-sider {
+  flex: 0 0 224px !important;
+  max-width: 224px !important;
+  min-width: 224px !important;
+  width: 224px !important;
+}

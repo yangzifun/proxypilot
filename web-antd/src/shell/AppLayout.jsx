@@ -23,14 +23,13 @@ export default function AppLayout({ activeKey, onNavigate, children }) {
 
   const items = useMemo(() => menuItems(isSuper), [isSuper]);
 
-  // 侧边栏折叠（窄屏自动折叠）
-  const [collapsed, setCollapsed] = useState(false);
-  useEffect(() => {
-    const apply = () => setCollapsed(window.innerWidth < 1100);
-    apply();
-    window.addEventListener('resize', apply);
-    return () => window.removeEventListener('resize', apply);
-  }, []);
+  // 管理后台是桌面端工具，**不做移动端适配**：侧边栏始终展开。
+  //
+  // 之前按 window.innerWidth < 1100 自动折叠，窗口一缩小就退化成
+  // 只有图标的窄栏 + 悬浮子菜单（截图里那种），既难认也难点。
+  // 这里有意识地不做响应式折叠；窗口太窄时页面自身会出现横向滚动条，
+  // 而不是把导航藏进图标里。
+  const collapsed = false;
 
   // 展开的分组：记住用户选择，并始终包含当前页面所在分组
   const OPEN_KEY = 'pp.nav.openGroups';
@@ -65,7 +64,7 @@ export default function AppLayout({ activeKey, onNavigate, children }) {
   };
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
+    <Layout className="pp-admin" style={{ minHeight: '100vh' }}>
       <Sider className="pp-sider" theme="dark" width={224}>
         <div className="pp-brand">
           <div className="pp-brand-mark">
