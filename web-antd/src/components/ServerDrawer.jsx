@@ -65,6 +65,9 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
   const { message } = AntdApp.useApp();
   const [state, setState] = useState({ data: null, metrics: [], configs: [], loading: false, error: null });
   const [busy, setBusy] = useState('');
+  // 删除确认弹窗：先列出会被一起解绑的内容
+  const [delOpen, setDelOpen] = useState(false);
+  const [delBindings, setDelBindings] = useState(null);
   const [install, setInstall] = useState(null);
   const [execOpen, setExecOpen] = useState(false);
   const [remoteOpen, setRemoteOpen] = useState(false);
@@ -344,11 +347,24 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
     }
   };
 
+  // 删除前先拉取「会被一起解绑」的清单，避免破坏性操作缺少告知。
+  const openDelete = async () => {
+    setDelBindings(null);
+    setDelOpen(true);
+    try {
+      const res = await api(`servers/${serverId}/bindings`);
+      setDelBindings(res || {});
+    } catch (e) {
+      setDelBindings({ error: e.message || '读取绑定信息失败' });
+    }
+  };
+
   const removeServer = async () => {
     setBusy('delete');
     try {
       await api(`servers/${serverId}`, { method: 'DELETE' });
       message.success('服务器已删除');
+      setDelOpen(false);
       onClose && onClose();
       onChanged && onChanged();
     } catch (e) {
@@ -413,11 +429,9 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
           <Tooltip title="编辑">
             <Button size="small" icon={<EditOutlined />} onClick={() => setEditOpen(true)} disabled={!d} aria-label="编辑" />
           </Tooltip>
-          <Popconfirm title="删除该服务器？" description="删除后 Agent 与节点配置都会解除绑定。" okText="删除" okButtonProps={{ danger: true }} disabled={!d} onConfirm={removeServer}>
-            <Tooltip title="删除服务器">
-              <Button size="small" danger icon={<DeleteOutlined />} loading={busy === 'delete'} disabled={!d} aria-label="删除" />
-            </Tooltip>
-          </Popconfirm>
+          <Tooltip title="删除服务器">
+            <Button size="small" danger icon={<DeleteOutlined />} loading={busy === 'delete'} disabled={!d} onClick={openDelete} aria-label="删除" />
+          </Tooltip>
           <Tooltip title="刷新">
             <Button size="small" icon={<ReloadOutlined />} onClick={load} loading={state.loading} aria-label="刷新" />
           </Tooltip>
@@ -1157,6 +1171,45 @@ function TasksModal({ row, onClose }) {
           },
         ]}
       />
+      <Modal
+        title="删除服务器？"
+        open={delOpen}
+        onCancel={() => setDelOpen(false)}
+        okText="确认删除"
+        okButtonProps={{ danger: true }}
+        confirmLoading={busy === 'delete'}
+        onOk={removeServer}
+        destroyOnClose
+      >
+        <p style={{ marginTop: 0 }}>
+          即将删除 <b>{d ? d.name : ''}</b>，以下内容会<b>一并解绑或删除</b>：
+        </p>
+        {delBindings === null ? (
+          <div style={{ padding: '8px 0', color: '#888' }}>正在检查绑定…</div>
+        ) : delBindings.error ? (
+          <Alert type="error" showIcon message={delBindings.error} />
+        ) : (
+          <div style={{ fontSize: 13 }}>
+            <div style={{ marginBottom: 6 }}>
+              VPN 节点：{(delBindings.vpn_nodes || []).length} 个
+              {(delBindings.vpn_grants || 0) > 0 ? `（连带 ${delBindings.vpn_grants} 条用户授权）` : ''}
+            </div>
+            {(delBindings.vpn_nodes || []).length > 0 ? (
+              <ul style={{ margin: '0 0 8px 18px', padding: 0 }}>
+                {delBindings.vpn_nodes.map((n) => (
+                  <li key={n.id}>{n.name} <span style={{ color: '#999' }}>{n.detail}</span></li>
+                ))}
+              </ul>
+            ) : null}
+            <div style={{ marginBottom: 6 }}>sing-box 节点：{(delBindings.singbox || []).length} 个</div>
+            <div style={{ marginBottom: 6 }}>下发配置：{delBindings.node_configs || 0} 条</div>
+            <div style={{ marginBottom: 6 }}>VPN 会话记录：{delBindings.vpn_sessions || 0} 条</div>
+            <p style={{ color: '#cf1322', marginBottom: 0 }}>
+              删除后这些 VPN 节点的用户授权会一起消失，且无法恢复。
+            </p>
+          </div>
+        )}
+      </Modal>
     </Modal>
   );
 }

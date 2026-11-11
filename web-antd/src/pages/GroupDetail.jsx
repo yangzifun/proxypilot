@@ -662,7 +662,7 @@ function VpnGrants({ uuid }) {
       message.success(`已撤销「${row.name}」`);
       load();
     } catch (e) {
-      message.error(e.message || '撤销失败');
+      message.error(e.message || '解除绑定失败');
     } finally {
       setBusy('');
     }
@@ -693,12 +693,12 @@ function VpnGrants({ uuid }) {
       width: 120,
       render: (_, row) => (row.granted ? (
         <Popconfirm
-          title={`撤销「${row.name}」的 VPN 授权？`}
-          okText="撤销"
+          title={`解除「${row.name}」的 VPN 绑定？`}
+          okText="解除绑定"
           okButtonProps={{ danger: true }}
           onConfirm={() => revoke(row)}
         >
-          <Button size="small" danger loading={busy === String(row.id)}>撤销</Button>
+          <Button size="small" danger loading={busy === String(row.id)}>解除绑定</Button>
         </Popconfirm>
       ) : (
         <Button size="small" type="primary" loading={busy === String(row.id)} onClick={() => grant(row)}>

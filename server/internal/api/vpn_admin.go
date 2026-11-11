@@ -1,4 +1,4 @@
-﻿package api
+package api
 
 import (
 	"context"
@@ -488,12 +488,20 @@ func (h *handlers) vpnAdminUserGrants(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "uuid 必填")
 		return
 	}
+	// 只关联「当前有效」的那一条授权（enabled=1 里 id 最大的）。
+	//
+	// 之前直接 JOIN 全部授权行：一旦用户被 授权→撤销→再授权，
+	// 同一节点就会出现两行（撤销的那行 + 新授权那行），前端列表重复。
+	// 用子查询取最新有效授权，保证每个节点最多一行。
 	rows, err := h.db.QueryContext(r.Context(),
 		`SELECT n.id, n.name, COALESCE(n.domain, ''), COALESCE(n.state, ''),
 		        COALESCE(g.id, 0), COALESCE(g.enabled, 0), COALESCE(g.expires_at, 0), COALESCE(g.max_devices, 0)
 		   FROM vpn_nodes n
-		   LEFT JOIN vpn_node_grants g
-		     ON g.node_id = n.id AND g.subject_type = 'user' AND g.subject_id = ?
+		   LEFT JOIN vpn_node_grants g ON g.id = (
+		         SELECT g2.id FROM vpn_node_grants g2
+		          WHERE g2.node_id = n.id AND g2.subject_type = 'user'
+		            AND g2.subject_id = ? AND g2.enabled = 1
+		          ORDER BY g2.id DESC LIMIT 1)
 		  ORDER BY n.id`, uuid)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "查询 VPN 授权失败")

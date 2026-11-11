@@ -289,6 +289,7 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /api/servers/{id}", h.authed(authOpts{}, h.serverGet))
 	mux.HandleFunc("PUT /api/servers/{id}", h.authed(authOpts{}, h.serverUpdate))
 	mux.HandleFunc("DELETE /api/servers/{id}", h.authed(authOpts{}, h.serverDelete))
+	mux.HandleFunc("GET /api/servers/{id}/bindings", h.authed(authOpts{}, h.serverBindings))
 	mux.HandleFunc("POST /api/servers/{id}/agent-token", h.authed(authOpts{}, h.serverRotateToken))
 	mux.HandleFunc("GET /api/servers/{id}/unlock", h.authed(authOpts{}, h.serverUnlock))
 	mux.HandleFunc("POST /api/servers/{id}/unlock", h.authed(authOpts{}, h.serverUnlock))
