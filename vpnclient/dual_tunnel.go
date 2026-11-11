@@ -52,6 +52,10 @@ type datagramPeer interface {
 // dualPacketConn 把「可靠流」与「QUIC DATAGRAM」合成一个 packetConn。
 type dualPacketConn struct {
 	stream packetConn
+	// lanes 是多路复用的额外可靠流（lane 0 就是 stream 本身）。
+	// 每条 lane 是一条独立的 QUIC 流，有独立的流控与重传队列 ——
+	// 一条连接丢包不会连累其他连接（跨流队头阻塞）。
+	lanes []packetConn
 	dg     datagramPeer
 	// maxDatagram 是单条 DATAGRAM 的载荷上限，超过就走可靠流。
 	maxDatagram int
@@ -78,11 +82,17 @@ type dualPacketConn struct {
 
 // newDualPacketConn 建立双通道；fecGroup > 1 时在 DATAGRAM 通道启用分组 FEC。
 func newDualPacketConn(stream packetConn, dg datagramPeer, maxDatagram, fecGroup int) *dualPacketConn {
+	return newDualPacketConnLanes(stream, nil, dg, maxDatagram, fecGroup)
+}
+
+// newDualPacketConnLanes 在 stream 之外再挂 n 条独立可靠流。
+func newDualPacketConnLanes(stream packetConn, lanes []packetConn, dg datagramPeer, maxDatagram, fecGroup int) *dualPacketConn {
 	if maxDatagram <= 0 {
 		maxDatagram = 1400
 	}
 	c := &dualPacketConn{
 		stream:      stream,
+		lanes:       lanes,
 		dg:          dg,
 		maxDatagram: maxDatagram,
 		q:           make(chan []byte, dualQueueDepth),
@@ -92,8 +102,11 @@ func newDualPacketConn(stream packetConn, dg datagramPeer, maxDatagram, fecGroup
 		c.fecEnc = newFECEncoder(fecGroup)
 		c.fecDec = newFECDecoder()
 	}
-	c.wg.Add(2)
+	c.wg.Add(2 + len(lanes))
 	go c.streamLoop()
+	for i, ln := range lanes {
+		go c.laneLoop(ln, i)
+	}
 	go c.datagramLoop()
 	return c
 }
@@ -146,13 +159,52 @@ func (c *dualPacketConn) SendPacket(pkt []byte) error {
 		// DATAGRAM 发不出去（对端不支持 / 缓冲满）时回退到可靠流
 		log.Printf("数据面：DATAGRAM 发送失败，回退到可靠流（%v）", errors.New("send failed"))
 	}
-	if err := c.stream.SendPacket(pkt); err != nil {
+	sender := c.stream
+	if n := len(c.lanes); n > 0 {
+		sender = c.lanes[flowLane(pkt, n)]
+	}
+	if err := sender.SendPacket(pkt); err != nil {
 		return err
 	}
 	c.streamSent.Add(1)
 	return nil
 }
 
+// flowLane 按内层五元组算 lane：同一条连接永远落在同一条流上（保持顺序），
+// 不同连接尽量分散，从而把一个包的丢失影响限制在一条流内。
+func flowLane(pkt []byte, n int) int {
+	if n <= 1 || len(pkt) < 20 || pkt[0]>>4 != 4 {
+		return 0
+	}
+	ihl := int(pkt[0]&0x0f) * 4
+	h := uint32(2166136261)
+	for _, b := range pkt[12:16] { // 源/目的 IP
+		h = (h ^ uint32(b)) * 16777619
+	}
+	if len(pkt) >= ihl+4 {
+		for _, b := range pkt[ihl : ihl+4] { // 源/目的端口
+			h = (h ^ uint32(b)) * 16777619
+		}
+	}
+	return int(h % uint32(n))
+}
+
+// laneLoop 搬运某条 lane 上的下行包（复用同一个合并队列）。
+func (c *dualPacketConn) laneLoop(ln packetConn, idx int) {
+	defer c.wg.Done()
+	for {
+		pkt, err := ln.RecvPacket()
+		if err != nil {
+			// 单条 lane 断了不影响整体：降到 0 号流即可。
+			log.Printf("数据面：lane %d 结束（%v），该 lane 流量回落到主可靠流", idx+1, err)
+			return
+		}
+		c.streamRecv.Add(1)
+		if !c.push(pkt) {
+			return
+		}
+	}
+}
 // streamLoop 把可靠流上的下行包搬进合并队列。
 func (c *dualPacketConn) streamLoop() {
 	defer c.wg.Done()

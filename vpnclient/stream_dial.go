@@ -23,6 +23,14 @@ import (
 // 否则它会挂在那条空闲的鉴权连接上（cwnd 极小、甚至连接已被回收），
 // 表现为「客户端发出 343 个、节点只收到 129 个，双方都没有错误计数」。
 func openTunnelStream(ctx context.Context, endpoint, sni, token string, insecure bool) (*streamPacketConn, *quic.Conn, bool, func(), error) {
+	return openTunnelStreamLane(ctx, endpoint, sni, token, insecure, 0)
+}
+
+// openTunnelStreamLane 打开一条指定 lane 的隧道流。
+//
+// lane=0 是主可靠流；lane>0 是额外的一条独立 QUIC 流，
+// 与主流通用同一条 QUIC 连接，但拥有独立的流控与重传队列。
+func openTunnelStreamLane(ctx context.Context, endpoint, sni, token string, insecure bool, lane int) (*streamPacketConn, *quic.Conn, bool, func(), error) {
 	var conn *quic.Conn
 	tlsConf := &tls.Config{
 		ServerName:         sni,
@@ -100,6 +108,10 @@ func openTunnelStream(ctx context.Context, endpoint, sni, token string, insecure
 	req.Header.Set("Capsule-Protocol", "?1")
 	req.Header.Set("Connect-Protocol", "connect-ip")
 	req.Header.Set("H3-Datagram", "?1")
+	if lane > 0 {
+		req.Header.Set("X-VPN-Lane", fmt.Sprintf("%d", lane))
+		// 附加流不需要重跑鉴权，但节点仍会校验 JWT 并复用同一设备 IP。
+	}
 
 	resp, err := tr.RoundTrip(req)
 	if err != nil {

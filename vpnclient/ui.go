@@ -193,6 +193,15 @@ func saveSettings(s uiSettings) error {
 
 // ---------- 连接引擎 ----------
 
+// multiLaneCount 是主可靠流之外额外开的多路复用 lane 数。
+// lane 之间互相独立（各自一条 QUIC 流），用于削掉跨连接的队头阻塞。
+// 注意：节点侧的多 lane 受理（X-VPN-Lane 头 + sessionSet.lanes）尚未实现。
+// 当前阶段节点会把每条新流都当成「同 kind 的旧会话」接管，
+// 那样开 lane 反而会把主可靠流顶掉 —— 所以在节点改造完成前固定为 0。
+// 客户端基础设施（flowLane / laneLoop / openTunnelStreamLane）已就绪，
+// 节点上线后把这里改成 3 即可，无需再改其他地方。
+const multiLaneCount = 0
+
 type sessionState struct {
 	mu sync.Mutex
 	// attempt 是连接尝试的序号：旧尝试的 goroutine 不许覆盖新尝试的状态
@@ -1032,6 +1041,22 @@ func (s *uiServer) connect(nodeID int64) error {
 		tunDNS = append(tunDNS, "1.1.1.1", "223.5.5.5")
 		log.Printf("隧道参数：地址=%s 网关=%s 网段=%s DNS=%v", prof.IP4, gateway, cidr, tunDNS)
 		pc, streamConn, nodeHasDatagram, cleanupStream, serr := openTunnelStream(ctx, pick.Endpoint, sni, prof.Token, skipVerify)
+		// 多路复用：在主可靠流之外再开 3 条独立 QUIC 流（同一条 QUIC 连接）。
+		// 每条流有独立的流控与重传队列，一条连接丢包不会连累其他连接。
+		// 失败就当作没有 lanes，自动退回单流 —— 不允许因为多流开不起来而断网。
+		lanes := make([]packetConn, 0, multiLaneCount)
+		for li := 1; li <= multiLaneCount; li++ {
+			lpc, _, _, lclean, lerr := openTunnelStreamLane(ctx, pick.Endpoint, sni, prof.Token, skipVerify, li)
+			if lerr != nil {
+				log.Printf("数据面：lane %d 建立失败（%v），本次只用 %d 条可靠流", li, lerr, len(lanes)+1)
+				break
+			}
+			defer lclean()
+			lanes = append(lanes, lpc)
+		}
+		if len(lanes) > 0 {
+			log.Printf("数据面：多路复用已启用（主可靠流 + %d 条 lane）", len(lanes))
+		}
 		if serr != nil {
 			s.fail(cancel, attempt, "建立隧道流失败", serr)
 			return
@@ -1056,7 +1081,7 @@ func (s *uiServer) connect(nodeID int64) error {
 		case !nodeHasDatagram || !supportsDatagrams(streamConn):
 			log.Printf("数据面：对端未协商 DATAGRAM，全部走可靠流")
 		default:
-			dual := newDualPacketConn(pc, quicDatagramPeer{conn: streamConn}, maxDatagramPayload, fecGroup)
+			dual := newDualPacketConnLanes(pc, lanes, quicDatagramPeer{conn: streamConn}, maxDatagramPayload, fecGroup)
 			pconn = dual
 			s.setFor(attempt, func(st *sessionState) { st.dualConn = dual })
 			if fecGroup > 1 {
