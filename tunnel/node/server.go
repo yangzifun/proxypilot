@@ -388,6 +388,35 @@ func (set *sessionSet) other(s *session) *session {
 	return set.datagram
 }
 
+// writeDatagramToTun 把一条已解码的内层报文写入 TUN，并做源地址校验。
+//
+// 从 readSession 抽出来，是因为引入 FEC 后一个 DATAGRAM 可能产出 0 或 1 个
+// 完整报文，校验与写入逻辑需要被复用，避免复制粘贴两份。
+func (s *Server) writeDatagramToTun(sess *session, data []byte, badPkt, badSrc, writeFail *int) {
+	pkt, src, _, perr := StripPadding(data)
+	if perr != nil {
+		*badPkt++
+		if *badPkt == 1 {
+			s.log.Warn("丢弃无法解析的报文", "ip", sess.ip.String(), "len", len(data), "err", perr.Error())
+		}
+		return
+	}
+	if !src.Equal(sess.ip) {
+		*badSrc++
+		if *badSrc == 1 {
+			s.log.Warn("丢弃源地址不符的报文", "sess_ip", sess.ip.String(), "src", src.String())
+		}
+		return
+	}
+	if _, werr := s.tun.Write(pkt); werr != nil {
+		*writeFail++
+		if *writeFail == 1 {
+			s.log.Warn("写入 TUN 失败", "err", werr, "len", len(pkt), "ip", sess.ip.String())
+		}
+		return
+	}
+	sess.tx++
+}
 // isDNSPacket 判断是否为 DNS 报文（UDP 且源/目的端口为 53）。
 //
 // 与客户端 vpnclient/dual_tunnel.go 的同名函数保持一致的判定，
@@ -495,6 +524,12 @@ func (s *Server) readSession(sess *session) {
 	}()
 	var badPkt, badSrc int
 	var writeFail int
+	// 每个 datagram 会话一个解码器，按 session 生命周期存活。
+	// FEC 是「81% 丢包」的补救手段：DATAGRAM 不重传，只有冗余能救。
+	var fecDec *fecDecoder
+	if s.cfg.FECMode == "xor" && s.cfg.FECGroup > 1 {
+		fecDec = newFECDecoder()
+	}
 	lastStats := time.Now()
 	for {
 		data, err := sess.conn.ReceiveDatagram(sess.conn.Context())
@@ -505,20 +540,23 @@ func (s *Server) readSession(sess *session) {
 				"bad_pkt", badPkt, "bad_src", badSrc)
 			return
 		}
-		pkt, src, _, perr := StripPadding(data)
-		if perr != nil {
-			badPkt++
-			if badPkt == 1 {
-				s.log.Warn("丢弃无法解析的报文", "ip", sess.ip.String(), "len", len(data), "err", perr.Error())
+		frames := [][]byte{data}
+		if fecDec != nil {
+			decoded, ferr := fecDec.Decode(data)
+			if ferr != nil {
+				badPkt++
+				if badPkt == 1 {
+					s.log.Warn("FEC 解码失败", "ip", sess.ip.String(), "len", len(data), "err", ferr.Error())
+				}
+				continue
 			}
-			continue
+			if len(decoded) == 0 {
+				continue
+			}
+			frames = decoded
 		}
-		if !src.Equal(sess.ip) {
-			badSrc++
-			if badSrc == 1 {
-				s.log.Warn("丢弃源地址不符的报文", "sess_ip", sess.ip.String(), "src", src.String())
-			}
-			continue
+		for _, frame := range frames {
+			s.writeDatagramToTun(sess, frame, &badPkt, &badSrc, &writeFail)
 		}
 		if time.Since(lastStats) > 30*time.Second {
 			// 命名对齐可靠流那边的「流隧道流量」，方便两侧对照排查：
@@ -531,22 +569,17 @@ func (s *Server) readSession(sess *session) {
 				"bad_pkt", badPkt, "bad_src", badSrc)
 			lastStats = time.Now()
 		}
-		if _, werr := s.tun.Write(pkt); werr != nil {
-			// 单个报文写失败（例如超过 TUN MTU）不能终止会话，
-			// 否则后续所有流量都会被静默丢弃、表现为「已连接但完全不通」。
-			writeFail++
-			if writeFail == 1 {
-				s.log.Warn("写入 TUN 失败", "err", werr, "len", len(pkt), "ip", sess.ip.String())
-			}
-			continue
-		}
-		sess.tx++
 	}
 }
 
 // tunLoop 读取 TUN，把下行报文发给对应客户端；客户端互访直接丢弃。
 func (s *Server) tunLoop() {
 	buf := make([]byte, 65535)
+	// 下行 FEC 编码器（仅 DATAGRAM 通道使用）
+	var fecEncDown *fecEncoder
+	if s.cfg.FECMode == "xor" && s.cfg.FECGroup > 1 {
+		fecEncDown = newFECEncoder(s.cfg.FECGroup)
+	}
 	for {
 		n, err := s.tun.Read(buf)
 		if err != nil {
@@ -590,6 +623,19 @@ func (s *Server) tunLoop() {
 			}
 		}
 		sent := false
+		// 下行 FEC：只作用于 DATAGRAM 通道。开一个分组校验帧，
+		// 组内丢 1 个可由对端还原 —— 这是 81% 丢包唯一的补救手段。
+		if fecEncDown != nil && sess != nil && sess.kind == kindDatagram && len(pkt) <= s.cfg.MaxDatagram {
+			data, parity := fecEncDown.Encode(pkt)
+			if err := sess.send(data); err == nil {
+				sess.rx++
+				if len(parity) > 0 {
+					_ = sess.send(parity)
+				}
+				continue
+			}
+			sess.sendFail.Add(1)
+		}
 		if sess != nil && sess.send != nil {
 			if err := sess.send(pkt); err == nil {
 				sess.rx++
