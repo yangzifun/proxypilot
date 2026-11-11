@@ -106,11 +106,31 @@ func innerProto(pkt []byte) byte {
 	return pkt[9]
 }
 
+// isDNSPacket 判断是否为 DNS 报文（UDP 且源/目的端口为 53）。
+//
+// 实测（客户端 3.9 + Agent 3.10）：DATAGRAM 通道已经通了（UDP 收 > 0），
+// 但 398 发只回 74，约 81% 的 UDP 回包丢失 —— 因为 DATAGRAM 帧不重传，
+// 且与大流量的可靠流共用同一个拥塞窗口，流一忙 datagram 就被丢。
+// DNS 客户端超时 2 秒，81% 丢失直接表现为「nslookup 连续超时」。
+// 因此 DNS 固定走可靠流，其余 UDP 才用 DATAGRAM。
+func isDNSPacket(pkt []byte) bool {
+	if len(pkt) < 28 || pkt[0]>>4 != 4 || pkt[9] != udpProto {
+		return false
+	}
+	ihl := int(pkt[0]&0x0f) * 4
+	if ihl < 20 || len(pkt) < ihl+8 {
+		return false
+	}
+	sport := int(pkt[ihl])<<8 | int(pkt[ihl+1])
+	dport := int(pkt[ihl+2])<<8 | int(pkt[ihl+3])
+	return sport == 53 || dport == 53
+}
+
 // SendPacket 按协议号分流。
 func (c *dualPacketConn) SendPacket(pkt []byte) error {
 	proto := innerProto(pkt)
 	// 只有 UDP 且长度在上限内才走 DATAGRAM
-	if proto == udpProto && c.dg != nil && len(pkt) <= c.maxDatagram {
+	if proto == udpProto && c.dg != nil && len(pkt) <= c.maxDatagram && !isDNSPacket(pkt) {
 		frame, parity := pkt, []byte(nil)
 		if c.fecEnc != nil {
 			frame, parity = c.fecEnc.Encode(pkt)

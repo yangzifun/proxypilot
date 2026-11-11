@@ -388,6 +388,22 @@ func (set *sessionSet) other(s *session) *session {
 	return set.datagram
 }
 
+// isDNSPacket 判断是否为 DNS 报文（UDP 且源/目的端口为 53）。
+//
+// 与客户端 vpnclient/dual_tunnel.go 的同名函数保持一致的判定，
+// 保证两个方向的 DNS 都走可靠流。
+func isDNSPacket(pkt []byte) bool {
+	if len(pkt) < 28 || pkt[0]>>4 != 4 || pkt[9] != 17 {
+		return false
+	}
+	ihl := int(pkt[0]&0x0f) * 4
+	if ihl < 20 || len(pkt) < ihl+8 {
+		return false
+	}
+	sport := int(pkt[ihl])<<8 | int(pkt[ihl+1])
+	dport := int(pkt[ihl+2])<<8 | int(pkt[ihl+3])
+	return sport == 53 || dport == 53
+}
 // dropDatagramChannel 清掉某设备的 datagram 槽位。
 //
 // 用于「客户端明确不支持 DATAGRAM」时：必须让 pick() 回退到可靠流，
@@ -565,7 +581,14 @@ func (s *Server) tunLoop() {
 		if len(pkt) >= 10 {
 			proto = pkt[9]
 		}
+		// DNS 固定走可靠流：DATAGRAM 不重传，实测 81% 的 UDP 回包丢失，
+		// 而 DNS 客户端 2 秒超时，丢了就是用户等好几秒。其余 UDP 仍走 DATAGRAM。
 		sess := set.pick(proto)
+		if isDNSPacket(pkt) {
+			if set.stream != nil && set.stream.send != nil {
+				sess = set.stream
+			}
+		}
 		sent := false
 		if sess != nil && sess.send != nil {
 			if err := sess.send(pkt); err == nil {
