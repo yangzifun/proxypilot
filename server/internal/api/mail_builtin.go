@@ -139,11 +139,24 @@ func (h *handlers) sendMailBuiltin(mc mailConfig, to, subject, htmlBody string) 
 	return fmt.Errorf("直投失败：%w（常见原因：云厂商封禁出站 25 端口，或对方拒收本机 IP）", lastErr)
 }
 
+// mailEgressNetwork 固定邮件出站网络为 IPv4。
+//
+// 本机虽然有公网 IPv6，但发信域只有 IPv4 的 A 记录、SPF 只有 ip4、反解也只有
+// IPv4；一旦 SMTP 走 IPv6，收件方看到的就是「无 PTR + SPF softfail」。Go 的
+// "tcp" 会按系统地址排序（通常 IPv6 优先），所以这里显式钉死 tcp4；对端只有
+// AAAA（极罕见）时宁可投递失败，也不要用一个没有反解、不在 SPF 里的 IPv6 发信。
+const mailEgressNetwork = "tcp4"
+
+// dialMailSMTP 以固定 IPv4 网络拨号，自建直投与 SMTP 通道共用。
+func dialMailSMTP(ctx context.Context, addr string) (net.Conn, error) {
+	d := &net.Dialer{Timeout: 12 * time.Second}
+	return d.DialContext(ctx, mailEgressNetwork, addr)
+}
+
 // deliverSMTP 与单个 MX 完成一次投递。
 func deliverSMTP(mxHost, from, to, heloDomain string, msg []byte) error {
 	addr := net.JoinHostPort(mxHost, "25")
-	dialer := &net.Dialer{Timeout: 12 * time.Second}
-	conn, err := dialer.Dial("tcp", addr)
+	conn, err := dialMailSMTP(context.Background(), addr)
 	if err != nil {
 		return fmt.Errorf("连接 25 端口失败：%w", err)
 	}

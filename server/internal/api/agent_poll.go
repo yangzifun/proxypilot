@@ -400,6 +400,9 @@ func (h *handlers) agentUpdateSnapshot(ctx context.Context, srv *agentServer, m 
 		IP, IP4, IP6   string
 		PrivateIP      string
 		MeshIP4, MeshIP6 string
+		// ClearIP4/ClearIP6：本次明确要清空该列（Agent 明确上报「无真实 IP」或旧值是
+		// WARP/CGNAT 脏数据）。置真时不能再用 COALESCE 保留旧值（task-15）。
+		ClearIP4, ClearIP6 bool
 	}, rates agentRates) error {
 	now := nowMillis()
 	summary := m.summary(rates, opts.AgentVersion)
@@ -434,8 +437,8 @@ func (h *handlers) agentUpdateSnapshot(ctx context.Context, srv *agentServer, m 
 	      agent_last_seen = ?, agent_last_poll_at = IF(?, ?, agent_last_poll_at),
 	      agent_next_poll_sec = COALESCE(NULLIF(?, 0), agent_next_poll_sec), agent_poll_count = IF(?, ?, agent_poll_count),
 	      last_ip = COALESCE(NULLIF(?, ''), last_ip),
-	      last_ip4 = COALESCE(NULLIF(?, ''), last_ip4),
-	      last_ip6 = COALESCE(NULLIF(?, ''), last_ip6),
+	      last_ip4 = CASE WHEN ? THEN ? ELSE COALESCE(NULLIF(?, ''), last_ip4) END,
+	      last_ip6 = CASE WHEN ? THEN ? ELSE COALESCE(NULLIF(?, ''), last_ip6) END,
       last_ip_private = COALESCE(NULLIF(?, ''), last_ip_private),
       last_mesh_ip4 = COALESCE(NULLIF(?, ''), last_mesh_ip4),
       last_mesh_ip6 = COALESCE(NULLIF(?, ''), last_mesh_ip6),
@@ -444,7 +447,10 @@ func (h *handlers) agentUpdateSnapshot(ctx context.Context, srv *agentServer, m 
 	    WHERE id = ?`,
 		"online", "", now, string(summaryJSON), osInfo, "agent", platform, version,
 		now, pollFlag, now, opts.PersistPollSec, pollFlag, opts.PollCount,
-		opts.IP, opts.IP4, opts.IP6, opts.PrivateIP, opts.MeshIP4, opts.MeshIP6, now, now, srv.ID)
+		opts.IP,
+		opts.ClearIP4, opts.IP4, opts.IP4,
+		opts.ClearIP6, opts.IP6, opts.IP6,
+		opts.PrivateIP, opts.MeshIP4, opts.MeshIP6, now, now, srv.ID)
 	if err == nil && srv.LastStatus == "offline" {
 		go h.notifyStatus(context.Background(), "服务器恢复", []serverStatusNotice{{ID: srv.ID, Detail: "Agent 心跳恢复"}})
 	}
@@ -696,6 +702,11 @@ func (h *handlers) agentPoll(w http.ResponseWriter, r *http.Request) {
 		writeError(w, status, msg)
 		return
 	}
+	if srv.GraceAuth {
+		// 本次是按来源 IP 临时放行的（令牌轮换事故）：尽快给节点排一条自愈任务，
+		// 把 conf 里的重复/旧令牌改回面板当前令牌并重启 Agent；同一节点窗口内只排一次。
+		h.ensureAgentTokenFixTask(r.Context(), srv)
+	}
 	now := nowMillis()
 	if srv.AgentLastPollAt > 0 && now-srv.AgentLastPollAt < agentPollThrottleMS {
 		retry := (agentPollThrottleMS - (now - srv.AgentLastPollAt)) / 1000
@@ -724,85 +735,9 @@ func (h *handlers) agentPoll(w http.ResponseWriter, r *http.Request) {
 
 	shouldSample := pollCount%metricsEvery == 0 || srv.LastStatus != "online"
 
-	ip := clientIP(r)
-	if ip == "" || ip == "unknown" {
-		mine := strings.TrimSpace(jsonStr(body["ip"]))
-		if regexpIP.MatchString(mine) {
-			ip = truncateRunes(mine, 64)
-		}
-	}
-	// Agent 主动上报的出口公网 IP：走内网通道时，连接来源是 100.64/10 等内网地址，
-	// 必须靠这个字段才能拿到真正的公网 IP。
-	agentPublicIP := strings.TrimSpace(jsonStr(body["public_ip"]))
-	agentPrivateIP := strings.TrimSpace(jsonStr(body["private_ip"]))
-	if agentPrivateIP == "" {
-		agentPrivateIP = strings.TrimSpace(jsonStr(body["ip"]))
-	}
-	// 组网地址（Cloudflare WARP）：Agent 直接从组网网卡读取，v4/v6 各一
-	meshIP4 := ""
-	meshIP6 := ""
-	{
-		v4 := strings.TrimSpace(jsonStr(body["mesh_ip4"]))
-		if regexpIPv4.MatchString(v4) {
-			meshIP4 = truncateRunes(v4, 64)
-		}
-		v6 := strings.TrimSpace(jsonStr(body["mesh_ip6"]))
-		if strings.Contains(v6, ":") && regexpIP.MatchString(v6) {
-			meshIP6 = truncateRunes(v6, 64)
-		}
-	}
-
-	// 内网地址：优先 Agent 上报的本机内网 IP，其次连接来源（WARP / 内网）
-	privateIP := ""
-	if agentPrivateIP != "" && isPrivateIP(agentPrivateIP) && regexpIP.MatchString(agentPrivateIP) {
-		privateIP = truncateRunes(agentPrivateIP, 64)
-	} else if ip != "" && isPrivateIP(ip) && regexpIP.MatchString(ip) {
-		privateIP = truncateRunes(ip, 64)
-	}
-	// 公网 IPv4：Agent 主动探测 > 连接来源；都拿不到时留空，保留库里已有的公网 IP
-	ip4 := firstNonEmpty(publicIPv4(agentPublicIP), publicIPv4(ip))
-	agentPublicV6 := ""
-	if ip4 == "" && agentPublicIP != "" && strings.Contains(agentPublicIP, ":") &&
-		regexpIP.MatchString(agentPublicIP) && !isPrivateIP(agentPublicIP) {
-		agentPublicV6 = agentPublicIP
-	}
-	if ip4 == "" {
-		mine := strings.TrimSpace(jsonStr(body["ipv4"]))
-		if mine == "" {
-			mine = strings.TrimSpace(jsonStr(body["ip"]))
-		}
-		if regexpIPv4.MatchString(mine) && !isPrivateIP(mine) &&
-			!strings.HasPrefix(mine, "0.") && !strings.HasPrefix(mine, "127.") &&
-			!strings.HasPrefix(mine, "169.254.") {
-			ip4 = mine
-		}
-	}
-	ip6 := agentPublicV6
-	if ip6 == "" {
-		mine := strings.TrimSpace(jsonStr(body["ipv6"]))
-		if strings.Contains(mine, ":") && regexpIP.MatchString(mine) && !isPrivateIP(mine) {
-			ip6 = mine
-		}
-	}
-
-	// 最终落库值：拿不到新公网 IP 时保留旧的公网 IP；若旧值是内网地址则清空（修复历史脏数据）
-	if ip4 == "" {
-		if !isPrivateIP(srv.LastIP4) {
-			ip4 = strings.TrimSpace(srv.LastIP4)
-		}
-	}
-	if ip6 == "" && !isPrivateIP(srv.LastIP6) {
-		ip6 = strings.TrimSpace(srv.LastIP6)
-	}
-	if privateIP == "" {
-		privateIP = strings.TrimSpace(srv.LastIPPrivate)
-	}
-	if meshIP4 == "" {
-		meshIP4 = strings.TrimSpace(srv.LastMeshIP4)
-	}
-	if meshIP6 == "" {
-		meshIP6 = strings.TrimSpace(srv.LastMeshIP6)
-	}
+	// IP 列解析（含 WARP/组网过滤与「字段缺失 vs 明确空串」判定），见 agent_ip.go。
+	// 返回 ClearIP4/ClearIP6 时，落库必须真正清空而不能被 COALESCE 保留旧值。
+	ips := resolveAgentIPs(body, clientIP(r), srv)
 
 	rates := agentThroughputFromSample(prev, m, nextPollSec)
 	agentVersion := firstNonEmpty(jsonStr(body["agent_version"]), jsonStr(body["agentVersion"]))
@@ -814,7 +749,10 @@ func (h *handlers) agentPoll(w http.ResponseWriter, r *http.Request) {
 		IP, IP4, IP6   string
 		PrivateIP      string
 		MeshIP4, MeshIP6 string
-	}{nextPollSec, configured, pollCount, agentVersion, ip, ip4, ip6, privateIP, meshIP4, meshIP6}, rates); err != nil {
+		ClearIP4, ClearIP6 bool
+	}{nextPollSec, configured, pollCount, agentVersion,
+		ips.IP, ips.IP4, ips.IP6, ips.PrivateIP, ips.MeshIP4, ips.MeshIP6,
+		ips.ClearIP4, ips.ClearIP6}, rates); err != nil {
 		h.log.Error("更新 Agent 快照失败", "err", err)
 	}
 
@@ -1027,6 +965,8 @@ var systemExecActions = []string{
 	systemActionCloudflaredUpdate,
 	systemActionVPNApply,
 	systemActionWarpUpdate,
+	// 令牌轮换事故自愈：把 Agent conf 里的令牌行改回面板当前令牌（见 agent_grace.go）。
+	systemActionAgentTokenFix,
 }
 
 // isSystemExecPayload 系统级固定动作（非用户任意命令），不受 allow_exec 限制。
@@ -1064,7 +1004,14 @@ func (h *handlers) ingestAgentWSMetrics(ctx context.Context, srv *agentServer, b
 		IP, IP4, IP6   string
 		PrivateIP      string
 		MeshIP4, MeshIP6 string
-	}{srv.NextPollSec, 0, srv.AgentPollCount, version, ip, srv.LastIP4, srv.LastIP6, srv.LastIPPrivate, srv.LastMeshIP4, srv.LastMeshIP6}
+		ClearIP4, ClearIP6 bool
+	}{
+		NextPollSec: srv.NextPollSec, PollCount: srv.AgentPollCount, AgentVersion: version,
+		IP: ip,
+		// IP4/IP6/PrivateIP/Mesh* 不在 WS 快照里更新：这里传空串 + Clear=false，
+		// 落库 SQL 会保留库里当前值。若把 WS 握手时缓存的 srv.LastIP6 再写回去，
+		// 会把 poll 刚清掉的历史 WARP 地址重新写回（task-15）。
+	}
 	if err := h.agentUpdateSnapshot(ctx, srv, m, false, opts, rates); err != nil {
 		h.log.Warn("WS 快照更新失败", "err", err)
 	}

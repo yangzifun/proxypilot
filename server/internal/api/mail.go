@@ -41,9 +41,14 @@ func (h *handlers) sendMailSMTP(mc mailConfig, to, subject, htmlBody string) err
 		return fmt.Errorf("组装邮件失败：%w", serr)
 	}
 
-	c, err := smtp.Dial(mc.Addr)
+	conn, err := dialMailSMTP(context.Background(), mc.Addr)
 	if err != nil {
 		return fmt.Errorf("连接 SMTP 失败: %w", err)
+	}
+	c, err := smtp.NewClient(conn, host)
+	if err != nil {
+		_ = conn.Close()
+		return fmt.Errorf("SMTP 握手失败: %w", err)
 	}
 	defer c.Close()
 

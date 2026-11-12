@@ -51,8 +51,45 @@ type agentServer struct {
 	LastMeshIP6     string
 	IPCountry       string
 	IPRegion        string
-	LastMetrics     string
-	AgentKeyUsedAt  int64
+	LastMetrics    string
+	AgentKeyUsedAt int64
+	// GraceAuth 只存在于本次请求的内存态：true 表示本次是按来源 IP 放行的（见 agent_grace.go）。
+	GraceAuth bool
+}
+
+// agentServerSelectColumns 供 agentAuthenticate 使用的 servers 字段列表。
+// 正常令牌查询与 grace 按 IP 查询共用同一份列表，避免两处字段漂移。
+//
+// 注意：这里刻意不含 agent_auth_grace —— 它由迁移 0053 新增，如果面板二进制先于迁移
+// 上线，把新列写进这条主查询会让「全部节点」的 Agent 认证直接 500。grace 状态在
+// 需要时单独查（见 agent_grace.go），迁移没上时只影响 grace 放行能力，不影响正常认证。
+const agentServerSelectColumns = `SELECT id, COALESCE(name,''), COALESCE(link_mode,'ssh'),
+	      COALESCE(enabled,0), COALESCE(agent_next_poll_sec,60), COALESCE(agent_version,''),
+	      COALESCE(agent_platform,''), COALESCE(agent_token_enc,''), COALESCE(agent_last_poll_at,0),
+	      COALESCE(agent_poll_count,0), COALESCE(agent_last_seen,0), COALESCE(last_status,'unknown'),
+	      COALESCE(metrics_every,1), COALESCE(allow_exec,0), COALESCE(os_info,''), COALESCE(tags,''),
+	      COALESCE(username,''), COALESCE(host,''), COALESCE(port,22), COALESCE(last_ip,''),
+	      COALESCE(last_ip4,''), COALESCE(last_ip6,''), COALESCE(last_ip_private,''), COALESCE(last_mesh_ip4,''), COALESCE(last_mesh_ip6,''), COALESCE(ip_country,''), COALESCE(ip_region,''),
+	      COALESCE(last_metrics,''), COALESCE(agent_key_used_at,0)
+	    FROM servers`
+
+// agentServerRowScanner 抽象 *sql.Row / *sql.Rows 的 Scan，供上面同一份列表使用。
+type agentServerRowScanner interface {
+	Scan(dest ...any) error
+}
+
+// scanAgentServerRow 按 agentServerSelectColumns 的字段顺序扫描一行。
+func scanAgentServerRow(row agentServerRowScanner) (*agentServer, error) {
+	var s agentServer
+	err := row.Scan(&s.ID, &s.Name, &s.LinkMode, &s.Enabled, &s.NextPollSec, &s.AgentVersion,
+		&s.AgentPlatform, &s.AgentTokenEnc, &s.AgentLastPollAt, &s.AgentPollCount, &s.AgentLastSeen,
+		&s.LastStatus, &s.MetricsEvery, &s.AllowExec, &s.OSInfo, &s.Tags,
+		&s.Username, &s.Host, &s.Port, &s.LastIP, &s.LastIP4, &s.LastIP6, &s.LastIPPrivate, &s.LastMeshIP4, &s.LastMeshIP6,
+		&s.IPCountry, &s.IPRegion, &s.LastMetrics, &s.AgentKeyUsedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &s, nil
 }
 
 // agentTokenFromRequest 只从请求头提取 Agent 接入令牌。
@@ -78,22 +115,14 @@ func (h *handlers) agentAuthenticate(r *http.Request, body map[string]any) (*age
 		return nil, http.StatusUnauthorized, "接入令牌格式无效"
 	}
 
-	var s agentServer
-	err := h.db.QueryRowContext(r.Context(), `SELECT id, COALESCE(name,''), COALESCE(link_mode,'ssh'),
-	      COALESCE(enabled,0), COALESCE(agent_next_poll_sec,60), COALESCE(agent_version,''),
-	      COALESCE(agent_platform,''), COALESCE(agent_token_enc,''), COALESCE(agent_last_poll_at,0),
-	      COALESCE(agent_poll_count,0), COALESCE(agent_last_seen,0), COALESCE(last_status,'unknown'),
-	      COALESCE(metrics_every,1), COALESCE(allow_exec,0), COALESCE(os_info,''), COALESCE(tags,''),
-	      COALESCE(username,''), COALESCE(host,''), COALESCE(port,22), COALESCE(last_ip,''),
-	      COALESCE(last_ip4,''), COALESCE(last_ip6,''), COALESCE(last_ip_private,''), COALESCE(last_mesh_ip4,''), COALESCE(last_mesh_ip6,''), COALESCE(ip_country,''), COALESCE(ip_region,''),
-	      COALESCE(last_metrics,''), COALESCE(agent_key_used_at,0)
-	    FROM servers WHERE agent_token_hash = ? LIMIT 1`, sha256Hex(raw)).
-		Scan(&s.ID, &s.Name, &s.LinkMode, &s.Enabled, &s.NextPollSec, &s.AgentVersion,
-			&s.AgentPlatform, &s.AgentTokenEnc, &s.AgentLastPollAt, &s.AgentPollCount, &s.AgentLastSeen,
-			&s.LastStatus, &s.MetricsEvery, &s.AllowExec, &s.OSInfo, &s.Tags,
-			&s.Username, &s.Host, &s.Port, &s.LastIP, &s.LastIP4, &s.LastIP6, &s.LastIPPrivate, &s.LastMeshIP4, &s.LastMeshIP6,
-			&s.IPCountry, &s.IPRegion, &s.LastMetrics, &s.AgentKeyUsedAt)
+	s, err := scanAgentServerRow(h.db.QueryRowContext(r.Context(),
+		agentServerSelectColumns+` WHERE agent_token_hash = ? LIMIT 1`, sha256Hex(raw)))
 	if err == sql.ErrNoRows {
+		// 令牌哈希匹配失败：若该节点被显式置了 agent_auth_grace=1 且来源 IP 对得上，
+		// 临时放行一次，让节点有机会跑到自愈逻辑把 conf 里的旧令牌改掉（见 agent_grace.go）。
+		if g, ok := h.agentGraceAuthenticate(r, raw); ok {
+			return g, 0, ""
+		}
 		// 临时诊断：令牌不匹配时打印提示与来源 IP，便于定位「节点上到底是哪一套令牌」
 		h.log.Warn("Agent 鉴权失败：令牌不匹配",
 			"token_hint", hintOf(raw), "remote", r.RemoteAddr,
@@ -110,7 +139,9 @@ func (h *handlers) agentAuthenticate(r *http.Request, body map[string]any) (*age
 	if s.Enabled != 1 {
 		return nil, http.StatusForbidden, "该服务器已被禁用"
 	}
-	return &s, 0, ""
+	// 用正常令牌认证成功一次即撤销临时放行，临时通道自动关闭。
+	h.clearAgentAuthGrace(r.Context(), s)
+	return s, 0, ""
 }
 
 // GET/POST /api/agent/keycheck
@@ -218,6 +249,7 @@ func (h *handlers) componentVersion(ctx context.Context) string {
 	componentVerExpires = time.Now().Add(10 * time.Minute)
 	return componentVerCache
 }
+
 // agentBaseFor 优先用显式基址，否则按当前请求推导本地 /agent-dist。
 func (h *handlers) agentBaseFor(r *http.Request) string {
 	if s := h.agentBinaryBaseURL(); s != "" {

@@ -116,6 +116,8 @@ func scanServerRow(rows *sql.Rows) (serverRow, error) {
 		s.LastIP = ""
 	}
 	s.LastIP4 = publicDisplayIPv4(s.LastIP4, s.LastIP)
+	// 展示兜底：历史脏数据里的 WARP 段 / 非全球单播地址不展示（task-15）
+	s.LastIP6 = displayIPv6(s.LastIP6)
 	// 内网地址单独字段，避免把 10.x / 100.64.x 当成公网展示
 	if s.LastIPPrivate == "" && isPrivateIP(s.LastIP) && s.LastIP != s.LastIP4 {
 		s.LastIPPrivate = s.LastIP
@@ -297,6 +299,8 @@ func (h *handlers) serversStatus(w http.ResponseWriter, r *http.Request) {
 		if it.LastIP == "unknown" {
 			it.LastIP = ""
 		}
+		it.LastIP4 = publicDisplayIPv4(it.LastIP4, it.LastIP)
+		it.LastIP6 = displayIPv6(it.LastIP6)
 		it.NextPollSec = clampInt(it.NextPollSec, 2, 900)
 		it.Status = agentOnlineStatus(it.AgentLastSeen, lastStatus, it.NextPollSec)
 		it.Metrics = rawJSON(metrics)
@@ -375,14 +379,20 @@ func rawJSON(v sql.NullString) json.RawMessage {
 	return json.RawMessage(v.String)
 }
 
-// publicDisplayIPv4 将 Agent 上报的内网 IPv4 替换为连接来源公网 IPv4；
-// 若只拿到公网 IPv6，则隐藏内网 IPv4，避免把 192.168/10.x 当成公网地址展示。
+// publicDisplayIPv4 展示用的公网 IPv4：
+//   - last_ip4 本身是合法公网 IPv4 → 原样展示
+//   - 是私网 / CGNAT(100.64/10，WARP 组网) 等非公网地址 → 用连接来源的公网 IPv4 顶替
+//   - 顶替不到就隐藏（空串），绝不把组网地址当成主机 IPv4 展示
 func publicDisplayIPv4(v4, connectionIP string) string {
 	v4 = strings.TrimSpace(v4)
-	if v4 == "" || !isPrivateIP(v4) {
-		return v4
+	if v4 == "" {
+		// 没有 IPv4 就保持空（IPv6-only 节点不拿连接来源硬凑一个 v4）
+		return ""
 	}
-	if pub := publicIPv4(connectionIP); pub != "" {
+	if pub := usablePublicIPv4(v4); pub != "" {
+		return pub
+	}
+	if pub := usablePublicIPv4(connectionIP); pub != "" {
 		return pub
 	}
 	return ""
@@ -394,16 +404,4 @@ func isPrivateIP(s string) bool {
 		return false
 	}
 	return ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsUnspecified()
-}
-
-func publicIPv4(s string) string {
-	ip := net.ParseIP(strings.TrimSpace(s))
-	if ip == nil {
-		return ""
-	}
-	v4 := ip.To4()
-	if v4 == nil || isPrivateIP(ip.String()) {
-		return ""
-	}
-	return v4.String()
 }

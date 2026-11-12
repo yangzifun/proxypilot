@@ -61,6 +61,7 @@ func (h *handlers) serversMonitor(w http.ResponseWriter, r *http.Request) {
 			"last_error": mapStr(row, "last_error", ""),
 			"last_ip":    mapStr(row, "last_ip", ""),
 			"last_ip4":   publicDisplayIPv4(mapStr(row, "last_ip4", ""), mapStr(row, "last_ip", "")),
+			"last_ip6":   displayIPv6(mapStr(row, "last_ip6", "")),
 			"ip_country": mapStr(row, "ip_country", ""), "ip_region": mapStr(row, "ip_region", ""),
 			"last_check_at":   mapInt(row, "last_check_at", 0),
 			"last_latency_ms": mapInt(row, "last_latency_ms", 0),

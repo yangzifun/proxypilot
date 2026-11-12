@@ -1,9 +1,11 @@
-﻿package api
+package api
 
 import (
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
+	"errors"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -283,6 +285,18 @@ func (h *handlers) ingestSnapshot(ctx context.Context, nodeID, upTotal, downTota
 		nodeID).Scan(&prevAt, &prevUp, &prevDown); err == nil {
 		hasPrev = true
 	}
+
+	// task-17：先更新「单调累计」（历史求和），再写原始快照。
+	// 首次见到该节点时，lifetime 初值取旧快照累计（迁移 0054 也会回填），
+	// last_raw 取本轮原始计数，避免上线后累计归零。
+	baseUp, baseDown := int64(0), int64(0)
+	if hasPrev {
+		baseUp, baseDown = prevUp, prevDown
+	}
+	if err := h.accumulateNodeLifetime(ctx, nodeID, upTotal, downTotal, baseUp, baseDown, now); err != nil {
+		h.log.Warn("写入节点累计流量失败", "err", err, "node_id", nodeID)
+	}
+
 	var upRate, downRate int64
 	if hasPrev && now > prevAt {
 		secs := (now - prevAt) / 1000
@@ -304,6 +318,102 @@ func (h *handlers) ingestSnapshot(ctx context.Context, nodeID, upTotal, downTota
 		nodeID, now, connCount, upTotal, downTotal, upRate, downRate); err != nil {
 		h.log.Warn("写入节点统计快照失败", "err", err)
 	}
+}
+
+// lifetimeDelta 计算「单调累计」应增加的量：
+//   - 正常递增（raw >= last）：delta = raw - last；
+//   - 计数回退（sing-box 重启，raw < last）：delta = raw（重启后从 0 重新开始的新流量）；
+//   - 负数/异常值按 0 处理。
+func lifetimeDelta(raw, last int64) int64 {
+	if raw < 0 {
+		raw = 0
+	}
+	if last < 0 {
+		last = 0
+	}
+	if raw >= last {
+		return raw - last
+	}
+	return raw
+}
+
+// accumulateNodeLifetime 原子地更新节点历史累计（带一次并发插入重试）。
+func (h *handlers) accumulateNodeLifetime(ctx context.Context, nodeID, rawUp, rawDown, baseUp, baseDown, now int64) error {
+	err := h.accumulateNodeLifetimeOnce(ctx, nodeID, rawUp, rawDown, baseUp, baseDown, now)
+	if err != nil && isDuplicateKeyError(err) {
+		// 并发首轮上报：另一请求刚插入同一 node_id 的行 → 重新走「增量更新」路径。
+		return h.accumulateNodeLifetimeOnce(ctx, nodeID, rawUp, rawDown, baseUp, baseDown, now)
+	}
+	return err
+}
+
+// isDuplicateKeyError 识别 MySQL 1062（fake/测试驱动也可能用英文文本）。
+func isDuplicateKeyError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "duplicate entry") || strings.Contains(msg, "duplicate key")
+}
+
+// accumulateNodeLifetimeOnce 单事务完成一次累计更新。
+//
+// 表 node_traffic_lifetime（迁移 0054）：
+//
+//	up_total/down_total = 历史求和（单调递增，重启不回退，API 返回这个值）
+//	last_raw_up/down    = 上一轮原始计数
+//
+// 并发：单事务 + SELECT ... FOR UPDATE，同一节点的并发/重复上报串行化，
+// 重复上报同一 raw 时 delta=0，不会重复计数。
+func (h *handlers) accumulateNodeLifetimeOnce(ctx context.Context, nodeID, rawUp, rawDown, baseUp, baseDown, now int64) error {
+	if nodeID <= 0 {
+		return nil
+	}
+	if rawUp < 0 {
+		rawUp = 0
+	}
+	if rawDown < 0 {
+		rawDown = 0
+	}
+	tx, err := h.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var upTotal, downTotal, lastUp, lastDown int64
+	err = tx.QueryRowContext(ctx,
+		`SELECT up_total, down_total, last_raw_up, last_raw_down
+		   FROM node_traffic_lifetime WHERE node_id = ? FOR UPDATE`, nodeID).
+		Scan(&upTotal, &downTotal, &lastUp, &lastDown)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		// 首轮：lifetime 初值取旧快照累计（迁移 0054 已回填存量节点；
+		// 新节点没有快照时 base=0），last_raw 取本轮原始计数。
+		if baseUp > 0 || baseDown > 0 {
+			upTotal, downTotal = baseUp, baseDown
+		}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO node_traffic_lifetime
+			   (node_id, up_total, down_total, last_raw_up, last_raw_down, updated_at)
+			 VALUES (?, ?, ?, ?, ?, ?)`,
+			nodeID, upTotal, downTotal, rawUp, rawDown, now); err != nil {
+			return err
+		}
+	case err != nil:
+		return err
+	default:
+		dUp := lifetimeDelta(rawUp, lastUp)
+		dDown := lifetimeDelta(rawDown, lastDown)
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE node_traffic_lifetime
+			    SET up_total = ?, down_total = ?, last_raw_up = ?, last_raw_down = ?, updated_at = ?
+			  WHERE node_id = ?`,
+			upTotal+dUp, downTotal+dDown, rawUp, rawDown, now, nodeID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 // ---------------- 查询接口 ----------------
@@ -506,17 +616,38 @@ func (h *handlers) statsTrafficUserDetail(w http.ResponseWriter, r *http.Request
 }
 
 // GET /api/stats/traffic/nodes
+//
+// task-17：up_total/down_total 返回「单调累计」（node_traffic_lifetime），
+// 不再直接返回 sing-box 进程内计数；后者只用于算速率与增量。
+// 兼容旧数据：lifetime 行尚未建立时（迁移执行前/从未上报）回退到旧快照值。
 func (h *handlers) statsTrafficNodes(w http.ResponseWriter, r *http.Request) {
 	rows, err := queryRowsAsMaps(r.Context(), h.db, `SELECT n.id AS node_id, n.name AS node_name,
 	      n.server_id, COALESCE(s.name,'') AS server_name, n.stats_enabled,
 	      COALESCE(snap.sampled_at,0) AS sampled_at, COALESCE(snap.conn_count,0) AS conn_count,
-	      COALESCE(snap.up_total,0) AS up_total, COALESCE(snap.down_total,0) AS down_total,
+	      COALESCE(lt.up_total, snap.up_total, 0) AS up_total,
+	      COALESCE(lt.down_total, snap.down_total, 0) AS down_total,
 	      COALESCE(snap.up_rate,0) AS up_rate, COALESCE(snap.down_rate,0) AS down_rate,
 	      COALESCE(snap.err_text,'') AS stats_error
 	    FROM singbox_nodes n
 	    LEFT JOIN servers s ON s.id = n.server_id
 	    LEFT JOIN node_stats_snapshot snap ON snap.node_id = n.id
+	    LEFT JOIN node_traffic_lifetime lt ON lt.node_id = n.id
 	    ORDER BY n.id ASC`)
+	if err != nil && strings.Contains(err.Error(), "node_traffic_lifetime") {
+		// 迁移 0054 尚未执行（AutoMigrate=false 的旧库）：退回只读原始快照，
+		// 保证统计页面可用；累计语义会在迁移执行后恢复。
+		h.log.Warn("node_traffic_lifetime 不存在，已回退原始快照展示；请执行迁移 0054", "err", err)
+		rows, err = queryRowsAsMaps(r.Context(), h.db, `SELECT n.id AS node_id, n.name AS node_name,
+		      n.server_id, COALESCE(s.name,'') AS server_name, n.stats_enabled,
+		      COALESCE(snap.sampled_at,0) AS sampled_at, COALESCE(snap.conn_count,0) AS conn_count,
+		      COALESCE(snap.up_total,0) AS up_total, COALESCE(snap.down_total,0) AS down_total,
+		      COALESCE(snap.up_rate,0) AS up_rate, COALESCE(snap.down_rate,0) AS down_rate,
+		      COALESCE(snap.err_text,'') AS stats_error
+		    FROM singbox_nodes n
+		    LEFT JOIN servers s ON s.id = n.server_id
+		    LEFT JOIN node_stats_snapshot snap ON snap.node_id = n.id
+		    ORDER BY n.id ASC`)
+	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "查询节点统计失败")
 		return

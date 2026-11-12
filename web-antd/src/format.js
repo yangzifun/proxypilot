@@ -90,20 +90,48 @@ export function shortUuid(uuid) {
   return s.slice(0, 8) + '…' + s.slice(-4);
 }
 
+// Cloudflare WARP 的 IPv6 段（与前端无关的服务端口径一致，见 server/internal/api/agent_ip.go）。
+const WARP_IPV6_PREFIXES = ['2606:4700:', '2602:fa4f:'];
+
+/** WARP/组网地址不能当作主机 IP 展示。 */
+export function isWARPIPv6(v) {
+  const s = String(v || '').trim().toLowerCase();
+  return WARP_IPV6_PREFIXES.some((p) => s.startsWith(p));
+}
+
+/** 100.64.0.0/10（CGNAT，WARP 组网 IPv4 常用此段）。 */
+export function isCGNATIPv4(v) {
+  const m = String(v || '').trim().match(/^100\.(\d{1,3})\./);
+  if (!m) return false;
+  const second = Number(m[1]);
+  return second >= 64 && second <= 127;
+}
+
 /**
  * 服务器地址拆成 IPv4 / IPv6 两个槽位。
  * 后端三列：last_ip4 / last_ip6（Agent 上报的本机地址）、last_ip（Agent 连 CF 时的出口地址）。
  * 老 Agent 只报 last_ip + last_ip6 → 出口是 IPv6 时把 IPv4 丢了，所以这里做兼容：
  *   · last_ip4 优先；没有就看 last_ip 是不是 IPv4；
  *   · last_ip6 优先；没有就看 last_ip 是不是 IPv6。
+ *
+ * 兜底过滤（task-15）：WARP 段 IPv6 与 CGNAT 100.64/10 不是真实主机地址，
+ * 即使库里还有历史脏数据也不展示（调用方会显示「—」）。
  * 返回 { v4, v6 }，各自可能为空串。
  */
 export function splitIps(row) {
   const s = row || {};
   const raw = String(s.last_ip || '').trim();
   const rawIs6 = raw.includes(':');
-  const v4 = String(s.last_ip4 || '').trim() || (!rawIs6 ? raw : '');
-  const v6 = String(s.last_ip6 || '').trim() || (rawIs6 ? raw : '');
+  const usableV4 = (v) => {
+    const t = String(v || '').trim();
+    return t && !isCGNATIPv4(t) ? t : '';
+  };
+  const usableV6 = (v) => {
+    const t = String(v || '').trim();
+    return t && !isWARPIPv6(t) ? t : '';
+  };
+  const v4 = usableV4(s.last_ip4) || (!rawIs6 ? usableV4(raw) : '');
+  const v6 = usableV6(s.last_ip6) || (rawIs6 ? usableV6(raw) : '');
   return { v4, v6 };
 }
 

@@ -5,6 +5,7 @@ import {
   SendOutlined,
   CheckCircleFilled,
   CloseCircleFilled,
+  ExclamationCircleFilled,
   QuestionCircleFilled,
   CloudUploadOutlined,
   EditOutlined,
@@ -19,6 +20,8 @@ const TYPE_COLOR = { TXT: 'blue', PTR: 'purple' };
 
 function StatusTag({ status }) {
   if (status === 'ok') return <Tag color="success" icon={<CheckCircleFilled />}>已生效</Tag>;
+  if (status === 'provider_default') return <Tag color="warning" icon={<ExclamationCircleFilled />}>服务商默认名</Tag>;
+  if (status === 'forward_mismatch') return <Tag color="warning" icon={<ExclamationCircleFilled />}>反查不一致</Tag>;
   if (status === 'missing') return <Tag color="error" icon={<CloseCircleFilled />}>未配置</Tag>;
   return <Tag icon={<QuestionCircleFilled />}>未知</Tag>;
 }
