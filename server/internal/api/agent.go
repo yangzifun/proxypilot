@@ -94,6 +94,10 @@ func (h *handlers) agentAuthenticate(r *http.Request, body map[string]any) (*age
 			&s.Username, &s.Host, &s.Port, &s.LastIP, &s.LastIP4, &s.LastIP6, &s.LastIPPrivate, &s.LastMeshIP4, &s.LastMeshIP6,
 			&s.IPCountry, &s.IPRegion, &s.LastMetrics, &s.AgentKeyUsedAt)
 	if err == sql.ErrNoRows {
+		// 临时诊断：令牌不匹配时打印提示与来源 IP，便于定位「节点上到底是哪一套令牌」
+		h.log.Warn("Agent 鉴权失败：令牌不匹配",
+			"token_hint", hintOf(raw), "remote", r.RemoteAddr,
+			"ua", truncateRunes(r.UserAgent(), 60), "path", r.URL.Path)
 		return nil, http.StatusUnauthorized, "接入令牌无效或已轮换"
 	}
 	if err != nil {
@@ -379,4 +383,12 @@ func agentVersionNewer(latest, current string) bool {
 		}
 	}
 	return false
+}
+
+// hintOf 输出令牌的可辨别前缀/后缀（不打全量令牌）。
+func hintOf(tok string) string {
+	if len(tok) <= 12 {
+		return strings.Repeat("*", len(tok))
+	}
+	return tok[:8] + "****" + tok[len(tok)-4:]
 }
