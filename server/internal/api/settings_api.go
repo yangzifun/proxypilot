@@ -95,7 +95,7 @@ func (h *handlers) settingsAPI(w http.ResponseWriter, r *http.Request) {
 				v = b
 			}
 			switch key {
-			case settingPublicBaseURL, settingOIDCIssuer, settingComponentBase:
+			case settingPublicBaseURL, settingOIDCIssuer, settingComponentBase, settingAgentBinaryBase:
 				if v != "" {
 					u, err := url.Parse(v)
 					if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
@@ -167,6 +167,22 @@ func (h *handlers) settingsAPI(w http.ResponseWriter, r *http.Request) {
 		// 先在“拟保存后的状态”上做锁定校验，避免把三种登录方式全部关掉。
 		// 注意：未在 app_settings 中显式配置时，要使用环境变量/默认值，而不是当成关闭。
 		ctx := r.Context()
+		// 安全敏感设置只允许超级管理员修改（审计 P2-14 提权链）。
+		// 只拦「真的改了」的键：设置页会整表单回传当前值，未修改不应报错。
+		claims, hasClaims := claimsFrom(r)
+		isSuper := hasClaims && h.cfg.SuperAdmin != "" && claims.Sub == h.cfg.SuperAdmin
+		if !isSuper {
+			for key, v := range changes {
+				if !isSuperOnlySetting(key) {
+					continue
+				}
+				if !h.sensitiveSettingChanged(ctx, key, v) {
+					continue
+				}
+				writeError(w, http.StatusForbidden, "仅超级管理员可修改安全敏感设置（"+key+"）")
+				return
+			}
+		}
 		pick := func(key string) string {
 			if v, ok := changes[key]; ok {
 				return v

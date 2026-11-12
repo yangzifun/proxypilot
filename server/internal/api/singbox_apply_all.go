@@ -116,6 +116,8 @@ func (h *handlers) applySingboxNode(ctx context.Context, nodeID int64, usersOver
 		if err != nil {
 			return nil, nil, nil, 0, "查询节点配置失败"
 		}
+		// hash / existHash 都是「content 原文」的 sha256（content_hash 口径，见
+		// nodeConfigContentHash），只用于判断生成内容是否变化。
 		same := existHash == hash && existPath == path && existRestart == restartCmd
 		if same && !force {
 			out = append(out, map[string]any{

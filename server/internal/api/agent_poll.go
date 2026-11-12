@@ -1011,13 +1011,31 @@ func decodeAgentOutput(m map[string]any) string {
 	return jsonStr(m["output"])
 }
 
+// 系统级固定动作（payload.system_action）：由面板后台固定脚本生成，不是用户任意命令，
+// 因此不受服务器 allow_exec 开关限制。
+//
+// 新增 system_action 必须在这里登记，否则 allow_exec=0 的机器上任务会被直接判失败
+// （审计 P1-4：warp_update 漏登记，导致「更新 WARP 客户端」必然失败）。
+const (
+	systemActionCloudflaredUpdate = "cloudflared_update"
+	systemActionVPNApply          = "vpn_apply"
+	systemActionWarpUpdate        = "warp_update"
+)
+
+// systemExecActions 已登记的系统级动作集合（供测试与排查使用）。
+var systemExecActions = []string{
+	systemActionCloudflaredUpdate,
+	systemActionVPNApply,
+	systemActionWarpUpdate,
+}
+
 // isSystemExecPayload 系统级固定动作（非用户任意命令），不受 allow_exec 限制。
 func isSystemExecPayload(p map[string]any) bool {
-	switch mapStr(p, "system_action", "") {
-	case "cloudflared_update":
-		return true
-	case "vpn_apply":
-		return true
+	action := mapStr(p, "system_action", "")
+	for _, a := range systemExecActions {
+		if action == a {
+			return true
+		}
 	}
 	return false
 }

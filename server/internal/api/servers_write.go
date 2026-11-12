@@ -379,6 +379,52 @@ func (h *handlers) serverUpdate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
+// serverDeleteCascadeSQL 删除服务器时必须按顺序执行的级联清理。
+//
+// 顺序规则：
+//  1. 引用 singbox_nodes / mihomo_nodes / mtproto_nodes / vpn_nodes 的子表必须先删
+//     （用 node_id JOIN 父表定位），父表删掉之后就再也定位不到这些孤儿行；
+//  2. configs 里由 sing-box 节点生成的订阅配置也在这里清掉；
+//  3. servers 必须最后删。
+//
+// 审计 P2-9：旧实现只清 11 张表，agent_tasks / 流量配额 / 解锁检查 / 终端会话 /
+// 端口映射 / 组网成员 / VPN 证书与链路 / MTProto 客户端 / 节点流量统计等表都会留孤儿行。
+var serverDeleteCascadeSQL = []string{
+	// 订阅侧授权：configs.singbox_node_id 指向 sing-box 节点
+	`DELETE c FROM configs c JOIN singbox_nodes n ON n.id = c.singbox_node_id WHERE n.server_id = ?`,
+	// sing-box 节点统计（node_id 指向 singbox_nodes.id）
+	`DELETE t FROM node_connections t JOIN singbox_nodes n ON n.id = t.node_id WHERE n.server_id = ?`,
+	`DELETE t FROM node_stats_snapshot t JOIN singbox_nodes n ON n.id = t.node_id WHERE n.server_id = ?`,
+	`DELETE t FROM node_user_counter t JOIN singbox_nodes n ON n.id = t.node_id WHERE n.server_id = ?`,
+	`DELETE t FROM user_node_recent t JOIN singbox_nodes n ON n.id = t.node_id WHERE n.server_id = ?`,
+	`DELETE t FROM user_traffic_hourly t JOIN singbox_nodes n ON n.id = t.node_id WHERE n.server_id = ?`,
+	`DELETE FROM singbox_nodes WHERE server_id = ?`,
+	// mihomo 节点统计
+	`DELETE t FROM mihomo_traffic_hourly t JOIN mihomo_nodes n ON n.id = t.node_id WHERE n.server_id = ?`,
+	`DELETE FROM mihomo_nodes WHERE server_id = ?`,
+	// MTProto：先客户端再节点
+	`DELETE c FROM mtproto_clients c JOIN mtproto_nodes n ON n.id = c.node_id WHERE n.server_id = ?`,
+	`DELETE FROM mtproto_nodes WHERE server_id = ?`,
+	// VPN：先授权 / 会话 / 链路 / 证书，再节点
+	`DELETE g FROM vpn_node_grants g JOIN vpn_nodes n ON n.id = g.node_id WHERE n.server_id = ?`,
+	`DELETE s FROM vpn_sessions s JOIN vpn_nodes n ON n.id = s.node_id WHERE n.server_id = ?`,
+	`DELETE l FROM vpn_node_links l JOIN vpn_nodes n ON n.id = l.node_id WHERE n.server_id = ?`,
+	`DELETE c FROM vpn_certs c JOIN vpn_nodes n ON n.id = c.node_id WHERE n.server_id = ?`,
+	`DELETE FROM vpn_nodes WHERE server_id = ?`,
+	// 直接带 server_id 的表
+	`DELETE FROM node_configs WHERE server_id = ?`,
+	`DELETE FROM server_metrics WHERE server_id = ?`,
+	`DELETE FROM node_push_logs WHERE server_id = ?`,
+	`DELETE FROM agent_tasks WHERE server_id = ?`,
+	`DELETE FROM server_traffic_limits WHERE server_id = ?`,
+	`DELETE FROM server_traffic_usage WHERE server_id = ?`,
+	`DELETE FROM server_unlock_checks WHERE server_id = ?`,
+	`DELETE FROM shell_sessions WHERE server_id = ?`,
+	`DELETE FROM uuid_port_map WHERE server_id = ?`,
+	`DELETE FROM vpn_mesh_nodes WHERE server_id = ?`,
+	`DELETE FROM servers WHERE id = ?`,
+}
+
 // DELETE /api/servers/{id}
 func (h *handlers) serverDelete(w http.ResponseWriter, r *http.Request) {
 	id, ok := serverID(r)
@@ -396,29 +442,12 @@ func (h *handlers) serverDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback()
-	// 先清理这台服务器关联的 VPN 节点及其授权/会话。
+	// 先清理这台服务器关联的一切（VPN 节点 / 授权 / 会话 / 任务 / 统计 / 配置）。
 	//
-	// 之前删服务器只清了 node_configs / metrics / push_logs，
-	// VPN 节点（vpn_nodes.server_id 指向它）原样留着，
-	// 于是「节点删了，但授权给用户的服务器还在」。
+	// 之前删服务器只清了 node_configs / metrics / push_logs，后续补了一轮 VPN 节点，
+	// 仍有 13 类关联表会留孤儿行；清单与顺序见 serverDeleteCascadeSQL。
 	// 必须排在删 servers 之前，否则 server_id 已经无主、无法定位。
-	for _, q := range []string{
-		// 订阅侧授权：删除服务器前先清掉该服务器上的 sing-box / mihomo / MTProto 节点绑定，
-		// 以及用户在订阅里由这些节点生成的配置（configs.singbox_node_id 指向它们）。
-		// 之前只删 node_configs，于是「代理授权」里会残留已删除服务器的节点，
-		// 表现为一行没有名字、却还显示「N 个服务」的授权。
-		`DELETE c FROM configs c JOIN singbox_nodes n ON n.id = c.singbox_node_id WHERE n.server_id = ?`,
-		`DELETE FROM singbox_nodes WHERE server_id = ?`,
-		`DELETE FROM mihomo_nodes WHERE server_id = ?`,
-		`DELETE FROM mtproto_nodes WHERE server_id = ?`,
-		`DELETE g FROM vpn_node_grants g JOIN vpn_nodes n ON n.id = g.node_id WHERE n.server_id = ?`,
-		`DELETE s FROM vpn_sessions s JOIN vpn_nodes n ON n.id = s.node_id WHERE n.server_id = ?`,
-		`DELETE FROM vpn_nodes WHERE server_id = ?`,
-		`DELETE FROM node_configs WHERE server_id = ?`,
-		`DELETE FROM server_metrics WHERE server_id = ?`,
-		`DELETE FROM node_push_logs WHERE server_id = ?`,
-		`DELETE FROM servers WHERE id = ?`,
-	} {
+	for _, q := range serverDeleteCascadeSQL {
 		if _, err := tx.ExecContext(r.Context(), q, id); err != nil {
 			h.log.Error("删除服务器失败", "err", err)
 			writeError(w, http.StatusInternalServerError, "删除失败")

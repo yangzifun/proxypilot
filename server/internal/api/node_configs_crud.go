@@ -101,7 +101,9 @@ func (h *handlers) nodeConfigCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	input["version"] = int64(1)
 	content := mapStr(input, "content", "")
-	input["content_hash"] = sha256Hex(content)
+	// content_hash 固定为「原文哈希」口径，见 nodeConfigContentHash 的说明。
+	// 模板继承 / 占位符配置的「下发内容」哈希由 agentBuildDeployPayload 渲染后另算。
+	input["content_hash"] = nodeConfigContentHash(content)
 	id, err := insertDynamic(r.Context(), h.db, "node_configs", input, nowMillis())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "创建失败")
@@ -165,7 +167,8 @@ func (h *handlers) nodeConfigItem(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		content := mapStr(input, "content", "")
-		input["content_hash"] = sha256Hex(content)
+		// 同创建：content_hash 只表示 content 原文（口径见 nodeConfigContentHash）。
+		input["content_hash"] = nodeConfigContentHash(content)
 		if err := updateDynamic(r.Context(), h.db, "node_configs", id, input, nowMillis()); err != nil {
 			writeError(w, http.StatusInternalServerError, "更新失败")
 			return

@@ -57,6 +57,7 @@ func (h *handlers) applyMtprotoToNode(ctx context.Context, nodeID int64) (bool, 
 		cfgID, _ = res.LastInsertId()
 		changed = true
 	} else if err == nil {
+		// existHash 与 hash 都是「content 原文」的 sha256（content_hash 口径）。
 		if !(existHash == hash && existPath == eff.ConfigPath && existRestart == mtprotoReloadCmd) {
 			_, _ = h.db.ExecContext(ctx, `UPDATE node_configs SET server_id = ?, engine = 'mtproto',
 			  target_path = ?, service_name = ?, restart_cmd = ?, check_cmd = ?, content = ?, content_hash = ?,

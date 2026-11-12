@@ -54,7 +54,10 @@ func (h *handlers) cronConfigSelfHeal(ctx context.Context, now int64) {
 			_, _ = h.db.ExecContext(ctx, `UPDATE node_configs SET last_checked_at = ? WHERE id = ?`, now, id)
 			continue
 		}
-		want := strings.ToLower(strings.TrimSpace(mapStrFromRows(rows, id, "content_hash")))
+		// 期望值必须用「实际会写到节点上的内容」来算，不能用 node_configs.content_hash：
+		// 后者是模板原文（可能含 {{占位符}}）的哈希，而节点上的文件是渲染后的结果，
+		// 两者天然不等 —— 直接比对会导致每轮巡检都误判并重下发（模板配置尤其危险）。
+		want := h.expectedDeploySha(ctx, p.ServerID, id)
 		got := strings.ToLower(strings.TrimSpace(p.Sha256))
 		_, _ = h.db.ExecContext(ctx,
 			`UPDATE node_configs SET last_checked_at = ?, last_check_sha = ? WHERE id = ?`, now, got, id)
@@ -166,4 +169,21 @@ func StartConfigSelfHeal(ctx context.Context, cfg config.Config, db *sql.DB, log
 			}
 		}
 	}()
+}
+// expectedDeploySha 返回「下一次下发会写入节点的内容」的 sha256。
+//
+// 与 agentBuildDeployPayload 用同一条渲染路径（buildNodeDeploy），
+// 因此与 Agent 实际落盘的 sha256 口径一致；计算失败返回空（本轮跳过，不误判）。
+func (h *handlers) expectedDeploySha(ctx context.Context, serverID, configID int64) string {
+	cfg, err := h.loadNodeConfig(ctx, configID)
+	if err != nil || cfg == nil {
+		return ""
+	}
+	srv, err := h.fetchAgentServer(ctx, serverID)
+	if err != nil || srv == nil {
+		return ""
+	}
+	payload := h.agentBuildDeployPayload(ctx, cfg, srv)
+	sha := strings.ToLower(strings.TrimSpace(mapStr(payload, "sha256", "")))
+	return sha
 }

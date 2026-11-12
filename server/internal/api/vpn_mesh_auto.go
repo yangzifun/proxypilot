@@ -84,7 +84,7 @@ systemctl is-active pp-mesh-client`, token, unit)
 	payload := map[string]any{
 		"command":       script,
 		"timeout":       90,
-		"system_action": "vpn_apply",
+		"system_action": systemActionVPNApply,
 		"service":       "pp-mesh-client",
 	}
 	if _, _, msg := h.agentQueueTask(ctx, srv, "exec", 0, payload, "auto-mesh"); msg != "" {

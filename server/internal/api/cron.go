@@ -12,6 +12,17 @@ import (
 	"github.com/yzfn/proxypilot/server/internal/config"
 )
 
+// agent_tasks 终态集合（供保留期清理）。
+//
+// 成功路径写入的是 done / skipped（agent_poll.go 的 finalStatus、localagent.go），
+// 历史上还有 success；旧清理语句只删 success/failed/expired，导致 77% 的成功任务
+// 永远不会过期清理（审计 P2-1，线上 7 天前应删的 done 任务有 1433 行）。
+const agentTasksCleanupStatuses = "'done','success','failed','expired','skipped'"
+
+// agentTasksCleanupSQL 由 cronCleanup 执行；单独抽成变量便于测试锁住状态集合。
+var agentTasksCleanupSQL = `DELETE FROM agent_tasks WHERE status IN (` + agentTasksCleanupStatuses +
+	`) AND finished_at > 0 AND finished_at < ? LIMIT 2000`
+
 // StartCronFor 提供进程内定时任务，替代 Worker 的 Cron Trigger：
 //   - Agent 心跳判定（按 poll 间隔自适应）+ 离线邮件通知
 //   - 任务回收 / 过期 / 清理
@@ -206,10 +217,14 @@ func (h *handlers) cronTaskMaintenance(ctx context.Context, now int64) {
 	_, _ = h.db.ExecContext(ctx,
 		`UPDATE agent_tasks SET status = 'expired', finished_at = ? WHERE status = 'pending' AND created_at < ?`,
 		now, now-24*3600*1000)
-	// 批量任务锁超时释放（进程崩溃兜底）
+	// 批量任务锁超时释放（进程崩溃兜底）。
+	//
+	// 执行中的 runner 每 batchJobHeartbeatIntervalMS 会续期 locked_at，
+	// 所以只有真的挂掉（超过 batchJobLockTimeoutMS 没有续期）才会被回收。
+	// 旧实现只靠「抢占时写一次 locked_at」，任何超过 5 分钟的任务都会被误判（审计 P1-2）。
 	_, _ = h.db.ExecContext(ctx,
 		`UPDATE batch_jobs SET locked_at = 0, runner_id = '', status = 'queued', updated_at = ?
-		  WHERE status = 'running' AND locked_at > 0 AND locked_at < ?`, now, now-5*60*1000)
+		  WHERE status = 'running' AND locked_at > 0 AND locked_at < ?`, now, now-batchJobLockTimeoutMS)
 }
 
 func (h *handlers) cronResumeJobs(ctx context.Context, now int64) {
@@ -244,8 +259,7 @@ func (h *handlers) cronCleanup(ctx context.Context, now int64) {
 	_, _ = h.db.ExecContext(ctx, `DELETE FROM batch_jobs WHERE finished_at > 0 AND finished_at < ?`, batchCutoff)
 
 	taskCutoff := now - taskDays*24*3600*1000
-	_, _ = h.db.ExecContext(ctx,
-		`DELETE FROM agent_tasks WHERE status IN ('success','failed','expired') AND finished_at > 0 AND finished_at < ? LIMIT 2000`, taskCutoff)
+	_, _ = h.db.ExecContext(ctx, agentTasksCleanupSQL, taskCutoff)
 
 	metricsCutoff := now - metricsDays*24*3600*1000
 	_, _ = h.db.ExecContext(ctx, `DELETE FROM server_metrics WHERE created_at > 0 AND created_at < ? LIMIT 5000`, metricsCutoff)

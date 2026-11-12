@@ -21,7 +21,7 @@ import {
   KeyOutlined,
 } from '@ant-design/icons';
 import { useAsync } from '../hooks';
-import { api, apiPost } from '../api';
+import { api, apiPost, getToken } from '../api';
 import { CopyText, ErrorBlock, PageCard, StatCard } from '../components';
 
 const { Text } = Typography;
@@ -88,10 +88,45 @@ export default function Certs() {
     }
   };
 
-  const download = (kind) => {
-    const token = localStorage.getItem('token') || '';
-    const url = `/api/vpn/cert/download?kind=${kind}&token=${encodeURIComponent(token)}`;
-    window.open(url, '_blank');
+  // 下载走 fetch + Authorization 头，再转 blob 触发下载。
+  //
+  // 旧实现是 window.open('/api/vpn/cert/download?...&token=...')：window.open 不会带
+  // Authorization 头，而后端 authed 只认 Header，query 里的 token 没有任何代码消费，
+  // 所以下载恒 401（审计 P1-5）。改为与 Backup.jsx 一致的 fetch + Bearer 头方案，
+  // 不额外开后端「query token」通道，避免 JWT 落到 URL / 访问日志 / Referer 里。
+  const download = async (kind) => {
+    setBusy('download-' + kind);
+    try {
+      const res = await fetch(`/api/vpn/cert/download?kind=${encodeURIComponent(kind)}`, {
+        headers: { Authorization: 'Bearer ' + getToken() },
+      });
+      if (!res.ok) {
+        let msg = `下载失败（HTTP ${res.status}）`;
+        try {
+          const j = await res.json();
+          if (j && j.error) msg = j.error;
+        } catch (e) {
+          /* ignore */
+        }
+        throw new Error(msg);
+      }
+      const blob = await res.blob();
+      const cd = res.headers.get('Content-Disposition') || '';
+      const m = /filename="?([^";]+)"?/.exec(cd);
+      const name = (m && m[1]) || `site-${kind}.pem`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    } catch (e) {
+      message.error(e.message || '下载失败');
+    } finally {
+      setBusy('');
+    }
   };
 
   const caRows = [
@@ -263,13 +298,13 @@ export default function Certs() {
               ]}
             />
             <Space style={{ marginTop: 12 }}>
-              <Button icon={<DownloadOutlined />} onClick={() => download('cert')}>
+              <Button icon={<DownloadOutlined />} loading={busy === 'download-cert'} onClick={() => download('cert')}>
                 下载证书
               </Button>
-              <Button icon={<DownloadOutlined />} onClick={() => download('chain')}>
+              <Button icon={<DownloadOutlined />} loading={busy === 'download-chain'} onClick={() => download('chain')}>
                 下载链
               </Button>
-              <Button icon={<DownloadOutlined />} danger onClick={() => download('key')}>
+              <Button icon={<DownloadOutlined />} danger loading={busy === 'download-key'} onClick={() => download('key')}>
                 下载私钥
               </Button>
             </Space>

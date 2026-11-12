@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/hex"
@@ -9,6 +10,20 @@ import (
 	"net/http"
 	"time"
 )
+
+// 已签发节点证书的统计口径。
+//
+// 旧代码查 vpn_node_certs，这张表在仓库迁移和线上库里都不存在（历史遗留的错表名），
+// SQL 报错又被 `_ =` 吞掉，导致「已签发节点证书」恒为 0（审计 P2-3）。
+// 真实表是 0032_vpn.sql 建的 vpn_certs（node_id + status: active|renewing|expired|revoked），
+// 这里统计未吊销的证书数量。
+const issuedNodeCertsSQL = `SELECT COUNT(*) FROM vpn_certs WHERE status <> 'revoked'`
+
+func (h *handlers) countIssuedNodeCerts(ctx context.Context) (int64, error) {
+	var n int64
+	err := h.db.QueryRowContext(ctx, issuedNodeCertsSQL).Scan(&n)
+	return n, err
+}
 
 // GET /api/vpn/ca/status —— 本站内部 CA 证书详情（管理后台「证书管理」使用）。
 func (h *handlers) vpnCAStatus(w http.ResponseWriter, r *http.Request) {
@@ -47,8 +62,14 @@ func (h *handlers) vpnCAStatus(w http.ResponseWriter, r *http.Request) {
 		"download":    "/api/vpn/ca.crt",
 	}
 	// 统计用该 CA 签发的节点证书数量
-	var issued int64
-	_ = h.db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM vpn_node_certs`).Scan(&issued)
+	issued, err := h.countIssuedNodeCerts(r.Context())
+	if err != nil {
+		// 不让统计失败影响整个接口，但必须留痕（旧实现静默吞错，问题被掩盖了半年）。
+		if h.log != nil {
+			h.log.Warn("统计节点证书数量失败", "err", err)
+		}
+		issued = 0
+	}
 	out["issued_node_certs"] = issued
 	writeJSON(w, http.StatusOK, out)
 }

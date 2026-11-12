@@ -187,6 +187,8 @@ func (h *handlers) singboxNodeApply(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "查询节点配置失败")
 			return
 		}
+		// 这里的 hash / existHash 都是「content 原文」的 sha256（content_hash 口径，
+		// 见 nodeConfigContentHash）；只判断生成内容是否变化，不与机器上的文件比对。
 		same := existHash == hash && existPath == path && existRestart == restartCmd
 		if same {
 			results = append(results, applied{existID, cfgName, false, existVersion, path, key, engine, service, checkCmd, content})

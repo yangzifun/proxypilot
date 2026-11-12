@@ -37,7 +37,9 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("POST /api/mfa/backup-codes/regenerate", h.authed(authOpts{}, h.mfaRegenerateBackupCodes))
 	mux.HandleFunc("POST /api/mfa/login-with-backup", h.mfaLoginWithBackup)
 
-	// 用户管理（仅超管）—— 其余后台功能对普通管理员开放
+	// 用户管理（仅超管）—— 其余后台功能对普通管理员开放。
+	// 例外：安全敏感设置（分发基址 / Agent 接入端点 / 登录信任链 / 密钥类）
+	// 在 settingsAPI 内按「是否实际改动」校验超级管理员身份（审计 P2-14，见 superOnlySettings）。
 	mux.HandleFunc("GET /api/admin/users", h.authed(authOpts{superOnly: true}, h.adminUsersDispatch))
 	mux.HandleFunc("POST /api/admin/users", h.authed(authOpts{superOnly: true}, h.adminUsersDispatch))
 	mux.HandleFunc("PUT /api/admin/users", h.authed(authOpts{superOnly: true}, h.adminUsersDispatch))

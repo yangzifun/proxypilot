@@ -245,6 +245,21 @@ type nodeDeploy struct {
 	TemplateID  int64
 }
 
+// nodeConfigContentHash 计算 node_configs.content 的「原文哈希」，是 content_hash 列的唯一口径。
+//
+// 口径（审计 P1-3 二选一后固定为「原文哈希」）：
+//   - content_hash = sha256(库里存的 content 原文)；
+//   - 不含模板合并、不含 {{PLACEHOLDER}} 渲染、不含 node_configs 外部字段；
+//   - 「下发到节点上的文件」的哈希是另一个口径：agentBuildDeployPayload 的 sha256
+//     与 config_selfheal.expectedDeploySha 都先走 buildNodeDeploy 渲染再算。
+//
+// 为什么不改成「渲染后哈希」：
+//  1. CRUD 时没有渲染上下文（{{NOW}}/{{NODES}} 等每次渲染都可能不同），存渲染哈希会让
+//     「内容没变」永远判成变了，singbox_apply / mtproto_api 的 same 判断会失效并反复升版本；
+//  2. 「同一份原文 + 同一模板参数」是否变化，本来就是 CRUD 侧要表达的语义；
+//  3. 所有与「机器上真实文件」的比对只有 config_selfheal 一处，已改为 expectedDeploySha。
+func nodeConfigContentHash(content string) string { return sha256Hex(content) }
+
 func (h *handlers) buildNodeDeploy(ctx context.Context, cfg *nodeDeployConfig, srv *agentServer, tpl *nodeTemplateRow) nodeDeploy {
 	engine := cfg.Engine
 	if engine == "" || engine == "other" {

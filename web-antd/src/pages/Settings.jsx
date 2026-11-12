@@ -26,6 +26,7 @@ import {
   Typography,
 } from 'antd';
 import { api } from '../api';
+import { useAuth } from '../auth';
 import { useAsync } from '../hooks';
 import { ErrorBlock, PageCard, Toolbar } from '../components';
 import MailBuiltinGuide from '../components/MailBuiltinGuide';
@@ -42,6 +43,7 @@ function BoolField({ name, label, extra }) {
 
 export default function Settings({ embedded = false }) {
   const { message } = AntdApp.useApp();
+  const { isSuper } = useAuth();
   const [form] = Form.useForm();
   const mailProvider = Form.useWatch('mail_provider', form);
   const settings = useAsync(() => api('settings'), []);
@@ -187,6 +189,15 @@ export default function Settings({ embedded = false }) {
         message={`当前可用登录方式：${status.length ? status.join(' / ') : '无（保存会被拒绝）'}`}
         description="以下配置可在后台直接维护，未填写的值回落环境变量。Secret 留空表示保持原值。"
       />
+      {!isSuper ? (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message="安全敏感设置仅超级管理员可修改"
+          description="分发基址（Agent / sing-box / 组件版本与校验值）、Agent 接入与组网端点、登录方式与 OIDC 身份源、各类密钥，只有超级管理员可改动；修改其它设置不受影响。"
+        />
+      ) : null}
 
       <Form form={form} layout="vertical" onFinish={save}>
         <Tabs

@@ -502,6 +502,8 @@ func (h *handlers) mtprotoNodeApply(w http.ResponseWriter, r *http.Request) {
 		cfgID, _ = res.LastInsertId()
 		version, changed = 1, true
 	} else if err == nil {
+		// existHash 与 hash 都是「content 原文」的 sha256（content_hash 口径，
+		// 见 nodeConfigContentHash）；只判断生成内容是否变化。
 		same := existHash == hash && existPath == eff.ConfigPath && existRestart == mtprotoReloadCmd
 		if same {
 			_ = h.db.QueryRowContext(r.Context(), `SELECT COALESCE(version,0) FROM node_configs WHERE id = ?`, cfgID).Scan(&version)

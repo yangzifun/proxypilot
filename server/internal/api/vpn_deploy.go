@@ -163,7 +163,7 @@ func (h *handlers) vpnAdminNodeDeploy(w http.ResponseWriter, r *http.Request) {
 	payload := map[string]any{
 		"command":       script,
 		"timeout":       300,
-		"system_action": "vpn_apply",
+		"system_action": systemActionVPNApply,
 		"service":       "proxypilot-masque",
 	}
 	taskID, _, msg := h.agentQueueTask(r.Context(), srv, "exec", 0, payload, actorOf(r))

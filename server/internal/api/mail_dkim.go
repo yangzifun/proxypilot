@@ -380,10 +380,27 @@ func shortText(s string, n int) string {
 	return s[:n] + "…"
 }
 
-// 避免和业务里的 sort/其他 import 冲突
+// localServerIP4SQL 读取本机（控制服务器）采集到的公网 IPv4。
+//
+// local_server 表（0040_local_server.sql）的列名是 ip4/ip6/ip，旧代码查的
+// local_server.last_ip4 不存在，SQL 报错又被丢弃 → mailEgressIP 的第三级兜底永远失效（审计 P2-4）。
+const localServerIP4SQL = `SELECT ip4 FROM local_server WHERE id = 1`
+
+// localServerIP4 返回本机记录的公网 IPv4；读不到返回空串（调用方继续兜底）。
+func (h *handlers) localServerIP4(ctx context.Context) string {
+	var ip sql.NullString
+	if err := h.db.QueryRowContext(ctx, localServerIP4SQL).Scan(&ip); err != nil || !ip.Valid {
+		if err != nil && err != sql.ErrNoRows && h.log != nil {
+			h.log.Warn("读取本机公网 IP 失败", "err", err)
+		}
+		return ""
+	}
+	return strings.TrimSpace(ip.String)
+}
+
 // mailEgressIP 返回发信用本机公网出口 IP。
 //
-// 优先级：设置项 mail_egress_ip → UDP 探测 → 本机服务器记录里的 last_ip。
+// 优先级：设置项 mail_egress_ip → UDP 探测 → 本机服务器记录里的 ip4。
 // SPF 必须精确到 IP，写错会导致 softfail 进垃圾箱。
 func (h *handlers) mailEgressIP() string {
 	if v := strings.TrimSpace(h.settingValue(context.Background(), settingMailEgressIP)); v != "" {
@@ -393,13 +410,7 @@ func (h *handlers) mailEgressIP() string {
 		return ip
 	}
 	// 回落到本机服务器记录（面板已采集的公网地址）
-	var ip sql.NullString
-	_ = h.db.QueryRow(`
-		SELECT last_ip4 FROM local_server WHERE id = 1`).Scan(&ip)
-	if ip.Valid {
-		return strings.TrimSpace(ip.String)
-	}
-	return ""
+	return h.localServerIP4(context.Background())
 }
 
 // detectEgressIPv4 用 UDP connect 技巧拿本机出口地址（不发任何包）。

@@ -282,7 +282,7 @@ func init() {
 				return false, "服务器不存在"
 			}
 			taskID, _, msg := h.agentQueueTask(ctx, srv, "exec", 0,
-				map[string]any{"command": cloudflaredUpdateCommand(), "timeout": 240, "system_action": "cloudflared_update"}, actor)
+				map[string]any{"command": cloudflaredUpdateCommand(), "timeout": 240, "system_action": systemActionCloudflaredUpdate}, actor)
 			if msg != "" {
 				return false, msg
 			}
@@ -334,7 +334,7 @@ func init() {
 				return false, "服务器不存在"
 			}
 			taskID, _, msg := h.agentQueueTask(ctx, srv, "exec", 0,
-				map[string]any{"command": warpUpdateCommand(), "timeout": 300, "system_action": "warp_update"}, actor)
+				map[string]any{"command": warpUpdateCommand(), "timeout": 300, "system_action": systemActionWarpUpdate}, actor)
 			if msg != "" {
 				return false, msg
 			}

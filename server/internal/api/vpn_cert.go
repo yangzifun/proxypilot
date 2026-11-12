@@ -490,7 +490,7 @@ func (h *handlers) vpnCertDistribute(w http.ResponseWriter, r *http.Request) {
 		payload := map[string]any{
 			"command":       script,
 			"timeout":       120,
-			"system_action": "vpn_apply",
+			"system_action": systemActionVPNApply,
 			"service":       "proxypilot-agent",
 		}
 		tid, _, msg := h.agentQueueTask(ctx, srv, "exec", 0, payload, "cert-distribute")
