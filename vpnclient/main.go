@@ -30,7 +30,7 @@ import (
 )
 
 // Version 是 VPN 客户端版本（V1.x）。
-const Version = "1.0"
+const Version = "1.1"
 
 var caPEM []byte
 
@@ -220,6 +220,9 @@ func runCLI() {
 	log.Printf("DNS 探测成功：收到 %d 字节响应（%s）", len(resp), *dnsAddr)
 }
 
+// ErrSessionExpired 会话已过期（服务端返回 401），UI 应提示重新登录。
+var ErrSessionExpired = errors.New("会话已过期，请重新登录")
+
 func listNodes(ctx context.Context, api, token string) ([]node, error) {
 	url := strings.TrimRight(api, "/") + "/api/portal/vpn/nodes"
 	// 弱网下重试两次：一次失败就报「加载不出节点」体验太差
@@ -231,6 +234,10 @@ func listNodes(ctx context.Context, api, token string) ([]node, error) {
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode == http.StatusUnauthorized {
+		// 服务端校验令牌用途（V1.2 起），旧会话会拿到 401
+		return nil, ErrSessionExpired
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
 	}
@@ -254,6 +261,9 @@ func connect(ctx context.Context, api, token string, deviceID, nodeID int64) (*p
 	}
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode == http.StatusUnauthorized {
+		return nil, ErrSessionExpired
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(data))
 	}
