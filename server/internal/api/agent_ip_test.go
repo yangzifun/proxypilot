@@ -41,15 +41,15 @@ func TestUsableGlobalIPv6RejectsWARP(t *testing.T) {
 		{"2401:2660:1000:1572:9b8c:d1be:7271:77dc", "2401:2660:1000:1572:9b8c:d1be:7271:77dc"},
 		{"2404:8c80:85:1025::65", "2404:8c80:85:1025::65"},
 		{"2a0e:97c0:7d4:ce20:daf5:8f7b:ed94:db08", "2a0e:97c0:7d4:ce20:daf5:8f7b:ed94:db08"},
-		{"2606:4700:cf1:2000::1", ""},                 // WARP 主段
-		{"2606:4700::1", ""},                          // WARP 主段（短写）
-		{"2602:fa4f:a30:6d2d:26e4:992:e7fd:7501", ""}, // 现场实测 WARP 段
-		{"fd12:3456::1", ""},                          // ULA
-		{"fe80::1", ""},                               // 链路本地
-		{"::1", ""},                                   // 回环
-		{"::ffff:1.2.3.4", ""},                        // IPv4 映射
-		{"122.10.114.131", ""},                        // IPv4
-		{" 2401:2660::1 ", "2401:2660::1"},            // 首尾空白
+		{"2606:4700:cf1:2000::1", ""},                                                      // WARP 主段
+		{"2606:4700::1", ""},                                                               // WARP 主段（短写）
+		{"2602:fa4f:a30:6d2d:26e4:992:e7fd:7501", "2602:fa4f:a30:6d2d:26e4:992:e7fd:7501"}, // 真实 hoster IPv6（曾被误判为 WARP）
+		{"fd12:3456::1", ""},               // ULA
+		{"fe80::1", ""},                    // 链路本地
+		{"::1", ""},                        // 回环
+		{"::ffff:1.2.3.4", ""},             // IPv4 映射
+		{"122.10.114.131", ""},             // IPv4
+		{" 2401:2660::1 ", "2401:2660::1"}, // 首尾空白
 		{"", ""},
 	}
 	for _, c := range cases {
@@ -60,10 +60,11 @@ func TestUsableGlobalIPv6RejectsWARP(t *testing.T) {
 }
 
 func TestIsWARPIPv6AndCGNAT(t *testing.T) {
-	if !isWARPIPv6(mustIP("2606:4700:cf1:2000::1")) || !isWARPIPv6(mustIP("2602:fa4f::1")) {
+	if !isWARPIPv6(mustIP("2606:4700:cf1:2000::1")) {
 		t.Fatal("WARP 段判定失败")
 	}
-	if isWARPIPv6(mustIP("2401:2660::1")) || isWARPIPv6(mustIP("2602:f3f2::1")) {
+	if isWARPIPv6(mustIP("2401:2660::1")) || isWARPIPv6(mustIP("2602:f3f2::1")) ||
+		isWARPIPv6(mustIP("2602:fa4f:a30:6d2d:26e4:992:e7fd:7501")) {
 		t.Fatal("真实地址被误判为 WARP")
 	}
 	if !isCGNATIPv4(mustIP("100.64.0.1").To4()) || !isCGNATIPv4(mustIP("100.127.1.1").To4()) {
@@ -82,7 +83,7 @@ func TestIsWARPIPv6AndCGNAT(t *testing.T) {
 func TestResolveAgentIPs(t *testing.T) {
 	const (
 		warp6  = "2606:4700:cf1:2000::1"
-		warp62 = "2602:fa4f:a30:6d2d:26e4:992:e7fd:7501"
+		real62 = "2602:fa4f:a30:6d2d:26e4:992:e7fd:7501" // 东京2 物理网卡真实 IPv6
 		real6  = "2401:2660:1000:1572:9b8c:d1be:7271:77dc"
 		real4  = "122.10.114.131"
 	)
@@ -106,8 +107,13 @@ func TestResolveAgentIPs(t *testing.T) {
 		},
 		{
 			name: "上报 WARP 段：拒写并清空",
-			body: map[string]any{"ipv6": warp62}, lastIP6: warp6,
+			body: map[string]any{"ipv6": "2606:4700:cf1:1000::9"}, lastIP6: warp6,
 			wantClear6: true,
+		},
+		{
+			name: "上报真实 hoster IPv6（2602:fa4f）：写入并覆盖旧 WARP",
+			body: map[string]any{"ipv6": real62}, lastIP6: warp6,
+			wantIP6: real62, wantClear6: true,
 		},
 		{
 			name: "上报真实 IPv6：写入并覆盖",
@@ -187,7 +193,7 @@ func TestDisplayIPv6(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"2401:2660::1", "2401:2660::1"},
 		{"2606:4700:cf1:2000::1", ""},
-		{"2602:fa4f:1:2::3", ""},
+		{"2602:fa4f:1:2::3", "2602:fa4f:1:2::3"}, // 真实 hoster IPv6，必须展示
 		{"", ""},
 	}
 	for _, c := range cases {

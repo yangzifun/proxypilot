@@ -88,11 +88,14 @@ func TestPickPrimaryIPv6SkipsWARPNIC(t *testing.T) {
 			want: "",
 		},
 		{
-			name: "网卡名不像 WARP，但地址落在 2602:fa4f::/32",
+			// 2026-11-12 现场核实：2602:fa4f::/32 是东京2/东京3 物理网卡 eth0 上的
+			// 真实公网 IPv6（默认路由 via 2602:fa4f:a30::1），不是 WARP 段。
+			name: "真实网卡上的 hoster IPv6（2602:fa4f::/32）必须保留",
 			views: []ifaceView{
-				view("ppp0", true, "2602:fa4f:1:2::9"),
+				view("eth0", true, "2602:fa4f:a30:6d2d:26e4:992:e7fd:7501"),
+				view("CloudflareWARP", true, "2606:4700:cf1:2000::1"),
 			},
-			want: "",
+			want: "2602:fa4f:a30:6d2d:26e4:992:e7fd:7501",
 		},
 		{
 			name: "真实网卡只有链路本地，WARP 有全球地址 → 空",
@@ -184,17 +187,18 @@ func TestPickPrimaryIPSkipsWARPAndCGNAT(t *testing.T) {
 	}
 }
 
-// pickIPv6 是公开语义的纯函数：WARP 地址段即使传进来也必须被丢弃。
+// pickIPv6 是公开语义的纯函数：WARP 地址段即使传进来也必须被丢弃；
+// 真实 hoster IPv6（如 2602:fa4f::/32）必须保留。
 func TestPickIPv6DropsWARPAddresses(t *testing.T) {
 	cands := []net.IP{
 		net.ParseIP("2606:4700:cf1:2000::1"),
 		net.ParseIP("2602:fa4f:1:2::9"),
 		net.ParseIP("2401:d800:1:2::10"),
 	}
-	if got := pickIPv6(cands); got != "2401:d800:1:2::10" {
-		t.Fatalf("应跳过 WARP 段，得到 %q", got)
+	if got := pickIPv6(cands); got != "2602:fa4f:1:2::9" {
+		t.Fatalf("应跳过 2606:4700 WARP 段、保留真实地址，得到 %q", got)
 	}
-	if got := pickIPv6(cands[:2]); got != "" {
+	if got := pickIPv6(cands[:1]); got != "" {
 		t.Fatalf("只有 WARP 段时应返回空串，得到 %q", got)
 	}
 }

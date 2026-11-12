@@ -27,9 +27,14 @@ func TestClearWarpLastIPMigration(t *testing.T) {
 	if !strings.HasPrefix(stmts[1], "UPDATE servers") || !strings.Contains(stmts[1], "last_ip4 = ''") {
 		t.Fatalf("第二条语句应是清理 last_ip4 的 UPDATE: %q", stmts[1])
 	}
-	for _, prefix := range []string{"2606:4700::", "2602:fa4f::"} {
-		if !strings.Contains(src, prefix) {
-			t.Fatalf("迁移缺少 WARP 段 %s 的清理条件", prefix)
+	// 只清 Cloudflare WARP 主段 2606:4700::/32；2602:fa4f::/32 是东京2/东京3
+	// 物理网卡上的真实公网 IPv6（2026-11-12 现场核实），迁移不得清理。
+	if !strings.Contains(stmts[0], "2606:4700::") {
+		t.Fatal("迁移缺少 WARP 段 2606:4700:: 的清理条件")
+	}
+	for _, stmt := range stmts {
+		if strings.Contains(stmt, "2602:fa4f:") {
+			t.Fatal("2602:fa4f::/32 是真实公网 IPv6，迁移语句不得把它当 WARP 清理")
 		}
 	}
 	if !strings.Contains(src, "INET6_ATON") {

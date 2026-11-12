@@ -170,11 +170,15 @@ func isMeshIfaceName(name string) bool {
 
 // warpIPv6CIDRs 是 Cloudflare WARP 的 IPv6 段。
 //
-// 2606:4700::/32 是 WARP 设备地址/网关所在的主段；2602:fa4f::/32 是现场
-// 面板「主机 IP」列里出现过的 WARP 段。网卡名被改得不像 WARP 时，用地址段兜底。
+// 2606:4700::/32 是 WARP 设备地址/网关所在的主段。网卡名被改得不像 WARP 时，
+// 用地址段兜底。
+//
+// 注意：2602:fa4f::/32 曾被当作 WARP 段，但现场核实（2026-11-12，东京2/东京3）
+// 它是节点物理网卡 eth0 上的真实公网 IPv6（默认路由 via 2602:fa4f:a30::1），
+// WARP 网卡持有的是 2606:4700::/32。把 2602:fa4f::/32 当 WARP 会把真实 IPv6
+// 过滤掉，因此这里只保留 2606:4700::/32。
 var warpIPv6CIDRs = []string{
 	"2606:4700::/32",
-	"2602:fa4f::/32",
 }
 
 var warpIPv6Nets = func() []*net.IPNet {

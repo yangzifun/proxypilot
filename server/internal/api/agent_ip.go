@@ -9,8 +9,7 @@ import (
 //
 // 背景：Agent 1.1 起，采集侧会跳过 WARP/组网网卡；「只有 WARP IPv6」的机器上报空串
 // 表示「没有真实 IPv6」。但落库 SQL 原来是 COALESCE(NULLIF(?, ''), last_ip6)，
-// 空串永远不覆盖旧值，库里历史 WARP 地址（2606:4700:cf1:...、2602:fa4f:...）
-// 就一直挂在列表上。
+// 空串永远不覆盖旧值，库里历史 WARP 地址（2606:4700:cf1:...）就一直挂在列表上。
 //
 // 这里把「该写什么 / 该不该清空」的判定抽成纯函数，方便单测覆盖：
 //   - last_ip6 只接受真实网卡的全球单播 IPv6；WARP 段一律拒写
@@ -18,9 +17,12 @@ import (
 //   - last_ip4 不接受 CGNAT 100.64/10（WARP 组网地址只进 last_mesh_ip4）
 
 // warpIPv6CIDRs 与 Agent 侧采集口径保持一致（agent/internal/metrics/net.go）。
+//
+// 只把 2606:4700::/32 当 WARP 段。2602:fa4f::/32 曾在现场被误判为 WARP，
+// 2026-11-12 核实为东京2/东京3 物理网卡 eth0 上的真实公网 IPv6（默认路由
+// via 2602:fa4f:a30::1），不能过滤，否则会把真实 IPv6 隐藏掉。
 var warpIPv6CIDRs = []string{
 	"2606:4700::/32", // Cloudflare WARP 设备地址/网关主段
-	"2602:fa4f::/32", // 现场实测到的 WARP 段
 }
 
 var warpIPv6Nets = func() []*net.IPNet {

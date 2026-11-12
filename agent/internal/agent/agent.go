@@ -43,7 +43,9 @@ import (
 // 1.8.5：组件二进制改为「临时文件 + rename」写入，修复运行中覆盖导致的 text file busy
 // 1.8.6：解包改流式写盘，避免小内存节点在安装 78MB sing-box 时被 OOM kill
 // 1.8.7：新增 inspect 动作（只读检查配置文件，供 UUID 一致性巡检核对机器实际配置）
-const Version = "1.1"
+// 1.2：主机 IPv6/IPv4 采集只取真实网卡，排除 WARP/组网网卡与 WARP 地址段（ee3d04af 采集侧修复；
+// 现网 1.1 二进制构建于修复提交之前，因此递增到 1.2 以便面板区分旧二进制）
+const Version = "1.2"
 
 // maxActionsPerRound 单轮执行任务数上限（服务端 AGENT_ACTIONS_PER_POLL = 5，这里留足余量）。
 const maxActionsPerRound = 20
