@@ -20,8 +20,16 @@ import (
 const agentTasksCleanupStatuses = "'done','success','failed','expired','skipped'"
 
 // agentTasksCleanupSQL 由 cronCleanup 执行；单独抽成变量便于测试锁住状态集合。
+//
+// 兼容两类历史脏数据：
+//  1. 正常终态：finished_at > 0，按 finished_at 判断保留期；
+//  2. 旧版本 ack 只在成功时写 finished_at，failed/skipped 终态 finished_at=0，
+//     这些行永远不满足 finished_at > 0，历史上已积累数百条。用 created_at 兜底清理。
 var agentTasksCleanupSQL = `DELETE FROM agent_tasks WHERE status IN (` + agentTasksCleanupStatuses +
-	`) AND finished_at > 0 AND finished_at < ? LIMIT 2000`
+	`) AND (
+		(finished_at > 0 AND finished_at < ?)
+		OR ((finished_at = 0 OR finished_at IS NULL) AND created_at > 0 AND created_at < ?)
+	) LIMIT 2000`
 
 // StartCronFor 提供进程内定时任务，替代 Worker 的 Cron Trigger：
 //   - Agent 心跳判定（按 poll 间隔自适应）+ 离线邮件通知
@@ -259,7 +267,7 @@ func (h *handlers) cronCleanup(ctx context.Context, now int64) {
 	_, _ = h.db.ExecContext(ctx, `DELETE FROM batch_jobs WHERE finished_at > 0 AND finished_at < ?`, batchCutoff)
 
 	taskCutoff := now - taskDays*24*3600*1000
-	_, _ = h.db.ExecContext(ctx, agentTasksCleanupSQL, taskCutoff)
+	_, _ = h.db.ExecContext(ctx, agentTasksCleanupSQL, taskCutoff, taskCutoff)
 
 	metricsCutoff := now - metricsDays*24*3600*1000
 	_, _ = h.db.ExecContext(ctx, `DELETE FROM server_metrics WHERE created_at > 0 AND created_at < ? LIMIT 5000`, metricsCutoff)

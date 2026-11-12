@@ -1,4 +1,4 @@
-﻿package api
+package api
 
 import (
 	"context"
@@ -352,6 +352,10 @@ func TestAgentTasksCleanupSQLCoversDoneAndSkipped(t *testing.T) {
 	}
 	if !strings.Contains(agentTasksCleanupSQL, "finished_at < ?") {
 		t.Fatalf("清理 SQL 必须按 finished_at 判定保留期：%s", agentTasksCleanupSQL)
+	}
+	// 旧版本 ack 不给 failed/skipped 写 finished_at，历史残留行必须能用 created_at 兜底清理。
+	if !strings.Contains(agentTasksCleanupSQL, "created_at > 0 AND created_at < ?") {
+		t.Fatalf("清理 SQL 需要对 finished_at=0 的历史终态用 created_at 兜底：%s", agentTasksCleanupSQL)
 	}
 }
 

@@ -415,12 +415,12 @@ func (m *agentMetrics) summary(rates agentRates, agentVersion string) map[string
 func (h *handlers) agentUpdateSnapshot(ctx context.Context, srv *agentServer, m *agentMetrics,
 	touchPoll bool,
 	opts struct {
-		NextPollSec    int64
-		PersistPollSec int64
-		PollCount      int64
-		AgentVersion   string
-		IP, IP4, IP6   string
-		PrivateIP      string
+		NextPollSec      int64
+		PersistPollSec   int64
+		PollCount        int64
+		AgentVersion     string
+		IP, IP4, IP6     string
+		PrivateIP        string
 		MeshIP4, MeshIP6 string
 		// ClearIP4/ClearIP6：本次明确要清空该列（Agent 明确上报「无真实 IP」或旧值是
 		// WARP/CGNAT 脏数据）。置真时不能再用 COALESCE 保留旧值（task-15）。
@@ -761,13 +761,13 @@ func (h *handlers) agentPoll(w http.ResponseWriter, r *http.Request) {
 	rates := agentThroughputFromSample(prev, m, nextPollSec)
 	agentVersion := firstNonEmpty(jsonStr(body["agent_version"]), jsonStr(body["agentVersion"]))
 	if err := h.agentUpdateSnapshot(r.Context(), srv, m, true, struct {
-		NextPollSec    int64
-		PersistPollSec int64
-		PollCount      int64
-		AgentVersion   string
-		IP, IP4, IP6   string
-		PrivateIP      string
-		MeshIP4, MeshIP6 string
+		NextPollSec        int64
+		PersistPollSec     int64
+		PollCount          int64
+		AgentVersion       string
+		IP, IP4, IP6       string
+		PrivateIP          string
+		MeshIP4, MeshIP6   string
 		ClearIP4, ClearIP6 bool
 	}{nextPollSec, configured, pollCount, agentVersion,
 		ips.IP, ips.IP4, ips.IP6, ips.PrivateIP, ips.MeshIP4, ips.MeshIP6,
@@ -812,9 +812,9 @@ func (h *handlers) agentPoll(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok": true, "server_id": srv.ID, "server_name": srv.Name,
 		"next_poll_sec": nextPollSec, "metrics_every": metricsEvery,
-		"agent_access_url":  h.agentEffectiveAccessURL(r.Context()),
+		"agent_access_url":   h.agentEffectiveAccessURL(r.Context()),
 		"agent_internal_url": h.agentEffectiveAccessURL(r.Context()),
-		"server_time": now, "agent_script_version": agentScriptVersion,
+		"server_time":        now, "agent_script_version": agentScriptVersion,
 		"shell": shell, "actions": agentActionsJSON(actions),
 		"stats_targets":     statsTargets,
 		"agent_binary_base": h.agentBinaryBaseURL(),
@@ -824,6 +824,20 @@ func (h *handlers) agentPoll(w http.ResponseWriter, r *http.Request) {
 }
 
 // POST /api/agent/ack
+// agentTaskFinishedAt 返回任务终态应写入的 finished_at：
+//   - pending（还要重试）保持 0，不能用 0 以外的值污染「未结束」语义；
+//   - 其它终态（done/failed/skipped/expired）一律写当前时间。
+//
+// 旧实现只在 ok 时写 finished_at，failed/skipped 终态的 finished_at 永远为 0，
+// 导致保留期清理（finished_at > 0 才删）无法删除，线上积累 600+ 条 7 天前任务。
+// 单独抽成纯函数便于单测。
+func agentTaskFinishedAt(finalStatus string, now int64) int64 {
+	if finalStatus == "pending" || finalStatus == "sent" || finalStatus == "" {
+		return 0
+	}
+	return now
+}
+
 func (h *handlers) agentAck(w http.ResponseWriter, r *http.Request) {
 	var body map[string]any
 	if err := decodeJSON(w, r, &body); err != nil || body == nil {
@@ -906,10 +920,11 @@ func (h *handlers) agentAck(w http.ResponseWriter, r *http.Request) {
 				finalStatus = "pending"
 			}
 		}
-		finishedAt := int64(0)
-		if ok {
-			finishedAt = now
-		}
+		// finished_at 只在终态写入；pending 表示还要重试，保持 0。
+		// 旧实现只在 ok 时写 finished_at，导致 failed/skipped 终态永远没有结束时间：
+		// 面板「任务」会一直显示它们，且保留期清理（要求 finished_at > 0）永远删不掉，
+		// 线上已积累 600+ 条 7 天前的 failed 任务。
+		finishedAt := agentTaskFinishedAt(finalStatus, now)
 		_, _ = h.db.ExecContext(r.Context(),
 			`UPDATE agent_tasks SET status = ?, attempts = ?, exit_code = ?, output = ?, finished_at = ?, sent_at = 0
 			  WHERE id = ?`, finalStatus, newAttempts, exitCode,
@@ -1016,13 +1031,13 @@ func (h *handlers) ingestAgentWSMetrics(ctx context.Context, srv *agentServer, b
 	rates := agentThroughputFromSample(prev, m, intervalSec)
 	version := firstNonEmpty(jsonStr(body["agent_version"]), jsonStr(body["agentVersion"]))
 	opts := struct {
-		NextPollSec    int64
-		PersistPollSec int64
-		PollCount      int64
-		AgentVersion   string
-		IP, IP4, IP6   string
-		PrivateIP      string
-		MeshIP4, MeshIP6 string
+		NextPollSec        int64
+		PersistPollSec     int64
+		PollCount          int64
+		AgentVersion       string
+		IP, IP4, IP6       string
+		PrivateIP          string
+		MeshIP4, MeshIP6   string
 		ClearIP4, ClearIP6 bool
 	}{
 		NextPollSec: srv.NextPollSec, PollCount: srv.AgentPollCount, AgentVersion: version,
@@ -1038,6 +1053,7 @@ func (h *handlers) ingestAgentWSMetrics(ctx context.Context, srv *agentServer, b
 		h.insertServerMetric(ctx, srv.ID, m, rates)
 	}
 }
+
 // agentEffectiveAccessURL 返回按优先级排序后的第一个 Agent 访问地址。
 func (h *handlers) agentEffectiveAccessURL(ctx context.Context) string {
 	raw := strings.TrimSpace(h.settingValue(ctx, settingAgentAccessURLs))
@@ -1056,6 +1072,7 @@ func (h *handlers) agentEffectiveAccessURL(ctx context.Context) string {
 	}
 	return strings.TrimSpace(h.settingValue(ctx, settingAgentAccessURL))
 }
+
 // agentAccessURLList 返回按优先级排序的 Agent 访问地址列表。
 func (h *handlers) agentAccessURLList(ctx context.Context) []string {
 	out := []string{}
@@ -1080,4 +1097,3 @@ func (h *handlers) agentAccessURLList(ctx context.Context) []string {
 	add(h.settingValue(ctx, settingAgentAccessURL))
 	return out
 }
-
