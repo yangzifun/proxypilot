@@ -24,6 +24,12 @@ func withinRoots(abs string) bool {
 	return false
 }
 
+// safeConfigPathFn 是 deploy 做路径校验时实际调用的函数。
+//
+// 生产代码路径恒等 safeConfigPath。抽成变量只为单测注入临时目录白名单：
+// Windows 上不存在 /etc 前缀，deploy 的「校验/重启失败回滚」分支无法直接跑通。
+var safeConfigPathFn = safeConfigPath
+
 // safeConfigPath 校验下发路径：绝对化、白名单前缀、拒绝符号链接。
 func safeConfigPath(p string) (string, error) {
 	clean := strings.TrimSpace(p)

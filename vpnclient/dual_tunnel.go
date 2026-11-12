@@ -63,6 +63,13 @@ type dualPacketConn struct {
 	q    chan []byte
 	done chan struct{}
 	once sync.Once
+	// ctx 用于取消阻塞中的 ReceiveDatagram：DATAGRAM 接收原来传的是
+	// context.Background()，done 关闭传不到它，Close() 里的 wg.Wait 会永久卡住。
+	ctx    context.Context
+	cancel context.CancelFunc
+
+	closeOnce sync.Once
+	closeErr  error
 
 	wg sync.WaitGroup
 
@@ -90,6 +97,7 @@ func newDualPacketConnLanes(stream packetConn, lanes []packetConn, dg datagramPe
 	if maxDatagram <= 0 {
 		maxDatagram = 1400
 	}
+	ctx, cancel := context.WithCancel(context.Background())
 	c := &dualPacketConn{
 		stream:      stream,
 		lanes:       lanes,
@@ -97,6 +105,8 @@ func newDualPacketConnLanes(stream packetConn, lanes []packetConn, dg datagramPe
 		maxDatagram: maxDatagram,
 		q:           make(chan []byte, dualQueueDepth),
 		done:        make(chan struct{}),
+		ctx:         ctx,
+		cancel:      cancel,
 	}
 	if fecGroup > 1 && dg != nil {
 		c.fecEnc = newFECEncoder(fecGroup)
@@ -228,7 +238,7 @@ func (c *dualPacketConn) datagramLoop() {
 		return
 	}
 	for {
-		pkt, err := c.dg.ReceiveDatagram(context.Background())
+		pkt, err := c.dg.ReceiveDatagram(c.ctx)
 		if err != nil {
 			// DATAGRAM 断开不应直接判定整条隧道失败：可靠流可能还在。
 			// 交给 streamLoop 决定隧道生死。
@@ -288,6 +298,10 @@ func (c *dualPacketConn) fail(err error) {
 		c.errMu.Lock()
 		c.lastErr = err
 		c.errMu.Unlock()
+		// 先取消 ctx 再关 done：让所有阻塞在底层连接上的协程都能尽快返回。
+		if c.cancel != nil {
+			c.cancel()
+		}
 		close(c.done)
 	})
 }
@@ -317,13 +331,34 @@ func (c *dualPacketConn) RecvPacket() ([]byte, error) {
 	}
 }
 
+// Close 停掉所有数据面协程并释放底层资源。
+//
+// 顺序很关键：先 fail（取消 ctx、关闭 done）→ 关闭 DATAGRAM 连接与各条可靠流，
+// 让阻塞在 ReceiveDatagram / RecvPacket 上的协程返回 → 最后才 wg.Wait()。
+// 反过来（先 Wait）会永久死锁：datagramLoop 原来阻塞在
+// ReceiveDatagram(context.Background())，done 关闭传不到它，Wait 永不返回，
+// 下面的 CloseWithError / stream.Close 永远执行不到 —— 每次「连接→断开」
+// 都在客户端泄漏 1 条 QUIC 连接 + 4 个 UDP socket + 3 个 goroutine。
+//
+// 幂等：重复调用不会重复清理，返回首次清理的错误。
 func (c *dualPacketConn) Close() error {
-	c.fail(errors.New("隧道已关闭"))
-	c.wg.Wait()
-	if c.dg != nil {
-		_ = c.dg.CloseWithError(0, "tunnel closed")
-	}
-	return c.stream.Close()
+	c.closeOnce.Do(func() {
+		c.fail(errors.New("隧道已关闭"))
+		// 直接关闭 DATAGRAM 承载：ReceiveDatagram 立即返回错误，
+		// 不依赖对端实现是否响应 ctx 取消。
+		if c.dg != nil {
+			_ = c.dg.CloseWithError(0, "tunnel closed")
+		}
+		// 关闭可靠流的读端/写端，让 streamLoop、laneLoop 退出。
+		c.closeErr = c.stream.Close()
+		for _, ln := range c.lanes {
+			if ln != nil {
+				_ = ln.Close()
+			}
+		}
+		c.wg.Wait()
+	})
+	return c.closeErr
 }
 
 // DropStats 合并队列溢出数（用于诊断）。

@@ -106,13 +106,45 @@ func New(opts Options) *Agent {
 
 // Once 执行一轮：采集 → poll → 执行 wire 任务 → ack。
 // 返回的 error 仅表示本轮失败（调用方决定退避）；无任务不算失败。
-func (a *Agent) Once(ctx context.Context) error {
+//
+// 这是「普通轮询」入口：仍受 interval-5 的节流（防止无意义的重复 poll）。
+// 被 WebSocket / 长轮询唤醒时走 once(ctx, true)，见那里的说明。
+func (a *Agent) Once(ctx context.Context) error { return a.once(ctx, false) }
+
+// wakeMinGap 是「被唤醒的 poll」之间的最小冷却时间。
+//
+// 服务端对 5 秒内的重复 poll 返回 429，所以唤醒也要防抖；
+// 但只受这 5 秒限制，不再套整个轮询间隔 —— 否则唤醒会被 interval-5
+// 的大窗口整轮吞掉（唤醒只在本来就要 poll 的最后 5 秒里才可能生效）。
+// 变量形式只为单测注入更短的值，生产恒为 5s。
+var wakeMinGap = 5 * time.Second
+
+// wakeDelay 计算「被唤醒后」还要等多久才能 poll：补足 wakeMinGap 防刷冷却。
+// 返回 0 表示立刻 poll；返回正数时，等待结束后距离上次 poll 一定 ≥ wakeMinGap，
+// 保证这次唤醒不会因为冷却被 once(ctx, true) 再次跳过。
+func wakeDelay(elapsed time.Duration) time.Duration {
+	if gap := wakeMinGap - elapsed + 200*time.Millisecond; gap > 0 {
+		return gap
+	}
+	return 0
+}
+
+// once 执行一轮：采集 → poll → 执行 wire 任务 → ack。
+// force=true 表示本轮由 WebSocket / 长轮询「唤醒」触发：只受 wakeMinGap 最小冷却限制。
+func (a *Agent) once(ctx context.Context, force bool) error {
 	if err := a.opts.Store.Ensure(); err != nil {
 		a.opts.Log("创建状态目录失败：%v", err)
 	}
 	now := a.opts.Now()
 	interval := a.interval()
-	if last := a.opts.Store.LastPoll(); last > 0 && now.Unix()-last < int64(interval-5) {
+	last := a.opts.Store.LastPoll()
+	minGap := int64(wakeMinGap / time.Second)
+	if force {
+		if last > 0 && now.Unix()-last < minGap {
+			a.opts.Log("唤醒但距上次 poll 不足 %ds（防刷冷却），本轮跳过", minGap)
+			return nil
+		}
+	} else if last > 0 && now.Unix()-last < int64(interval-5) {
 		a.opts.Log("距上次 poll 不足 %ds，本轮跳过", interval-5)
 		return nil
 	}
@@ -460,9 +492,12 @@ func (a *Agent) Daemon(ctx context.Context) error {
 	a.pickInternalOrigin(ctx)
 	go a.watchInternal(ctx)
 	go a.wsLoop(ctx)
+	// woken 表示下一轮 poll 由唤醒触发（绕过 interval-5 的大窗口，只受最小冷却限制）
+	woken := false
 	for {
 		lastPoll := time.Now()
-		err := a.Once(ctx)
+		err := a.once(ctx, woken)
+		woken = false
 		delay := time.Duration(a.interval()) * time.Second
 		if err != nil {
 			failures++
@@ -491,7 +526,9 @@ func (a *Agent) Daemon(ctx context.Context) error {
 					return nil
 				case <-a.wake:
 					timer.Stop()
-					delay = time.Second
+					// 唤醒必须真正触发一次 poll：标记 woken，并补足服务端 5s 防刷冷却。
+					woken = true
+					delay = wakeDelay(time.Since(lastPoll))
 				case <-timer.C:
 					delay = 0
 				}
@@ -502,12 +539,8 @@ func (a *Agent) Daemon(ctx context.Context) error {
 				switch {
 				case werr == nil && woke:
 					// Worker 有 5s 防刷：醒来后补足冷却再 poll，避免 429
-					gap := 5*time.Second - time.Since(lastPoll) + 200*time.Millisecond
-					if gap > 0 {
-						delay = gap
-					} else {
-						delay = 0
-					}
+					woken = true
+					delay = wakeDelay(time.Since(lastPoll))
 				case werr == nil:
 					// 等到了预定的 poll 时间
 					delay = 0

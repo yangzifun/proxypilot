@@ -31,6 +31,18 @@ const (
 	AckTimeout  = 20 * time.Second
 )
 
+// pollTimeout / ackTimeout 是实际生效的单次请求超时。
+// 变量形式只为单测注入更短的值，生产恒等于 PollTimeout / AckTimeout。
+//
+// 为什么必须逐请求设超时而不是给 http.Client 设 Timeout：
+//   - Client.Timeout 会连长轮询 /api/agent/wait 一起砍掉（它本来就该等 25s）；
+//   - 面板/中间设备「接受 TCP 但不回响应」时，没有 deadline 的 poll 会永久挂起，
+//     Once() 不返回 → 心跳、任务执行、ack 全部停摆，且进程活着 systemd 不会重启。
+var (
+	pollTimeout = PollTimeout
+	ackTimeout  = AckTimeout
+)
+
 // ErrWaitUnsupported Worker 没启用长轮询（旧版本 / 未绑定 AGENT_HUB）。
 var ErrWaitUnsupported = errors.New("长轮询不受支持")
 
@@ -305,8 +317,12 @@ func (c *Client) rotate() string {
 }
 
 // Poll 上报心跳/指标并领取任务。
-func (c *Client) Poll(ctx context.Context, req PollRequest) (PollResponse, error) {	var resp PollResponse
-	body, err := c.post(ctx, "/api/agent/poll", req, &resp)
+func (c *Client) Poll(ctx context.Context, req PollRequest) (PollResponse, error) {
+	var resp PollResponse
+	// 单次 poll 必须有界：响应挂起时必须能失败退出，交给 Daemon 退避重试。
+	pctx, cancel := context.WithTimeout(ctx, pollTimeout)
+	defer cancel()
+	body, err := c.post(pctx, "/api/agent/poll", req, &resp)
 	if err != nil {
 		return resp, err
 	}
@@ -336,8 +352,10 @@ func (c *Client) Wait(ctx context.Context, timeoutSec int) (bool, error) {
 			c.rotate()
 			continue
 		}
-		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1024))
-		_ = resp.Body.Close()
+		func() {
+			defer resp.Body.Close()
+			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1024))
+		}()
 		switch resp.StatusCode {
 		case http.StatusOK:
 			return true, nil
@@ -354,7 +372,10 @@ func (c *Client) Wait(ctx context.Context, timeoutSec int) (bool, error) {
 
 // Ack 回传任务执行结果。
 func (c *Client) Ack(ctx context.Context, req AckRequest) error {
-	_, err := c.post(ctx, "/api/agent/ack", req, nil)
+	// ack 用更短的超时：调用方会重试 3 次，单次挂太久会把整轮 Once() 拖住。
+	actx, cancel := context.WithTimeout(ctx, ackTimeout)
+	defer cancel()
+	_, err := c.post(actx, "/api/agent/ack", req, nil)
 	return err
 }
 
@@ -392,8 +413,11 @@ func (c *Client) post(ctx context.Context, path string, payload interface{}, out
 			c.rotate()
 			continue
 		}
-		data, _ := io.ReadAll(io.LimitReader(resp.Body, 4*1024*1024))
-		_ = resp.Body.Close()
+		// 响应体必然关闭：即使读失败/后续解析失败也不会泄漏连接。
+		data, _ := func() ([]byte, error) {
+			defer resp.Body.Close()
+			return io.ReadAll(io.LimitReader(resp.Body, 4*1024*1024))
+		}()
 		if resp.StatusCode != http.StatusOK {
 			return nil, &StatusError{Status: resp.StatusCode, Body: string(data), RetryAfter: parseRetryAfter(resp.Header.Get("Retry-After"))}
 		}

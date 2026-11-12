@@ -21,6 +21,9 @@ type Tunnel struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
+	// closeOnce 保证 Close 幂等：断开（disconnect）、连接失败（fail）、
+	// 隧道自断（保活循环）三条路径都会调用 Close，清理只能做一次。
+	closeOnce sync.Once
 
 	rxBytes atomic.Int64
 	txBytes atomic.Int64
@@ -239,18 +242,32 @@ func (t *Tunnel) Err() string {
 	return ""
 }
 
-// Close 停止收发、清理路由并关闭网卡。
+// cleanupTunFn 是 cleanupTun 的间接引用。
+//
+// 生产路径恒等 cleanupTun；抽成变量只为单测注入计数替身
+// （测试环境无法真的改路由/DNS，但必须能断言「断开时清理确实被调用」）。
+var cleanupTunFn = cleanupTun
+
+// Close 停止收发、还原路由/DNS/断线保护并关闭网卡。
+//
+// 幂等：重复调用不会重复清理，也不报错。断开、连接失败、隧道自断三条路径
+// 都会调用它 —— 任何一条漏掉，0.0.0.0/1 与 128.0.0.0/1 就会继续把整机
+// IPv4 送进已经不存在的网卡（实测表现为「断开后电脑上不了网」）。
 func (t *Tunnel) Close() {
-	t.cancel()
-	done := make(chan struct{})
-	go func() { t.wg.Wait(); close(done) }()
-	select {
-	case <-done:
-	case <-time.After(3 * time.Second):
-	}
-	cleanupTun(t.res)
-	_ = t.dev.Close()
-	log.Printf("隧道已关闭：%s", t.res.Summary())
+	t.closeOnce.Do(func() {
+		t.cancel()
+		done := make(chan struct{})
+		go func() { t.wg.Wait(); close(done) }()
+		select {
+		case <-done:
+		case <-time.After(3 * time.Second):
+		}
+		cleanupTunFn(t.res)
+		if t.dev != nil {
+			_ = t.dev.Close()
+		}
+		log.Printf("隧道已关闭：%s", t.res.Summary())
+	})
 }
 
 // stripIPv4 归一化从网卡读到的包：去掉可能存在的 4 字节 AF 头。

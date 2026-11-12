@@ -1202,33 +1202,62 @@ func (s *uiServer) connect(nodeID int64) error {
 		}
 
 		// 保活：保持 QUIC 连接并同步 RTT/流量，直到用户断开或隧道中断。
-		ticker := time.NewTicker(2 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
+		//
+		// 关键：隧道一旦建立，所有退出路径都必须还原网络（路由 / DNS 守卫 /
+		// 断线保护 / 物理网卡 IPv6）。这里不能依赖 state.tun —— disconnect()
+		// 会先把引用置空，晚一步就再也没有人能清理这条隧道了。
+		s.runConnectedSession(ctx, attempt, conn, tun, 2*time.Second)
+	}()
+	return nil
+}
+
+// runKeepAlive 保持 QUIC 连接并同步 RTT/流量，直到 ctx 结束（用户断开/切换节点）
+// 或数据面自断。返回非空原因表示隧道自断，调用方必须还原网络。
+func (s *uiServer) runKeepAlive(ctx context.Context, attempt int64, conn *quic.Conn, tun *Tunnel, every time.Duration) string {
+	ticker := time.NewTicker(every)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return ""
+		case <-ticker.C:
+			if conn != nil {
 				if stats := conn.ConnectionStats(); stats.SmoothedRTT > 0 {
 					s.setFor(attempt, func(st *sessionState) { st.rttMs = int(stats.SmoothedRTT.Milliseconds()) })
 				}
-				if tun != nil {
-					if e := tun.Err(); e != "" {
-						rx, tx := tun.Stats()
-						s.setFor(attempt, func(st *sessionState) {
-							st.status = "error"
-							st.message = "隧道中断：" + e
-							st.tunErr = e
-							st.rx, st.tx = uint64(rx), uint64(tx)
-						})
-						cancel()
-						return
-					}
+			}
+			if tun != nil {
+				if e := tun.Err(); e != "" {
+					rx, tx := tun.Stats()
+					s.setFor(attempt, func(st *sessionState) {
+						st.status = "error"
+						st.message = "隧道中断：" + e
+						st.tunErr = e
+						st.rx, st.tx = uint64(rx), uint64(tx)
+					})
+					return e
 				}
 			}
 		}
-	}()
-	return nil
+	}
+}
+
+// runConnectedSession 在隧道建立后保持会话，并保证**任何**退出路径都还原系统网络。
+//
+// 修复前的事故：数据面报 session replaced 后状态变 error 但直接 return，
+// 没有 tun.Close() → 0.0.0.0/1 与 128.0.0.0/1 两条隧道路由仍在（metric 10，
+// 压过 LAN 默认路由），整个 IPv4 被黑洞，连面板都打不开。
+func (s *uiServer) runConnectedSession(ctx context.Context, attempt int64, conn *quic.Conn, tun *Tunnel, every time.Duration) {
+	if tun == nil {
+		return
+	}
+	// 兜底：无论正常断开、连接失败还是隧道自断，退出本函数时一定清理（Close 幂等）。
+	defer tun.Close()
+	if e := s.runKeepAlive(ctx, attempt, conn, tun, every); e != "" {
+		// 与 fail() 一致，走 disconnect 统一状态迁移：它会关闭隧道并还原网络。
+		// defer tun.Close() 保证即使 disconnect 拿不到 st.tun 也不会漏清理。
+		s.disconnect("隧道中断，已还原网络：" + e)
+	}
 }
 
 // attemptSeq 单调递增，用来区分「同一时刻只有最新一次连接尝试算数」。

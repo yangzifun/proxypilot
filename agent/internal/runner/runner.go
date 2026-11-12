@@ -3,6 +3,7 @@
 // 语义与 V8.1 shell agent 的 run_task 完全对齐（顺序不能改，否则「先校验后替换」的安全性会丢失）：
 //
 //	deploy：校验路径 → 建目录 → 备份 → 写临时文件 → sha256 校验 → 原子替换 → check_cmd → restart_cmd → 记录 applied
+//	        （check_cmd / restart_cmd 失败时把替换前的旧内容原子还原，回执写明「已回滚」）
 //	restart：restart_cmd（缺省由 service_name 推导）
 //	exec：command（可带超时）
 //	probe：回报本机信息摘要
@@ -187,7 +188,8 @@ func (r *Runner) applyInstallVersions(ctx context.Context, a client.Action) ([]s
 	return notes, changed, ""
 }
 
-// deploy 下发配置：先校验、后替换，任何一步失败都不改动目标文件。
+// deploy 下发配置：先校验、后替换；替换后 check/restart 失败会回滚旧内容，
+// 保证「任何一步失败都不留下未验证通过的新配置」。
 func (r *Runner) deploy(ctx context.Context, a client.Action) (int, string) {
 	if a.Path == "" {
 		return 1, "目标路径为空"
@@ -199,7 +201,7 @@ func (r *Runner) deploy(ctx context.Context, a client.Action) (int, string) {
 	if r.InstallMissing {
 		r.ensureServiceUnit(a)
 	}
-	if safePath, perr := safeConfigPath(a.Path); perr != nil {
+	if safePath, perr := safeConfigPathFn(a.Path); perr != nil {
 		return 1, perr.Error()
 	} else {
 		a.Path = safePath
@@ -266,6 +268,10 @@ func (r *Runner) deploy(ctx context.Context, a client.Action) (int, string) {
 			return 1, "内容校验失败（sha256 不一致）：期望 " + short(a.Sha256) + "，实际 " + short(got)
 		}
 	}
+	// 回滚快照：rename 之后旧内容就没了，必须在替换前读进内存。
+	// 回滚是「新配置没通过校验就不要生效」的正确性要求，与 Backup 开关无关。
+	oldContent, oldErr := os.ReadFile(a.Path)
+	hadOld := oldErr == nil
 	if err := os.Rename(tmp, a.Path); err != nil {
 		_ = os.Remove(tmp)
 		return 1, "替换文件失败：" + err.Error()
@@ -278,7 +284,7 @@ func (r *Runner) deploy(ctx context.Context, a client.Action) (int, string) {
 		if bin := firstCommandWord(a.CheckCmd); bin != "" {
 			if _, err := exec.LookPath(bin); err != nil {
 				if code, out := r.ensureComponent(ctx, bin); code != 0 {
-					return code, out
+					return code, out + r.rollbackDeploy(ctx, a, oldContent, hadOld)
 				}
 			}
 		}
@@ -292,7 +298,7 @@ func (r *Runner) deploy(ctx context.Context, a client.Action) (int, string) {
 		out, code := r.shell()(ctx, a.CheckCmd, 0)
 		output += "\n[check] " + strings.TrimSpace(out)
 		if code != 0 {
-			return 1, output + "\n校验命令失败（rc=" + strconv.Itoa(code) + "）"
+			return 1, output + "\n校验命令失败（rc=" + strconv.Itoa(code) + "）" + r.rollbackDeploy(ctx, a, oldContent, hadOld)
 		}
 	}
 	restart := r.restartCmd(a)
@@ -300,7 +306,7 @@ func (r *Runner) deploy(ctx context.Context, a client.Action) (int, string) {
 		out, code := r.shell()(ctx, restart, 0)
 		output += "\n[restart] " + strings.TrimSpace(out)
 		if code != 0 {
-			return 1, output + "\n重启命令失败（rc=" + strconv.Itoa(code) + "）"
+			return 1, output + "\n重启命令失败（rc=" + strconv.Itoa(code) + "）" + r.rollbackDeploy(ctx, a, oldContent, hadOld)
 		}
 	}
 	if a.ConfigID > 0 {
@@ -309,6 +315,42 @@ func (r *Runner) deploy(ctx context.Context, a client.Action) (int, string) {
 		}
 	}
 	return 0, output
+}
+
+// rollbackDeploy 把目标文件恢复成下发前的快照，并尽量按旧配置重启服务。
+//
+// 只在「文件已经原子替换」之后的失败分支调用（check_cmd / restart_cmd / 组件安装）。
+// 返回追加到任务回执里的说明，一定写明「已回滚」或回滚失败的原因 ——
+// 服务端据此判断节点上是否是可信状态，不能静默。
+func (r *Runner) rollbackDeploy(ctx context.Context, a client.Action, old []byte, hadOld bool) string {
+	path := a.Path
+	if !hadOld {
+		// 下发前目标文件不存在：回滚 = 删掉本次写入的配置，服务保持原状（未重启）。
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return "\n[rollback] 回滚失败：下发前无原文件，删除新配置 " + path + " 出错：" + err.Error()
+		}
+		return "\n[rollback] 已回滚：下发前目标文件不存在，已删除本次写入的配置"
+	}
+	// 与 deploy 的写入方式保持一致：临时文件 + rename 原子替换。
+	tmp := path + ".pp.rollback." + strconv.Itoa(os.Getpid())
+	if err := os.WriteFile(tmp, old, 0o644); err != nil {
+		return "\n[rollback] 回滚失败：写入回滚临时文件出错：" + err.Error()
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return "\n[rollback] 回滚失败：还原 " + path + " 出错：" + err.Error()
+	}
+	msg := "\n[rollback] 已回滚到下发前的配置（" + path + "）"
+	// best-effort：把服务按旧配置拉回来。失败不改变「已回滚」的结论，但要写进回执。
+	if restart := r.restartCmd(a); restart != "" {
+		out, code := r.shell()(ctx, restart, 0)
+		if code != 0 {
+			msg += "\n[rollback] 文件已还原，但按旧配置重启失败（rc=" + strconv.Itoa(code) + "）：" + strings.TrimSpace(out)
+		} else {
+			msg += "\n[rollback] 已按旧配置重启"
+		}
+	}
+	return msg
 }
 
 // probe 回报本机信息摘要（比 shell agent 的 "probe ok" 更有用，字段与指标采集同源）。

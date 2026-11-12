@@ -74,6 +74,15 @@ type session struct {
 	// sendFail 统计下行发送失败次数（DATAGRAM 缓冲满/连接关闭等），
 	// 是「节点发了但客户端没收到」的唯一线索。
 	sendFail atomic.Uint64
+
+	// fecEnc 是**该会话独享**的下行 FEC 编码器（仅 kindDatagram 使用）。
+	//
+	// 曾经在 tunLoop 里只建一个全局共享编码器：一个 FEC 组里混入发往不同客户端的
+	// 包，凑满组时校验帧只发给「触发凑满的那个包」的会话，其余客户端永远缺包，
+	// Decode 判定 missingCount>1 直接放弃 —— FEC 只烧 1/K 带宽、完全无法还原。
+	// 解码端（readSession / 客户端 dualPacketConn）本来就是每会话一个解码器，
+	// 编码器必须按同样粒度分组。只在 tunLoop 单协程里读写，无需加锁。
+	fecEnc *fecEncoder
 }
 
 // Server 是自研 HTTP/3 隧道节点（非标准 MASQUE）。
@@ -475,12 +484,25 @@ func isDNSPacket(pkt []byte) bool {
 	dport := int(pkt[ihl+2])<<8 | int(pkt[ihl+3])
 	return sport == 53 || dport == 53
 }
-// dropDatagramChannel 清掉某设备的 datagram 槽位。
+// negotiateDatagram 判断本次隧道流是否启用 DATAGRAM：
+// 节点开了 DATAGRAM 且客户端在请求头声明支持，两者缺一不可。
+//
+// 必须在注册 datagram 会话之前调用：先注册后判断会走「注册了再回退」的路径，
+// 而回退要清掉共享连接上的会话，容易误关正在承载隧道流的连接。
+func (s *Server) negotiateDatagram(clientDeclared bool) bool {
+	return s.cfg.DatagramEnabled && clientDeclared
+}
+
+// dropDatagramChannel 清掉某设备的 datagram 槽位，让 pick() 回退到可靠流。
 //
 // 用于「客户端明确不支持 DATAGRAM」时：必须让 pick() 回退到可靠流，
 // 否则节点会继续把 UDP 下行塞进 DATAGRAM，而客户端不读 datagram，
 // 回包直接消失 —— 实测表现为 nslookup 全部超时、ping 公网 IP 正常。
-func (s *Server) dropDatagramChannel(ip net.IP) {
+//
+// keepConn 是本次请求正在使用的连接（DATAGRAM 与隧道流共用同一条 QUIC 连接）：
+// **绝不能关闭它**，否则会把刚建立的隧道流一起断掉。只有残留的 datagram 会话
+// 跑在别的连接上时才关闭旧连接（那才是安全的清理）。
+func (s *Server) dropDatagramChannel(ip net.IP, keepConn datagramConn) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	key := ip.String()
@@ -493,7 +515,7 @@ func (s *Server) dropDatagramChannel(ip net.IP) {
 	if set.empty() {
 		delete(s.sessions, key)
 	}
-	if cur.conn != nil {
+	if cur.conn != nil && cur.conn != keepConn {
 		_ = cur.conn.CloseWithError(0, "client datagram unsupported")
 	}
 	s.log.Info("已停用 DATAGRAM 通道", "ip", key, "reason", "客户端未声明支持")
@@ -637,11 +659,8 @@ func (s *Server) readSession(sess *session) {
 // tunLoop 读取 TUN，把下行报文发给对应客户端；客户端互访直接丢弃。
 func (s *Server) tunLoop() {
 	buf := make([]byte, 65535)
-	// 下行 FEC 编码器（仅 DATAGRAM 通道使用）
-	var fecEncDown *fecEncoder
-	if s.cfg.FECMode == "xor" && s.cfg.FECGroup > 1 {
-		fecEncDown = newFECEncoder(s.cfg.FECGroup)
-	}
+	// 下行 FEC 开关（仅 DATAGRAM 通道使用）；编码器按会话持有，见 session.fecEnc。
+	fecDownOn := s.cfg.FECMode == "xor" && s.cfg.FECGroup > 1
 	for {
 		n, err := s.tun.Read(buf)
 		if err != nil {
@@ -681,13 +700,18 @@ func (s *Server) tunLoop() {
 			}
 		}
 		sent := false
-		// 下行 FEC：只作用于 DATAGRAM 通道。开一个分组校验帧，
+		// 下行 FEC：只作用于 DATAGRAM 通道，每组校验帧都发给**同一个会话**。
 		// 组内丢 1 个可由对端还原 —— 这是 81% 丢包唯一的补救手段。
-		if fecEncDown != nil && sess != nil && sess.kind == kindDatagram && len(pkt) <= s.cfg.MaxDatagram {
-			data, parity := fecEncDown.Encode(pkt)
+		// 校验帧比原始报文多 4+K*2 字节头，超 MaxDatagram 时跳过（否则必然发送失败，
+		// 该组失去恢复能力且日志无痕）。
+		if fecDownOn && sess != nil && sess.kind == kindDatagram && sess.send != nil && len(pkt) <= s.cfg.MaxDatagram {
+			if sess.fecEnc == nil {
+				sess.fecEnc = newFECEncoder(s.cfg.FECGroup)
+			}
+			data, parity := sess.fecEnc.Encode(pkt)
 			if err := sess.send(data); err == nil {
 				sess.rx++
-				if len(parity) > 0 {
+				if len(parity) > 0 && len(parity) <= s.cfg.MaxDatagram {
 					_ = sess.send(parity)
 				}
 				continue

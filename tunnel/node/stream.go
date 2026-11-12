@@ -190,18 +190,29 @@ func (s *Server) serveStream(w http.ResponseWriter, r *http.Request) {
 	//
 	// 注意：这条会话与流共享连接，绝不能在自己的清理里关闭连接，
 	// 否则会把隧道流一起弄断（closeFn 置为空实现）。
-	if s.cfg.DatagramEnabled {
-		if conn, _ := r.Context().Value(connKey{}).(*quic.Conn); conn != nil {
-			dsess := &session{
-				jti: claims.JTI, kind: kindDatagram, ip: ip, device: claims.Subject,
-				grantID: claims.GrantID, conn: conn, started: time.Now(),
-			}
-			dsess.send = func(p []byte) error { return dsess.conn.SendDatagram(p) }
-			dsess.closeFn = func() {} // 共享连接，不在这里关闭
-			if s.register(dsess) {
-				s.log.Info("单连接双通道", "ip", ip.String(), "remote", r.RemoteAddr)
-				go s.readSession(dsess)
-			}
+	//
+	// 能力协商（MASQUE/RFC 9297 风格）：客户端在请求头声明是否支持 HTTP Datagram。
+	// **必须先读能力头，再决定是否注册 datagram 会话**（P1 修复）：
+	// 反过来会先注册 datagram 会话（conn 就是本条隧道流用的连接），紧接着发现
+	// 客户端不支持、dropDatagramChannel 关掉这条共享连接 → 刚建立的隧道流
+	// 一起被断，客户端表现为连上即断、反复重连，回退到可靠流的设计完全失效。
+	clientDatagram := r.Header.Get("H3-Datagram") != ""
+	useDatagram := s.negotiateDatagram(clientDatagram)
+	conn, _ := r.Context().Value(connKey{}).(*quic.Conn)
+	var curConn datagramConn
+	if conn != nil {
+		curConn = conn
+	}
+	if useDatagram && conn != nil {
+		dsess := &session{
+			jti: claims.JTI, kind: kindDatagram, ip: ip, device: claims.Subject,
+			grantID: claims.GrantID, conn: conn, started: time.Now(),
+		}
+		dsess.send = func(p []byte) error { return dsess.conn.SendDatagram(p) }
+		dsess.closeFn = func() {} // 共享连接，不在这里关闭
+		if s.register(dsess) {
+			s.log.Info("单连接双通道", "ip", ip.String(), "remote", r.RemoteAddr)
+			go s.readSession(dsess)
 		}
 	}
 
@@ -210,19 +221,18 @@ func (s *Server) serveStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !useDatagram {
+		// 客户端没声明支持（旧版客户端）：只清残留的 datagram 槽位，让 pick()
+		// 回退到可靠流；绝不能关连接 —— 它正承载本次隧道流。
+		s.dropDatagramChannel(ip, curConn)
+	}
+
 	h := w.Header()
 	h.Set("X-VPN-Auth", "Success")
 	h.Set("X-VPN-Assigned-IPv4", ip.String())
 
-	// 能力协商（MASQUE/RFC 9297 风格）：客户端在请求头声明是否支持 HTTP Datagram。
-	// 只有双方都支持，才允许这条会话走 DATAGRAM 下行；否则把 datagram 槽位清掉，
-	// 让 tunLoop 的 pick() 回退到可靠流 —— 否则节点继续用 DATAGRAM 发 UDP，
-	// 而客户端根本不读 datagram，回包就静默消失（表现为 DNS 完全不通）。
-	clientDatagram := r.Header.Get("H3-Datagram") != ""
-	useDatagram := s.cfg.DatagramEnabled && clientDatagram
-	if !clientDatagram {
-		s.dropDatagramChannel(ip)
-	}
+	// 只有双方都支持才回能力位；否则节点继续用 DATAGRAM 发 UDP 而客户端不读，
+	// 回包就静默消失（表现为 DNS 完全不通）。
 	if useDatagram {
 		h.Set("Capsule-Protocol", "?1")
 		h.Set("H3-Datagram", "?1")

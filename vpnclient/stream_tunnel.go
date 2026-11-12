@@ -197,6 +197,12 @@ func (c *streamPacketConn) Close() error {
 	c.closeOnce.Do(func() {
 		c.closed.Store(true)
 		close(c.done)
+		// 关闭底层读端：RecvPacket 阻塞在 io.ReadFull(c.r) 上，
+		// 不关它的话上层 dualPacketConn.Close() 的 wg.Wait 等不到 streamLoop 退出
+		// （表现为「点了断开但数据面协程还在」）。重复 Close 由底层 io.Closer 自行保证安全。
+		if rc, ok := c.r.(io.Closer); ok {
+			_ = rc.Close()
+		}
 		c.wg.Wait()
 		if cw, ok := c.w.(io.Closer); ok {
 			err = cw.Close()
