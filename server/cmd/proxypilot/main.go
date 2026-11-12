@@ -71,6 +71,7 @@ func run(log *slog.Logger) error {
 	api.EnsureLocalServer(ctx, pool, log)
 	api.StartLocalMonitor(ctx, pool, log)
 	api.StartCronFor(ctx, cfg, pool, log)
+	api.StartConfigSelfHeal(ctx, cfg, pool, log)
 	srv := &http.Server{
 		Addr:              cfg.Addr,
 		Handler:           securityHeaders(api.New(cfg, pool, log)),
