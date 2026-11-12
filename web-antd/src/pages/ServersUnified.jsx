@@ -179,6 +179,12 @@ function Heartbeat({ row }) {
   );
 }
 
+/* ---------------- 节点在线用户 / 实时速率 ----------------
+ * 「节点在线用户」= 近 N 分钟在该节点有流量增量的去重用户数（后端 user_node_recent 口径）。
+ * 不能拿瞬时连接数当主指标：sing-box 的 /connections 只反映采样那一刻活着的连接，
+ * 客户端 url-test 健康检查是亚秒级连接，随机采样几乎必然落在两次连接之间 → 恒 0，
+ * 但用户其实在用。瞬时连接数（conn_count）与窗口峰值仍然保留在 tooltip 里，不填充。
+ */
 function NodeConn({ node }) {
   if (!node) return <span className="pp-muted">—</span>;
   if (node.stale) {
@@ -189,11 +195,51 @@ function NodeConn({ node }) {
       </span>
     );
   }
+  const hasOnline = node.online_count !== undefined && node.online_count !== null;
+  const online = hasOnline ? Number(node.online_count) || 0 : null;
+  const winMin = Math.max(1, Math.round((Number(node.active_window_sec) || 300) / 60));
+  const rateWinMin = Math.round((Number(node.rate_window_sec) || 0) / 60);
+  const tip = (
+    <div style={{ fontSize: 12, lineHeight: 1.7 }}>
+      <div>在线用户：近 {winMin} 分钟在该节点有流量增量的去重用户数</div>
+      <div>瞬时连接：{fmtNum(node.conn_count)}（采样时刻；健康检查/短连接常为 0）</div>
+      {node.conn_peak ? <div>近 {winMin} 分钟连接峰值：{fmtNum(node.conn_peak)}</div> : null}
+      {rateWinMin ? <div>速率窗口：近 {rateWinMin} 分钟平均</div> : null}
+      {node.sampled_at ? <div>采样时间：{fmtTime(node.sampled_at)}</div> : null}
+    </div>
+  );
   return (
-    <span className="pp-nowrap">
-      {fmtNum(node.conn_count)}
-      {node.error ? <Tag color="orange" style={{ marginInlineStart: 6 }}>采集异常</Tag> : null}
-    </span>
+    <Tooltip title={tip}>
+      <span className="pp-nowrap" style={{ fontVariantNumeric: 'tabular-nums' }}>
+        {online === null ? fmtNum(node.conn_count) : fmtNum(online)}
+        {node.error ? <Tag color="orange" style={{ marginInlineStart: 6 }}>采集异常</Tag> : null}
+      </span>
+    </Tooltip>
+  );
+}
+
+/* 「节点实时」主展示用近 N 分钟窗口平均（真实原始计数首尾差 / 实际跨度），
+ * 单次采样恰好落在两次流量突发之间时不再显示 0；窗口内确实没有流量时仍如实显示 0。
+ * 单次采样速率仍在 tooltip 里，便于排障。 */
+function NodeRate({ node }) {
+  if (!node || node.stale) return <span className="pp-mono pp-nowrap" style={{ fontSize: 12 }}>—</span>;
+  const hasAvg = node.down_rate_avg !== undefined && node.down_rate_avg !== null;
+  const down = hasAvg ? node.down_rate_avg : node.down_rate;
+  const up = hasAvg ? node.up_rate_avg : node.up_rate;
+  const winMin = Math.round((Number(node.rate_window_sec) || 0) / 60);
+  const tip = (
+    <div style={{ fontSize: 12, lineHeight: 1.7 }}>
+      <div>{winMin ? `近 ${winMin} 分钟平均（真实采样计数首尾差）` : '窗口样本不足，展示单次采样速率'}</div>
+      <div>当前采样：↓ {fmtBytes(node.down_rate)}/s ↑ {fmtBytes(node.up_rate)}/s</div>
+      {node.sampled_at ? <div>采样时间：{fmtTime(node.sampled_at)}</div> : null}
+    </div>
+  );
+  return (
+    <Tooltip title={tip}>
+      <span className="pp-mono pp-nowrap" style={{ fontSize: 12 }}>
+        {fmtBytes(down)}/s / {fmtBytes(up)}/s
+      </span>
+    </Tooltip>
   );
 }
 
@@ -339,7 +385,7 @@ function ServerCard({ row, node, checked, onCheck, onOpen }) {
           <span><Heartbeat row={row} /></span>
         </div>
         <div>
-          <span>节点连接数</span>
+          <span>在线用户</span>
           <span><NodeConn node={node} /></span>
         </div>
       </div>
@@ -440,12 +486,31 @@ export default function ServersUnified() {
     ((nodes.data && nodes.data.data) || []).forEach((n) => {
       const sid = Number(n.server_id) || 0;
       if (!sid) return;
-      const cur = map.get(sid) || { conn_count: 0, down_rate: 0, up_rate: 0, down_total: 0, up_total: 0, error: false, stale: true };
+      // 一台服务器可能绑定多个节点：连接/速率/流量按节点求和；
+      // 在线用户当前每服务器 1 个节点，求和只是兜底（多节点时同一用户可能被重复计）。
+      const cur = map.get(sid) || {
+        conn_count: 0, down_rate: 0, up_rate: 0, down_total: 0, up_total: 0,
+        online_count: null, up_rate_avg: null, down_rate_avg: null,
+        conn_peak: 0, rate_window_sec: 0, active_window_sec: 0,
+        error: false, stale: true,
+      };
       cur.conn_count += Number(n.conn_count) || 0;
       cur.down_rate += Number(n.down_rate) || 0;
       cur.up_rate += Number(n.up_rate) || 0;
       cur.down_total += Number(n.down_total) || 0;
       cur.up_total += Number(n.up_total) || 0;
+      if (n.online_count !== undefined && n.online_count !== null) {
+        cur.online_count = (cur.online_count || 0) + (Number(n.online_count) || 0);
+      }
+      if (n.up_rate_avg !== undefined && n.up_rate_avg !== null) {
+        cur.up_rate_avg = (cur.up_rate_avg || 0) + (Number(n.up_rate_avg) || 0);
+      }
+      if (n.down_rate_avg !== undefined && n.down_rate_avg !== null) {
+        cur.down_rate_avg = (cur.down_rate_avg || 0) + (Number(n.down_rate_avg) || 0);
+      }
+      cur.conn_peak += Number(n.conn_peak) || 0;
+      cur.rate_window_sec = Math.max(cur.rate_window_sec, Number(n.rate_window_sec) || 0);
+      cur.active_window_sec = Math.max(cur.active_window_sec, Number(n.active_window_sec) || 0);
       if (n.error) cur.error = true;
       if (n.stale === false) cur.stale = false;
       map.set(sid, cur);
@@ -865,18 +930,15 @@ export default function ServersUnified() {
       render: (_, row) => <Heartbeat row={row} />,
     },
     {
-      title: '节点连接数',
+      title: '在线用户',
       width: 118,
       align: 'center',
       render: (_, row) => <NodeConn node={nodeById.get(Number(row.id))} />,
     },
     {
-      title: '节点实时 ↓ / ↑',
-      width: 150,
-      render: (_, row) => {
-        const n = nodeById.get(Number(row.id));
-        return <span className="pp-mono pp-nowrap" style={{ fontSize: 12 }}>{fmtBytes(n && n.down_rate)}/s / {fmtBytes(n && n.up_rate)}/s</span>;
-      },
+      title: '节点实时 ↓ / ↑（5分钟均）',
+      width: 176,
+      render: (_, row) => <NodeRate node={nodeById.get(Number(row.id))} />,
     },
     {
       title: '节点累计 ↓ / ↑',

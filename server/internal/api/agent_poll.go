@@ -105,6 +105,28 @@ func jsonSlice(v any) []any {
 	return nil
 }
 
+// agentMinRealtimeVersion 「可以按配置间隔轮询」的最低 Agent 版本。
+//
+// 历史原因：没有 WebSocket / 长轮询唤醒的老 Agent 需要 10s 短轮询才能及时收到任务，
+// 所以曾用 1.5.5 作为门槛把 next_poll_sec 压到 10s。Agent 已统一重编号为 1.x
+// （当前 const Version = "1.2"，含 WS/长轮询/统计），旧门槛 1.5.5 会把当前 Agent
+// 误判为「远古版本」，导致配置的 20/60s 被忽略、全量节点按 10s 轮询：
+// 既放大了面板与数据库压力，也让「节点实时」只用 10~15s 窗口算速率、频繁抖成 0。
+// 重编号后的 Agent 全部具备唤醒能力，门槛降到 1.0；更老的版本仍按 10s 兜底。
+const agentMinRealtimeVersion = "1.0"
+
+// agentNextPollSeconds 计算下发给 Agent 的轮询间隔：
+// 版本未知或低于 agentMinRealtimeVersion 时仍限制在 10s，其余按服务端配置。
+func agentNextPollSeconds(configured int64, agentVersion string) int64 {
+	if configured <= 0 {
+		return configured
+	}
+	if !agentVersionAtLeast(agentVersion, agentMinRealtimeVersion) && configured > 10 {
+		return 10
+	}
+	return configured
+}
+
 func parseAgentMetrics(body map[string]any) *agentMetrics {
 	m := &agentMetrics{
 		Services: map[string]string{}, Versions: map[string]string{},
@@ -721,10 +743,7 @@ func (h *handlers) agentPoll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	configured := clampInt(srv.NextPollSec, agentPollMinSec, agentPollMaxSec)
-	nextPollSec := configured
-	if !agentVersionAtLeast(srv.AgentVersion, "1.5.5") && nextPollSec > 10 {
-		nextPollSec = 10
-	}
+	nextPollSec := agentNextPollSeconds(configured, srv.AgentVersion)
 	metricsEvery := clampInt(srv.MetricsEvery, 1, 10)
 	pollCount := srv.AgentPollCount + 1
 

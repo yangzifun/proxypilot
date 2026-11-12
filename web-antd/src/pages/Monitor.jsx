@@ -776,18 +776,50 @@ export function ServerCard({ s, node, onPick, onUnlock, leading }) {
         {node ? (
           <>
             <div>
-              <span>sing-box 节点连接</span>
+              <span>节点在线用户（近5分钟）</span>
               <span>
-                {fmtNum(node.conn_count)}
+                <Tooltip
+                  title={
+                    <div style={{ fontSize: 12, lineHeight: 1.7 }}>
+                      <div>在线用户：近 5 分钟在该节点有流量增量的去重用户数</div>
+                      <div>瞬时连接：{fmtNum(node.conn_count)}（采样时刻；健康检查/短连接常为 0）</div>
+                      {node.conn_peak ? <div>近 5 分钟连接峰值：{fmtNum(node.conn_peak)}</div> : null}
+                      {node.sampled_at ? <div>采样时间：{fmtTime(node.sampled_at)}</div> : null}
+                    </div>
+                  }
+                >
+                  <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+                    {node.online_count === undefined || node.online_count === null
+                      ? fmtNum(node.conn_count)
+                      : fmtNum(node.online_count)}
+                  </span>
+                </Tooltip>
                 {node.error ? (
                   <Tag color="orange" style={{ marginInlineStart: 6 }}>采集异常</Tag>
                 ) : null}
               </span>
             </div>
             <div>
-              <span>节点实时 ↓ / ↑</span>
+              <span>节点实时 ↓ / ↑（5分钟均）</span>
               <span>
-                {fmtBytes(node.down_rate)}/s / {fmtBytes(node.up_rate)}/s
+                <Tooltip
+                  title={
+                    <div style={{ fontSize: 12, lineHeight: 1.7 }}>
+                      <div>
+                        {Number(node.rate_window_sec) > 0
+                          ? `近 ${Math.max(1, Math.round(Number(node.rate_window_sec) / 60))} 分钟平均（真实采样计数首尾差）`
+                          : '窗口样本不足，展示单次采样速率'}
+                      </div>
+                      <div>当前采样：↓ {fmtBytes(node.down_rate)}/s ↑ {fmtBytes(node.up_rate)}/s</div>
+                      {node.sampled_at ? <div>采样时间：{fmtTime(node.sampled_at)}</div> : null}
+                    </div>
+                  }
+                >
+                  <span>
+                    {fmtBytes(node.down_rate_avg === undefined || node.down_rate_avg === null ? node.down_rate : node.down_rate_avg)}/s /{' '}
+                    {fmtBytes(node.up_rate_avg === undefined || node.up_rate_avg === null ? node.up_rate : node.up_rate_avg)}/s
+                  </span>
+                </Tooltip>
               </span>
             </div>
             <div>

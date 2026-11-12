@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // =====================================================================
@@ -26,6 +27,153 @@ import (
 var inboundUUIDRe = regexp.MustCompile(`[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`)
 
 const statsActiveWindowMs int64 = 120_000
+
+// =====================================================================
+//  节点级「在线用户」与「实时速率」口径（V1.3 修复节点连接数 0 / 实时 0）
+//
+//  为什么不能拿瞬时连接数当主指标：
+//   1. sing-box 的 clash_api /connections 只反映「采样那一刻」还活着的连接。
+//      客户端 url-test 健康检查是亚秒级连接（实测：同源 IP 依次走
+//      hysteria2/anytls/vless-ws/ss/vless-reality 各打一发 www.google.com 就断），
+//      60s/次级别的采样几乎必然落在两次连接之间 → 面板恒显示 0，但用户明明在用。
+//   2. 产品最初的需求是「用户在线情况」，不是「排障用的瞬时连接数」。
+//
+//  因此：节点主指标「在线用户」= 近 5 分钟在该节点有流量增量的去重用户数
+//  （user_node_recent.last_ts，只在 dUp/dDown>0 时刷新，见 ingestUserCounters）。
+//  这个口径与 mihomo 节点 online_count、UserTraffic「按节点 · 活跃 UUID」一致，
+//  只用真实上报数据推导，不做任何缓存填充；瞬时连接数仍原样返回（conn_count），
+//  供 tooltip / 排障使用。
+//
+//  「节点实时」同理：单次采样窗口（当前约 10~60s）经常正好落在两次突发之间，
+//  直接展示单次采样的差分会抖成 0。这里在进程内保留最近 5 分钟的真实上报样本，
+//  用「窗口首尾原始计数差 / 实际跨度」算平均速率；样本不足或 sing-box 重启
+//  （计数回退）时如实回退到单次采样速率，窗口内真的没有流量时仍然显示 0。
+// =====================================================================
+
+const (
+	// statsNodeOnlineWindowMs 节点「在线用户」窗口：5 分钟。
+	// 与 mihomo 节点 online_count（mihomo.go）、traffic_nodes.go 的 5 分钟窗口一致。
+	statsNodeOnlineWindowMs int64 = 300_000
+	// statsNodeRateWindowMs 「节点实时」平滑窗口：5 分钟。
+	statsNodeRateWindowMs int64 = 300_000
+	// statsNodeRateMaxSamples 单节点最多保留的采样数（防止内存无上限增长）。
+	statsNodeRateMaxSamples = 240
+	// statsNodeRateMinSpanMs 计算窗口平均速率所需的最小跨度（不足则回退单次采样）。
+	statsNodeRateMinSpanMs int64 = 10_000
+)
+
+// nodeRateSample 一次真实统计上报里的节点原始计数（来自 clash_api 的累计值）。
+type nodeRateSample struct {
+	at        int64 // 采样时间（服务端入库时间，毫秒）
+	up, down  int64 // sing-box 进程内累计上下行（原始计数）
+	connCount int64 // 采样时刻的连接数（排障用）
+}
+
+// nodeRateHistory 进程内保存每个节点最近的采样，用于计算窗口平均速率与连接峰值。
+// 只保存 Agent 真实上报的数值，不做任何插值/填充；进程重启后窗口重新累积，
+// 期间接口回退到单次采样速率（不伪造数据）。
+type nodeRateHistory struct {
+	mu   sync.Mutex
+	data map[int64][]nodeRateSample
+}
+
+// statsNodeRates 全局窗口（面板为单进程，无需持久化）。
+var statsNodeRates = newNodeRateHistory()
+
+func newNodeRateHistory() *nodeRateHistory {
+	return &nodeRateHistory{data: map[int64][]nodeRateSample{}}
+}
+
+// record 追加一条真实采样并裁掉窗口外的旧样本。
+func (h *nodeRateHistory) record(nodeID, at, up, down, connCount int64) {
+	if nodeID <= 0 || at <= 0 {
+		return
+	}
+	// 负值防御：Agent 上报异常（负数）按 0 处理，避免污染窗口平均值。
+	if up < 0 {
+		up = 0
+	}
+	if down < 0 {
+		down = 0
+	}
+	if connCount < 0 {
+		connCount = 0
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	list := append(h.data[nodeID], nodeRateSample{at: at, up: up, down: down, connCount: connCount})
+	cutoff := at - statsNodeRateWindowMs
+	keep := make([]nodeRateSample, 0, len(list))
+	for _, s := range list {
+		if s.at >= cutoff {
+			keep = append(keep, s)
+		}
+	}
+	if len(keep) > statsNodeRateMaxSamples {
+		keep = keep[len(keep)-statsNodeRateMaxSamples:]
+	}
+	h.data[nodeID] = keep
+}
+
+// window 返回窗口内（at >= now-statsNodeRateWindowMs）的样本副本，按时间升序。
+func (h *nodeRateHistory) window(nodeID, now int64) []nodeRateSample {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	list := h.data[nodeID]
+	if len(list) == 0 {
+		return nil
+	}
+	cutoff := now - statsNodeRateWindowMs
+	out := make([]nodeRateSample, 0, len(list))
+	for _, s := range list {
+		if s.at >= cutoff {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// reset 清空窗口（仅单测使用，避免用例之间互相污染）。
+func (h *nodeRateHistory) reset() {
+	h.mu.Lock()
+	h.data = map[int64][]nodeRateSample{}
+	h.mu.Unlock()
+}
+
+// nodeWindowSummary 汇总一个节点的窗口指标：
+//
+//	upAvg/downAvg = (窗口最新原始计数 - 窗口最早原始计数) / 实际跨度（字节/秒）
+//	connPeak      = 窗口内单次采样的连接数峰值
+//	spanMs        = 实际参与计算的跨度（0 表示回退到单次采样速率）
+//
+// 回退规则（宁可显示单次采样，也不编造趋势）：
+//   - 窗口内不足 2 个样本，或跨度 < statsNodeRateMinSpanMs；
+//   - 原始计数回退（sing-box 重启，last < first），窗口不可比。
+func nodeWindowSummary(samples []nodeRateSample, instUpRate, instDownRate int64) (upAvg, downAvg, spanMs, connPeak int64) {
+	for _, s := range samples {
+		if s.connCount > connPeak {
+			connPeak = s.connCount
+		}
+	}
+	if len(samples) < 2 {
+		return instUpRate, instDownRate, 0, connPeak
+	}
+	first, last := samples[0], samples[len(samples)-1]
+	// 负值/时间乱序防御：任一异常都回退单次采样，不参与窗口平均。
+	if first.up < 0 || first.down < 0 || last.up < 0 || last.down < 0 {
+		return instUpRate, instDownRate, 0, connPeak
+	}
+	spanMs = last.at - first.at
+	if spanMs < statsNodeRateMinSpanMs {
+		return instUpRate, instDownRate, 0, connPeak
+	}
+	if last.up < first.up || last.down < first.down {
+		return instUpRate, instDownRate, 0, connPeak
+	}
+	return (last.up - first.up) * 1000 / spanMs,
+		(last.down - first.down) * 1000 / spanMs,
+		spanMs, connPeak
+}
 
 var regexpUUID = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
@@ -317,7 +465,11 @@ func (h *handlers) ingestSnapshot(ctx context.Context, nodeID, upTotal, downTota
 	      up_rate = VALUES(up_rate), down_rate = VALUES(down_rate), err_text = ''`,
 		nodeID, now, connCount, upTotal, downTotal, upRate, downRate); err != nil {
 		h.log.Warn("写入节点统计快照失败", "err", err)
+		return
 	}
+	// 记录到进程内窗口：「节点实时」用 5 分钟平均速率展示，避免单次采样落在两次突发
+	// 之间时抖动成 0；只存 Agent 真实上报的原始计数，不做填充。
+	statsNodeRates.record(nodeID, now, upTotal, downTotal, connCount)
 }
 
 // lifetimeDelta 计算「单调累计」应增加的量：
@@ -615,11 +767,39 @@ func (h *handlers) statsTrafficUserDetail(w http.ResponseWriter, r *http.Request
 	})
 }
 
+// nodeOnlineCounts 统计每个节点「近 statsNodeOnlineWindowMs 分钟有流量增量」的去重用户数。
+//
+// 数据来源 user_node_recent.last_ts：ingestUserCounters 只在本轮有流量增量
+// （dUp/dDown > 0）时刷新它，因此它就是「最近真的在这台节点上用网的用户」，
+// 不用采样时刻的连接数冒充在线。表不存在 / 查询失败时降级为全 0（页面仍可用）。
+func (h *handlers) nodeOnlineCounts(ctx context.Context, now int64) map[int64]int64 {
+	out := map[int64]int64{}
+	rows, err := h.db.QueryContext(ctx,
+		`SELECT node_id, COUNT(DISTINCT uuid) FROM user_node_recent
+		  WHERE last_ts >= ? GROUP BY node_id`, now-statsNodeOnlineWindowMs)
+	if err != nil {
+		h.log.Warn("查询节点在线用户数失败（降级为 0）", "err", err)
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var nodeID, n int64
+		if rows.Scan(&nodeID, &n) == nil && nodeID > 0 {
+			out[nodeID] = n
+		}
+	}
+	return out
+}
+
 // GET /api/stats/traffic/nodes
 //
 // task-17：up_total/down_total 返回「单调累计」（node_traffic_lifetime），
 // 不再直接返回 sing-box 进程内计数；后者只用于算速率与增量。
 // 兼容旧数据：lifetime 行尚未建立时（迁移执行前/从未上报）回退到旧快照值。
+//
+// V1.3 统计口径修正：新增 online_count（近 5 分钟活跃用户数）与
+// up_rate_avg/down_rate_avg（近 5 分钟平均速率）、conn_peak（窗口内连接峰值）；
+// conn_count / up_rate / down_rate 仍保留原始单次采样值（tooltip、排障用）。
 func (h *handlers) statsTrafficNodes(w http.ResponseWriter, r *http.Request) {
 	rows, err := queryRowsAsMaps(r.Context(), h.db, `SELECT n.id AS node_id, n.name AS node_name,
 	      n.server_id, COALESCE(s.name,'') AS server_name, n.stats_enabled,
@@ -653,11 +833,17 @@ func (h *handlers) statsTrafficNodes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	nowMs := nowMillis()
+	onlineByNode := h.nodeOnlineCounts(r.Context(), nowMs)
 	data := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
+		nodeID := mapInt(row, "node_id", 0)
 		sampledAt := mapInt(row, "sampled_at", 0)
 		// 超过 5 分钟没上报视为失联，避免展示过期的错误信息
 		stale := sampledAt == 0 || nowMs-sampledAt > 300_000
+		instUp := mapInt(row, "up_rate", 0)
+		instDown := mapInt(row, "down_rate", 0)
+		upAvg, downAvg, rateSpanMs, connPeak := nodeWindowSummary(
+			statsNodeRates.window(nodeID, nowMs), instUp, instDown)
 		data = append(data, map[string]any{
 			"node_id": mapInt(row, "node_id", 0), "node_name": mapStr(row, "node_name", ""),
 			"server_id":     mapInt(row, "server_id", 0),
@@ -666,8 +852,13 @@ func (h *handlers) statsTrafficNodes(w http.ResponseWriter, r *http.Request) {
 			"sampled_at":    mapInt(row, "sampled_at", 0),
 			"conn_count":    mapInt(row, "conn_count", 0),
 			"up_total":      mapInt(row, "up_total", 0), "down_total": mapInt(row, "down_total", 0),
-			"up_rate": mapInt(row, "up_rate", 0), "down_rate": mapInt(row, "down_rate", 0),
-			"error": mapStr(row, "stats_error", ""), "stale": stale,
+			"up_rate": instUp, "down_rate": instDown,
+			"up_rate_avg": upAvg, "down_rate_avg": downAvg,
+			"rate_window_sec":   rateSpanMs / 1000,
+			"online_count":      onlineByNode[nodeID],
+			"active_window_sec": statsNodeOnlineWindowMs / 1000,
+			"conn_peak":         connPeak,
+			"error":             mapStr(row, "stats_error", ""), "stale": stale,
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"success": true, "total": len(data), "data": data})
