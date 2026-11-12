@@ -1,6 +1,8 @@
 package api
 
 import (
+	"net"
+	"net/url"
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
@@ -123,17 +125,76 @@ func decryptAgentToken(secret, enc string) string {
 	return string(plain)
 }
 
-// agentInstallCommand 复刻 Worker：优先对象存储脚本，否则用本站 /api/agent/install.sh。
+// agentInstallCommand 生成节点安装命令。
+//
+// 关键约束：**脚本地址必须公网可达**。
+// 之前这里用「Agent 访问地址」（内网 100.96.x.x）覆盖了 origin，结果生成的命令是
+//   curl -fsSL http://100.96.0.18:80/api/agent/install.sh | sudo sh
+// 新机器还没接入内网，这条命令根本拉不到脚本 —— 安装必然失败。
+//
+// 现在的分工：
+//   脚本地址  = 分发基址（对象存储桶）> 面板公网地址；永远不用内网地址
+//   --url     = Agent 的伺服地址，可以先用公网，Agent 上线后会自行切到内网通道
 func (h *handlers) agentInstallCommand(ctx context.Context, origin, token string) string {
-	// 节点直连地址优先（系统管理 → Agent 访问地址），留空回落到请求来源
-	if v := strings.TrimSpace(h.settingValue(ctx, settingAgentInternalURL)); v != "" {
+	origin = strings.TrimRight(strings.TrimSpace(origin), "/")
+
+	// --url 必须是新机器装好就能连上的地址：内网地址只有已入网的机器可达，
+	// 所以这里优先用「Agent 访问地址」（公网），没有再退回请求来源。
+	if v := strings.TrimRight(strings.TrimSpace(h.settingValue(ctx, settingAgentAccessURL)), "/"); v != "" && !isPrivateHost(v) {
 		origin = v
 	}
-	base := strings.TrimRight(strings.TrimSpace(h.cfg.AgentInstallBase), "/")
+	// 脚本基址 = 管理员设定的「Agent 分发基址」（agent_binary_base_url），
+	// 安装脚本就发布在该路径下：<基址>/install.sh
+	base := strings.TrimRight(strings.TrimSpace(firstNonEmptyStr(
+		h.cfg.AgentInstallBase,
+		h.settingValue(ctx, settingAgentBinaryBase),
+	)), "/")
+	return buildInstallCommand(base, origin, token)
+}
+
+// buildInstallCommand 是纯函数，便于单测：由「分发基址 + 伺服地址 + 密钥」拼命令。
+//
+// base 非空 → 走设定路径下的 install.sh（对象存储桶）；
+// base 为空 → 回落到面板自身的 /api/agent/install.sh。
+func buildInstallCommand(base, origin, token string) string {
+	base = strings.TrimRight(strings.TrimSpace(base), "/")
+	origin = strings.TrimRight(strings.TrimSpace(origin), "/")
 	if base != "" {
 		return fmt.Sprintf("curl -fsSL %s/install.sh | sudo sh -s -- --key %s --url %s", base, token, origin)
 	}
-	return fmt.Sprintf("curl -fsSL %s/api/agent/install.sh | sudo sh -s -- --key %s", strings.TrimRight(origin, "/"), token)
+	return fmt.Sprintf("curl -fsSL %s/api/agent/install.sh | sudo sh -s -- --key %s --url %s", origin, token, origin)
+}
+
+// firstNonEmptyStr 返回第一个非空字符串。
+func firstNonEmptyStr(vals ...string) string {
+	for _, v := range vals {
+		if s := strings.TrimSpace(v); s != "" {
+			return s
+		}
+	}
+	return ""
 }
 
 var errNoAgentKey = errors.New("未配置 AGENT_KEY_SECRET，无法加密接入令牌")
+
+// isPrivateHost 判断 URL 是否指向内网/回环地址（这类地址不能用于对外安装命令）。
+func isPrivateHost(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	host := u.Hostname()
+	if host == "" {
+		return false
+	}
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	// 100.64.0.0/10 是运营商级 NAT 段（组网 mesh 就用它），Go 的 IsPrivate 不认，单独判断
+	cgnat := &net.IPNet{IP: net.IPv4(100, 64, 0, 0), Mask: net.CIDRMask(10, 32)}
+	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || cgnat.Contains(ip)
+}
