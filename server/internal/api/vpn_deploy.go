@@ -99,6 +99,12 @@ func (h *handlers) vpnAdminNodeDeploy(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "节点未填写域名，无法生成证书")
 		return
 	}
+	// 审计中-01：host 会被拼进节点上以 root 执行的 openssl 命令。这里做严格的
+	// shell 安全白名单（域名/IP 字面量），任何 $、`、;、|、&、引号、空格等一律拒绝。
+	if !shellSafeVPNHost(host) {
+		writeError(w, http.StatusConflict, "节点域名包含非法字符（只允许字母、数字、点、连字符与 IP 字面量）")
+		return
+	}
 	certPEM, keyPEM := "", ""
 	switch strings.ToLower(strings.TrimSpace(node.CertMode)) {
 	case "internal_ca":
@@ -178,6 +184,10 @@ func (h *handlers) vpnAdminNodeDeploy(w http.ResponseWriter, r *http.Request) {
 }
 
 func buildVPNDeployScript(host, binaryURL, cfgJSON string, port int, certPEM, keyPEM string) string {
+	// 双保险：调用方已用 shellSafeVPNHost 校验；这里再兜底一次，绝不让 shell 元字符进脚本。
+	if !shellSafeVPNHost(host) {
+		host = "invalid.invalid"
+	}
 	certBlock := `if [ ! -s "$DIR/tls/cert.pem" ] || [ ! -s "$DIR/tls/key.pem" ]; then
   openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 90 \
     -subj "/CN=` + strings.ReplaceAll(host, `"`, ``) + `" \

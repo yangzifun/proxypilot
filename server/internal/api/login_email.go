@@ -47,18 +47,31 @@ func (h *handlers) loginEmailCodeSend(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "邮箱格式无效")
 		return
 	}
-	username, _, _, ok := h.findAdminByVerifiedEmail(r.Context(), email)
-	if !ok {
-		writeError(w, http.StatusNotFound, "该邮箱未绑定管理员账号或尚未通过验证")
+	// 审计低-04：发送登录验证码必须过人机验证（与 /api/login、/api/portal/send-code
+	// 保持一致），防止被用于邮件轰炸。
+	if err := h.verifyTurnstile(r, mapStr(body, "cf_turnstile_response", "")); err != nil {
+		writeError(w, http.StatusForbidden, err.Error())
 		return
 	}
 	if code, msg := h.checkEmailCodeRate(r.Context(), email, emailLoginPurpose); code != 0 {
 		writeError(w, code, msg)
 		return
 	}
+	// 审计低-04：不再对未绑定邮箱返回 404（可枚举管理员邮箱）；统一响应。
+	generic := map[string]any{
+		"success":     true,
+		"ttl_minutes": 10,
+		"message":     "如果该邮箱已绑定管理员账号，验证码将发送到邮箱",
+	}
+	username, _, _, ok := h.findAdminByVerifiedEmail(r.Context(), email)
+	if !ok {
+		writeJSON(w, http.StatusOK, generic)
+		return
+	}
 	code, err := h.issueEmailCode(r.Context(), email, username, emailLoginPurpose)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "生成验证码失败")
+		h.log.Error("生成验证码失败", "err", err)
+		writeJSON(w, http.StatusOK, generic)
 		return
 	}
 	ip := clientIP(r)
@@ -75,10 +88,10 @@ func (h *handlers) loginEmailCodeSend(w http.ResponseWriter, r *http.Request) {
 	intro += `<br><br>请输入下面的 6 位验证码完成登录。如非本人操作，请立即修改密码并检查登录记录。`
 	mailBody := emailHTML("管理后台登录验证码", intro, code, 10)
 	if err := h.sendMail(email, "【代理配置管理】登录验证码", mailBody); err != nil {
-		writeError(w, http.StatusBadGateway, "发送失败："+err.Error())
-		return
+		// 发信失败也不回显给调用方，避免通过不同响应推断邮箱是否绑定。
+		h.log.Warn("登录验证码邮件发送失败", "err", err)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"success": true, "ttl_minutes": 10})
+	writeJSON(w, http.StatusOK, generic)
 }
 
 // POST /api/login/email-code/verify

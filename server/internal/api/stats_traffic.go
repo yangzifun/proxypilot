@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"context"
@@ -47,14 +47,14 @@ func (h *handlers) ensureNodeStatsSecret(ctx context.Context, nodeID int64) stri
 		`SELECT COALESCE(stats_secret_enc,'') FROM singbox_nodes WHERE id = ?`, nodeID).Scan(&enc); err != nil {
 		return ""
 	}
-	if s := decryptAgentToken(h.agentKeySecret(), enc); s != "" {
+	if s := h.openAgentToken(enc); s != "" {
 		return s
 	}
 	secret := randomStatsSecret()
 	if secret == "" {
 		return ""
 	}
-	encNew, err := encryptAgentToken(h.agentKeySecret(), secret)
+	encNew, err := h.sealAgentToken(secret)
 	if err != nil {
 		return ""
 	}

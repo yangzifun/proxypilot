@@ -37,8 +37,37 @@ func (h *handlers) cdnCheckParams(ctx context.Context) (string, string) {
 	return strings.TrimSpace(sni), strings.TrimSpace(path)
 }
 
+// cdnTargetAllowed 解析目标地址并拒绝内网/保留地址（审计低-02：盲 SSRF）。
+//
+// 之前的检测会对数据库里的任意 address:port 发起 TCP/TLS/HTTP 请求，普通管理员
+// 可借此探测内网端口。这里在拨号前解析并拒绝任一私网/保留结果；解析失败也拒绝。
+func cdnTargetAllowed(ctx context.Context, addr string) bool {
+	addr = strings.TrimSpace(addr)
+	if addr == "" {
+		return false
+	}
+	if ip := net.ParseIP(addr); ip != nil {
+		return !isBlockedIP(ip)
+	}
+	lookupCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	ips, err := net.DefaultResolver.LookupIP(lookupCtx, "ip", addr)
+	if err != nil || len(ips) == 0 {
+		return false
+	}
+	for _, ip := range ips {
+		if isBlockedIP(ip) {
+			return false
+		}
+	}
+	return true
+}
+
 // probeCDNAddress 探测单个地址，返回是否可用、耗时、错误信息。
-func probeCDNAddress(addr string, port int, sni, path string) (bool, int, string) {
+func probeCDNAddress(ctx context.Context, addr string, port int, sni, path string) (bool, int, string) {
+	if !cdnTargetAllowed(ctx, addr) {
+		return false, 0, "目标地址不允许（内网/保留地址或无法解析）"
+	}
 	target := net.JoinHostPort(addr, strconv.Itoa(port))
 	start := time.Now()
 	dialer := &net.Dialer{Timeout: 3 * time.Second}
@@ -103,7 +132,7 @@ func (h *handlers) runCDNPreferChecks(ctx context.Context) ([]cdnCheckResult, er
 		fails := int(mapInt(row, "fail_count", 0))
 		enabled := mapInt(row, "enabled", 1)
 
-		ok, lat, msg := probeCDNAddress(addr, port, sni, path)
+		ok, lat, msg := probeCDNAddress(ctx, addr, port, sni, path)
 		res := cdnCheckResult{ID: id, OK: ok, Latency: lat, Error: msg}
 		okv := 0
 		if ok {

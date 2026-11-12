@@ -9,17 +9,26 @@ import (
 //go:embed assets/install.sh
 var installScriptBody string
 
+// siteOrigin 返回安装脚本里使用的对外基址。
+//
+// 安全约束（低-01）：优先使用配置的对外基址；否则从请求推导，且只有可信反代
+// 才采信 X-Forwarded-Proto/Host（防止伪造安装命令里的下载/伺服地址）。
 func (h *handlers) siteOrigin(r *http.Request) string {
+	if base := configuredSiteOrigin(); base != "" {
+		return base
+	}
 	scheme := "https"
-	if r.TLS == nil && strings.HasPrefix(r.Host, "localhost") {
+	if r.TLS == nil && (strings.HasPrefix(r.Host, "localhost") || strings.HasPrefix(r.Host, "127.0.0.1")) {
 		scheme = "http"
 	}
-	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
-		scheme = proto
-	}
 	host := r.Host
-	if fwd := r.Header.Get("X-Forwarded-Host"); fwd != "" {
-		host = fwd
+	if isTrustedProxyRequest(r) {
+		if proto := strings.TrimSpace(firstForwardedValue(r.Header.Get("X-Forwarded-Proto"))); proto != "" {
+			scheme = proto
+		}
+		if fwd := firstForwardedValue(r.Header.Get("X-Forwarded-Host")); fwd != "" {
+			host = fwd
+		}
 	}
 	return scheme + "://" + host
 }

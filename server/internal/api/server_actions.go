@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"net/http"
@@ -31,7 +31,7 @@ func (h *handlers) serverAction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		hint := mapStr(server, "agent_token_hint", "")
-		token := decryptAgentToken(h.agentKeySecret(), mapStr(server, "agent_token_enc", ""))
+		token := h.openAgentToken(mapStr(server, "agent_token_enc", ""))
 		if token == "" {
 			writeJSON(w, http.StatusConflict, map[string]any{
 				"success": false, "ok": false, "viewable": false, "reason": "not_recoverable",
@@ -58,7 +58,7 @@ func (h *handlers) serverAction(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusMethodNotAllowed, "Method Not Allowed")
 			return
 		}
-		token := decryptAgentToken(h.agentKeySecret(), mapStr(server, "agent_token_enc", ""))
+		token := h.openAgentToken(mapStr(server, "agent_token_enc", ""))
 		if token == "" {
 			writeError(w, http.StatusBadRequest, "无法生成安装命令：密钥不可查看，请先重置接入密钥")
 			return

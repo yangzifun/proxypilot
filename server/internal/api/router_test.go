@@ -60,8 +60,29 @@ func TestCORSHeadersAndPreflight(t *testing.T) {
 	if rr.Code != http.StatusNoContent {
 		t.Fatalf("预检状态码 = %d，期望 204", rr.Code)
 	}
-	if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "*" {
-		t.Fatalf("CORS = %q", got)
+	// 低-06：不再无条件返回 *；不带 Origin 或跨站 Origin 都不返回 CORS 头。
+	if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Fatalf("不应返回通配 CORS，got %q", got)
+	}
+
+	// 同源 Origin 才反射（前后端同源部署，不需要跨域）。
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodOptions, "/api/login", nil)
+	req.Host = "pp.example.com"
+	req.Header.Set("Origin", "https://pp.example.com")
+	newHandler().ServeHTTP(rr, req)
+	if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "https://pp.example.com" {
+		t.Fatalf("同源 Origin 应被反射，got %q", got)
+	}
+
+	// 跨站 Origin：不返回 CORS 头（浏览器侧会被拦）。
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodOptions, "/api/login", nil)
+	req.Host = "pp.example.com"
+	req.Header.Set("Origin", "https://evil.example.com")
+	newHandler().ServeHTTP(rr, req)
+	if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Fatalf("跨站 Origin 不应返回 CORS 头，got %q", got)
 	}
 }
 

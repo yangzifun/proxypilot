@@ -24,7 +24,7 @@ import (
 )
 
 // version 由构建脚本注入：-ldflags "-X main.version=v1.0.0"
-var version = "V1.2"
+var version = "V1.3"
 
 func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -61,12 +61,19 @@ func run(log *slog.Logger) error {
 
 	api.Version = version
 	api.EnsureAdminPassword(ctx, pool, cfg, log)
-	// 密钥持久化：JWT / Agent 密钥写入 app_settings，重启或容器重建后登录态与 Agent 令牌不失效
-	cfg.JWTSecret = api.EnsurePersistentSecret(ctx, pool, "jwt_secret", cfg.JWTSecret, 32, log)
-	cfg.AgentKeySecret = api.EnsurePersistentSecret(ctx, pool, "agent_key_secret", cfg.AgentKeySecret, 16, log)
+	// 密钥持久化：JWT / Agent 密钥写入 app_settings，重启后登录态与 Agent 令牌不失效
+	// 中-03：数据库存储用面板外部 KEK 加密（enc:v2:）；KEK 文件放在数据库之外。
+	secretBox := api.LoadSecretBox(cfg.SecretKeyFile, log)
+	cfg.JWTSecret = api.EnsurePersistentSecret(ctx, pool, "jwt_secret", cfg.JWTSecret, 32, secretBox, log)
+	cfg.AgentKeySecret = api.EnsurePersistentSecret(ctx, pool, "agent_key_secret", cfg.AgentKeySecret, 16, secretBox, log)
+	// 中-03/中-06：幂等重加密（明文/enc:v1: → enc:v2:），支持 PP_SECRET_AT_REST=decrypt 回滚。
+	api.MigrateSecretsAtRest(ctx, pool, secretBox, cfg.AgentKeySecret, cfg.SecretAtRest, log)
 	api.ReloadCDNPreferred(ctx, pool)
 	if len(cfg.JWTSecret) < 32 && !cfg.AllowDevSecret {
 		return errors.New("JWT 密钥不足 32 字节：请设置 PP_JWT_SECRET，或确认 app_settings.jwt_secret 存在；开发环境可设 PP_DEV=1")
+	}
+	if len(cfg.AgentKeySecret) < 16 && !cfg.AllowDevSecret {
+		return errors.New("Agent 密钥不可用：请恢复 secret.key（静态加密 KEK）或设置 PP_AGENT_KEY_SECRET；避免覆盖库内已加密的密钥")
 	}
 	api.EnsureLocalServer(ctx, pool, log)
 	api.StartLocalMonitor(ctx, pool, log)

@@ -348,6 +348,10 @@ func collectLocal() localSample {
 	return out
 }
 
+// localConfigFileMode 本机下发配置的文件权限：可能含用户 UUID/密码/私钥，
+// 审计低-03 要求按 0600 写入（面板以 root 运行，服务读取不受影响）。
+func localConfigFileMode() os.FileMode { return 0o600 }
+
 func readFileTrim(path string) string {
 	b, _ := os.ReadFile(path)
 	return string(b)
@@ -447,9 +451,12 @@ func (h *handlers) execLocalTask(ctx context.Context, typ string, configID int64
 			return false, "创建目录失败：" + err.Error(), 1
 		}
 		if _, err := os.Stat(path); err == nil {
-			_ = os.WriteFile(path+".bak", mustRead(path), 0o644)
+			_ = os.WriteFile(path+".bak", mustRead(path), 0o600)
 		}
-		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		// 审计低-03：下发配置可能含用户 UUID/密码/私钥，本机部署按 0600 写入
+		// （服务由 root 运行，无需 group/other 读）。Agent 节点侧的权限收紧
+		// 需要 Agent 发版支持，见 fix-security-2-report.md。
+		if err := os.WriteFile(path, []byte(content), localConfigFileMode()); err != nil {
 			return false, "写入失败：" + err.Error(), 1
 		}
 		out := "已写入 " + path

@@ -67,6 +67,11 @@ func (h *handlers) clientAuthStart(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// clientAuthTokenWindow 授权通过后，令牌可被客户端领取的时间窗口。
+// 审计中-07：之前 approved 状态会「永久」反复返回令牌；现在只给 60 秒窗口，
+// 足够客户端轮询拿到（客户端约 2 秒一次），窗口过后状态置 expired 并清除 token。
+const clientAuthTokenWindow = 60 * time.Second
+
 // GET /api/client-auth/poll?code=
 func (h *handlers) clientAuthPoll(w http.ResponseWriter, r *http.Request) {
 	code := strings.TrimSpace(r.URL.Query().Get("code"))
@@ -75,16 +80,27 @@ func (h *handlers) clientAuthPoll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var status, token, email string
-	var expires int64
+	var expires, approvedAt int64
 	err := h.db.QueryRowContext(r.Context(),
-		`SELECT status, token, email, expires_at FROM client_auth_codes WHERE code = ?`, code).
-		Scan(&status, &token, &email, &expires)
+		`SELECT status, token, email, expires_at, COALESCE(approved_at,0) FROM client_auth_codes WHERE code = ?`, code).
+		Scan(&status, &token, &email, &expires, &approvedAt)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "授权码不存在")
 		return
 	}
-	if status == "pending" && time.Now().UnixMilli() > expires {
+	original := status
+	now := time.Now().UnixMilli()
+	if now > expires {
+		if status == "pending" || status == "approved" {
+			status = "expired"
+		}
+	} else if status == "approved" && approvedAt > 0 && now-approvedAt > clientAuthTokenWindow.Milliseconds() {
+		// 领取窗口已过：令牌作废，避免「授权码泄露后可无限期换取门户令牌」。
 		status = "expired"
+	}
+	if status != original {
+		_, _ = h.db.ExecContext(r.Context(),
+			`UPDATE client_auth_codes SET status = ?, token = '' WHERE code = ?`, status, code)
 	}
 	out := map[string]any{"status": status, "expires_at": expires}
 	if status == "approved" {

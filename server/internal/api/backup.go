@@ -182,7 +182,7 @@ func backupRedactRow(table string, obj map[string]any) int {
 		if !ok || s == "" {
 			continue
 		}
-		if strings.HasPrefix(s, agentKeyVersion) {
+		if strings.HasPrefix(s, "enc:v") {
 			obj[col] = ""
 			n++
 		}

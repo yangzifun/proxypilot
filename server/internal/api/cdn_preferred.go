@@ -126,6 +126,11 @@ func (h *handlers) cdnPreferredCreate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "地址不能为空")
 		return
 	}
+	// 审计低-02：检测会对该地址发起真实连接，禁止保存内网/保留地址。
+	if !cdnTargetAllowed(r.Context(), addr) {
+		writeError(w, http.StatusBadRequest, "地址不允许（内网/保留地址或无法解析）")
+		return
+	}
 	if body.Port <= 0 {
 		body.Port = 443
 	}
@@ -174,8 +179,13 @@ func (h *handlers) cdnPreferredUpdate(w http.ResponseWriter, r *http.Request) {
 		args = append(args, strings.TrimSpace(*body.Group))
 	}
 	if body.Address != nil {
+		addr := strings.TrimSpace(*body.Address)
+		if !cdnTargetAllowed(r.Context(), addr) {
+			writeError(w, http.StatusBadRequest, "地址不允许（内网/保留地址或无法解析）")
+			return
+		}
 		sets = append(sets, "address = ?")
-		args = append(args, strings.TrimSpace(*body.Address))
+		args = append(args, addr)
 	}
 	if body.Port != nil {
 		sets = append(sets, "port = ?")
@@ -260,6 +270,11 @@ func (h *handlers) cdnPreferredImport(w http.ResponseWriter, r *http.Request) {
 		}
 		host = strings.TrimSpace(host)
 		if host == "" {
+			skipped++
+			continue
+		}
+		// 审计低-02：批量导入同样禁止内网/保留地址（检测会真实发起连接）。
+		if !cdnTargetAllowed(r.Context(), host) {
 			skipped++
 			continue
 		}

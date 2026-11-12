@@ -46,27 +46,69 @@ type storedCert struct {
 
 func (h *handlers) loadCert(ctx context.Context) (*storedCert, error) {
 	var c storedCert
+	var keyEnc string
 	err := h.db.QueryRowContext(ctx,
-		`SELECT domains, source, cert_pem, key_pem, chain_pem, fingerprint, not_before, not_after, updated_at
+		`SELECT domains, source, cert_pem, COALESCE(key_pem,''), chain_pem, fingerprint, not_before, not_after, updated_at,
+		        COALESCE(key_pem_enc,'')
 		   FROM vpn_certificates WHERE id = 1`).
-		Scan(&c.Domains, &c.Source, &c.CertPEM, &c.KeyPEM, &c.ChainPEM, &c.Fingerprint, &c.NotBefore, &c.NotAfter, &c.UpdatedAt)
+		Scan(&c.Domains, &c.Source, &c.CertPEM, &c.KeyPEM, &c.ChainPEM, &c.Fingerprint, &c.NotBefore, &c.NotAfter, &c.UpdatedAt, &keyEnc)
+	if err != nil && strings.Contains(strings.ToLower(err.Error()), "unknown column") {
+		// 迁移 0050 尚未执行：退回旧查询（明文 key_pem）。
+		keyEnc = ""
+		err = h.db.QueryRowContext(ctx,
+			`SELECT domains, source, cert_pem, COALESCE(key_pem,''), chain_pem, fingerprint, not_before, not_after, updated_at
+			   FROM vpn_certificates WHERE id = 1`).
+			Scan(&c.Domains, &c.Source, &c.CertPEM, &c.KeyPEM, &c.ChainPEM, &c.Fingerprint, &c.NotBefore, &c.NotAfter, &c.UpdatedAt)
+	}
 	if err != nil {
 		return nil, err
+	}
+	// 中-06：私钥优先从 key_pem_enc（外部 KEK 加密）读取；兼容旧明文 key_pem。
+	if keyEnc != "" {
+		c.KeyPEM = h.box.Open(keyEnc)
+	} else if c.KeyPEM != "" {
+		c.KeyPEM = h.decodeAtRestValue(c.KeyPEM)
 	}
 	return &c, nil
 }
 
 func (h *handlers) saveCert(ctx context.Context, c *storedCert) error {
 	now := time.Now().UnixMilli()
+	keyPlain := c.KeyPEM
+	keyEnc := ""
+	storePEM := keyPlain
+	if h.box.Enabled() && keyPlain != "" {
+		enc, err := h.box.Seal(keyPlain)
+		if err != nil {
+			return err
+		}
+		keyEnc = enc
+		storePEM = "" // 明文列清空，只保留密文
+	}
 	_, err := h.db.ExecContext(ctx,
-		`INSERT INTO vpn_certificates (id, domains, source, provider, cert_pem, key_pem, chain_pem,
+		`INSERT INTO vpn_certificates (id, domains, source, provider, cert_pem, key_pem, key_pem_enc, chain_pem,
 		        fingerprint, not_before, not_after, status, created_at, updated_at)
-		 VALUES (1, ?, ?, 'cloudflare', ?, ?, ?, ?, ?, ?, 'valid', ?, ?)
+		 VALUES (1, ?, ?, 'cloudflare', ?, ?, ?, ?, ?, ?, ?, 'valid', ?, ?)
 		 ON DUPLICATE KEY UPDATE domains = VALUES(domains), source = VALUES(source),
-		        cert_pem = VALUES(cert_pem), key_pem = VALUES(key_pem), chain_pem = VALUES(chain_pem),
+		        cert_pem = VALUES(cert_pem), key_pem = VALUES(key_pem), key_pem_enc = VALUES(key_pem_enc),
+		        chain_pem = VALUES(chain_pem),
 		        fingerprint = VALUES(fingerprint), not_before = VALUES(not_before),
 		        not_after = VALUES(not_after), status = 'valid', updated_at = VALUES(updated_at)`,
-		c.Domains, c.Source, c.CertPEM, c.KeyPEM, c.ChainPEM, c.Fingerprint, c.NotBefore, c.NotAfter, now, now)
+		c.Domains, c.Source, c.CertPEM, storePEM, keyEnc, c.ChainPEM, c.Fingerprint, c.NotBefore, c.NotAfter, now, now)
+	if err != nil && strings.Contains(strings.ToLower(err.Error()), "unknown column") {
+		// 迁移 0050 尚未执行（AutoMigrate=false 的旧库）：退回明文列，保证证书功能可用，
+		// 但会在日志里明确告警，提示尽快执行迁移。
+		h.log.Warn("vpn_certificates.key_pem_enc 不存在，已回退明文存储；请执行迁移 0050", "err", err)
+		_, err = h.db.ExecContext(ctx,
+			`INSERT INTO vpn_certificates (id, domains, source, provider, cert_pem, key_pem, chain_pem,
+			        fingerprint, not_before, not_after, status, created_at, updated_at)
+			 VALUES (1, ?, ?, 'cloudflare', ?, ?, ?, ?, ?, ?, 'valid', ?, ?)
+			 ON DUPLICATE KEY UPDATE domains = VALUES(domains), source = VALUES(source),
+			        cert_pem = VALUES(cert_pem), key_pem = VALUES(key_pem), chain_pem = VALUES(chain_pem),
+			        fingerprint = VALUES(fingerprint), not_before = VALUES(not_before),
+			        not_after = VALUES(not_after), status = 'valid', updated_at = VALUES(updated_at)`,
+			c.Domains, c.Source, c.CertPEM, keyPlain, c.ChainPEM, c.Fingerprint, c.NotBefore, c.NotAfter, now, now)
+	}
 	return err
 }
 

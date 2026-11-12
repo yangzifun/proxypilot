@@ -20,6 +20,7 @@ const (
 	settingAgentMeshEnabled = "agent_mesh_enabled"
 	settingAgentMeshCenter = "agent_mesh_center"
 	settingAgentMeshSync = "agent_mesh_sync"
+	settingAgentMeshTLSVerify = "agent_mesh_tls_verify"
 	settingAgentBinaryBase = "agent_binary_base_url"
 	settingComponentBase   = "component_base_url"
 	// sing-box 组件的版本与各架构 sha256：安装时下发给节点做校验
@@ -72,6 +73,7 @@ var settingDefs = []settingDef{
 	{Key: settingAgentMeshEnabled, Bool: true},
 	{Key: settingAgentMeshCenter},
 	{Key: settingAgentMeshSync, Bool: true},
+	{Key: settingAgentMeshTLSVerify, Bool: true},
 	{Key: settingAgentBinaryBase},
 	{Key: settingComponentBase},
 	{Key: settingComponentVersion},
@@ -150,8 +152,12 @@ func (h *handlers) loadAppSettings(ctx context.Context) map[string]string {
 
 func (h *handlers) settingValue(ctx context.Context, key string) string {
 	v := strings.TrimSpace(h.loadAppSettings(ctx)[key])
+	if strings.HasPrefix(v, secretAtRestVersion) {
+		// 中-03：敏感设置用外部 KEK 加密（enc:v2:）；解密失败视为未设置（回落环境变量）
+		return h.box.Open(v)
+	}
 	if strings.HasPrefix(v, agentKeyVersion) {
-		// 敏感设置以 AES-GCM 密文存储；解密失败视为未设置（回落环境变量）
+		// 旧版加密存储（KEK 与密文同库），仅用于兼容历史数据
 		return decryptAgentToken(h.agentKeySecret(), v)
 	}
 	return v
@@ -308,8 +314,8 @@ func (h *handlers) putSetting(ctx context.Context, key, value string) error {
 }
 
 func (h *handlers) saveSetting(ctx context.Context, key, value string) error {
-	if value != "" && isSecretSetting(key) && !strings.HasPrefix(value, agentKeyVersion) {
-		enc, err := encryptAgentToken(h.agentKeySecret(), value)
+	if value != "" && isSecretSetting(key) && !strings.HasPrefix(value, agentKeyVersion) && !strings.HasPrefix(value, secretAtRestVersion) {
+		enc, err := h.encodeAtRestValue(value)
 		if err != nil {
 			return err
 		}

@@ -28,6 +28,8 @@ type Config struct {
 	SuperAdmin string
 
 	// AdminTokenTTL 管理端登录有效期；PortalTokenTTL 用户中心登录有效期。
+	// 审计中-07：管理端默认从 168h 收紧到 24h，门户从 720h 收紧到 168h；
+	// 仍可用 PP_ADMIN_TOKEN_TTL_HOURS / PP_PORTAL_TOKEN_TTL_HOURS 覆盖。
 	AdminTokenTTL  time.Duration
 	PortalTokenTTL time.Duration
 	// AdminPassword 首次启动时若 admin 仍是默认口令，用它重置（生产必配）。
@@ -88,6 +90,14 @@ type Config struct {
 	TurnstileSiteKey string
 	// AgentBinaryBaseURL Agent 二进制与 manifest.json 的基址。
 	AgentBinaryBaseURL string
+	// TrustedProxies 可信反代网段（CIDR/IP，逗号分隔）。为空时使用内置 Cloudflare
+	// 网段 + 回环地址；只有来自这些地址的请求才采信 X-Forwarded-* / CF-Connecting-IP。
+	TrustedProxies []string
+	// SecretKeyFile 静态加密 KEK 文件路径（0600）。为空时使用可执行文件同目录的
+	// secret.key；文件不存在会自动生成（审计中-03/中-06）。
+	SecretKeyFile string
+	// SecretAtRest 静态加密模式：auto（默认，迁移+加密）/ decrypt（回滚：解密回明文）/ off。
+	SecretAtRest string
 }
 
 // Load 从环境变量加载配置。
@@ -98,8 +108,8 @@ func Load() (Config, error) {
 		MySQLDSN:            strings.TrimSpace(os.Getenv("PP_MYSQL_DSN")),
 		JWTSecret:           os.Getenv("PP_JWT_SECRET"),
 		SuperAdmin:          env("PP_SUPER_ADMIN", "admin"),
-		AdminTokenTTL:       envHours("PP_ADMIN_TOKEN_TTL_HOURS", 168),
-		PortalTokenTTL:      envHours("PP_PORTAL_TOKEN_TTL_HOURS", 720),
+		AdminTokenTTL:       envHours("PP_ADMIN_TOKEN_TTL_HOURS", 24),
+		PortalTokenTTL:      envHours("PP_PORTAL_TOKEN_TTL_HOURS", 168),
 		AdminPassword:       strings.TrimSpace(os.Getenv("PP_ADMIN_PASSWORD")),
 		AutoMigrate:         envBool("PP_AUTO_MIGRATE", true),
 		TurnstileSecret:     os.Getenv("PP_TURNSTILE_SECRET"),
@@ -137,6 +147,9 @@ func Load() (Config, error) {
 		R2Endpoint:          strings.TrimRight(strings.TrimSpace(os.Getenv("PP_R2_ENDPOINT")), "/"),
 		CDNBaseURL:          strings.TrimRight(strings.TrimSpace(os.Getenv("PP_CDN_BASE_URL")), "/"),
 		PublicBaseURL:       strings.TrimRight(firstNonEmpty(os.Getenv("PP_PUBLIC_BASE_URL"), os.Getenv("PUBLIC_BASE_URL")), "/"),
+		TrustedProxies:      splitCSV(os.Getenv("PP_TRUSTED_PROXIES")),
+		SecretKeyFile:       strings.TrimSpace(os.Getenv("PP_SECRET_KEY_FILE")),
+		SecretAtRest:        strings.ToLower(strings.TrimSpace(env("PP_SECRET_AT_REST", "auto"))),
 	}
 	if err := c.validate(); err != nil {
 		return c, err
@@ -182,6 +195,17 @@ func envBool(key string, fallback bool) bool {
 		return fallback
 	}
 	return b
+}
+
+// splitCSV 拆分逗号分隔列表并去掉空项（用于 PP_TRUSTED_PROXIES）。
+func splitCSV(raw string) []string {
+	var out []string
+	for _, part := range strings.Split(raw, ",") {
+		if s := strings.TrimSpace(part); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // envHours 读取小时数环境变量并转为 Duration（<=0 时使用默认值）。

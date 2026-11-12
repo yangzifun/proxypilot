@@ -80,10 +80,39 @@ func TestAtoiDefault(t *testing.T) {
 
 func TestRequestOriginHonoursForwardedHeaders(t *testing.T) {
 	r := httptest.NewRequest("GET", "http://internal:8080/api/portal/uuids", nil)
+	// 低-01：只有来自可信反代（这里是回环）的请求才采信 X-Forwarded-*。
+	r.RemoteAddr = "127.0.0.1:12345"
 	r.Header.Set("X-Forwarded-Proto", "https")
 	r.Header.Set("X-Forwarded-Host", "pp.example.com")
 	if got := requestOrigin(r); got != "https://pp.example.com" {
-		t.Fatalf("origin = %q", got)
+		t.Fatalf("可信反代 origin = %q", got)
+	}
+}
+
+func TestRequestOriginIgnoresForwardedHeadersFromUntrustedPeer(t *testing.T) {
+	r := httptest.NewRequest("GET", "http://internal:8080/api/portal/uuids", nil)
+	r.RemoteAddr = "203.0.113.9:4433"
+	r.Header.Set("X-Forwarded-Proto", "https")
+	r.Header.Set("X-Forwarded-Host", "evil.example.com")
+	if got := requestOrigin(r); got != "http://internal:8080" {
+		t.Fatalf("直连请求不应采信转发头，origin = %q", got)
+	}
+	if got := clientIP(r); got != "203.0.113.9" {
+		t.Fatalf("直连请求 clientIP = %q，应使用 RemoteAddr", got)
+	}
+}
+
+func TestClientIPTrustsCloudflareHeaderOnlyFromTrustedPeer(t *testing.T) {
+	r := httptest.NewRequest("GET", "/api/login", nil)
+	r.RemoteAddr = "127.0.0.1:12345"
+	r.Header.Set("CF-Connecting-IP", "198.51.100.7")
+	if got := clientIP(r); got != "198.51.100.7" {
+		t.Fatalf("可信反代 clientIP = %q", got)
+	}
+	r.RemoteAddr = "203.0.113.9:4433"
+	r.Header.Set("CF-Connecting-IP", "198.51.100.7")
+	if got := clientIP(r); got != "203.0.113.9" {
+		t.Fatalf("非可信来源应忽略 CF-Connecting-IP，got %q", got)
 	}
 }
 

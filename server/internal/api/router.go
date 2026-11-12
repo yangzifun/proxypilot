@@ -21,7 +21,11 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 		db:     pool,
 		log:    log,
 		legacy: &http.Client{Timeout: 60 * time.Second},
+		box:    LoadSecretBox(cfg.SecretKeyFile, log),
 	}
+	// 低-01：转发头只信任可信反代；对外基址配置优先。
+	configureTrustedProxies(cfg.TrustedProxies)
+	configureSitePublicOrigin(cfg.PublicBaseURL)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", h.health)
@@ -54,7 +58,7 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /api/vpn/cert/status", h.authed(authOpts{}, h.vpnCertStatus))
 	mux.HandleFunc("POST /api/vpn/cert/issue", h.authed(authOpts{}, h.vpnCertIssue))
 	mux.HandleFunc("POST /api/vpn/cert/distribute", h.authed(authOpts{}, h.vpnCertDistribute))
-	mux.HandleFunc("GET /api/vpn/cert/download", h.authed(authOpts{}, h.vpnCertDownload))
+	mux.HandleFunc("GET /api/vpn/cert/download", h.authed(authOpts{superOnly: true}, h.vpnCertDownload))
 	mux.HandleFunc("GET /admin/certs", h.vpnCertPage)
 	mux.HandleFunc("GET /api/vpn/ca.crt", h.vpnPublicCACert)
 	mux.HandleFunc("POST /api/admin/vpn/mesh/batch", h.authed(authOpts{}, h.vpnAdminMeshBatch))
@@ -472,6 +476,8 @@ type handlers struct {
 	db     *sql.DB
 	log    *slog.Logger
 	legacy *http.Client
+	// box 是面板外部 KEK（静态加密，中-03/中-06）；nil 表示未启用。
+	box *secretBox
 
 	settingsMu sync.RWMutex
 	settings   map[string]string

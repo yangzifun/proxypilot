@@ -95,11 +95,20 @@ func (h *handlers) settingsAPI(w http.ResponseWriter, r *http.Request) {
 				v = b
 			}
 			switch key {
-			case settingPublicBaseURL, settingOIDCIssuer, settingComponentBase, settingAgentBinaryBase:
+			case settingPublicBaseURL, settingOIDCIssuer:
 				if v != "" {
 					u, err := url.Parse(v)
 					if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 						writeError(w, http.StatusBadRequest, key+" 必须是 http(s) URL")
+						return
+					}
+				}
+			case settingComponentBase, settingAgentBinaryBase:
+				// 审计中-02/低-02：分发基址是「把二进制交给全部节点」的信任入口，
+				// 只允许 https 公网地址（禁止明文、userinfo 与内网/回环字面量）。
+				if v != "" {
+					if err := validateDistributionURL(v); err != nil {
+						writeError(w, http.StatusBadRequest, key+" "+err.Error())
 						return
 					}
 				}

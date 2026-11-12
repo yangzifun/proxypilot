@@ -55,23 +55,22 @@ type agentServer struct {
 	AgentKeyUsedAt  int64
 }
 
-// agentAuthenticate 复刻 Worker 的令牌提取顺序：Bearer → X-Agent-Token → body.token → ?token=。
-func (h *handlers) agentAuthenticate(r *http.Request, body map[string]any) (*agentServer, int, string) {
-	raw := ""
+// agentTokenFromRequest 只从请求头提取 Agent 接入令牌。
+//
+// 审计中-04：旧实现还会从 body.token 与 ?token= 读取令牌，导致令牌进入访问日志、
+// 反向代理日志、浏览器/Referer 历史，泄露面被放大。节点上运行的是 Agent 1.1，
+// 它统一使用 X-Agent-Token 头（install.sh 的 keycheck/bootstrap 同样用 Header），
+// 因此这里移除 URL/body 兼容路径 —— 已部署节点不受影响。
+func agentTokenFromRequest(r *http.Request) string {
 	if authz := strings.TrimSpace(r.Header.Get("Authorization")); strings.HasPrefix(authz, "Bearer ") {
-		raw = strings.TrimSpace(strings.TrimPrefix(authz, "Bearer "))
+		return strings.TrimSpace(strings.TrimPrefix(authz, "Bearer "))
 	}
-	if raw == "" {
-		raw = strings.TrimSpace(r.Header.Get("X-Agent-Token"))
-	}
-	if raw == "" && body != nil {
-		if v, ok := body["token"].(string); ok {
-			raw = strings.TrimSpace(v)
-		}
-	}
-	if raw == "" {
-		raw = strings.TrimSpace(r.URL.Query().Get("token"))
-	}
+	return strings.TrimSpace(r.Header.Get("X-Agent-Token"))
+}
+
+// agentAuthenticate 校验 Agent 令牌（Bearer 或 X-Agent-Token 头）。
+func (h *handlers) agentAuthenticate(r *http.Request, body map[string]any) (*agentServer, int, string) {
+	raw := agentTokenFromRequest(r)
 	if raw == "" {
 		return nil, http.StatusUnauthorized, "缺少接入令牌"
 	}

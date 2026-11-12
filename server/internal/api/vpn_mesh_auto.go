@@ -2,12 +2,22 @@ package api
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/yzfn/proxypilot/server/internal/vpn"
 )
+
+// meshTLSArg 返回组网客户端的 TLS 参数：有平台 CA 时用 -ca 校验证书，
+// 否则才回退 -insecure（仅在未配置 CA 且显式关闭校验时）。
+func meshTLSArg(verify bool, caPEM string) string {
+	if verify && strings.TrimSpace(caPEM) != "" {
+		return "-ca /etc/proxypilot/mesh/ca.crt"
+	}
+	return "-insecure"
+}
 
 // autoMeshTask 在 Agent 轮询时自动为新服务器下发组网客户端（无需手工部署）。
 func (h *handlers) autoMeshTask(ctx context.Context, srv *agentServer) {
@@ -54,16 +64,34 @@ func (h *handlers) autoMeshTaskForce(ctx context.Context, srv *agentServer, forc
 	}
 
 	endpoints := meshEndpoints(h.settingValue(ctx, settingAgentMeshCenter))
+	// 审计中-05：组网客户端默认校验 TLS（-ca <平台 CA>），不再使用 -insecure。
+	// 前提：节点上的 pp-mesh-client 必须是支持 -ca 参数的版本（vpnclient ≥1.0）；
+	// 老节点不会被自动改动，只有新建/强制重下发组网时才会用新 unit。若上游分发
+	// 目录里仍是旧客户端，可把 agent_mesh_tls_verify 设为 0 临时回退。
+	tlsArg := "-insecure"
+	caBlock := ""
+	if h.settingBool(ctx, settingAgentMeshTLSVerify, true) {
+		if ca, cerr := h.vpnCA(ctx); cerr == nil && len(ca.CertPEM) > 0 {
+			caB64 := base64.StdEncoding.EncodeToString(ca.CertPEM)
+			caBlock = "printf '%s' " + caB64 + " | base64 -d > /etc/proxypilot/mesh/ca.crt\n" +
+				"chmod 600 /etc/proxypilot/mesh/ca.crt\n"
+			tlsArg = meshTLSArg(true, string(ca.CertPEM))
+		} else {
+			h.log.Warn("组网客户端未取得平台 CA，暂不能启用 TLS 校验（本次仍使用 -insecure）", "server", srv.ID)
+		}
+	} else {
+		h.log.Warn("agent_mesh_tls_verify=0：组网客户端使用 -insecure（不推荐）", "server", srv.ID)
+	}
 	unit := fmt.Sprintf(`[Unit]
 Description=ProxyPilot mesh client
 After=network-online.target
 [Service]
 Type=simple
-ExecStart=/bin/sh -c "exec /opt/proxypilot/mesh/pp-mesh-client -mesh-token \"$(cat /etc/proxypilot/mesh.token)\" -mesh-ip %s -mesh-cidr 10.99.0.0/16 -mesh-tun ppmesh0 -mesh-endpoint %s -mesh-sni vpncenter.yzfn.top -insecure"
+ExecStart=/bin/sh -c "exec /opt/proxypilot/mesh/pp-mesh-client -mesh-token \"$(cat /etc/proxypilot/mesh.token)\" -mesh-ip %s -mesh-cidr 10.99.0.0/16 -mesh-tun ppmesh0 -mesh-endpoint %s -mesh-sni vpncenter.yzfn.top %s"
 Restart=always
 RestartSec=3
 [Install]
-WantedBy=multi-user.target`, ip, endpoints)
+WantedBy=multi-user.target`, ip, endpoints, tlsArg)
 	script := fmt.Sprintf(`set -e
 mkdir -p /opt/proxypilot/mesh /etc/proxypilot
 curl -fsSL https://proxypilot.yangzifun.org/agent-dist/pp-mesh-client -o /tmp/pp-mesh-client.new
@@ -71,6 +99,7 @@ chmod 755 /tmp/pp-mesh-client.new
 mv -f /tmp/pp-mesh-client.new /opt/proxypilot/mesh/pp-mesh-client
 printf '%%s' %s > /etc/proxypilot/mesh.token
 chmod 600 /etc/proxypilot/mesh.token
+%s
 cat > /etc/systemd/system/pp-mesh-client.service <<'UNIT'
 %s
 UNIT
@@ -79,7 +108,7 @@ systemctl reset-failed pp-mesh-client 2>/dev/null || true
 systemctl enable pp-mesh-client
 systemctl restart pp-mesh-client
 sleep 3
-systemctl is-active pp-mesh-client`, token, unit)
+systemctl is-active pp-mesh-client`, token, caBlock, unit)
 
 	payload := map[string]any{
 		"command":       script,

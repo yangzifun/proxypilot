@@ -80,6 +80,33 @@ func (h *handlers) agentKeySecret() string {
 	return h.cfg.JWTSecret
 }
 
+// sealAgentToken 加密 Agent 令牌副本（展示/下载用）。
+// 中-03：启用外部 KEK 时写 enc:v2:，否则沿用旧 enc:v1:（KEK=agent_key_secret）。
+func (h *handlers) sealAgentToken(token string) (string, error) {
+	if h.box.Enabled() {
+		return h.box.Seal(token)
+	}
+	return encryptAgentToken(h.agentKeySecret(), token)
+}
+
+// openAgentToken 解密 Agent 令牌副本，兼容 enc:v2: / enc:v1: / 明文空值。
+func (h *handlers) openAgentToken(enc string) string {
+	enc = strings.TrimSpace(enc)
+	if enc == "" {
+		return ""
+	}
+	if strings.HasPrefix(enc, secretAtRestVersion) {
+		if h.box != nil {
+			return h.box.Open(enc)
+		}
+		return ""
+	}
+	if strings.HasPrefix(enc, agentKeyVersion) {
+		return decryptAgentToken(h.agentKeySecret(), enc)
+	}
+	return ""
+}
+
 // encryptAgentToken 输出 enc:v1:<base64(iv||ciphertext)>，与 Worker 格式一致。
 func encryptAgentToken(secret, token string) (string, error) {
 	key := hkdfSHA256([]byte(secret), []byte(agentKeySalt), []byte(agentKeyInfo), 32)
@@ -163,17 +190,21 @@ func (h *handlers) agentInstallCommand(ctx context.Context, origin, token string
 	return buildInstallCommand(base, origin, token)
 }
 
-// buildInstallCommand 是纯函数，便于单测：由「分发基址 + 伺服地址 + 密钥」拼命令。
+// buildInstallCommand 是纯函数，便于单测：由「分发基址 + 伺服地址」拼命令。
 //
 // base 非空 → 走设定路径下的 install.sh（对象存储桶）；
 // base 为空 → 回落到面板自身的 /api/agent/install.sh。
+//
+// 审计低-07：命令里不再拼接入令牌（命令行会进 history/ps/截图/聊天记录）；
+// install.sh 会通过 /dev/tty 交互读取令牌，需要自动化时可显式加 --key（自担风险）。
 func buildInstallCommand(base, origin, token string) string {
+	_ = token
 	base = strings.TrimRight(strings.TrimSpace(base), "/")
 	origin = strings.TrimRight(strings.TrimSpace(origin), "/")
 	if base != "" {
-		return fmt.Sprintf("curl -fsSL %s/install.sh | sudo sh -s -- --key %s --url %s", base, token, origin)
+		return fmt.Sprintf("curl -fsSL %s/install.sh | sudo sh -s -- --url %s", base, origin)
 	}
-	return fmt.Sprintf("curl -fsSL %s/api/agent/install.sh | sudo sh -s -- --key %s --url %s", origin, token, origin)
+	return fmt.Sprintf("curl -fsSL %s/api/agent/install.sh | sudo sh -s -- --url %s", origin, origin)
 }
 
 // firstNonEmptyStr 返回第一个非空字符串。

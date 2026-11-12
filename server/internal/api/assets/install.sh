@@ -5,11 +5,12 @@
 #  流程：架构识别 → keycheck（向 Worker 验证密钥）→ 取 <base>/manifest.json（版本 + sha256）
 #        → 从对象存储下载二进制 → sha256 强制校验 → 写配置(600) 与 systemd 服务 → 自动 doctor
 #
-#  安装：curl -fsSL <origin>/api/agent/install.sh | sudo sh -s -- --key ag_xxx
+#  安装：curl -fsSL <origin>/api/agent/install.sh | sudo sh -s -- --url <origin>
+#        （令牌交互输入；自动化可加 --key ag_xxx，但注意命令行历史泄露风险）
 #  卸载：sudo proxypilot-agent uninstall   （或 sh -s -- --uninstall）
 #
 #  可选参数：
-#    --key <密钥>        接入密钥（后台「服务器管理 → 生成密钥」获取；必填）
+#    --key <密钥>        接入密钥（交互方式：默认终端提示输入，不回显）
 #    --url <地址>        Worker 地址（默认用下载本脚本时的域名）
 #    --base <地址>       二进制所在对象存储基址（默认由 Worker 注入，可用 --base 覆盖）
 #    --sha256 <hex>      强制指定二进制 sha256（桶里暂时没有 manifest.json 时的兜底）
@@ -81,7 +82,18 @@ if [ "$UNINSTALL" = 1 ]; then
     exit 0
 fi
 
-[ -n "$KEY" ] || die '缺少 --key（安装命令形如：curl -fsSL <origin>/api/agent/install.sh | sudo sh -s -- --key ag_xxx）'
+# 审计低-07：安装命令不再把令牌放在命令行（会进 shell history / ps / 截图）。
+# 未通过 --key 提供时，从终端交互读取（curl | sh 的 stdin 是脚本本身，必须用 /dev/tty）。
+if [ -z "$KEY" ]; then
+    if [ -r /dev/tty ] && [ -t 0 ] 2>/dev/null || [ -r /dev/tty ]; then
+        printf '接入令牌（ag_...，后台「服务器管理」里复制；输入不回显）: ' > /dev/tty 2>/dev/null || true
+        if command -v stty >/dev/null 2>&1; then stty -echo </dev/tty 2>/dev/null || true; fi
+        IFS= read -r KEY </dev/tty || true
+        if command -v stty >/dev/null 2>&1; then stty echo </dev/tty 2>/dev/null || true; fi
+        printf '\n' >/dev/tty 2>/dev/null || true
+    fi
+fi
+[ -n "$KEY" ] || die '缺少接入令牌：可交互执行（终端会提示输入），或显式加 --key ag_xxx（注意命令行历史泄露风险）'
 case "$KEY" in ag_*) : ;; *) die '接入密钥格式无效（应以 ag_ 开头）' ;; esac
 [ -n "$ORIGIN" ] || die '缺少 Worker 地址（--url，或直接在后台复制完整安装命令）'
 
@@ -110,16 +122,25 @@ SRV_NAME=$(json_str "$CHECK" server_name)
 log "密钥校验通过（服务器：${SRV_NAME:-未知}）"
 
 # ---------------- 取 manifest（版本 + sha256） ----------------
-[ -n "$BINARY_BASE" ] || die '缺少二进制基址（--base，或让管理员在 Worker 配置 AGENT_BINARY_BASE_URL）'
-BINARY_BASE='https://s3.proxypilot.yangzifun.org/agent'
+# 审计低-07：之前这里无条件覆盖成写死的桶地址，导致 --base 与后台配置的分发基址
+# 全部失效；现在只在未指定时才使用默认值。
+[ -n "$BINARY_BASE" ] || BINARY_BASE='https://s3.proxypilot.yangzifun.org/agent'
 MANIFEST=$(curl -fsSL -m 30 "$BINARY_BASE/manifest.json" 2>/dev/null) || MANIFEST=''
 MANIFEST_FLAT=$(printf '%s' "$MANIFEST" | tr -d ' \t\r\n')   # 压缩空白：美化 / 紧凑两种格式都能解析
 VERSION=$(printf '%s' "$MANIFEST_FLAT" | sed -n 's/.*"version":"\([^"]*\)".*/\1/p' | head -n 1)
 SHA=$(printf '%s' "$MANIFEST_FLAT" | sed -n "s/.*\"linux-$ARCH\":[^}]*\"sha256\":\"\([0-9a-fA-F]*\)\".*/\1/p" | head -n 1)
-if [ -n "$SHA_OVERRIDE" ]; then
-    SHA=$SHA_OVERRIDE
-    log '使用 --sha256 指定的校验值'
-elif [ -z "$SHA" ]; then
+if [ -n "$SHA" ]; then
+    # manifest 可用时以 manifest 为准；--sha256 只允许与之一致，禁止静默覆盖。
+    if [ -n "$SHA_OVERRIDE" ]; then
+        SHA_L=$(printf '%s' "$SHA" | tr 'A-Z' 'a-z')
+        OVR_L=$(printf '%s' "$SHA_OVERRIDE" | tr 'A-Z' 'a-z')
+        [ "$SHA_L" = "$OVR_L" ] || die 'manifest 与 --sha256 不一致（可能被篡改或版本不对）：已中止安装'
+        log '--sha256 与 manifest 一致'
+    fi
+elif [ -n "$SHA_OVERRIDE" ]; then
+    SHA=$(printf '%s' "$SHA_OVERRIDE" | tr 'A-Z' 'a-z')
+    log 'manifest 不可用，使用 --sha256 指定的校验值'
+else
     die "无法从 $BINARY_BASE/manifest.json 取得 linux-$ARCH 的 sha256：请确认已上传 manifest.json（或改用 --sha256 <hex>）"
 fi
 [ -n "$VERSION" ] || VERSION='unknown'
@@ -271,47 +292,44 @@ if [ "$WITH_SINGBOX" = 1 ]; then
         fi
         SB_URL=$(json_str "$BOOT" binary_url)
         SB_SHA=$(json_str "$BOOT" binary_sha256)
+        # 审计中-02：组件（sing-box）必须校验 sha256；没有 sha256 就拒绝安装，
+        # 不再回退到「无校验的 GitHub 直连下载」。
+        if [ -n "$SB_URL" ] && [ -z "$SB_SHA" ]; then
+            log 'sing-box 下载地址缺少 sha256（后台未配置 component_sha_*）：拒绝安装未校验组件'
+            SB_URL=''
+        fi
         if [ -n "$SB_URL" ]; then
             SBTMP=$(mktemp 2>/dev/null || echo "/tmp/sing-box.$$")
             if curl -fsSL -m 300 -o "$SBTMP" "$SB_URL" && [ -s "$SBTMP" ]; then
-                SBOK=1
-                if [ -n "$SB_SHA" ]; then
-                    if command -v sha256sum >/dev/null 2>&1; then
-                        SBGOT=$(sha256sum "$SBTMP" | awk '{print $1}')
-                    else
-                        SBGOT=$(shasum -a 256 "$SBTMP" | awk '{print $1}')
-                    fi
-                    if [ "$(printf '%s' "$SBGOT" | tr 'A-Z' 'a-z')" != "$(printf '%s' "$SB_SHA" | tr 'A-Z' 'a-z')" ]; then
-                        log 'sing-box sha256 校验失败，已跳过（未安装）'
-                        SBOK=0
-                    fi
+                SBOK=0
+                if command -v sha256sum >/dev/null 2>&1; then
+                    SBGOT=$(sha256sum "$SBTMP" | awk '{print $1}')
+                elif command -v shasum >/dev/null 2>&1; then
+                    SBGOT=$(shasum -a 256 "$SBTMP" | awk '{print $1}')
+                elif command -v openssl >/dev/null 2>&1; then
+                    SBGOT=$(openssl dgst -sha256 "$SBTMP" 2>/dev/null | awk '{print $NF}')
+                else
+                    SBGOT=''
+                fi
+                if [ -z "$SBGOT" ]; then
+                    log '缺少 sha256 校验工具（sha256sum/shasum/openssl），拒绝安装 sing-box'
+                elif [ "$(printf '%s' "$SBGOT" | tr 'A-Z' 'a-z')" != "$(printf '%s' "$SB_SHA" | tr 'A-Z' 'a-z')" ]; then
+                    log 'sing-box sha256 校验失败，已跳过（未安装）'
+                else
+                    SBOK=1
                 fi
                 if [ "$SBOK" = 1 ]; then
                     if install -m 755 "$SBTMP" /usr/local/bin/sing-box 2>/dev/null; then :
                     else cp "$SBTMP" /usr/local/bin/sing-box && chmod 755 /usr/local/bin/sing-box; fi
-                    log 'sing-box 已安装：/usr/local/bin/sing-box'
+                    log 'sing-box 已安装并通过 sha256 校验：/usr/local/bin/sing-box'
                 fi
                 rm -f "$SBTMP"
             else
                 log "sing-box 下载失败（$SB_URL）：可稍后在后台推送时重试"
             fi
         else
-            log '未配置 sing-box 下载地址（AGENT_BINARY_BASE_URL），跳过二进制安装'
+            log '未配置可校验的 sing-box 下载地址（需同时配置 component_base_url 与 component_sha_*），跳过二进制安装'
         fi
-if [ ! -x /usr/local/bin/sing-box ]; then
-    SBARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
-    SBVER=1.14.4
-    SBTAR=$(mktemp -d 2>/dev/null || echo "/tmp/singbox.$$")
-    log "sing-box 从 GitHub 下载（linux-$SBARCH v$SBVER）..."
-    if curl -fsSL -m 300 -o "$SBTAR/sb.tgz" "https://github.com/SagerNet/sing-box/releases/download/v$SBVER/sing-box-$SBVER-linux-$SBARCH.tar.gz" \
-        && tar -xzf "$SBTAR/sb.tgz" -C "$SBTAR" 2>/dev/null \
-        && install -m 755 "$SBTAR/sing-box-$SBVER-linux-$SBARCH/sing-box" /usr/local/bin/sing-box 2>/dev/null; then
-        log 'sing-box 已从 GitHub 安装'
-    else
-        log 'sing-box GitHub 下载也失败（网络受限），稍后可在后台重试'
-    fi
-    rm -rf "$SBTAR"
-fi
         SB_UNIT="/etc/systemd/system/$SB_SERVICE.service"
         if [ -x /usr/local/bin/sing-box ] && [ ! -f "$SB_UNIT" ]; then
             {

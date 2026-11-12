@@ -45,40 +45,39 @@ func (h *handlers) portalSendCode(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "邮箱格式无效")
 		return
 	}
+	if code, msg := h.checkEmailCodeRate(r.Context(), email, portalLoginPurpose); code != 0 {
+		writeError(w, code, msg)
+		return
+	}
+	// 审计低-04：不再对「未绑定 UUID」返回 404（该响应可枚举账号）。
+	// 统一返回「如邮箱存在将发送验证码」，绑定与否由服务端内部决定。
+	generic := map[string]any{
+		"success":    true,
+		"message":    "如果该邮箱已绑定订阅，验证码将发送到邮箱",
+		"expires_in": int(emailCodeTTL.Seconds()),
+	}
 	var bound int
 	if err := h.db.QueryRowContext(r.Context(),
 		`SELECT COUNT(*) FROM uuid_info WHERE LOWER(email) = ?`, email).Scan(&bound); err != nil {
 		bound = 0
 	}
 	if bound == 0 {
-		writeError(w, http.StatusNotFound, "该邮箱还没有绑定任何 UUID，请联系管理员")
-		return
-	}
-	if code, msg := h.checkEmailCodeRate(r.Context(), email, portalLoginPurpose); code != 0 {
-		writeError(w, code, msg)
+		writeJSON(w, http.StatusOK, generic)
 		return
 	}
 	code, err := h.issueEmailCode(r.Context(), email, email, portalLoginPurpose)
 	if err != nil {
 		h.log.Error("写入验证码失败", "err", err)
-		writeError(w, http.StatusInternalServerError, "验证码写入失败")
+		writeJSON(w, http.StatusOK, generic)
 		return
 	}
 	ttl := int(emailCodeTTL.Minutes())
 	if err := h.sendMail(email, "【ProxyPilot】用户中心登录验证码",
 		emailHTML("用户中心登录验证码", "您正在登录 ProxyPilot 用户中心，请在页面中输入下面的 6 位验证码：", code, ttl)); err != nil {
-		if errors.Is(err, errMailNotConfigured) {
-			writeError(w, http.StatusServiceUnavailable, err.Error())
-			return
-		}
-		writeError(w, http.StatusBadGateway, "验证码邮件发送失败："+err.Error())
-		return
+		// 发信失败也不回显给调用方，避免通过不同响应推断邮箱是否绑定。
+		h.log.Warn("用户中心验证码邮件发送失败", "err", err)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"success":    true,
-		"email":      email,
-		"expires_in": int(emailCodeTTL.Seconds()),
-	})
+	writeJSON(w, http.StatusOK, generic)
 }
 
 // POST /api/portal/login
@@ -115,7 +114,7 @@ func (h *handlers) portalLogin(w http.ResponseWriter, r *http.Request) {
 		"token":        token,
 		"token_ttl_ms": h.cfg.PortalTokenTTL.Milliseconds(),
 		"email":        email,
-		"expires_in":   7 * 24 * 3600,
+		"expires_in":   int(h.cfg.PortalTokenTTL.Seconds()),
 	})
 }
 
@@ -336,7 +335,7 @@ func (h *handlers) portalEmailVerify(w http.ResponseWriter, r *http.Request) {
 		"email":        target,
 		"token":        token,
 		"token_ttl_ms": h.cfg.PortalTokenTTL.Milliseconds(),
-		"expires_in":   7 * 24 * 3600,
+		"expires_in":   int(h.cfg.PortalTokenTTL.Seconds()),
 	})
 }
 
@@ -349,17 +348,27 @@ func isDigits(s string) bool {
 	return true
 }
 
+// requestOrigin 返回对外访问基址（用于生成 Agent 安装命令、OIDC redirect_uri 等）。
+//
+// 安全约束（低-01）：
+//   - 配置了 site_public_base_url / PP_PUBLIC_BASE_URL 时直接使用，不信任请求头；
+//   - 否则只使用请求本身的 Host，X-Forwarded-* 仅在来源是可信反代时采信。
 func requestOrigin(r *http.Request) string {
+	if base := configuredSiteOrigin(); base != "" {
+		return base
+	}
 	scheme := "http"
 	if r.TLS != nil {
 		scheme = "https"
 	}
-	if p := r.Header.Get("X-Forwarded-Proto"); p != "" {
-		scheme = strings.TrimSpace(strings.Split(p, ",")[0])
-	}
 	host := r.Host
-	if h := r.Header.Get("X-Forwarded-Host"); h != "" {
-		host = strings.TrimSpace(strings.Split(h, ",")[0])
+	if isTrustedProxyRequest(r) {
+		if p := strings.TrimSpace(firstForwardedValue(r.Header.Get("X-Forwarded-Proto"))); p != "" {
+			scheme = p
+		}
+		if h := firstForwardedValue(r.Header.Get("X-Forwarded-Host")); h != "" {
+			host = h
+		}
 	}
 	return scheme + "://" + host
 }

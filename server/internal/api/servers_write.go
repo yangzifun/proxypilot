@@ -114,7 +114,7 @@ func (h *handlers) serverCreate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "生成接入密钥失败")
 		return
 	}
-	enc, err := encryptAgentToken(h.agentKeySecret(), token)
+	enc, err := h.sealAgentToken(token)
 	if err != nil {
 		h.log.Warn("加密接入密钥失败（仍会返回明文令牌）", "err", err)
 		enc = ""
@@ -158,7 +158,7 @@ func (h *handlers) serverCreate(w http.ResponseWriter, r *http.Request) {
 		"data":            row,
 		"agent_token":     token,
 		"install_command": h.agentInstallCommand(r.Context(), origin, token),
-		"message":         "请把 install_command 复制到服务器执行；密钥已加密保存，之后可在后台随时查看",
+		"message":         "请复制 install_command 到服务器执行；执行时会提示粘贴上面的接入密钥（密钥不再放在命令里，避免历史泄露）",
 		"probe":           nil,
 	})
 }
@@ -346,7 +346,7 @@ func (h *handlers) serverUpdate(w http.ResponseWriter, r *http.Request) {
 		token, err := generateAgentToken()
 		if err == nil {
 			newToken = token
-			enc, _ := encryptAgentToken(h.agentKeySecret(), token)
+			enc, _ := h.sealAgentToken(token)
 			add("agent_token_hash = ?", sha256Hex(token))
 			add("agent_token_hint = ?", agentTokenHint(token))
 			add("agent_token_enc = ?", enc)
@@ -480,7 +480,7 @@ func (h *handlers) serverRotateToken(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "生成接入密钥失败")
 		return
 	}
-	enc, _ := encryptAgentToken(h.agentKeySecret(), token)
+	enc, _ := h.sealAgentToken(token)
 	now := nowMillis()
 	if _, err := h.db.ExecContext(r.Context(),
 		`UPDATE servers SET agent_token_hash = ?, agent_token_hint = ?, agent_token_enc = ?,

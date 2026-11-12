@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"context"
@@ -470,8 +470,8 @@ func TestVpnCertDownloadOnlyAcceptsAuthorizationHeader(t *testing.T) {
 	fdb.onQuery = func(q string, args []driver.Value) (driver.Rows, error) {
 		if strings.Contains(q, "FROM vpn_certificates WHERE id = 1") {
 			return fakeRowsSet(
-				[]string{"domains", "source", "cert_pem", "key_pem", "chain_pem", "fingerprint", "not_before", "not_after", "updated_at"},
-				[]driver.Value{"*.example.com", "acme", "CERT-PEM", "KEY-PEM", "CHAIN-PEM", "fp", int64(1), int64(2), int64(3)},
+				[]string{"domains", "source", "cert_pem", "key_pem", "chain_pem", "fingerprint", "not_before", "not_after", "updated_at", "key_pem_enc"},
+				[]driver.Value{"*.example.com", "acme", "CERT-PEM", "KEY-PEM", "CHAIN-PEM", "fp", int64(1), int64(2), int64(3), ""},
 			), nil
 		}
 		return &fakeRows{}, nil

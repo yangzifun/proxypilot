@@ -321,12 +321,11 @@ func (h *handlers) masqueWarpRegisterAndStore(r *http.Request, uuid string) (int
 		}
 		return http.StatusBadGateway, fmt.Errorf("注册 WARP 失败：%v", err)
 	}
-	secret := h.agentKeySecret()
-	tokenEnc, err := encryptAgentToken(secret, p.Token)
+	tokenEnc, err := h.sealAgentToken(p.Token)
 	if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("加密 WARP 凭据失败")
 	}
-	privEnc, err := encryptAgentToken(secret, p.PrivateKey)
+	privEnc, err := h.sealAgentToken(p.PrivateKey)
 	if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("加密 WARP 私钥失败")
 	}
@@ -370,7 +369,7 @@ func (h *handlers) masqueWarpProfileRefresh(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	if old.Status == "active" {
-		if token := decryptAgentToken(h.agentKeySecret(), old.TokenEnc); token != "" {
+		if token := h.openAgentToken(old.TokenEnc); token != "" {
 			ctx, cancel := contextWithTimeout(r, 20*time.Second)
 			_ = masqueWarpClient.Delete(ctx, old.DeviceID, token)
 			cancel()
@@ -404,7 +403,7 @@ func (h *handlers) masqueWarpProfileRevoke(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	warning := ""
-	if token := decryptAgentToken(h.agentKeySecret(), p.TokenEnc); token != "" {
+	if token := h.openAgentToken(p.TokenEnc); token != "" {
 		ctx, cancel := contextWithTimeout(r, 20*time.Second)
 		if err := masqueWarpClient.Delete(ctx, p.DeviceID, token); err != nil {
 			warning = "远端设备删除失败，已在本地撤销：" + err.Error()
@@ -441,7 +440,7 @@ func (h *handlers) masqueWarpWriteConfig(w http.ResponseWriter, r *http.Request,
 		writeError(w, http.StatusInternalServerError, "读取授权失败")
 		return
 	}
-	priv := decryptAgentToken(h.agentKeySecret(), p.PrivateKeyEnc)
+	priv := h.openAgentToken(p.PrivateKeyEnc)
 	if priv == "" {
 		writeError(w, http.StatusInternalServerError, "WARP 私钥不可用，请刷新授权")
 		return

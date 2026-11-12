@@ -21,6 +21,11 @@ type meshHeartbeatBody struct {
 	LastError string `json:"last_error"`
 }
 
+// meshHeartbeatTokenAllowed 只有组网令牌（签发时 Network=mesh）可用于心跳。
+func meshHeartbeatTokenAllowed(network string) bool {
+	return strings.EqualFold(strings.TrimSpace(network), "mesh")
+}
+
 // POST /api/vpn/mesh/heartbeat — 组网客户端上报存活、RTT 与数据面状态（Bearer 组网 JWT）。
 func (h *handlers) vpnMeshHeartbeat(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -45,6 +50,14 @@ func (h *handlers) vpnMeshHeartbeat(w http.ResponseWriter, r *http.Request) {
 	}, time.Now())
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
+	// 审计低-05：组网心跳只接受「组网令牌」（签发时 Network=mesh）。
+	// VPN 连接令牌（Network=default）与组网令牌共用同一个签名器，若不区分，
+	// 普通 VPN 用户令牌就能伪造/污染 vpn_mesh_nodes 状态。
+	// 已部署节点的组网令牌一直带 Network=mesh，因此本校验不影响存量节点。
+	if !meshHeartbeatTokenAllowed(claims.Network) {
+		writeError(w, http.StatusForbidden, "非组网令牌")
 		return
 	}
 
@@ -111,6 +124,17 @@ func (h *handlers) vpnMeshHeartbeat(w http.ResponseWriter, r *http.Request) {
 
 	// 3) 老成员不存在时自动补登，避免"心跳一直 404、面板永远 down"。
 	if n == 0 && claims.NodeID > 0 && ip != "" {
+		// 审计低-05：补登前确认 NodeID 确实是存在的服务器，避免把任意 ID 注入组网表。
+		var serverExists int
+		if err := h.db.QueryRowContext(r.Context(),
+			`SELECT COUNT(*) FROM servers WHERE id = ?`, claims.NodeID).Scan(&serverExists); err != nil {
+			writeError(w, http.StatusInternalServerError, "校验服务器失败")
+			return
+		}
+		if serverExists == 0 {
+			writeError(w, http.StatusNotFound, "组网成员不存在")
+			return
+		}
 		domain := ""
 		if s, serr := h.vpnStore().LoadSettings(r.Context()); serr == nil {
 			domain = s.ServerMeshDomain

@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -461,7 +463,15 @@ func actorOf(r *http.Request) string {
 // 占位：认证中间件未注入用户名时保持兼容。
 type adminActorKey struct{}
 
+// vpnNodeDomainRe 严格域名白名单：只允许 [a-z0-9.-]，且每个 label 合法。
+// 审计中-01：domain 会被拼进节点上的 openssl 命令，之前只禁了空格/冒号/斜杠，
+// $(id).a.b 这类 payload 仍可通过并造成节点 root RCE。
+var vpnNodeDomainRe = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+
 // normalizeNodeDomain 规范化节点域名（用于证书 CN/SAN 与客户端连接）。
+//
+// 安全约束：只接受合法 DNS 主机名或 IP 字面量；任何 shell 元字符（$、`、;、|、&、
+// 引号、空格、括号等）一律拒绝。部署时还会用 shellSafeVPNHost 再校验一次。
 func normalizeNodeDomain(s string) (string, error) {
 	d := strings.ToLower(strings.TrimSpace(s))
 	d = strings.TrimPrefix(d, "https://")
@@ -469,13 +479,38 @@ func normalizeNodeDomain(s string) (string, error) {
 	if i := strings.IndexByte(d, '/'); i >= 0 {
 		d = d[:i]
 	}
+	d = strings.TrimSuffix(d, ".")
 	if d == "" {
 		return "", fmt.Errorf("domain 必填（用于节点证书与客户端连接）")
 	}
-	if len(d) > 255 || !strings.Contains(d, ".") || strings.ContainsAny(d, " :/") {
-		return "", fmt.Errorf("domain 不合法：%s", d)
+	if len(d) > 253 {
+		return "", fmt.Errorf("domain 过长")
+	}
+	if net.ParseIP(d) != nil {
+		return d, nil
+	}
+	if !vpnNodeDomainRe.MatchString(d) {
+		return "", fmt.Errorf("domain 不合法：只允许字母、数字、点和连字符，且必须是合法域名")
 	}
 	return d, nil
+}
+
+// shellSafeVPNHost 是部署脚本拼接前的二次白名单：允许域名与 IP 字面量（含 IPv6
+// 冒号/方括号/百分号 zone），不允许任何可能影响 shell 解析的字符。
+func shellSafeVPNHost(host string) bool {
+	host = strings.TrimSpace(host)
+	if host == "" || len(host) > 253 {
+		return false
+	}
+	for _, r := range host {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		case r == '.', r == '-', r == ':', r == '_', r == '%', r == '[', r == ']':
+		default:
+			return false
+		}
+	}
+	return true
 }
 // GET /api/admin/vpn/users/{uuid}/grants — 用户可用于连接的 VPN 节点及授权状态。
 func (h *handlers) vpnAdminUserGrants(w http.ResponseWriter, r *http.Request) {

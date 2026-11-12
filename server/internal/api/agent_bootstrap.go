@@ -7,6 +7,16 @@ import (
 	"strings"
 )
 
+// componentBinaryURL 返回组件下载地址；缺 sha256 时返回空串（fail-closed，不安装未校验组件）。
+func componentBinaryURL(base, sha, arch string) string {
+	base = strings.TrimRight(strings.TrimSpace(base), "/")
+	sha = strings.TrimSpace(sha)
+	if base == "" || sha == "" {
+		return ""
+	}
+	return base + "/sing-box-linux-" + arch
+}
+
 func singboxRuntimeConfig() (string, error) {
 	uuid := randomUUID()
 	ssKey := randomB64Key()
@@ -58,16 +68,19 @@ func (h *handlers) agentBootstrap(w http.ResponseWriter, r *http.Request) {
 		h.setting(r.Context(), settingComponentVersion, ""),
 		os.Getenv("SINGBOX_VERSION"),
 	))
-	binaryURL := ""
-	if base != "" {
-		binaryURL = base + "/sing-box-linux-" + arch
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	binaryURL := componentBinaryURL(base, sha, arch)
+	resp := map[string]any{
 		"ok": true, "server_id": srv.ID, "server_name": srv.Name, "arch": arch,
 		"binary_url": binaryURL, "binary_sha256": sha, "binary_version": version,
 		"target": "/etc/sing-box/sb.json", "service": "sing-box",
 		"cert_path": "/etc/sing-box/cert.crt", "key_path": "/etc/sing-box/private.key",
 		"config_b64":  base64.StdEncoding.EncodeToString([]byte(content)),
 		"server_time": nowMillis(),
-	})
+	}
+	// 审计中-02：组件分发必须可校验。缺少 sha256 时不下发下载地址（fail-closed），
+	// install.sh 与 Agent 都不会安装未校验的 sing-box。
+	if base != "" && sha == "" {
+		resp["warning"] = "component_sha_<arch> 未配置，已拒绝下发 sing-box 下载地址（无法校验完整性）"
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
