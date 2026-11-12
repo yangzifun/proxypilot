@@ -19,8 +19,10 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -266,12 +268,19 @@ type dnsRecord struct {
 	Value  string `json:"value"`
 	TTL    int    `json:"ttl"`
 	Note   string `json:"note"`
-	Status string `json:"status"` // ok / missing / provider_default / forward_mismatch / unknown
-	Actual string `json:"actual"` // 实际查到的值（便于排错）
+	Status string `json:"status"` // ok / provider_default / missing / unknown
+	Actual string `json:"actual"` // 真实查询到的原始值（PTR/MX 直接来自 DNS，便于排错）
+	Detail string `json:"detail"` // 附加说明（FCrDNS、MX 是否指向本机等），不参与主状态判定
 	Key    string `json:"key"`    // 记录标识，便于前端定位
 }
 
 // mailDNSGuide 生成发信所需的 DNS 记录指引，并实时校验。
+//
+// PTR 与 MX 一律「直接查 DNS 拿原始记录」：
+//   - PTR：反查本机公网 IP 的 in-addr.arpa，展示原始 PTR 主机名；状态只看反查结果
+//     （无 PTR / 服务商默认名 / 已设置域名），forward-confirmed 只写进 Detail 附注。
+//   - MX：直接查发信域名的 MX（priority + exchange），不靠正向解析推断；是否指向
+//     本机、是否与 PTR 主机名一致写进 Detail，缺失时在 Value 给出建议值。
 func (h *handlers) mailDNSGuide(domain, selector, publicB64, spfExtra string) []dnsRecord {
 	domain = strings.TrimSpace(domain)
 	if domain == "" {
@@ -305,22 +314,27 @@ func (h *handlers) mailDNSGuide(domain, selector, publicB64, spfExtra string) []
 		},
 	}
 
-	// 实时校验
+	// 实时校验 TXT
 	for i := range recs {
 		status, actual := h.checkTXT(recs[i].Host, recs[i].Key)
 		recs[i].Status = status
 		recs[i].Actual = actual
 	}
 
-	// PTR 单独给一条说明（只能在 VPS 控制台改，不能加 DNS 记录）
-	ptrStatus, ptrValue := h.checkPTR()
-	recs = append(recs, dnsRecord{
-		Type: "PTR", Host: "（在 VPS 服务商控制台设置）", TTL: 0, Key: "ptr",
-		Value:  "面板服务器公网 IP → " + domain,
-		Note:   "反向解析。没有 PTR 的 IP 会被 Gmail/QQ 直接判垃圾；PTR 指向的域名还必须能正查回本机 IP（forward-confirmed，建议直接用发信域的 MX 主机名）。",
-		Status: ptrStatus,
-		Actual: ptrValue,
-	})
+	// PTR 与 MX 都是直查 DNS 的独立查询，并发执行以缩短邮件页等待。
+	ip := h.mailEgressIP()
+	ptrCh := make(chan ptrVerdict, 1)
+	mxCh := make(chan mxLookup, 1)
+	go func() { ptrCh <- checkPTRFor(ip, mailPTRLookup, mailPTRForwardLookup) }()
+	go func() {
+		list, err := mailMXLookup(domain)
+		mxCh <- mxLookup{Records: list, Err: err}
+	}()
+	ptr := <-ptrCh
+	mxRes := <-mxCh
+
+	recs = append(recs, buildPTRRecord(ip, domain, ptr))
+	recs = append(recs, buildMXRecord(domain, ip, ptr, mxRes, mailPTRForwardLookup))
 	return recs
 }
 
@@ -359,15 +373,20 @@ func (h *handlers) checkTXT(host, kind string) (string, string) {
 	return "ok", joined
 }
 
-// ---- PTR / forward-confirmed 检测 ----
+// ---- PTR / MX 原始值检测 ----
 //
-// 判定状态（前端按状态显示不同标签）：
+// 用户要求：面板要看到「PTR / MX 的真实记录值」，不能用正向解析去推断或当主判据。
 //
-//	ok               PTR 存在，且正查能回到本机 IP（forward-confirmed 通过）
+// PTR 判定状态（只看反查原始值）：
+//
+//	ok               PTR 存在且是域名（FQDN，如 mail.example.com）
 //	provider_default PTR 只是服务商默认主机名（不含域名后缀，如 racknerd-b3c2b64）
-//	forward_mismatch PTR 是域名，但该名字正查不指回本机 IP（常见于域名被 CDN 代理）
 //	missing          完全没有 PTR
 //	unknown          探测不到出口 IP，或所有 DNS 通道都不可用
+//
+// forward-confirmed（把 PTR 名字正查 A/AAAA 看是否回到本机）只作为 Detail 里的
+// 附注参考，不参与状态判定 —— 域名被 Cloudflare 代理时 FCrDNS 天然不成立，
+// 但这并不代表 PTR 没设置。
 //
 // 为什么不直接用 net.DefaultResolver：本机 nsswitch 是 "hosts: files dns"，
 // Go 的 goLookupPTR 在 hostLookupFilesDNS 顺序下会先读 /etc/hosts
@@ -378,7 +397,6 @@ func (h *handlers) checkTXT(host, kind string) (string, string) {
 const (
 	ptrStatusOK              = "ok"
 	ptrStatusProviderDefault = "provider_default"
-	ptrStatusForwardMismatch = "forward_mismatch"
 	ptrStatusMissing         = "missing"
 	ptrStatusUnknown         = "unknown"
 )
@@ -386,6 +404,7 @@ const (
 const (
 	dnsTypeA    uint16 = 1
 	dnsTypePTR  uint16 = 12
+	dnsTypeMX   uint16 = 15
 	dnsTypeAAAA uint16 = 28
 )
 
@@ -414,56 +433,128 @@ var mailDoHEndpoint = "https://cloudflare-dns.com/dns-query"
 // mailDNSQueryTimeout 是单次 DNS 查询超时。
 var mailDNSQueryTimeout = 3 * time.Second
 
-// 以下两个变量便于测试注入。
+// 以下变量便于测试注入（把 DNS 查询换成假实现，验证绕过 /etc/hosts）。
 var (
 	mailPTRLookup        = lookupPTRDirect
 	mailPTRForwardLookup = lookupHostDirect
+	mailMXLookup         = lookupMXDirect
 )
 
-// checkPTR 检查本机公网 IP 的反向解析，并区分「无 PTR / 服务商默认名 / 反查不一致」。
-// 返回 (状态, 说明)；状态值见 ptrStatus* 常量。
-func (h *handlers) checkPTR() (string, string) {
-	ip := h.mailEgressIP()
-	if ip == "" {
-		return ptrStatusUnknown, "未能探测公网出口 IP"
-	}
-	names, err := mailPTRLookup(ip)
-	return classifyPTR(ip, names, err, mailPTRForwardLookup)
+// ptrVerdict 是 PTR 检查结果。
+//
+// Status 只由反查原始值决定；Actual 是原始 PTR 主机名；Detail 是附加说明
+// （含 FCrDNS 附注），不参与状态判定。
+type ptrVerdict struct {
+	Status string
+	Actual string
+	Detail string
 }
 
-// classifyPTR 根据反查（names）与正查（forwardLookup）结果给出状态与说明。
-// 抽成纯函数，便于单元测试。
-func classifyPTR(ip string, names []string, lookupErr error, forwardLookup func(string) ([]string, error)) (string, string) {
-	if lookupErr != nil {
-		return ptrStatusUnknown, ip + " PTR 查询失败：" + lookupErr.Error()
+// checkPTR 检查本机公网 IP 的反向解析，返回原始 PTR 值。
+func (h *handlers) checkPTR() ptrVerdict {
+	return checkPTRFor(h.mailEgressIP(), mailPTRLookup, mailPTRForwardLookup)
+}
+
+// checkPTRFor 用可注入的查询函数做 PTR 检查（便于单测模拟 /etc/hosts 干扰）。
+func checkPTRFor(ip string, lookup func(string) ([]string, error), forward func(string) ([]string, error)) ptrVerdict {
+	ip = strings.TrimSpace(ip)
+	if ip == "" {
+		return ptrVerdict{Status: ptrStatusUnknown, Detail: "未能探测公网出口 IP，无法反查 PTR"}
 	}
-	ptr := ""
-	for _, n := range names {
-		if n = strings.TrimSuffix(strings.TrimSpace(n), "."); n != "" {
-			ptr = n
-			break
+	if lookup == nil {
+		return ptrVerdict{Status: ptrStatusUnknown, Detail: "PTR 查询未配置"}
+	}
+	names, err := lookup(ip)
+	return classifyPTR(ip, names, err, forward)
+}
+
+// classifyPTR 根据反查（names）结果给出状态与原始值。
+// forwardLookup 只用于生成 FCrDNS 附注，不影响状态。抽成纯函数便于单元测试。
+func classifyPTR(ip string, names []string, lookupErr error, forwardLookup func(string) ([]string, error)) ptrVerdict {
+	if lookupErr != nil {
+		return ptrVerdict{
+			Status: ptrStatusUnknown,
+			Detail: ip + " 的 PTR 查询失败（公共 DNS 与 DoH 都不可用）：" + lookupErr.Error(),
 		}
 	}
-	if ptr == "" {
-		return ptrStatusMissing, ip + " 无 PTR（公共 DNS 反查为空）"
+	var ptrs []string
+	for _, n := range names {
+		if n = strings.TrimSuffix(strings.TrimSpace(n), "."); n != "" {
+			ptrs = append(ptrs, n)
+		}
 	}
+	if len(ptrs) == 0 {
+		return ptrVerdict{
+			Status: ptrStatusMissing,
+			Detail: ip + " 在公共 DNS 反查为空，即该 IP 没有 PTR 记录；需要到 VPS 服务商控制台添加",
+		}
+	}
+	actual := strings.Join(ptrs, ", ")
+	first := ptrs[0]
 	// 服务商默认主机名（如 racknerd-b3c2b64）不带域名后缀，收件方基本不认。
-	if !strings.Contains(ptr, ".") {
-		return ptrStatusProviderDefault, ip + " → " + ptr + "（服务商默认主机名，不含域名后缀，建议改成发信域名）"
+	if !strings.Contains(first, ".") {
+		return ptrVerdict{
+			Status: ptrStatusProviderDefault,
+			Actual: actual,
+			Detail: ip + " 的 PTR 是 " + first + "（服务商默认主机名，不含域名后缀）；" +
+				"收件方不认这种名字，建议到 VPS 服务商控制台改成发信域名",
+		}
 	}
-	addrs, ferr := forwardLookup(ptr)
-	if ferr != nil {
-		return ptrStatusForwardMismatch, ip + " → " + ptr + "（正查失败，无法 forward-confirm：" + ferr.Error() + "）"
+	return ptrVerdict{
+		Status: ptrStatusOK,
+		Actual: actual,
+		Detail: describeFCrDNS(ip, first, forwardLookup),
+	}
+}
+
+// describeFCrDNS 生成 FCrDNS 附注：把 PTR 名字正查 A/AAAA，看是否回到本机 IP。
+// 这里的结果只写进 Detail，不改变 PTR 状态（PTR 是否已设置只看反查原始值）。
+func describeFCrDNS(ip, ptr string, forwardLookup func(string) ([]string, error)) string {
+	if forwardLookup == nil {
+		return ""
+	}
+	addrs, err := forwardLookup(ptr)
+	if err != nil {
+		return "FCrDNS 附注（仅参考，不影响 PTR 状态）：正查 " + ptr + " 失败（" + err.Error() + "）"
+	}
+	if len(addrs) == 0 {
+		return "FCrDNS 附注（仅参考，不影响 PTR 状态）：" + ptr + " 没有 A/AAAA 记录"
 	}
 	for _, a := range addrs {
 		if sameIP(a, ip) {
-			return ptrStatusOK, ip + " → " + ptr
+			return "FCrDNS 附注（仅参考，不影响 PTR 状态）：PTR 名 " + ptr + " 正查含本机 IP，正反向一致"
 		}
 	}
-	if len(addrs) == 0 {
-		return ptrStatusForwardMismatch, ip + " → " + ptr + "（该名字没有 A/AAAA 记录，forward-confirmed 不成立）"
+	return "FCrDNS 附注（仅参考，不影响 PTR 状态）：PTR 名 " + ptr + " 正查为 " +
+		strings.Join(addrs, ", ") + "，不含本机 IP；PTR 本身已设置，但严格校验 FCrDNS 的收件方会扣分"
+}
+
+// buildPTRRecord 把 PTR 检查结果组装成面板展示用的记录。
+// Actual 是反查到的原始 PTR 主机名（无记录时为空），Value 是建议的 PTR 目标。
+func buildPTRRecord(egressIP, domain string, v ptrVerdict) dnsRecord {
+	rec := dnsRecord{
+		Type: "PTR", Host: "（在 VPS 服务商控制台设置）", TTL: 0, Key: "ptr",
+		Status: v.Status,
+		Actual: v.Actual,
+		Detail: v.Detail,
 	}
-	return ptrStatusForwardMismatch, ip + " → " + ptr + "（正查为 " + strings.Join(addrs, ", ") + "，不含本机 IP，forward-confirmed 不成立）"
+	// Host 直接显示真实反查名（in-addr.arpa），比一句「去服务商控制台设置」更可核对。
+	if rev, err := dnsReverseName(egressIP); err == nil {
+		rec.Host = rev
+	}
+	target := v.Actual
+	if target == "" || !strings.Contains(target, ".") {
+		target = "mail." + domain
+	}
+	if egressIP != "" {
+		rec.Value = "面板服务器公网 IP " + egressIP + " → " + target
+	} else {
+		rec.Value = "面板服务器公网 IP → " + target
+	}
+	rec.Note = "反向解析（PTR）。这里显示的是本机直连公共 DNS 反查到 23.254.172.198 这类公网 IP 的原始 PTR 主机名，" +
+		"不读 /etc/hosts、不用正向解析推断。PTR 只能在 VPS 服务商控制台设置（Cloudflare 不能给用户网段加 PTR）；" +
+		"没有 PTR 的 IP 会被 Gmail/QQ 直接判垃圾。FCrDNS（PTR 名正查能否回到本机）只作附注参考。"
+	return rec
 }
 
 // sameIP 判断两个 IP 字符串是否相同（兼容 IPv4 映射成 IPv6 的写法）。
@@ -605,8 +696,58 @@ func parseDNSAnswers(msg []byte) ([]string, error) {
 	return out, nil
 }
 
-// dnsQueryUDP 直接向 upstream 发一次 UDP 查询。
-func dnsQueryUDP(upstream, name string, qtype uint16) ([]string, error) {
+// parseDNSMXAnswers 解析响应中的 MX 答案（priority + exchange 原始值）。
+func parseDNSMXAnswers(msg []byte) ([]mxRecord, error) {
+	if len(msg) < 12 {
+		return nil, errors.New("DNS 响应过短")
+	}
+	rcode := int(msg[3] & 0x0F)
+	if rcode != 0 && rcode != 3 { // 3 = NXDOMAIN，按「没有记录」处理
+		return nil, fmt.Errorf("DNS 返回 rcode=%d", rcode)
+	}
+	qd := int(msg[4])<<8 | int(msg[5])
+	an := int(msg[6])<<8 | int(msg[7])
+	off := 12
+	for i := 0; i < qd; i++ {
+		_, next, err := readDNSName(msg, off)
+		if err != nil {
+			return nil, err
+		}
+		off = next + 4
+	}
+	var out []mxRecord
+	for i := 0; i < an; i++ {
+		_, next, err := readDNSName(msg, off)
+		if err != nil {
+			return nil, err
+		}
+		off = next
+		if off+10 > len(msg) {
+			return nil, errors.New("DNS 答案越界")
+		}
+		rtype := uint16(msg[off])<<8 | uint16(msg[off+1])
+		rdlen := int(msg[off+8])<<8 | int(msg[off+9])
+		off += 10
+		if off+rdlen > len(msg) {
+			return nil, errors.New("DNS rdata 越界")
+		}
+		if rtype == dnsTypeMX && rdlen >= 3 {
+			pref := int(msg[off])<<8 | int(msg[off+1])
+			host, _, nerr := readDNSName(msg, off+2)
+			if nerr != nil {
+				return nil, nerr
+			}
+			if host = strings.TrimSuffix(strings.TrimSpace(host), "."); host != "" {
+				out = append(out, mxRecord{Preference: pref, Host: host})
+			}
+		}
+		off += rdlen
+	}
+	return out, nil
+}
+
+// dnsUDPExchange 直接向 upstream 发一次 UDP 查询并返回原始响应报文。
+func dnsUDPExchange(upstream, name string, qtype uint16) ([]byte, error) {
 	query, _, err := buildDNSQuery(name, qtype)
 	if err != nil {
 		return nil, err
@@ -625,7 +766,16 @@ func dnsQueryUDP(upstream, name string, qtype uint16) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return parseDNSAnswers(buf[:n])
+	return buf[:n], nil
+}
+
+// dnsQueryUDP 直接向 upstream 发一次 UDP 查询（A / AAAA / PTR）。
+func dnsQueryUDP(upstream, name string, qtype uint16) ([]string, error) {
+	msg, err := dnsUDPExchange(upstream, name, qtype)
+	if err != nil {
+		return nil, err
+	}
+	return parseDNSAnswers(msg)
 }
 
 type dohAnswer struct {
@@ -639,31 +789,40 @@ type dohResponse struct {
 	Answer []dohAnswer `json:"Answer"`
 }
 
-// dnsQueryDoH 用 DNS-over-HTTPS（JSON）查询，作为 UDP 53 被拦截时的兜底。
-func dnsQueryDoH(name string, qtype uint16) ([]string, error) {
+// dohQuery 用 DNS-over-HTTPS（JSON）查一次，返回结构化响应。
+func dohQuery(name string, qtype uint16) (dohResponse, error) {
+	var dr dohResponse
 	q := mailDoHEndpoint + "?name=" + url.QueryEscape(strings.TrimSuffix(strings.TrimSpace(name), ".")) +
 		"&type=" + strconv.Itoa(int(qtype))
 	ctx, cancel := context.WithTimeout(context.Background(), mailDNSQueryTimeout+2*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, q, nil)
 	if err != nil {
-		return nil, err
+		return dr, err
 	}
 	req.Header.Set("accept", "application/dns-json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, err
+		return dr, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("DoH 返回 HTTP %d", resp.StatusCode)
+		return dr, fmt.Errorf("DoH 返回 HTTP %d", resp.StatusCode)
 	}
-	var dr dohResponse
 	if err := json.NewDecoder(resp.Body).Decode(&dr); err != nil {
-		return nil, err
+		return dr, err
 	}
 	if dr.Status != 0 && dr.Status != 3 {
-		return nil, fmt.Errorf("DoH 返回 Status=%d", dr.Status)
+		return dr, fmt.Errorf("DoH 返回 Status=%d", dr.Status)
+	}
+	return dr, nil
+}
+
+// dnsQueryDoH 用 DNS-over-HTTPS（JSON）查询 A / AAAA / PTR，作为 UDP 53 被拦截时的兜底。
+func dnsQueryDoH(name string, qtype uint16) ([]string, error) {
+	dr, err := dohQuery(name, qtype)
+	if err != nil {
+		return nil, err
 	}
 	var out []string
 	for _, a := range dr.Answer {
@@ -673,6 +832,41 @@ func dnsQueryDoH(name string, qtype uint16) ([]string, error) {
 		out = append(out, strings.TrimSuffix(a.Data, "."))
 	}
 	return out, nil
+}
+
+// dnsQueryDoHMX 用 DoH 查询 MX，解析成 priority + exchange。
+func dnsQueryDoHMX(name string) ([]mxRecord, error) {
+	dr, err := dohQuery(name, dnsTypeMX)
+	if err != nil {
+		return nil, err
+	}
+	var out []mxRecord
+	for _, a := range dr.Answer {
+		if a.Type != int(dnsTypeMX) {
+			continue
+		}
+		if rec, ok := parseDoHMXData(a.Data); ok {
+			out = append(out, rec)
+		}
+	}
+	return out, nil
+}
+
+// parseDoHMXData 解析 DoH JSON 里 MX 的 data 字段，形如 "10 mail.example.com."。
+func parseDoHMXData(data string) (mxRecord, bool) {
+	fields := strings.Fields(strings.TrimSpace(data))
+	if len(fields) < 2 {
+		return mxRecord{}, false
+	}
+	pref, err := strconv.Atoi(fields[0])
+	if err != nil || pref < 0 {
+		return mxRecord{}, false
+	}
+	host := strings.TrimSuffix(fields[1], ".")
+	if host == "" {
+		return mxRecord{}, false
+	}
+	return mxRecord{Preference: pref, Host: host}, true
 }
 
 // mailDNSQuery 并发查询：直连公共 DNS 与 DoH 一起发，先成功的结果胜出。
@@ -710,6 +904,43 @@ func mailDNSQuery(name string, qtype uint16) ([]string, error) {
 	return nil, firstErr
 }
 
+// mailDNSQueryMX 并发查询 MX：直连公共 DNS 与 DoH 一起发，先成功的结果胜出。
+// 结果按 priority 升序并去重（MX 的优先级是有语义的，必须保留原始值）。
+func mailDNSQueryMX(name string) ([]mxRecord, error) {
+	type mxResult struct {
+		vals []mxRecord
+		err  error
+	}
+	total := len(mailDNSUpstreams) + 1
+	ch := make(chan mxResult, total)
+	for _, upstream := range mailDNSUpstreams {
+		go func(up string) {
+			msg, err := dnsUDPExchange(up, name, dnsTypeMX)
+			if err != nil {
+				ch <- mxResult{err: err}
+				return
+			}
+			vals, perr := parseDNSMXAnswers(msg)
+			ch <- mxResult{vals: vals, err: perr}
+		}(upstream)
+	}
+	go func() {
+		vals, err := dnsQueryDoHMX(name)
+		ch <- mxResult{vals: vals, err: err}
+	}()
+	var firstErr error
+	for i := 0; i < total; i++ {
+		r := <-ch
+		if r.err == nil {
+			return sortMXRecords(r.vals), nil // 空结果同样算「确实没有 MX」
+		}
+		if firstErr == nil {
+			firstErr = r.err
+		}
+	}
+	return nil, firstErr
+}
+
 // lookupPTRDirect 用公共 DNS 反查 IP 的 PTR（绕开 /etc/hosts 与本地缓存）。
 func lookupPTRDirect(ip string) ([]string, error) {
 	name, err := dnsReverseName(ip)
@@ -729,6 +960,209 @@ func lookupHostDirect(name string) ([]string, error) {
 		return addrs, nil
 	}
 	return mailDNSQuery(name, dnsTypeAAAA)
+}
+
+// ---- MX 原始值检测 ----
+
+// mxRecord 是一条真实 MX 记录（priority + exchange）。
+type mxRecord struct {
+	Preference int
+	Host       string
+}
+
+// mxLookup 是一次 MX 查询结果：Records 为空 + Err==nil 表示「确实没有 MX 记录」。
+type mxLookup struct {
+	Records []mxRecord
+	Err     error
+}
+
+// lookupMXDirect 直接向公共 DNS 查询域名的 MX 记录（只信 MX 答案，不做正向解析推断）。
+func lookupMXDirect(domain string) ([]mxRecord, error) {
+	domain = strings.TrimSuffix(strings.TrimSpace(domain), ".")
+	if domain == "" {
+		return nil, errors.New("MX 查询域名为空")
+	}
+	return mailDNSQueryMX(domain)
+}
+
+// sortMXRecords 按 priority 升序排序并去掉完全重复的记录。
+// MX 的 priority 有语义（数值越小越优先），必须原样保留。
+func sortMXRecords(in []mxRecord) []mxRecord {
+	out := make([]mxRecord, 0, len(in))
+	seen := make(map[string]struct{}, len(in))
+	for _, r := range in {
+		if r.Host == "" {
+			continue
+		}
+		k := strconv.Itoa(r.Preference) + "|" + strings.ToLower(r.Host)
+		if _, ok := seen[k]; ok {
+			continue
+		}
+		seen[k] = struct{}{}
+		out = append(out, r)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Preference != out[j].Preference {
+			return out[i].Preference < out[j].Preference
+		}
+		return out[i].Host < out[j].Host
+	})
+	return out
+}
+
+// formatMXRecords 把 MX 记录格式化成「优先级 + exchange」，用于展示原始值。
+func formatMXRecords(recs []mxRecord) string {
+	parts := make([]string, 0, len(recs))
+	for _, r := range recs {
+		parts = append(parts, strconv.Itoa(r.Preference)+" "+r.Host)
+	}
+	return strings.Join(parts, "; ")
+}
+
+// suggestMXValue 是「域名没有任何 MX 记录」时给出的建议值。
+func suggestMXValue(domain string) string {
+	return "10 mail." + domain
+}
+
+// buildMXRecord 把 MX 查询结果组装成面板展示用的记录。
+//
+// Status 只看 MX 查询本身：查到记录 = ok；查询成功但为空 = missing；查询失败 = unknown。
+// 「是否指向本机」「是否与 PTR 主机名一致」只写进 Detail，不影响 MX 是否存在。
+func buildMXRecord(domain, egressIP string, ptr ptrVerdict, mx mxLookup, resolveHost func(string) ([]string, error)) dnsRecord {
+	rec := dnsRecord{Type: "MX", Host: domain, TTL: 300, Key: "mx"}
+	rec.Note = "MX（收信路由）：这里显示的是直连公共 DNS 查到的真实 MX 记录（优先级 + exchange），" +
+		"不是用正向解析推断出来的。自建直投「发信」本身不依赖这条记录，但让 MX 主机与 PTR 主机名一致、" +
+		"且该主机 A 记录指向本机，对收件方判断「这台机器是该域的合法邮件主机」最有帮助。"
+
+	switch {
+	case mx.Err != nil:
+		rec.Status = ptrStatusUnknown
+		rec.Detail = domain + " 的 MX 查询失败（公共 DNS 与 DoH 都不可用）：" + mx.Err.Error()
+	case len(mx.Records) == 0:
+		rec.Status = ptrStatusMissing
+		rec.Value = suggestMXValue(domain)
+		target := strings.TrimSpace(strings.TrimPrefix(rec.Value, "10 "))
+		tip := "先给 " + target + " 加一条 A 记录指向本机公网 IP"
+		if ip := strings.TrimSpace(egressIP); ip != "" {
+			tip = "先给 " + target + " 加一条 A 记录指向 " + ip
+		}
+		rec.Detail = domain + " 当前没有 MX 记录（NODATA）。建议值：" + rec.Value + "（" +
+			tip + "，再到 VPS 服务商把 PTR 也设成同一个名字）"
+	default:
+		rec.Status = ptrStatusOK
+		rec.Value = formatMXRecords(mx.Records)
+		rec.Actual = rec.Value
+		rec.Detail = describeMX(mx.Records, egressIP, ptr, resolveHost)
+	}
+	return rec
+}
+
+// describeMX 生成 MX 的附注：是否指向本机、是否与 PTR 主机名一致。
+func describeMX(recs []mxRecord, egressIP string, ptr ptrVerdict, resolveHost func(string) ([]string, error)) string {
+	hosts := uniqueMXHosts(recs)
+	parts := []string{"MX 主机：" + strings.Join(hosts, ", ")}
+	if egressIP == "" {
+		parts = append(parts, "未探测到本机公网出口 IP，无法判断 MX 是否指向本机")
+	} else if resolveHost != nil {
+		resolved := resolveMXHosts(hosts, resolveHost)
+		var onHost, offHost, failed []string
+		for _, h := range hosts {
+			r := resolved[h]
+			switch {
+			case r.Err != nil:
+				failed = append(failed, h)
+			case containsIP(r.Addrs, egressIP):
+				onHost = append(onHost, h)
+			default:
+				offHost = append(offHost, h)
+			}
+		}
+		if len(onHost) > 0 {
+			parts = append(parts, "指向本机（"+egressIP+"）："+strings.Join(onHost, ", "))
+		}
+		if len(offHost) > 0 {
+			parts = append(parts, "不指向本机："+strings.Join(offHost, ", "))
+		}
+		if len(failed) > 0 {
+			parts = append(parts, "正查失败无法判断："+strings.Join(failed, ", "))
+		}
+	}
+
+	ptrName := firstPTRName(ptr.Actual)
+	if ptrName == "" {
+		parts = append(parts, "本机 IP 还没有 PTR，无法做 PTR/MX 一致性比对")
+	} else if listContainsFold(hosts, ptrName) {
+		parts = append(parts, "与 PTR 主机名一致（"+ptrName+"）")
+	} else {
+		parts = append(parts, "与 PTR 主机名不一致（PTR 为 "+ptrName+"，MX 为 "+strings.Join(hosts, ", ")+"）")
+	}
+	return strings.Join(parts, "；")
+}
+
+// firstPTRName 取原始 PTR 值里的第一个主机名。
+func firstPTRName(actual string) string {
+	for _, part := range strings.Split(actual, ",") {
+		if p := strings.TrimSuffix(strings.TrimSpace(part), "."); p != "" {
+			return p
+		}
+	}
+	return ""
+}
+
+func uniqueMXHosts(recs []mxRecord) []string {
+	var out []string
+	seen := map[string]struct{}{}
+	for _, r := range recs {
+		k := strings.ToLower(r.Host)
+		if _, ok := seen[k]; ok {
+			continue
+		}
+		seen[k] = struct{}{}
+		out = append(out, r.Host)
+	}
+	return out
+}
+
+func containsIP(addrs []string, ip string) bool {
+	for _, a := range addrs {
+		if sameIP(a, ip) {
+			return true
+		}
+	}
+	return false
+}
+
+func listContainsFold(list []string, s string) bool {
+	for _, item := range list {
+		if strings.EqualFold(item, s) {
+			return true
+		}
+	}
+	return false
+}
+
+type mxHostResolution struct {
+	Addrs []string
+	Err   error
+}
+
+// resolveMXHosts 并发正查各 MX 主机的 A/AAAA（只用于判断「是否指向本机」）。
+func resolveMXHosts(hosts []string, resolve func(string) ([]string, error)) map[string]mxHostResolution {
+	out := make(map[string]mxHostResolution, len(hosts))
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for _, host := range hosts {
+		wg.Add(1)
+		go func(h string) {
+			defer wg.Done()
+			addrs, err := resolve(h)
+			mu.Lock()
+			out[h] = mxHostResolution{Addrs: addrs, Err: err}
+			mu.Unlock()
+		}(host)
+	}
+	wg.Wait()
+	return out
 }
 
 func shortText(s string, n int) string {

@@ -16,13 +16,15 @@ import { apiPost } from '../api';
 // 自建直投向导：填域名 + 发件人 → 生成 DNS 记录 → 一键写入 / 手动填写 → 校验 → 发测试。
 // 不依赖任何第三方发信服务，面板直接连收件方 MX 投递。
 
-const TYPE_COLOR = { TXT: 'blue', PTR: 'purple' };
+const TYPE_COLOR = { TXT: 'blue', PTR: 'purple', MX: 'geekblue' };
 
+// 状态只反映「记录是否存在」，不再用正向解析（FCrDNS）当主判据：
+// PTR 的 ok 表示反查到了域名（即使正查回不到本机），provider_default 表示只查到服务商默认名。
 function StatusTag({ status }) {
   if (status === 'ok') return <Tag color="success" icon={<CheckCircleFilled />}>已生效</Tag>;
   if (status === 'provider_default') return <Tag color="warning" icon={<ExclamationCircleFilled />}>服务商默认名</Tag>;
-  if (status === 'forward_mismatch') return <Tag color="warning" icon={<ExclamationCircleFilled />}>反查不一致</Tag>;
   if (status === 'missing') return <Tag color="error" icon={<CloseCircleFilled />}>未配置</Tag>;
+  if (status === 'unknown') return <Tag color="default" icon={<QuestionCircleFilled />}>查询失败</Tag>;
   return <Tag icon={<QuestionCircleFilled />}>未知</Tag>;
 }
 
@@ -55,7 +57,9 @@ export default function MailBuiltinGuide({ guide, reload }) {
     return lines.join('\n');
   };
   const domain = guide?.domain || '';
-  const missing = records.filter((r) => r.status !== 'ok').length;
+  // TXT 三条是「一键写入 Cloudflare」能处理的；PTR / MX 需要在 VPS 或 DNS 服务商侧确认，单独提示。
+  const missingTXT = records.filter((r) => r.type === 'TXT' && r.status !== 'ok').length;
+  const pendingOther = records.filter((r) => r.type !== 'TXT' && r.status !== 'ok').length;
 
   const copy = async (text) => {
     try {
@@ -154,8 +158,23 @@ export default function MailBuiltinGuide({ guide, reload }) {
       render: (_, r) => {
         const val = valueOf(r);
         const isEditing = editing === r.key;
-        if (r.type === 'PTR') {
-          return <Typography.Text style={{ fontSize: 12 }}>{val}</Typography.Text>;
+        // PTR / MX 是「真实查询/服务商侧配置」的记录，面板不能一键写入，给复制即可。
+        if (r.type === 'PTR' || r.type === 'MX') {
+          return (
+            <Space direction="vertical" size={4} style={{ width: '100%' }}>
+              <Typography.Paragraph
+                style={{ margin: 0, fontSize: 11.5, wordBreak: 'break-all', fontFamily: 'monospace' }}
+                copyable={{ text: val }}
+              >
+                {val}
+              </Typography.Paragraph>
+              <Typography.Text type="secondary" style={{ fontSize: 11.5 }}>
+                {r.type === 'PTR'
+                  ? '在 VPS 服务商控制台设置（Cloudflare 不能改用户网段的反解）'
+                  : '在 DNS 服务商处添加/核对；面板「一键写入」只处理 TXT 记录'}
+              </Typography.Text>
+            </Space>
+          );
         }
         return (
           <Space direction="vertical" size={4} style={{ width: '100%' }}>
@@ -213,6 +232,33 @@ export default function MailBuiltinGuide({ guide, reload }) {
         );
       },
     },
+    {
+      // 直接展示 DNS 里真实查到的原始值：PTR 是反查到的原始主机名，
+      // MX 是「优先级 + exchange」原文，不做任何正向解析推断。
+      title: '实际查询值（原始记录）',
+      dataIndex: 'actual',
+      width: 300,
+      render: (_, r) => {
+        const raw = (r.actual || '').trim();
+        if (!raw) {
+          return (
+            <Typography.Text type="secondary" style={{ fontSize: 11.5 }}>
+              {r.status === 'unknown' ? '查询失败' : r.type === 'TXT' ? '未查到' : '无记录'}
+            </Typography.Text>
+          );
+        }
+        const shown = raw.length > 120 ? `${raw.slice(0, 120)}…` : raw;
+        return (
+          <Typography.Paragraph
+            style={{ margin: 0, fontSize: 11.5, wordBreak: 'break-all', fontFamily: 'monospace' }}
+            copyable={{ text: raw }}
+            ellipsis={{ rows: 2, expandable: true, symbol: '展开' }}
+          >
+            {shown}
+          </Typography.Paragraph>
+        );
+      },
+    },
     { title: '状态', dataIndex: 'status', width: 96, render: (v) => <StatusTag status={v} /> },
   ];
 
@@ -222,7 +268,7 @@ export default function MailBuiltinGuide({ guide, reload }) {
         type="info"
         showIcon
         message="自建直投：面板直接连收件方 MX 投递，不经任何第三方"
-        description="只需要两个信息：发信域名 与 发件人邮箱。把下面三条 TXT 记录加到 DNS 即可；没有 SPF / DKIM / DMARC 时邮件几乎必定进垃圾箱。"
+        description="只需要两个信息：发信域名 与 发件人邮箱。把下面三条 TXT 记录加到 DNS，并核对 PTR（VPS 反解）与 MX（真实记录）；没有 SPF / DKIM / DMARC 时邮件几乎必定进垃圾箱。PTR / MX 两行的「实际查询值」是面板直连 DNS 查到的原始记录，不是用正向解析推断的。"
       />
 
       {!domain ? (
@@ -246,16 +292,25 @@ export default function MailBuiltinGuide({ guide, reload }) {
             )}
           </Space>
 
-          {missing > 0 ? (
+          {missingTXT > 0 ? (
             <Alert
               type="warning"
               showIcon
-              message={`还有 ${missing} 条记录未生效`}
+              message={`还有 ${missingTXT} 条 TXT 记录未生效`}
               description="DNS 生效通常 1-10 分钟（Cloudflare 一般 1 分钟内）。改完点「重新校验」。"
             />
           ) : (
-            <Alert type="success" showIcon message="DNS 记录已全部生效，可以发送测试邮件了" />
+            <Alert type="success" showIcon message="三条 TXT 记录已全部生效，可以发送测试邮件了" />
           )}
+
+          {pendingOther > 0 ? (
+            <Alert
+              type="warning"
+              showIcon
+              message={`PTR / MX 还有 ${pendingOther} 项需要核对`}
+              description="PTR 只能在 VPS 服务商控制台（RackNerd 等）设置；MX 在 DNS 服务商处添加。这两项不会阻断发信，但配好更利于送达率。"
+            />
+          ) : null}
 
           <Table
             rowKey="key"
@@ -267,9 +322,14 @@ export default function MailBuiltinGuide({ guide, reload }) {
               expandedRowRender: (r) => (
                 <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.7 }}>
                   {r.note}
+                  {r.detail ? (
+                    <div style={{ marginTop: 4, color: '#475569' }}>
+                      判定附注：{r.detail}
+                    </div>
+                  ) : null}
                   {r.actual ? (
                     <div style={{ marginTop: 4, fontFamily: 'monospace', wordBreak: 'break-all' }}>
-                      当前解析结果：{r.actual}
+                      实际查询值：{r.actual}
                     </div>
                   ) : null}
                 </div>
@@ -340,7 +400,7 @@ export default function MailBuiltinGuide({ guide, reload }) {
             description={
               <span>
                 点「复制为 BIND 片段」，然后到 Cloudflare → 选中 <b>{domain.split('.').slice(-2).join('.')}</b> →
-                DNS → Records → <b>Import and Export</b> → 粘贴导入。三条记录一次到位，不需要任何 API Token。
+                DNS → Records → <b>Import and Export</b> → 粘贴导入。三条 TXT 记录一次到位，不需要任何 API Token。
               </span>
             }
           />
@@ -348,11 +408,28 @@ export default function MailBuiltinGuide({ guide, reload }) {
           <Alert
             type="info"
             showIcon
-            message="还需要在 VPS 服务商控制台设置 PTR"
+            message="PTR：以面板反查到的原始值为准，需要去 VPS 服务商控制台设置"
             description={
               <span>
-                把本机公网 IP 的反向解析指向 <b>{domain}</b>。没有 PTR 的 IP 会被 Gmail / QQ 直接判为垃圾。
-                多数服务商（RackNerd / Vultr / DigitalOcean）在控制台的 Networking 或 rDNS 里改。
+                PTR 行显示的是面板直连公共 DNS 反查 <b>{guide.egress_ip || '本机公网 IP'}</b> 得到的原始主机名
+                （不读 /etc/hosts、不走本地缓存）。没有 PTR 的 IP 会被 Gmail / QQ 直接判为垃圾。
+                PTR 只能在 VPS 服务商控制台改（RackNerd / Vultr / DigitalOcean 的 Networking 或 rDNS 里），
+                Cloudflare 不能给用户网段设置反解。
+                「FCrDNS」只在展开行作为附注（PTR 名正查能否回到本机），<b>不作为 PTR 是否已设置的判据</b>。
+              </span>
+            }
+          />
+
+          <Alert
+            type="info"
+            showIcon
+            message="MX：显示真实查询到的记录，缺失时按建议值添加"
+            description={
+              <span>
+                MX 行是直连公共 DNS 查到的「优先级 + exchange」原文，不是正向解析推断出来的。
+                自建直投「发信」本身不依赖 MX；但若希望收件方把本机视为该域的合法邮件主机，
+                建议让 MX 主机与 PTR 主机名一致，并给该主机名加 A 记录指向本机。
+                MX 需要在 DNS 服务商处手动添加（面板「一键写入」只处理 TXT 记录）。
               </span>
             }
           />
