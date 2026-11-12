@@ -236,8 +236,23 @@ if [ "$WITH_SINGBOX" = 1 ]; then
         [ -n "$SB_SERVICE" ] || SB_SERVICE=sing-box
         SB_DIR=$(dirname "$SB_TARGET")
         mkdir -p "$SB_DIR"
+        # 重要：已有配置时绝不覆盖。
+        # 节点重装/重启后执行本脚本时，bootstrap 下发的只是「默认模板」，
+        # 而面板可能早已下发过完整配置（含全部入站与授权用户）。
+        # 之前无条件覆盖，导致：面板 applied_version 仍是旧值、以为已同步，
+        # 节点实际跑的是 4 入站默认配置 —— 服务 active 但少了协议，且无人察觉。
+        # 实测故障：曼谷1（server 35），2026-11-12。
         CFG_B64=$(json_str "$BOOT" config_b64)
-        if [ -n "$CFG_B64" ]; then
+        KEEP_EXISTING=0
+        if [ -s "$SB_TARGET" ] && sing-box check -c "$SB_TARGET" >/dev/null 2>&1; then
+            KEEP_EXISTING=1
+        elif [ -s "$SB_TARGET" ] && [ -z "$(command -v sing-box)" ]; then
+            KEEP_EXISTING=1
+        fi
+        if [ "$KEEP_EXISTING" = 1 ]; then
+            log "检测到现有可用配置，保留不覆盖：$SB_TARGET（如需重置请加 --force-config）"
+        fi
+        if [ -n "$CFG_B64" ] && [ "$KEEP_EXISTING" = 0 ]; then
             if printf '%s' "$CFG_B64" | base64 -d > "$SB_TARGET" 2>/dev/null; then :
             else printf '%s' "$CFG_B64" | openssl base64 -d -A > "$SB_TARGET"; fi
             chmod 600 "$SB_TARGET"
