@@ -1,6 +1,9 @@
 package api
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // 安装命令必须使用「设定的分发基址」下的 install.sh，
 // 不能退化成内网地址（新机器还没接入内网，拉不到脚本）。
@@ -36,5 +39,18 @@ func TestIsPrivateHost(t *testing.T) {
 		if got := isPrivateHost(in); got != want {
 			t.Fatalf("isPrivateHost(%q) = %v, 期望 %v", in, got, want)
 		}
+	}
+}
+// 安装命令里绝不能出现内网/组网地址：新节点此时还没组网，连不上就装不了。
+func TestInstallCommandNeverHasPrivateHost(t *testing.T) {
+	origin := "https://proxypilot.yangzifun.org"
+	cmd := buildInstallCommand("https://s3.proxypilot.yangzifun.org/agent", origin, "ag_x")
+	for _, bad := range []string{"100.96.", "127.0.0.1", "localhost", "10.0.0."} {
+		if strings.Contains(cmd, bad) {
+			t.Fatalf("安装命令包含内网地址 %q：%s", bad, cmd)
+		}
+	}
+	if !strings.Contains(cmd, "https://s3.proxypilot.yangzifun.org/agent/install.sh") {
+		t.Fatalf("脚本地址应为设定的分发基址：%s", cmd)
 	}
 }

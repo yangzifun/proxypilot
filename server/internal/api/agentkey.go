@@ -138,10 +138,21 @@ func decryptAgentToken(secret, enc string) string {
 func (h *handlers) agentInstallCommand(ctx context.Context, origin, token string) string {
 	origin = strings.TrimRight(strings.TrimSpace(origin), "/")
 
-	// --url 必须是新机器装好就能连上的地址：内网地址只有已入网的机器可达，
-	// 所以这里优先用「Agent 访问地址」（公网），没有再退回请求来源。
-	if v := strings.TrimRight(strings.TrimSpace(h.settingValue(ctx, settingAgentAccessURL)), "/"); v != "" && !isPrivateHost(v) {
-		origin = v
+	// --url 必须是「新机器刚装好就能连上」的地址。
+	//
+	// 组网地址（100.96.x.x）只有已入网的节点可达，而新节点此时还没组网，
+	// 所以安装命令里绝不能出现内网地址。这里按优先级取：
+	//   1) 站点公开地址（site_public_base_url，如 https://proxypilot.yangzifun.org）
+	//   2) 请求来源（管理后台是用公网域名访问时即公网）
+	//   3) Agent 访问地址（仅当它本身是公网地址时）
+	// 节点装好后先走公网通道，组网完成后面板会下发内网同步地址，
+	// Agent 探测到内网 /healthz 可用就自动切换过去（见 watchInternal）。
+	if pub := h.publicBaseURL(ctx); pub != "" && !isPrivateHost(pub) {
+		origin = pub
+	} else if isPrivateHost(origin) {
+		if v := strings.TrimRight(strings.TrimSpace(h.settingValue(ctx, settingAgentAccessURL)), "/"); v != "" && !isPrivateHost(v) {
+			origin = v
+		}
 	}
 	// 脚本基址 = 管理员设定的「Agent 分发基址」（agent_binary_base_url），
 	// 安装脚本就发布在该路径下：<基址>/install.sh
