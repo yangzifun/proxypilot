@@ -166,6 +166,55 @@ func (h *handlers) componentBaseURL() string {
 	return base + "/singbox"
 }
 
+// componentManifest 是组件基址下的 manifest.json（版本真相来源）。
+type componentManifest struct {
+	Version string `json:"version"`
+}
+
+var (
+	componentVerCache   string
+	componentVerExpires time.Time
+	componentVerMu      sync.Mutex
+)
+
+// componentVersion 返回 sing-box 组件当前分发版本：优先桶里的 manifest，
+// 其次是后台设置 component_version，最后是环境变量。
+//
+// 「版本默认为存储桶中的」——模板里留空时就用这里的值，
+// 保证面板下发的版本与实际可下载的二进制一致。
+func (h *handlers) componentVersion(ctx context.Context) string {
+	if v := strings.TrimSpace(h.setting(ctx, settingComponentVersion, "")); v != "" {
+		return v
+	}
+	if v := strings.TrimSpace(os.Getenv("SINGBOX_VERSION")); v != "" {
+		return v
+	}
+	componentVerMu.Lock()
+	defer componentVerMu.Unlock()
+	if componentVerCache != "" && time.Now().Before(componentVerExpires) {
+		return componentVerCache
+	}
+	base := h.componentBaseURL()
+	if base == "" {
+		return ""
+	}
+	cl := &http.Client{Timeout: 5 * time.Second}
+	resp, err := cl.Get(base + "/manifest.json")
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		return ""
+	}
+	var m componentManifest
+	if json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&m) != nil {
+		return ""
+	}
+	componentVerCache = strings.TrimSpace(m.Version)
+	componentVerExpires = time.Now().Add(10 * time.Minute)
+	return componentVerCache
+}
 // agentBaseFor 优先用显式基址，否则按当前请求推导本地 /agent-dist。
 func (h *handlers) agentBaseFor(r *http.Request) string {
 	if s := h.agentBinaryBaseURL(); s != "" {

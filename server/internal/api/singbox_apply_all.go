@@ -100,7 +100,7 @@ func (h *handlers) applySingboxNode(ctx context.Context, nodeID int64, usersOver
 			  (name, server_id, engine, target_path, service_name, restart_cmd, check_cmd, content, backup,
 			   enabled, auto_push, push_interval_min, template_id, uuid, install_versions, version, content_hash, created_at, updated_at)
 			  VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1, 0, 0, 0, '', ?, 1, ?, ?, ?)`,
-				cfgName, mapInt(nodeRow, "server_id", 0), engine, path, service, restartCmd, checkCmd, content, hash, singboxInstallVersions(tpl), now, now)
+				cfgName, mapInt(nodeRow, "server_id", 0), engine, path, service, restartCmd, checkCmd, content, hash, singboxInstallVersions(tpl, h.componentVersion(ctx)), now, now)
 			if err != nil {
 				return nil, nil, nil, 0, "写入节点配置失败：" + err.Error()
 			}
@@ -128,7 +128,7 @@ func (h *handlers) applySingboxNode(ctx context.Context, nodeID int64, usersOver
 		if _, err := h.db.ExecContext(ctx, `UPDATE node_configs SET server_id = ?, engine = ?, target_path = ?,
 		      service_name = ?, restart_cmd = ?, check_cmd = ?, content = ?, content_hash = ?, install_versions = ?,
 		      version = COALESCE(version,0) + 1, enabled = 1, updated_at = ? WHERE id = ?`,
-			mapInt(nodeRow, "server_id", 0), engine, path, service, restartCmd, checkCmd, content, hash, singboxInstallVersions(tpl),
+			mapInt(nodeRow, "server_id", 0), engine, path, service, restartCmd, checkCmd, content, hash, singboxInstallVersions(tpl, h.componentVersion(ctx)),
 			now, existID); err != nil {
 			return nil, nil, nil, 0, "下发失败"
 		}

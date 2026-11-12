@@ -641,7 +641,7 @@ export default function SingboxTemplateEditor({ state, onClose, onSaved }) {
         <Row gutter={12} style={{ marginTop: 10 }}>
           <Col span={12}>
             <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>
-              sing-box 版本（留空跟随 Agent 内置默认；可选正式版 / 预览版，也可手填 tag）
+              sing-box 版本（留空 = 使用「组件分发基址」里的版本，自动跟随存储桶；也可手填正式版 / 预览版 tag）
             </div>
             <AutoComplete
               value={sbVer}

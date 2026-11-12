@@ -173,7 +173,7 @@ func (h *handlers) singboxNodeApply(w http.ResponseWriter, r *http.Request) {
 			  (name, server_id, engine, target_path, service_name, restart_cmd, check_cmd, content, backup,
 			   enabled, auto_push, push_interval_min, template_id, uuid, install_versions, version, content_hash, created_at, updated_at)
 			  VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1, 0, 0, 0, '', ?, 1, ?, ?, ?)`,
-				cfgName, mapInt(nodeRow, "server_id", 0), engine, path, service, restartCmd, checkCmd, content, hash, singboxInstallVersions(tpl), now, now)
+				cfgName, mapInt(nodeRow, "server_id", 0), engine, path, service, restartCmd, checkCmd, content, hash, singboxInstallVersions(tpl, h.componentVersion(r.Context())), now, now)
 			if err != nil {
 				h.log.Error("写入节点配置失败", "err", err)
 				writeError(w, http.StatusInternalServerError, "下发失败")
@@ -195,7 +195,7 @@ func (h *handlers) singboxNodeApply(w http.ResponseWriter, r *http.Request) {
 		if _, err := h.db.ExecContext(r.Context(), `UPDATE node_configs SET server_id = ?, engine = ?, target_path = ?,
 		      service_name = ?, restart_cmd = ?, check_cmd = ?, content = ?, content_hash = ?, install_versions = ?,
 		      version = COALESCE(version,0) + 1, enabled = 1, updated_at = ? WHERE id = ?`,
-			mapInt(nodeRow, "server_id", 0), engine, path, service, restartCmd, checkCmd, content, hash, singboxInstallVersions(tpl),
+			mapInt(nodeRow, "server_id", 0), engine, path, service, restartCmd, checkCmd, content, hash, singboxInstallVersions(tpl, h.componentVersion(r.Context())),
 			now, existID); err != nil {
 			writeError(w, http.StatusInternalServerError, "下发失败")
 			return

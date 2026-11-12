@@ -27,13 +27,13 @@ func TestIsSecretSetting(t *testing.T) {
 
 func TestSingboxInstallVersions(t *testing.T) {
 	tpl := &singboxTemplate{SingboxVersion: "v1.15.0"}
-	got := singboxInstallVersions(tpl)
+	got := singboxInstallVersions(tpl, "")
 	want := `{"sing-box":"v1.15.0"}`
 	if got != want {
 		t.Fatalf("got %s want %s", got, want)
 	}
 	tpl2 := &singboxTemplate{}
-	if got := singboxInstallVersions(tpl2); got != "{}" {
+	if got := singboxInstallVersions(tpl2, ""); got != "{}" {
 		t.Fatalf("空版本应为 {}，得到 %s", got)
 	}
 }

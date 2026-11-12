@@ -425,10 +425,19 @@ func singboxRenderSb(tpl *singboxTemplate, users []sbUser, ports map[string]int,
 
 // singboxInstallVersions 生成随 deploy 下发的引擎版本（Agent 按需安装/切换）。
 // V15.6：Xray 下线，只下发 sing-box。
-func singboxInstallVersions(tpl *singboxTemplate) string {
+// singboxInstallVersions 生成「按版本安装组件」的清单。
+//
+// 模板里留空时用 defaultVersion（通常来自组件分发基址的 manifest），
+// 这样「版本默认为存储桶中的」：面板下发的版本一定在桶里存在，
+// 不会出现节点按版本去 GitHub 找包而失败。
+func singboxInstallVersions(tpl *singboxTemplate, defaultVersion string) string {
 	m := map[string]string{}
-	if tpl.engineOn("singbox") && strings.TrimSpace(tpl.SingboxVersion) != "" {
-		m["sing-box"] = strings.TrimSpace(tpl.SingboxVersion)
+	if tpl.engineOn("singbox") {
+		if v := strings.TrimSpace(tpl.SingboxVersion); v != "" {
+			m["sing-box"] = v
+		} else if v := strings.TrimSpace(defaultVersion); v != "" {
+			m["sing-box"] = v
+		}
 	}
 	b, _ := json.Marshal(m)
 	return string(b)
