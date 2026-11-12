@@ -6,7 +6,6 @@ import (
 	_ "embed"
 	"encoding/hex"
 	"encoding/json"
-	"html"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -105,52 +104,12 @@ func (h *handlers) bootJSON(mode string) string {
 	return string(raw)
 }
 
-// scriptTagRe 大小写不敏感地定位 <script 起始标签（用字节索引，避免 ToLower 改长度）。
-var scriptTagRe = regexp.MustCompile(`(?i)<script`)
+// injectCSPNonce 已废弃：V1.2 的 nonce 方案在 Cloudflare/缓存下无法保证「HTML 与 CSP
+// 头同响应」，会造成强制 CSP 拦掉全部脚本。现在动态数据走 #pp-boot JSON 数据块、
+// 可执行脚本全部是同源外部文件，不再需要 nonce。这里保留一个显式的“禁止内联脚本”
+// 校验函数给自定义 WebDist 外壳使用，见 page_scripts.go 的 hasExecutableInlineScript。
 
-// injectCSPNonce 给缺少 nonce 的 <script> 标签补上本次请求的 nonce。
-//
-// 强制 CSP 下未带 nonce 的内联脚本会被浏览器拦截；页面里所有内联脚本（引导脚本、
-// 设置页/证书页/客户端授权页的脚本）都必须带上同一个 nonce。外部 <script src> 加
-// nonce 无副作用，因此这里统一处理。自定义 WebDist 构建产物的 index.html 也走这里。
-func injectCSPNonce(page, nonce string) string {
-	if nonce == "" {
-		return page
-	}
-	attr := ` nonce="` + html.EscapeString(nonce) + `"`
-	locs := scriptTagRe.FindAllStringIndex(page, -1)
-	if len(locs) == 0 {
-		return page
-	}
-	var b strings.Builder
-	last := 0
-	for _, loc := range locs {
-		if loc[0] < last {
-			continue
-		}
-		b.WriteString(page[last:loc[0]])
-		endRel := strings.Index(page[loc[1]:], ">")
-		if endRel < 0 {
-			b.WriteString(page[loc[0]:])
-			return b.String()
-		}
-		end := loc[1] + endRel
-		tag := page[loc[0] : end+1]
-		lowerTag := strings.ToLower(tag)
-		if strings.Contains(lowerTag, "nonce=") {
-			b.WriteString(tag)
-		} else if strings.HasSuffix(tag, "/>") {
-			b.WriteString(tag[:len(tag)-2] + attr + "/>")
-		} else {
-			b.WriteString(tag[:len(tag)-1] + attr + ">")
-		}
-		last = end + 1
-	}
-	b.WriteString(page[last:])
-	return b.String()
-}
-
-func (h *handlers) shellHTML(mode, nonce string) string {
+func (h *handlers) shellHTML(mode string) string {
 	meta := h.webMetaInfo()
 	isPortal := mode == "portal"
 	title := "ProxyPilot 控制台"
@@ -160,7 +119,7 @@ func (h *handlers) shellHTML(mode, nonce string) string {
 		theme = "#f6f7fb"
 	}
 	ver := h.assetVersion()
-	return injectCSPNonce(`<!DOCTYPE html>
+	return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -207,34 +166,15 @@ func (h *handlers) shellHTML(mode, nonce string) string {
     <div class="pp-boot-retry" id="pp-boot-retry" hidden>加载时间较长，<a href="" id="pp-reload-link">刷新页面</a></div>
   </div>
 </div>
-<script data-cfasync="false">window.__PP_BOOT__=` + h.bootJSON(mode) + `;</script>
-<script>
-(function () {
-  var retry = document.getElementById('pp-boot-retry');
-  function showRetry(message) {
-    if (!retry || !document.querySelector('.pp-boot')) return;
-    if (message) retry.innerHTML = message + '，<a href="" id="pp-reload-link">刷新页面</a>';
-    retry.hidden = false;
-  }
-  // 强制 CSP 不允许 onclick 内联事件处理器，这里用事件委托实现「刷新页面」。
-  document.addEventListener('click', function (e) {
-    var el = e.target;
-    while (el && el !== document) {
-      if (el.id === 'pp-reload-link') { e.preventDefault(); location.reload(); return; }
-      el = el.parentNode;
-    }
-  });
-  window.setTimeout(function () { showRetry('加载时间较长'); }, 12000);
-  window.addEventListener('error', function () { showRetry('资源加载失败'); }, true);
-})();
-</script>
+<script type="application/json" id="pp-boot">` + h.bootJSON(mode) + `</script>
+<script data-cfasync="false" src="` + pageScriptBoot + `"></script>
 <script data-cfasync="false" src="/admin-app.js?v=` + ver + `" defer fetchpriority="high"></script>
 <noscript><p style="font-family:system-ui;padding:24px">当前界面需要启用 JavaScript。</p></noscript>
 </body>
-</html>`, nonce)
+</html>`
 }
 
-var bootScriptRe = regexp.MustCompile(`window\.__PP_BOOT__\s*=\s*[^;]+;`)
+var customBootScriptRe = regexp.MustCompile(`(?is)<script[^>]*>\s*window\.__PP_BOOT__\s*=\s*[^;]+;\s*</script>`)
 
 func (h *handlers) serveCustomIndex(w http.ResponseWriter, r *http.Request, mode string) bool {
 	dist := strings.TrimSpace(h.cfg.WebDist)
@@ -246,16 +186,24 @@ func (h *handlers) serveCustomIndex(w http.ResponseWriter, r *http.Request, mode
 	if err != nil {
 		return false
 	}
-	boot := `<script data-cfasync="false">window.__PP_BOOT__=` + h.bootJSON(mode) + `;</script>`
+	boot := `<script type="application/json" id="pp-boot">` + h.bootJSON(mode) + `</script>` + "\n" +
+		`<script data-cfasync="false" src="` + pageScriptBoot + `"></script>`
 	html := string(raw)
-	if bootScriptRe.MatchString(html) {
-		html = bootScriptRe.ReplaceAllString(html, boot)
-	} else {
+	if customBootScriptRe.MatchString(html) {
+		// 旧版自定义外壳把 boot 写成可执行内联脚本：整段替换为数据块 + 外部引导脚本。
+		html = customBootScriptRe.ReplaceAllString(html, boot)
+	} else if !strings.Contains(html, `id="pp-boot"`) {
 		html = strings.Replace(html, "</head>", boot+"\n</head>", 1)
+	}
+	// 自定义 index.html 若仍含「无 src 的可执行脚本」，强制 CSP 会拦掉 → 回退内嵌外壳，
+	// 避免再次出现「后台白屏」。日志里给出原因，便于自定义构建去掉内联脚本。
+	if hasExecutableInlineScript(html) {
+		h.log.Error("自定义前端(PP_WEB_DIST)包含可执行内联脚本，强制 CSP 下会被拦截；已回退内置前端")
+		return false
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
-	_, _ = w.Write([]byte(injectCSPNonce(html, cspNonce(r))))
+	_, _ = w.Write([]byte(html))
 	return true
 }
 
@@ -282,7 +230,7 @@ func (h *handlers) pageIndex(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	ver := h.assetVersion()
 	w.Header().Set("Link", "</admin-app.js?v="+ver+">; rel=preload; as=script, </admin-app.css?v="+ver+">; rel=preload; as=style")
-	_, _ = w.Write([]byte(h.shellHTML(mode, cspNonce(r))))
+	_, _ = w.Write([]byte(h.shellHTML(mode)))
 }
 
 func serveEmbeddedAsset(w http.ResponseWriter, r *http.Request, body []byte, contentType, etag string) {

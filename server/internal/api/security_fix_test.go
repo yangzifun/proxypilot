@@ -10,7 +10,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"regexp"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -354,11 +355,84 @@ func TestBackupExportZipRedactsSecrets(t *testing.T) {
 	}
 }
 
-// ---------- 3. 高：反射 XSS + CSP ----------
+// ---------- 3. 高：反射 XSS + 强制 CSP（无 nonce、无可执行内联脚本）----------
 
-var cspNonceRe = regexp.MustCompile(`'nonce-([^']+)'`)
+// assertStrictCSPHeader 校验强制 CSP：有头、无 Report-Only、script-src 不含
+// unsafe-inline，也不含非确定性 nonce（2026-11-12 白屏事故后禁止 reintroduce）。
+func assertStrictCSPHeader(t *testing.T, hdr http.Header) string {
+	t.Helper()
+	csp := hdr.Get("Content-Security-Policy")
+	if csp == "" {
+		t.Fatal("缺少强制 CSP 响应头")
+	}
+	if hdr.Get("Content-Security-Policy-Report-Only") != "" {
+		t.Fatal("不应再出现 Content-Security-Policy-Report-Only")
+	}
+	scriptSrc := ""
+	if i := strings.Index(csp, "script-src"); i >= 0 {
+		scriptSrc = csp[i:]
+		if j := strings.Index(scriptSrc, ";"); j >= 0 {
+			scriptSrc = scriptSrc[:j]
+		}
+	}
+	if !strings.Contains(scriptSrc, "'self'") {
+		t.Fatalf("script-src 未包含 'self'：%s", scriptSrc)
+	}
+	if strings.Contains(scriptSrc, "'unsafe-inline'") || strings.Contains(scriptSrc, "'unsafe-eval'") {
+		t.Fatalf("script-src 不应包含 unsafe-inline/unsafe-eval：%s", scriptSrc)
+	}
+	if strings.Contains(csp, "nonce-") {
+		t.Fatalf("CSP 不应再使用每请求 nonce（缓存/代理下会与 HTML 不一致）：%s", csp)
+	}
+	return csp
+}
 
-// /client-auth?code= 必须转义回显；页面内联脚本必须带 nonce；CSP 必须是强制模式。
+// assertNoExecutableInlineScripts 校验 HTML 里每个 <script> 要么是外部脚本（同源或
+// CSP 白名单站点），要么是非执行数据块（如 application/json）；同时不允许内联事件处理器。
+func assertNoExecutableInlineScripts(t *testing.T, page string) []htmlScript {
+	t.Helper()
+	scripts := parseHTMLScripts(page)
+	if len(scripts) == 0 {
+		t.Fatalf("页面没有解析到任何 <script>：%s", page[:min(300, len(page))])
+	}
+	for _, s := range scripts {
+		if strings.Contains(strings.ToLower(s.attrs), "nonce=") {
+			t.Fatalf("页面不应再依赖 nonce 属性：%q", s.attrs)
+		}
+		src := strings.TrimSpace(scriptAttrValue(s.attrs, "src"))
+		if src == "" {
+			if scriptTypeIsExecutable(s.attrs) {
+				body := s.body
+				if len(body) > 120 {
+					body = body[:120]
+				}
+				t.Fatalf("存在可执行内联脚本（强制 CSP 下会被拦截）：type=%q body=%q", scriptAttrValue(s.attrs, "type"), body)
+			}
+			continue
+		}
+		if !(strings.HasPrefix(src, "/") ||
+			strings.HasPrefix(src, "https://challenges.cloudflare.com/") ||
+			strings.HasPrefix(src, "https://static.cloudflareinsights.com/")) {
+			t.Fatalf("外部脚本地址不在 CSP 白名单内：%s", src)
+		}
+	}
+	if inlineHandler.MatchString(page) {
+		t.Fatal("页面存在内联事件处理器（on*=），强制 CSP 下会被拦截")
+	}
+	return scripts
+}
+
+func scriptSrcOf(t *testing.T, scripts []htmlScript, want string) bool {
+	t.Helper()
+	for _, s := range scripts {
+		if strings.Contains(scriptAttrValue(s.attrs, "src"), want) {
+			return true
+		}
+	}
+	return false
+}
+
+// /client-auth?code= 必须转义回显；页面不得有可执行内联脚本；CSP 必须强制。
 func TestClientAuthPageEscapesCodeAndUsesStrictCSP(t *testing.T) {
 	h := &handlers{cfg: config.Config{}, log: testLogger()}
 	hnd := h.secureHeaders(http.HandlerFunc(h.clientAuthPage))
@@ -378,28 +452,15 @@ func TestClientAuthPageEscapesCodeAndUsesStrictCSP(t *testing.T) {
 	if !strings.Contains(body, "&lt;/span&gt;") {
 		t.Fatalf("未看到转义后的 code：%s", body[:min(300, len(body))])
 	}
-
-	csp := rec.Header().Get("Content-Security-Policy")
-	if csp == "" {
-		t.Fatal("缺少强制 CSP 响应头")
-	}
-	if rec.Header().Get("Content-Security-Policy-Report-Only") != "" {
-		t.Fatal("仍在使用 Report-Only（只报告不拦截）")
-	}
-	if !strings.Contains(csp, "script-src 'self' 'nonce-") {
-		t.Fatalf("script-src 未启用 nonce：%s", csp)
-	}
-	nonce := extractCSPNonce(t, csp)
-	if got, want := strings.Count(body, "<script"), strings.Count(body, `nonce="`+nonce+`"`); got != want {
-		t.Fatalf("页面有 %d 个 <script>，但只有 %d 个带 nonce", got, want)
-	}
-	if strings.Contains(body, "onclick=") {
-		t.Fatal("页面仍含内联事件处理器（强制 CSP 下会被拦截）")
+	assertStrictCSPHeader(t, rec.Header())
+	scripts := assertNoExecutableInlineScripts(t, body)
+	if !scriptSrcOf(t, scripts, pageScriptClientAuth) {
+		t.Fatalf("页面应引用外部脚本 %s", pageScriptClientAuth)
 	}
 }
 
-// 管理端外壳（引导脚本 + 加载脚本）同样要带 nonce，且不能有内联 onclick。
-func TestAdminShellUsesStrictCSPNonce(t *testing.T) {
+// 管理端外壳：动态数据走 #pp-boot JSON 数据块，可执行脚本全部外部化，无 nonce。
+func TestAdminShellStrictCSPNoInlineScripts(t *testing.T) {
 	h := &handlers{cfg: config.Config{SuperAdmin: "admin"}, log: testLogger()}
 	hnd := h.secureHeaders(http.HandlerFunc(h.pageIndex))
 
@@ -409,75 +470,210 @@ func TestAdminShellUsesStrictCSPNonce(t *testing.T) {
 	hnd.ServeHTTP(rec, req)
 	body := rec.Body.String()
 
-	csp := rec.Header().Get("Content-Security-Policy")
-	if csp == "" || rec.Header().Get("Content-Security-Policy-Report-Only") != "" {
-		t.Fatalf("CSP 不是强制模式：%q", csp)
+	csp := assertStrictCSPHeader(t, rec.Header())
+	if !strings.Contains(csp, "ws:") || !strings.Contains(csp, "wss:") {
+		t.Fatalf("connect-src 未放行 WebSocket（终端会不可用）：%s", csp)
 	}
-	if !strings.Contains(csp, "ws://pp.example.com") || !strings.Contains(csp, "wss://pp.example.com") {
-		t.Fatalf("connect-src 未放行同主机 WebSocket（终端会不可用）：%s", csp)
+	scripts := assertNoExecutableInlineScripts(t, body)
+	if !scriptSrcOf(t, scripts, pageScriptBoot) {
+		t.Fatalf("外壳应引用外部引导脚本 %s", pageScriptBoot)
 	}
-	nonce := extractCSPNonce(t, csp)
-	if got, want := strings.Count(body, "<script"), strings.Count(body, `nonce="`+nonce+`"`); got != want {
-		t.Fatalf("外壳有 %d 个 <script>，但只有 %d 个带 nonce", got, want)
+	if !scriptSrcOf(t, scripts, "/admin-app.js") {
+		t.Fatal("外壳应引用 /admin-app.js")
 	}
-	if strings.Contains(body, "onclick=") {
-		t.Fatal("外壳仍含 onclick 内联事件处理器")
+
+	// boot 数据块必须是 application/json（数据块不执行、不受 script-src 约束）
+	const bootMarker = `<script type="application/json" id="pp-boot">`
+	start := strings.Index(body, bootMarker)
+	if start < 0 {
+		t.Fatal("缺少 #pp-boot JSON 数据块")
+	}
+	rest := body[start+len(bootMarker):]
+	end := strings.Index(rest, "</script>")
+	if end < 0 {
+		t.Fatal("#pp-boot 数据块未闭合")
+	}
+	var boot map[string]any
+	if err := json.Unmarshal([]byte(rest[:end]), &boot); err != nil {
+		t.Fatalf("#pp-boot 不是合法 JSON：%v", err)
+	}
+	if boot["mode"] != "admin" {
+		t.Fatalf("boot.mode = %v，期望 admin", boot["mode"])
+	}
+	// 数据块必须在引导脚本之前，引导脚本在 app bundle 之前执行
+	iData := strings.Index(body, bootMarker)
+	iBoot := strings.Index(body, pageScriptBoot)
+	iApp := strings.Index(body, `src="/admin-app.js`)
+	if !(iData >= 0 && iBoot >= 0 && iApp >= 0 && iData < iBoot && iBoot < iApp) {
+		t.Fatalf("脚本顺序错误：data=%d boot=%d app=%d", iData, iBoot, iApp)
 	}
 	if !strings.Contains(body, `id="pp-reload-link"`) {
 		t.Fatal("加载失败提示里的刷新链接缺少 id（事件委托无法绑定）")
 	}
 }
 
-// 设置页 / 证书页也是服务端拼出的 HTML，内联脚本必须带同一个 nonce。
-func TestServerRenderedPagesUseStrictCSPNonce(t *testing.T) {
-	h := &handlers{cfg: config.Config{}, log: testLogger()}
-	pages := map[string]http.HandlerFunc{
-		"/admin/settings": h.settingsPage,
-		"/admin/certs":    h.vpnCertPage,
+// CSP 必须是常量：不同 Host/不同请求拿到的 CSP 完全相同，缓存/代理拆分响应也不会
+// 造成 body 与头不一致（V1.2 白屏事故的根因是每请求 nonce）。
+func TestCSPHeaderIsConstantAcrossRequests(t *testing.T) {
+	h := &handlers{cfg: config.Config{SuperAdmin: "admin"}, log: testLogger()}
+	hnd := h.secureHeaders(http.HandlerFunc(h.pageIndex))
+	get := func(host string) string {
+		req := httptest.NewRequest(http.MethodGet, "/admin", nil)
+		req.Host = host
+		rec := httptest.NewRecorder()
+		hnd.ServeHTTP(rec, req)
+		return rec.Header().Get("Content-Security-Policy")
 	}
-	for path, fn := range pages {
-		req := httptest.NewRequest(http.MethodGet, path, nil)
+	a, b := get("pp.example.com"), get("1.2.3.4:8443")
+	if a == "" || a != b {
+		t.Fatalf("CSP 必须对所有请求完全一致（缓存安全），got %q vs %q", a, b)
+	}
+	if a != cspPolicy {
+		t.Fatalf("CSP 头与常量策略不一致：%q", a)
+	}
+}
+
+// 设置页 / 证书页 / 客户端授权页同样不能有可执行内联脚本。
+func TestServerRenderedPagesNoInlineScripts(t *testing.T) {
+	h := &handlers{cfg: config.Config{}, log: testLogger()}
+	pages := map[string]struct {
+		path string
+		fn   http.HandlerFunc
+	}{
+		"settings":    {"/admin/settings", h.settingsPage},
+		"certs":       {"/admin/certs", h.vpnCertPage},
+		"client-auth": {"/client-auth", h.clientAuthPage},
+	}
+	for name, p := range pages {
+		req := httptest.NewRequest(http.MethodGet, p.path, nil)
 		req.Host = "pp.example.com"
 		rec := httptest.NewRecorder()
-		h.secureHeaders(fn).ServeHTTP(rec, req)
-		body := rec.Body.String()
-		csp := rec.Header().Get("Content-Security-Policy")
-		nonce := extractCSPNonce(t, csp)
-		if got, want := strings.Count(body, "<script"), strings.Count(body, `nonce="`+nonce+`"`); got != want {
-			t.Fatalf("%s：有 %d 个 <script>，但只有 %d 个带 nonce", path, got, want)
+		h.secureHeaders(p.fn).ServeHTTP(rec, req)
+		assertStrictCSPHeader(t, rec.Header())
+		assertNoExecutableInlineScripts(t, rec.Body.String())
+		_ = name
+	}
+}
+
+// 每个页面脚本都有独立的同源外部文件（强制 CSP 靠 'self' 放行）。
+func TestPageScriptsServed(t *testing.T) {
+	h := &handlers{log: testLogger()}
+	routes := map[string]http.HandlerFunc{
+		pageScriptBoot:          h.bootJS,
+		pageScriptClientAuth:    h.clientAuthJS,
+		pageScriptAdminSettings: h.adminSettingsJS,
+		pageScriptAdminCerts:    h.adminCertsJS,
+	}
+	for path, fn := range routes {
+		rec := httptest.NewRecorder()
+		fn(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s = %d", path, rec.Code)
+		}
+		if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "javascript") {
+			t.Fatalf("%s Content-Type = %q", path, ct)
+		}
+		if rec.Body.Len() < 100 {
+			t.Fatalf("%s 体积异常：%d", path, rec.Body.Len())
+		}
+		if !strings.Contains(rec.Header().Get("Cache-Control"), "no-store") {
+			t.Fatalf("%s 应禁用长缓存，避免 HTML 与脚本版本错配：%q", path, rec.Header().Get("Cache-Control"))
+		}
+	}
+	// 引导脚本必须能解析 #pp-boot 数据块（前端入口依赖）
+	if !strings.Contains(string(embeddedBootJS), "pp-boot") || !strings.Contains(string(embeddedBootJS), "__PP_BOOT__") {
+		t.Fatal("/boot.js 必须解析 #pp-boot 并写入 window.__PP_BOOT__")
+	}
+}
+
+// 全局兜底：所有服务端渲染页面都不应再出现 nonce=（nonce 方案已废弃）。
+func TestNoNonceAnywhere(t *testing.T) {
+	h := &handlers{cfg: config.Config{SuperAdmin: "admin"}, log: testLogger()}
+	type page struct {
+		path string
+		fn   http.HandlerFunc
+	}
+	pages := []page{
+		{"/admin", h.pageIndex},
+		{"/admin/settings", h.settingsPage},
+		{"/admin/certs", h.vpnCertPage},
+		{"/client-auth", h.clientAuthPage},
+	}
+	for _, p := range pages {
+		req := httptest.NewRequest(http.MethodGet, p.path, nil)
+		req.Host = "pp.example.com"
+		rec := httptest.NewRecorder()
+		h.secureHeaders(p.fn).ServeHTTP(rec, req)
+		body := strings.ToLower(rec.Body.String())
+		if strings.Contains(body, "nonce=") {
+			t.Fatalf("%s 的 HTML 仍含 nonce 属性", p.path)
+		}
+		if strings.Contains(strings.ToLower(rec.Header().Get("Content-Security-Policy")), "nonce-") {
+			t.Fatalf("%s 的 CSP 仍含 nonce", p.path)
 		}
 	}
 }
 
-func extractCSPNonce(t *testing.T, csp string) string {
-	t.Helper()
-	m := cspNonceRe.FindStringSubmatch(csp)
-	if len(m) != 2 || m[1] == "" {
-		t.Fatalf("无法从 CSP 中解析 nonce：%s", csp)
+// hasExecutableInlineScript 的判定：数据块不算可执行内联脚本，classic/module 脚本算。
+func TestHasExecutableInlineScript(t *testing.T) {
+	cases := []struct {
+		name string
+		page string
+		want bool
+	}{
+		{"数据块", `<script type="application/json" id="pp-boot">{"a":1}</script>`, false},
+		{"外部脚本", `<script src="/app.js"></script>`, false},
+		{"classic 内联", `<script>alert(1)</script>`, true},
+		{"缺省 type 内联", `<script type="">x()</script>`, true},
+		{"module 内联", `<script type="module">x()</script>`, true},
+		{"importmap", `<script type="importmap">{"imports":{}}</script>`, false},
+		{"大小写/属性", `<SCRIPT TYPE="text/javascript">x()</SCRIPT>`, true},
+		{"含 src 空值", `<script src="">x()</script>`, true},
 	}
-	return m[1]
+	for _, tc := range cases {
+		if got := hasExecutableInlineScript(tc.page); got != tc.want {
+			t.Fatalf("%s：hasExecutableInlineScript=%v，期望 %v", tc.name, got, tc.want)
+		}
+	}
 }
 
-// nonce 注入只处理标签起始处、大小写不敏感、已带 nonce 的不重复添加，
-// 且不能因为页面含中文/大写标签而错位。
-func TestInjectCSPNonce(t *testing.T) {
-	page := `<p>中文页面</p><script>a()</script><SCRIPT src="x"></SCRIPT>` +
-		`<script nonce="keep">b()</script><p>结尾中文</p>`
-	out := injectCSPNonce(page, "abc123")
-	if n := strings.Count(out, `nonce="abc123"`); n != 2 {
-		t.Fatalf("应为 2 个标签补 nonce，实际 %d：%s", n, out)
+// 自定义 WebDist 外壳若含可执行内联脚本，强制 CSP 会拦掉 → 回退内置外壳，避免白屏。
+func TestCustomIndexWithInlineScriptFallsBack(t *testing.T) {
+	dir := t.TempDir()
+	index := `<html><head><script>alert(1)</script></head><body><div id="root"></div></body></html>`
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte(index), 0o644); err != nil {
+		t.Fatalf("写入 index.html 失败：%v", err)
 	}
-	if !strings.Contains(out, `<script nonce="keep">b()</script>`) {
-		t.Fatalf("已有 nonce 的标签不应被改动：%s", out)
+	h := &handlers{cfg: config.Config{SuperAdmin: "admin", WebDist: dir}, log: testLogger()}
+	rec := httptest.NewRecorder()
+	h.pageIndex(rec, httptest.NewRequest(http.MethodGet, "/admin", nil))
+	body := rec.Body.String()
+	if !strings.Contains(body, `id="pp-boot"`) || !strings.Contains(body, pageScriptBoot) {
+		t.Fatal("含内联脚本的自定义外壳应回退到内置外壳")
 	}
-	if !strings.Contains(out, `<SCRIPT src="x" nonce="abc123">`) {
-		t.Fatalf("大写标签未补 nonce：%s", out)
+	if strings.Contains(body, "alert(1)") {
+		t.Fatal("不应把含可执行内联脚本的自定义 HTML 原样输出")
 	}
-	if !strings.HasSuffix(out, `<p>结尾中文</p>`) {
-		t.Fatalf("页面尾部内容被破坏：%s", out)
+}
+
+// 自定义 WebDist 外壳只有外部脚本时保留自定义内容，并注入 #pp-boot 数据块 + 外部引导脚本。
+func TestCustomIndexWithoutInlineScriptInjectsBootBlock(t *testing.T) {
+	dir := t.TempDir()
+	index := `<html><head><script src="/assets/app.js"></script></head><body><div id="root"></div></body></html>`
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte(index), 0o644); err != nil {
+		t.Fatalf("写入 index.html 失败：%v", err)
 	}
-	// nonce 为空时（单测直接调用页面 handler）保持原样，避免产生非法属性。
-	if got := injectCSPNonce(page, ""); got != page {
-		t.Fatalf("nonce 为空时不应改动页面")
+	h := &handlers{cfg: config.Config{SuperAdmin: "admin", WebDist: dir}, log: testLogger()}
+	rec := httptest.NewRecorder()
+	h.pageIndex(rec, httptest.NewRequest(http.MethodGet, "/admin", nil))
+	body := rec.Body.String()
+	if !strings.Contains(body, `id="pp-boot"`) || !strings.Contains(body, pageScriptBoot) {
+		t.Fatal("自定义外壳应注入 #pp-boot 数据块与外部引导脚本")
+	}
+	if !strings.Contains(body, `<script src="/assets/app.js"></script>`) {
+		t.Fatal("自定义外壳自身的外部脚本应保留")
+	}
+	if hasExecutableInlineScript(body) {
+		t.Fatal("注入后的自定义外壳不应含可执行内联脚本")
 	}
 }

@@ -10,6 +10,28 @@ import (
 	"github.com/yzfn/proxypilot/server/internal/config"
 )
 
+// bootFromHTML 从服务端渲染的 HTML 中解析 #pp-boot JSON 数据块。
+// 强制 CSP 下动态数据不再写成可执行内联脚本（window.__PP_BOOT__=...），而是
+// <script type="application/json" id="pp-boot"> 数据块，由外部 /boot.js 解析。
+func bootFromHTML(t *testing.T, body string) map[string]any {
+	t.Helper()
+	const marker = `<script type="application/json" id="pp-boot">`
+	start := strings.Index(body, marker)
+	if start < 0 {
+		t.Fatalf("缺少 #pp-boot JSON 数据块")
+	}
+	rest := body[start+len(marker):]
+	end := strings.Index(rest, "</script>")
+	if end < 0 {
+		t.Fatalf("#pp-boot 数据块未闭合")
+	}
+	var boot map[string]any
+	if err := json.Unmarshal([]byte(rest[:end]), &boot); err != nil {
+		t.Fatalf("#pp-boot 不是合法 JSON：%v", err)
+	}
+	return boot
+}
+
 func TestPageShellModes(t *testing.T) {
 	h := &handlers{cfg: config.Config{SuperAdmin: "admin"}}
 
@@ -20,7 +42,8 @@ func TestPageShellModes(t *testing.T) {
 		t.Fatalf("/ status = %d", rr.Code)
 	}
 	body := rr.Body.String()
-	if !strings.Contains(body, `"mode":"portal"`) || !strings.Contains(body, "/admin-app.js") {
+	boot := bootFromHTML(t, body)
+	if boot["mode"] != "portal" || !strings.Contains(body, "/admin-app.js") {
 		t.Fatalf("portal shell 内容异常: %s", body[:min(200, len(body))])
 	}
 
@@ -28,21 +51,19 @@ func TestPageShellModes(t *testing.T) {
 	rr = httptest.NewRecorder()
 	h.pageIndex(rr, httptest.NewRequest(http.MethodGet, "/admin", nil))
 	body = rr.Body.String()
-	if !strings.Contains(body, `"mode":"admin"`) || !strings.Contains(body, `"superAdmin":"admin"`) {
-		t.Fatalf("admin shell 内容异常")
+	boot = bootFromHTML(t, body)
+	if boot["mode"] != "admin" || boot["superAdmin"] != "admin" {
+		t.Fatalf("admin shell 内容异常: %s", body[:min(200, len(body))])
 	}
-	var boot map[string]any
-	start := strings.Index(body, "window.__PP_BOOT__=")
-	if start < 0 {
-		t.Fatal("缺少 boot 注入")
-	}
-	snippet := body[start+len("window.__PP_BOOT__="):]
-	snippet = snippet[:strings.Index(snippet, ";</script>")]
-	if err := json.Unmarshal([]byte(snippet), &boot); err != nil {
-		t.Fatalf("boot JSON 解析失败: %v", err)
-	}
-	if boot["mode"] != "admin" || boot["flavor"] != "antd" {
+	if boot["flavor"] != "antd" {
 		t.Fatalf("boot = %#v", boot)
+	}
+	// 外壳必须引用外部引导脚本，且不能有可执行内联脚本
+	if !strings.Contains(body, `src="/boot.js"`) {
+		t.Fatal("缺少外部引导脚本 /boot.js")
+	}
+	if hasExecutableInlineScript(body) {
+		t.Fatal("外壳不应包含可执行内联脚本")
 	}
 
 	// /login → /admin
@@ -77,16 +98,7 @@ func TestBootScreenVersionMatchesServer(t *testing.T) {
 	if !strings.Contains(body, `<meta name="pp-version" content="V99.9">`) {
 		t.Fatalf("缺少 pp-version meta 兜底")
 	}
-	var boot map[string]any
-	start := strings.Index(body, "window.__PP_BOOT__=")
-	if start < 0 {
-		t.Fatal("缺少 boot 注入")
-	}
-	snippet := body[start+len("window.__PP_BOOT__="):]
-	snippet = snippet[:strings.Index(snippet, ";</script>")]
-	if err := json.Unmarshal([]byte(snippet), &boot); err != nil {
-		t.Fatalf("boot JSON 解析失败: %v", err)
-	}
+	boot := bootFromHTML(t, body)
 	if boot["version"] != "V99.9" {
 		t.Fatalf("boot.version = %v，期望 V99.9", boot["version"])
 	}

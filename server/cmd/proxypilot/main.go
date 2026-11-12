@@ -126,8 +126,9 @@ func run(log *slog.Logger) error {
 
 // securityHeaders 统一追加基础安全响应头。
 //
-// CSP 由 api 包统一设置（强制模式 + 每请求 nonce），见 api/middleware_security.go；
-// 这里不再写 Content-Security-Policy-Report-Only，避免「只报告不拦截」。
+// CSP 由 api 包统一设置（强制模式、常量策略，不依赖每请求 nonce），见
+// api/middleware_security.go；这里不再写 Content-Security-Policy-Report-Only，
+// 避免「只报告不拦截」。
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()

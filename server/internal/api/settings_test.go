@@ -32,10 +32,17 @@ func TestSettingsPageHTML(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.settingsPage(rr, httptest.NewRequest(http.MethodGet, "/admin/settings", nil))
 	body := rr.Body.String()
-	for _, want := range []string{"data-key=\"smtp_addr\"", "data-key=\"oidc_issuer\"", "data-bool=\"auth_password_enabled\"", "/api/settings"} {
+	// 结构与数据属性在 HTML 里，逻辑在外部脚本里（强制 CSP 不允许可执行内联脚本）。
+	for _, want := range []string{"data-key=\"smtp_addr\"", "data-key=\"oidc_issuer\"", "data-bool=\"auth_password_enabled\"", pageScriptAdminSettings} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("设置页缺少 %q", want)
 		}
+	}
+	if hasExecutableInlineScript(body) {
+		t.Fatal("设置页不应包含可执行内联脚本")
+	}
+	if !strings.Contains(string(embeddedAdminSettingsJS), "/api/settings") {
+		t.Fatal("外部脚本 admin-settings.js 缺少 /api/settings 调用")
 	}
 }
 

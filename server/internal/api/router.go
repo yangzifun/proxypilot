@@ -446,6 +446,11 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("POST /manage/uuid-info", h.manageUUIDInfoSave)
 	mux.HandleFunc("GET /manage/", h.pageIndex)
 	mux.HandleFunc("GET /agent-dist/", h.agentDistFile)
+	// 服务端渲染页面的外部脚本（强制 CSP 下不允许可执行内联脚本）
+	mux.HandleFunc("GET /boot.js", h.bootJS)
+	mux.HandleFunc("GET /client-auth.js", h.clientAuthJS)
+	mux.HandleFunc("GET /admin-settings.js", h.adminSettingsJS)
+	mux.HandleFunc("GET /admin-certs.js", h.adminCertsJS)
 	mux.HandleFunc("GET /admin-app.js", h.adminAppJS)
 	mux.HandleFunc("GET /g6-app.js", h.g6AppJS)
 	mux.HandleFunc("GET /xterm-app.js", h.xtermAppJS)

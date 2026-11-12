@@ -588,7 +588,7 @@ openssl x509 -in /etc/proxypilot/tunnel/tls/cert.pem -noout -fingerprint -sha256
 func (h *handlers) vpnCertPage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	// 页面里含 CSS 百分号与 ${} 模板占位，这里必须按普通字符串写出，不能当格式化串
-	_, _ = io.WriteString(w, injectCSPNonce(certPageHTML, cspNonce(r)))
+	_, _ = io.WriteString(w, certPageHTML)
 }
 
 const certPageHTML = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
@@ -626,56 +626,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 
 <div class="card"><h2>下发结果</h2><table id="distTable"><tr><th>目标</th><th>状态</th><th>说明</th></tr></table></div>
 
-<script>
-const token = localStorage.getItem('token') || '';
-const $ = id => document.getElementById(id);
-function setMsg(text, cls){ $('msg').className = 'msg ' + (cls||''); $('msg').textContent = text; }
-function auth(){ return token ? {'Authorization':'Bearer '+token} : {}; }
-function fmtTime(ms){ return ms ? new Date(Number(ms)).toLocaleString() : '—'; }
-
-async function load(){
-  try{
-    const r = await fetch('/api/admin/vpn/cert', {headers: auth()});
-    if(r.status === 401 || r.status === 403){ setMsg('未登录管理后台，请先在 /admin 登录后再打开本页', 'err'); return; }
-    const d = await r.json();
-    if(!d.cert){ $('domains').textContent = '还没有证书'; return; }
-    $('domains').textContent = d.cert.domains;
-    $('source').textContent = d.cert.source;
-    $('notAfter').textContent = fmtTime(d.cert.not_after);
-    $('fp').textContent = d.cert.fingerprint;
-    if(!d.has_cloudflare_token) setMsg('提示：尚未配置 Cloudflare API Token（系统设置 → 邮件/集成），无法签发', 'err');
-  }catch(e){ setMsg('加载失败：'+e.message, 'err'); }
-}
-
-$('btnIssue').onclick = async ()=>{
-  $('btnIssue').disabled = true; setMsg('正在申请（DNS-01 验证通常 30–90 秒）…');
-  try{
-    const r = await fetch('/api/admin/vpn/cert/issue', {method:'POST', headers: Object.assign({'Content-Type':'application/json'}, auth()), body:'{}'});
-    const d = await r.json();
-    if(!r.ok){ setMsg('签发失败：'+(d.error||r.status), 'err'); }
-    else { setMsg('签发成功：'+d.domains+'，到期 '+fmtTime(d.not_after), 'ok'); }
-  }catch(e){ setMsg('签发失败：'+e.message, 'err'); }
-  $('btnIssue').disabled = false; load();
-};
-
-$('btnDist').onclick = async ()=>{
-  $('btnDist').disabled = true; setMsg('正在下发…');
-  try{
-    const r = await fetch('/api/admin/vpn/cert/distribute', {method:'POST', headers: auth()});
-    const d = await r.json();
-    if(!r.ok){ setMsg('下发失败：'+(d.error||r.status), 'err'); }
-    else {
-      const rows = (d.results||[]).map(x=>'<tr><td>'+x.target+'</td><td class="'+(x.ok?'ok':'err')+'">'+(x.ok?'已排队':'失败')+'</td><td><code>'+(x.error||('task#'+(x.task_id||'-')))+'</code></td></tr>').join('');
-      $('distTable').querySelectorAll('tr:not(:first-child)').forEach(e=>e.remove());
-      $('distTable').insertAdjacentHTML('beforeend', rows);
-      setMsg('已下发 '+d.queued+' 个目标', 'ok');
-    }
-  }catch(e){ setMsg('下发失败：'+e.message, 'err'); }
-  $('btnDist').disabled = false;
-};
-
-load();
-</script></div></body></html>`
+<script data-cfasync="false" src="` + pageScriptAdminCerts + `"></script></div></body></html>`
 
 
 // vpnCertDiag 诊断 Cloudflare Token：能看哪些域名、能不能读写 DNS 记录。

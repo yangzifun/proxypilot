@@ -28,12 +28,29 @@ dayjs.locale('zh-cn');
 const zhCN = zhCNraw && zhCNraw.default && zhCNraw.default.Modal ? zhCNraw.default : zhCNraw;
 
 /**
- * 版本兜底：服务端会在 <meta name="pp-version"> 与 __PP_BOOT__ 里注入真实版本。
+ * 版本兜底：服务端会在 <meta name="pp-version"> 与 #pp-boot 数据块里注入真实版本。
  * 这里不再写死任何版本号，避免内置版本与发布版本不一致（曾出现加载页显示旧版本）。
+ *
+ * boot 数据以 <script type="application/json" id="pp-boot"> 数据块下发（不执行），
+ * 由外部 /boot.js 解析并写入 window.__PP_BOOT__；强制 CSP 不允许可执行内联脚本。
+ * 这里再读一次 #pp-boot 作为兜底（例如 /boot.js 加载失败时）。
  */
+function readBootData() {
+  try {
+    const el = document.getElementById('pp-boot');
+    if (el && el.textContent) {
+      const data = JSON.parse(el.textContent);
+      if (data && typeof data === 'object') return data;
+    }
+  } catch (e) {
+    /* 数据块缺失/损坏时忽略，走下一级兜底 */
+  }
+  return null;
+}
 const ppVersionMeta = document.querySelector('meta[name="pp-version"]');
 const ppVersionFallback = (ppVersionMeta && ppVersionMeta.getAttribute('content')) || '';
-window.__PP_BOOT__ = window.__PP_BOOT__ || { superAdmin: 'admin', version: ppVersionFallback, flavor: 'antd' };
+const ppBootData = readBootData();
+window.__PP_BOOT__ = window.__PP_BOOT__ || ppBootData || { superAdmin: 'admin', version: ppVersionFallback, flavor: 'antd' };
 if (window.__PP_BOOT__ && !window.__PP_BOOT__.version) window.__PP_BOOT__.version = ppVersionFallback;
 
 /**

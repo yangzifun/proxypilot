@@ -144,7 +144,6 @@ func (h *handlers) clientAuthPage(w http.ResponseWriter, r *http.Request) {
 	siteKey := sanitizeTurnstileSiteKey(h.turnstileSiteKey(r.Context()))
 	page := strings.ReplaceAll(clientAuthHTML, "__CODE__", code)
 	page = strings.ReplaceAll(page, "__TURNSTILE_SITE_KEY__", siteKey)
-	page = injectCSPNonce(page, cspNonce(r))
 	_, _ = io.WriteString(w, page)
 }
 
@@ -206,68 +205,5 @@ button:disabled{opacity:.55;cursor:not-allowed}
 
 <div class="msg" id="msg"></div>
 </div>
-<script>
-const CODE = document.getElementById('code').textContent.trim();
-const SITE_KEY = "__TURNSTILE_SITE_KEY__";
-if(!SITE_KEY){ const box=document.getElementById("tsBox"); if(box) box.style.display="none"; }
-setTimeout(function(){
-  if(SITE_KEY && !window.turnstile){
-    const box=document.getElementById("tsBox");
-    if(box) box.innerHTML='<div style="color:#fb7185;font-size:12px;line-height:1.6">人机验证组件加载失败，请检查网络后刷新本页</div>';
-  }
-}, 5000);
-function turnstileToken(){
-  const el = document.querySelector('[name="cf-turnstile-response"]');
-  return el ? el.value : "";
-}
-const $ = id => document.getElementById(id);
-function say(t, cls){ const m=$('msg'); m.className='msg '+(cls||''); m.textContent=t; }
-async function post(url, body, token){
-  const r = await fetch(url, {method:'POST', headers: Object.assign({'Content-Type':'application/json'}, token?{Authorization:'Bearer '+token}:{}), body: JSON.stringify(body||{})});
-  const d = await r.json().catch(()=>({}));
-  if(!r.ok) throw new Error(d.error || ('HTTP '+r.status));
-  return d;
-}
-$('btnSend').onclick = async () => {
-  const email = $('email').value.trim();
-  if(!email) return say('请填写邮箱','err');
-  $('btnSend').disabled = true;
-  try{
-    await post('/api/portal/send-code', {email, cf_turnstile_response: turnstileToken()});
-    say('验证码已发送，请查收邮件','ok');
-    $('step2').classList.remove('hide');
-  }catch(e){ say('发送失败：'+e.message,'err'); }
-  $('btnSend').disabled = false;
-};
-function showDone(){
-  document.querySelector('.card').innerHTML = '<div class="brand"><div class="logo">✓</div><h1>授权成功</h1></div>'
-    + '<p>客户端已获得登录凭证，可以关闭本页面回到客户端了。</p>';
-}
-
-$('btnLogin').onclick = async () => {
-  const email = $('email').value.trim();
-  const code = $('otp').value.trim();
-  if(code.length !== 6) return say('请输入 6 位验证码','err');
-  $('btnLogin').disabled = true;
-  try{
-    const login = await post('/api/portal/login', {email, code});
-    await post('/api/client-auth/approve', {code: CODE}, login.token);
-    try { localStorage.setItem('pp_portal_token', login.token); } catch(e) {}
-    showDone();
-  }catch(e){ say('授权失败：'+e.message,'err'); $('btnLogin').disabled = false; }
-};
-
-// 浏览器里已经登录过用户中心 → 直接授权，不再要求输入验证码
-(function autoApprove(){
-  let tok = '';
-  try { tok = localStorage.getItem('pp_portal_token') || ''; } catch(e) {}
-  if(!tok) return;
-  say('检测到已登录的账号，正在授权…');
-  post('/api/client-auth/approve', {code: CODE}, tok)
-    .then(showDone)
-    .catch(function(e){
-      try { localStorage.removeItem('pp_portal_token'); } catch(err) {}
-      say('当前登录状态已失效，请在下方重新验证邮箱：'+e.message,'err');
-    });
-})();
-</script></body></html>`
+<script data-cfasync="false" src="` + pageScriptClientAuth + `"></script>
+</body></html>`
