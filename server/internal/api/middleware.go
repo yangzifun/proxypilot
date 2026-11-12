@@ -34,6 +34,12 @@ func (h *handlers) authed(opts authOpts, next http.HandlerFunc) http.HandlerFunc
 			writeError(w, http.StatusUnauthorized, "Token过期")
 			return
 		}
+		// 只接受会话令牌（typ=access）。mfa / email_login 事务票据虽然签名有效，
+		// 但绝不能当管理端 Bearer 使用（否则 MFA 形同虚设）。
+		if !claims.IsAccessToken() {
+			writeError(w, http.StatusUnauthorized, "令牌用途无效，请重新登录")
+			return
+		}
 		if claims.Role == "user" && !opts.allowUser {
 			writeError(w, http.StatusForbidden, "用户端登录令牌不能访问管理接口")
 			return

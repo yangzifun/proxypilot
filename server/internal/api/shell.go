@@ -142,6 +142,11 @@ func (h *handlers) shellBrowser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "登录已过期，请重新登录")
 		return
 	}
+	// 只接受会话令牌：mfa / email_login 事务票据不能打开管理终端。
+	if !claims.IsAccessToken() {
+		writeError(w, http.StatusUnauthorized, "令牌用途无效，请重新登录")
+		return
+	}
 	if claims.Role == "user" {
 		writeError(w, http.StatusForbidden, "用户端令牌不能使用管理终端")
 		return

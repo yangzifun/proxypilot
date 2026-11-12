@@ -160,6 +160,8 @@ export const PAGE_META = {
     icon: <DatabaseOutlined />,
     group: '系统',
     accent: '#16a34a',
+    // 备份含全库数据与恢复能力（导出已剔除密钥），仅超管可见。
+    superOnly: true,
   },
   vpn: {
     title: '自建组网',

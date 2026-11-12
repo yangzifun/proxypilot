@@ -54,6 +54,11 @@ func (h *handlers) sseServersStream(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "Token 过期")
 		return
 	}
+	// 只接受会话令牌：mfa / email_login 事务票据不能订阅管理端数据流。
+	if !claims.IsAccessToken() {
+		writeError(w, http.StatusUnauthorized, "令牌用途无效，请重新登录")
+		return
+	}
 	if claims.Role == "user" {
 		writeError(w, http.StatusForbidden, "用户令牌不能访问管理接口")
 		return

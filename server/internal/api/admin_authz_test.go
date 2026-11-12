@@ -21,11 +21,11 @@ func TestAdminAuthzSuperOnlyIsUsersOnly(t *testing.T) {
 	const superAdmin = "admin"
 	h := &handlers{cfg: config.Config{JWTSecret: secret, SuperAdmin: superAdmin}}
 
-	ordinary, err := auth.Sign(auth.Claims{Sub: "shao", Role: "admin", Exp: time.Now().Add(time.Hour).UnixMilli()}, secret)
+	ordinary, err := auth.Sign(auth.Claims{Sub: "shao", Role: "admin", Typ: auth.TokenTypeAccess, Exp: time.Now().Add(time.Hour).UnixMilli()}, secret)
 	if err != nil {
 		t.Fatalf("签发普通管理员令牌失败：%v", err)
 	}
-	super, err := auth.Sign(auth.Claims{Sub: superAdmin, Role: "admin", Exp: time.Now().Add(time.Hour).UnixMilli()}, secret)
+	super, err := auth.Sign(auth.Claims{Sub: superAdmin, Role: "admin", Typ: auth.TokenTypeAccess, Exp: time.Now().Add(time.Hour).UnixMilli()}, secret)
 	if err != nil {
 		t.Fatalf("签发超管令牌失败：%v", err)
 	}

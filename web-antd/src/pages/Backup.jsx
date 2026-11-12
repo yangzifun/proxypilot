@@ -113,7 +113,7 @@ export default function Backup() {
         showIcon
         style={{ marginBottom: 16 }}
         message="导入会覆盖当前数据库与桶文件"
-        description="导入前请确认已备份当前系统；恢复 Secret 需要相同的 PP_JWT_SECRET 与 PP_AGENT_KEY_SECRET。"
+        description="导入前请确认已备份当前系统。导出已剔除 jwt_secret / agent_key_secret 等密钥与 enc:v1 密文；导入时 admin_users / app_settings 等安全关键表会跳过，不会用备份内容覆盖账号与密钥。"
       />
 
       <Row gutter={[16, 16]}>
@@ -129,7 +129,7 @@ export default function Backup() {
                 <Switch checked={includeLogs} onChange={setIncludeLogs} />
               </Space>
               <Typography.Text type="secondary">
-                导出 `schema.sql`、全表 JSON、桶内文件与 manifest；Secret 为加密值。
+                导出 `schema.sql`、全表 JSON、桶内文件与 manifest；jwt_secret / agent_key_secret 等密钥与 enc:v1 密文已剔除。
               </Typography.Text>
               <Button type="primary" icon={<CloudDownloadOutlined />} loading={exporting} onClick={exportBackup}>
                 生成并下载 ZIP
@@ -162,7 +162,7 @@ export default function Backup() {
               ) : null}
               <Popconfirm
                 title="确认导入备份？"
-                description="数据库表将被备份内容整表替换，桶文件会被覆盖。"
+                description="业务表将被备份内容整表替换，桶文件会被覆盖；admin_users / app_settings 等安全关键表会被跳过。"
                 okText="确认导入"
                 okButtonProps={{ danger: true }}
                 onConfirm={importBackup}

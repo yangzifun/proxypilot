@@ -245,7 +245,7 @@ func (h *handlers) mfaLoginWithBackup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	claims, err := auth.Parse(strings.TrimSpace(req.MFAToken), h.cfg.JWTSecret)
-	if err != nil || claims.Purpose != "mfa" || claims.Sub == "" {
+	if err != nil || claims.Typ != auth.TokenTypeMFA || claims.Purpose != "mfa" || claims.Sub == "" {
 		writeError(w, http.StatusUnauthorized, "验证信息已过期，请重新登录")
 		return
 	}
@@ -281,6 +281,7 @@ func (h *handlers) mfaLoginWithBackup(w http.ResponseWriter, r *http.Request) {
 	token, err := auth.Sign(auth.Claims{
 		Sub: username, Exp: nowMillis() + 86_400_000,
 		RequiresMFA: true, MFAVerified: true, ViaBackupCode: true,
+		Typ: auth.TokenTypeAccess,
 	}, h.cfg.JWTSecret)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "签发 token 失败")

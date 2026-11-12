@@ -135,7 +135,7 @@ func (h *handlers) login(w http.ResponseWriter, r *http.Request) {
 // loginVerifyMFA 只接受 password+Turnstile 通过后签发的 mfa_token。
 func (h *handlers) loginVerifyMFA(w http.ResponseWriter, r *http.Request, req loginRequest, key string) {
 	claims, err := auth.Parse(strings.TrimSpace(req.MFAToken), h.cfg.JWTSecret)
-	if err != nil || claims.Purpose != "mfa" || claims.Sub == "" || claims.Sub != req.Username {
+	if err != nil || claims.Typ != auth.TokenTypeMFA || claims.Purpose != "mfa" || claims.Sub == "" || claims.Sub != req.Username {
 		loginLimiter.Fail(key)
 		writeError(w, http.StatusUnauthorized, "验证码无效或已过期")
 		return

@@ -24,7 +24,7 @@ import (
 )
 
 // version 由构建脚本注入：-ldflags "-X main.version=v1.0.0"
-var version = "V1.1"
+var version = "V1.2"
 
 func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -125,6 +125,9 @@ func run(log *slog.Logger) error {
 }
 
 // securityHeaders 统一追加基础安全响应头。
+//
+// CSP 由 api 包统一设置（强制模式 + 每请求 nonce），见 api/middleware_security.go；
+// 这里不再写 Content-Security-Policy-Report-Only，避免「只报告不拦截」。
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
@@ -132,16 +135,9 @@ func securityHeaders(next http.Handler) http.Handler {
 		h.Set("X-Frame-Options", "SAMEORIGIN")
 		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-		h.Set("Content-Security-Policy-Report-Only", cspPolicy+"; report-uri /api/csp-report")
 		next.ServeHTTP(w, r)
 	})
 }
-
-// cspPolicy 先以 Report-Only 收集违规；确认无副作用后再切换为强制模式。
-const cspPolicy = "default-src 'self'; script-src 'self' https://static.cloudflareinsights.com https://challenges.cloudflare.com; " +
-	"style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://s3.yangzifun.org; font-src 'self' data:; " +
-	"connect-src 'self' https://cloudflareinsights.com; frame-src https://challenges.cloudflare.com; " +
-	"frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'"
 
 func fileExists(p string) bool {
 	st, err := os.Stat(p)

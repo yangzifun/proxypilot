@@ -376,8 +376,10 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("POST /api/jobs/{id}/retry", h.authed(authOpts{}, h.jobsRetry))
 	mux.HandleFunc("POST /api/jobs/clear", h.authed(authOpts{}, h.jobsClear))
 
-	mux.HandleFunc("GET /api/backup/export", h.authed(authOpts{}, h.backupExport))
-	mux.HandleFunc("POST /api/backup/import", h.authed(authOpts{}, h.backupImport))
+	// 备份导出/导入：整库导出可绕过权限模型（拿到 jwt_secret 即可伪造超管令牌），
+	// 因此只允许超级管理员；导出内容另做密钥字段剔除、导入禁止覆盖安全关键表。
+	mux.HandleFunc("GET /api/backup/export", h.authed(authOpts{superOnly: true}, h.backupExport))
+	mux.HandleFunc("POST /api/backup/import", h.authed(authOpts{superOnly: true}, h.backupImport))
 
 	mux.HandleFunc("GET /api/attachments/status", h.authed(authOpts{}, h.attachmentsStatus))
 	mux.HandleFunc("GET /api/attachments", h.authed(authOpts{}, h.attachmentsList))

@@ -81,7 +81,7 @@ export default function App() {
       <Result
         status="403"
         title="仅超级管理员可访问此页面"
-        subTitle={`「管理账号」只对「${superAdmin}」这类超级管理员账号开放；其余管理后台功能对普通管理员均可用。`}
+        subTitle={`该页面只对「${superAdmin}」这类超级管理员账号开放；其余管理后台功能对普通管理员均可用。`}
         extra={
           <Button type="primary" onClick={() => navigate('dash')}>
             返回系统概览

@@ -588,7 +588,7 @@ openssl x509 -in /etc/proxypilot/tunnel/tls/cert.pem -noout -fingerprint -sha256
 func (h *handlers) vpnCertPage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	// 页面里含 CSS 百分号与 ${} 模板占位，这里必须按普通字符串写出，不能当格式化串
-	_, _ = io.WriteString(w, certPageHTML)
+	_, _ = io.WriteString(w, injectCSPNonce(certPageHTML, cspNonce(r)))
 }
 
 const certPageHTML = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">

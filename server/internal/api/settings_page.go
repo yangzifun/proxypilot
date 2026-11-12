@@ -155,5 +155,5 @@ a{color:var(--pri);text-decoration:none}
 func (h *handlers) settingsPage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
-	_, _ = w.Write([]byte(settingsPageHTML))
+	_, _ = w.Write([]byte(injectCSPNonce(settingsPageHTML, cspNonce(r))))
 }

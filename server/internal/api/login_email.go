@@ -114,7 +114,7 @@ func (h *handlers) loginEmailCodeVerify(w http.ResponseWriter, r *http.Request) 
 	}
 	if mfaEnabled == 1 {
 		ticket, err := auth.Sign(auth.Claims{
-			Sub: username, Purpose: emailLoginTicketPurpose,
+			Sub: username, Purpose: emailLoginTicketPurpose, Typ: auth.TokenTypeEmailLogin,
 			Exp: nowMillis() + 10*60*1000,
 		}, h.cfg.JWTSecret)
 		if err != nil {
@@ -150,7 +150,7 @@ func (h *handlers) loginEmailCodeMfa(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ticket, err := auth.Parse(ticketRaw, h.cfg.JWTSecret)
-	if err != nil || ticket.Purpose != emailLoginTicketPurpose {
+	if err != nil || ticket.Typ != auth.TokenTypeEmailLogin || ticket.Purpose != emailLoginTicketPurpose {
 		writeError(w, http.StatusUnauthorized, "登录会话已失效，请重新获取验证码")
 		return
 	}
@@ -180,7 +180,7 @@ func (h *handlers) loginEmailCodeMfa(w http.ResponseWriter, r *http.Request) {
 		token, err := auth.Sign(auth.Claims{
 			Sub: ticket.Sub, Exp: nowMillis() + 24*3600*1000,
 			Role: "admin", RequiresMFA: true, MFAVerified: true,
-			ViaBackupCode: true,
+			ViaBackupCode: true, Typ: auth.TokenTypeAccess,
 		}, h.cfg.JWTSecret)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "登录失败")

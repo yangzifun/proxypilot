@@ -63,7 +63,51 @@ func TestIssueMFATokenPurpose(t *testing.T) {
 	if c.Sub != "admin" || c.Purpose != "mfa" || !c.RequiresMFA {
 		t.Fatalf("claims 不正确: %+v", c)
 	}
+	if c.Typ != TokenTypeMFA || c.IsAccessToken() {
+		t.Fatalf("mfa 令牌用途必须是 mfa 且不能当 access：%+v", c)
+	}
 	if _, err := Parse(token, "wrong-secret"); err == nil {
 		t.Fatal("错误 secret 不应通过")
+	}
+}
+
+// 三种令牌的用途声明必须正确：只有 access 可以访问业务接口。
+func TestTokenTypes(t *testing.T) {
+	admin, err := IssueAdminTokenTTL("admin", "secret", true, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mfa, err := IssueMFAToken("admin", "secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	portal, err := IssuePortalTokenTTL("user@example.com", "secret", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, tc := range map[string]struct {
+		token string
+		want  string
+		ok    bool
+	}{
+		"admin":  {admin, TokenTypeAccess, true},
+		"mfa":    {mfa, TokenTypeMFA, false},
+		"portal": {portal, TokenTypeAccess, true},
+	} {
+		c, err := Parse(tc.token, "secret")
+		if err != nil {
+			t.Fatalf("%s 解析失败：%v", name, err)
+		}
+		if c.Typ != tc.want || c.IsAccessToken() != tc.ok {
+			t.Fatalf("%s：typ=%q IsAccessToken=%v，期望 typ=%q ok=%v", name, c.Typ, c.IsAccessToken(), tc.want, tc.ok)
+		}
+	}
+	// 旧版本没有 typ 字段的令牌按非 access 处理（部署后需要重新登录）。
+	legacy, err := Sign(Claims{Sub: "admin", Exp: time.Now().Add(time.Hour).UnixMilli()}, "secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c, err := Parse(legacy, "secret"); err != nil || c.IsAccessToken() {
+		t.Fatalf("旧版无 typ 令牌不应被视为 access：%+v err=%v", c, err)
 	}
 }

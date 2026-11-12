@@ -10,6 +10,17 @@ import (
 	"time"
 )
 
+// 令牌用途（Claims.Typ）。只有 access 令牌可以访问管理/门户接口；
+// mfa 与 email_login 是一次性事务票据，只能用于各自的验证步骤。
+const (
+	// TokenTypeAccess 管理端 / 用户中心会话令牌（IssueAdminTokenTTL / IssuePortalTokenTTL）。
+	TokenTypeAccess = "access"
+	// TokenTypeMFA 密码通过后签发的 MFA 挑战票据（IssueMFAToken）。
+	TokenTypeMFA = "mfa"
+	// TokenTypeEmailLogin 邮箱验证码通过后签发的 MFA 事务票据。
+	TokenTypeEmailLogin = "email_login"
+)
+
 // Claims 与 Worker 端签发的 JWT 载荷保持一致（exp 为 Unix 毫秒）。
 type Claims struct {
 	Sub           string `json:"sub"`
@@ -20,7 +31,14 @@ type Claims struct {
 	ViaOIDC       bool   `json:"via_oidc,omitempty"`
 	ViaBackupCode bool   `json:"via_backup_code,omitempty"`
 	Purpose       string `json:"purpose,omitempty"`
+	// Typ 明确令牌用途："access" | "mfa" | "email_login"。
+	// 旧版本签发的令牌没有该字段，按"非 access"处理（部署后需重新登录）。
+	Typ string `json:"typ,omitempty"`
 }
+
+// IsAccessToken 判断令牌是否为可访问业务接口的会话令牌。
+// 只认显式的 access，缺省/其它用途一律拒绝（默认拒绝，避免再次出现用途混淆）。
+func (c Claims) IsAccessToken() bool { return c.Typ == TokenTypeAccess }
 
 // ErrInvalidToken 表示签名错误、结构错误或已过期。
 var ErrInvalidToken = errors.New("token 无效或已过期")
@@ -92,6 +110,7 @@ func IssueAdminTokenTTL(username, secret string, mfaVerified bool, ttl time.Dura
 		Exp:         time.Now().Add(ttl).UnixMilli(),
 		RequiresMFA: mfaVerified,
 		MFAVerified: mfaVerified,
+		Typ:         TokenTypeAccess,
 	}, secret)
 }
 
@@ -103,6 +122,7 @@ func IssueMFAToken(username, secret string) (string, error) {
 		Exp:         time.Now().Add(5 * time.Minute).UnixMilli(),
 		Purpose:     "mfa",
 		RequiresMFA: true,
+		Typ:         TokenTypeMFA,
 	}, secret)
 }
 
@@ -120,5 +140,6 @@ func IssuePortalTokenTTL(email, secret string, ttl time.Duration) (string, error
 		Sub:  email,
 		Exp:  time.Now().Add(ttl).UnixMilli(),
 		Role: "user",
+		Typ:  TokenTypeAccess,
 	}, secret)
 }

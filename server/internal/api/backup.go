@@ -61,9 +61,11 @@ func (h *handlers) backupExport(w http.ResponseWriter, r *http.Request) {
 	manifest := map[string]any{
 		"app": "proxypilot", "version": Version, "exported_at": now.Format(time.RFC3339),
 		"tables": map[string]int64{}, "files": 0, "bucket": includeBucket, "agent_dist": includeAgent,
-		"note": "数据库为 schema.sql + 每表 JSON；本地桶按相对路径打包；Secret 为加密存储值，恢复需相同 PP_JWT_SECRET / PP_AGENT_KEY_SECRET",
+		"note": "数据库为 schema.sql + 每表 JSON；本地桶按相对路径打包；" +
+			"jwt_secret / agent_key_secret 等密钥与 enc:v1 密文已剔除，恢复后需重新填写密钥类设置",
 	}
 	counts := map[string]int64{}
+	redactedFields := int64(0)
 
 	// 1) schema.sql
 	sw, err := zw.Create("schema.sql")
@@ -84,14 +86,16 @@ func (h *handlers) backupExport(w http.ResponseWriter, r *http.Request) {
 		if !includeLogs && (table == "config_access_logs" || table == "node_push_logs") {
 			continue
 		}
-		n, err := h.backupTableJSON(r, zw, table)
+		n, rf, err := h.backupTableJSON(r, zw, table)
 		if err != nil {
 			h.log.Warn("备份：导出表失败", "table", table, "err", err)
 			continue
 		}
 		counts[table] = n
+		redactedFields += rf
 	}
 	manifest["tables"] = counts
+	manifest["redacted_fields"] = redactedFields
 
 	// 3) 本地桶
 	files := 0
@@ -141,24 +145,69 @@ func (h *handlers) backupTableNames(r *http.Request) ([]string, error) {
 	return out, rows.Err()
 }
 
-func (h *handlers) backupTableJSON(r *http.Request, zw *zip.Writer, table string) (int64, error) {
+// backupSecretSettingKeys 备份导出时必须剔除明文的 app_settings 键：
+// jwt_secret / agent_key_secret 是令牌签名与密文加密的根（拿到即可伪造超管令牌、
+// 解密其它密文）；其余为第三方凭证（SMTP/OIDC/Turnstile/Cloudflare/R2/DKIM）。
+var backupSecretSettingKeys = map[string]bool{
+	"jwt_secret":           true,
+	"agent_key_secret":     true,
+	"agent_token_enc":      true,
+	settingSMTPPass:        true,
+	settingOIDCSecret:      true,
+	settingTurnstileSecret: true,
+	settingCFToken:         true,
+	settingR2SecretKey:     true,
+	settingMailDKIMKey:     true,
+}
+
+// backupRedactRow 在导出时剔除密钥类字段，返回发生剔除的字段数：
+//   - app_settings 中明文保存的签名密钥 / 加密根 / 第三方凭证；
+//   - 任意表中形如 enc:v1:... 的密文（如 servers.agent_token_enc）。
+//
+// 说明：servers.agent_token_hash 是单向哈希、不可直接使用，保留它可让恢复后的节点
+// 继续鉴权；vpn_certificates.key_pem 属于证书功能数据，不在本次「备份泄露即超管失陷」
+// 的利用链上，仍由 superOnly + 文件权限保护。
+func backupRedactRow(table string, obj map[string]any) int {
+	n := 0
+	if table == "app_settings" {
+		if key, _ := obj["key"].(string); backupSecretSettingKeys[key] {
+			if v, ok := obj["value"]; !ok || v != "" {
+				obj["value"] = ""
+				n++
+			}
+		}
+	}
+	for col, raw := range obj {
+		s, ok := raw.(string)
+		if !ok || s == "" {
+			continue
+		}
+		if strings.HasPrefix(s, agentKeyVersion) {
+			obj[col] = ""
+			n++
+		}
+	}
+	return n
+}
+
+func (h *handlers) backupTableJSON(r *http.Request, zw *zip.Writer, table string) (int64, int64, error) {
 	rows, err := h.db.QueryContext(r.Context(), "SELECT * FROM `"+strings.ReplaceAll(table, "`", "``")+"`")
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	defer rows.Close()
 	cols, err := rows.Columns()
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	fw, err := zw.Create("db/" + table + ".json")
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	if _, err := io.WriteString(fw, "[\n"); err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	var n int64
+	var n, redacted int64
 	first := true
 	for rows.Next() {
 		vals := make([]any, len(cols))
@@ -167,29 +216,30 @@ func (h *handlers) backupTableJSON(r *http.Request, zw *zip.Writer, table string
 			ptrs[i] = &vals[i]
 		}
 		if err := rows.Scan(ptrs...); err != nil {
-			return n, err
+			return n, redacted, err
 		}
 		obj := make(map[string]any, len(cols))
 		for i, c := range cols {
 			obj[c] = backupValue(vals[i])
 		}
+		redacted += int64(backupRedactRow(table, obj))
 		b, err := json.Marshal(obj)
 		if err != nil {
 			continue
 		}
 		if !first {
 			if _, err := io.WriteString(fw, ",\n"); err != nil {
-				return n, err
+				return n, redacted, err
 			}
 		}
 		first = false
 		if _, err := fw.Write(b); err != nil {
-			return n, err
+			return n, redacted, err
 		}
 		n++
 	}
 	_, err = io.WriteString(fw, "\n]\n")
-	return n, err
+	return n, redacted, err
 }
 
 func backupValue(v any) any {

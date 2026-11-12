@@ -6,6 +6,7 @@ import (
 	_ "embed"
 	"encoding/hex"
 	"encoding/json"
+	"html"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -104,7 +105,52 @@ func (h *handlers) bootJSON(mode string) string {
 	return string(raw)
 }
 
-func (h *handlers) shellHTML(mode string) string {
+// scriptTagRe 大小写不敏感地定位 <script 起始标签（用字节索引，避免 ToLower 改长度）。
+var scriptTagRe = regexp.MustCompile(`(?i)<script`)
+
+// injectCSPNonce 给缺少 nonce 的 <script> 标签补上本次请求的 nonce。
+//
+// 强制 CSP 下未带 nonce 的内联脚本会被浏览器拦截；页面里所有内联脚本（引导脚本、
+// 设置页/证书页/客户端授权页的脚本）都必须带上同一个 nonce。外部 <script src> 加
+// nonce 无副作用，因此这里统一处理。自定义 WebDist 构建产物的 index.html 也走这里。
+func injectCSPNonce(page, nonce string) string {
+	if nonce == "" {
+		return page
+	}
+	attr := ` nonce="` + html.EscapeString(nonce) + `"`
+	locs := scriptTagRe.FindAllStringIndex(page, -1)
+	if len(locs) == 0 {
+		return page
+	}
+	var b strings.Builder
+	last := 0
+	for _, loc := range locs {
+		if loc[0] < last {
+			continue
+		}
+		b.WriteString(page[last:loc[0]])
+		endRel := strings.Index(page[loc[1]:], ">")
+		if endRel < 0 {
+			b.WriteString(page[loc[0]:])
+			return b.String()
+		}
+		end := loc[1] + endRel
+		tag := page[loc[0] : end+1]
+		lowerTag := strings.ToLower(tag)
+		if strings.Contains(lowerTag, "nonce=") {
+			b.WriteString(tag)
+		} else if strings.HasSuffix(tag, "/>") {
+			b.WriteString(tag[:len(tag)-2] + attr + "/>")
+		} else {
+			b.WriteString(tag[:len(tag)-1] + attr + ">")
+		}
+		last = end + 1
+	}
+	b.WriteString(page[last:])
+	return b.String()
+}
+
+func (h *handlers) shellHTML(mode, nonce string) string {
 	meta := h.webMetaInfo()
 	isPortal := mode == "portal"
 	title := "ProxyPilot 控制台"
@@ -114,7 +160,7 @@ func (h *handlers) shellHTML(mode string) string {
 		theme = "#f6f7fb"
 	}
 	ver := h.assetVersion()
-	return `<!DOCTYPE html>
+	return injectCSPNonce(`<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -158,7 +204,7 @@ func (h *handlers) shellHTML(mode string) string {
     <div class="pp-boot-version">` + webVersion(meta.Version) + `</div>
     <div class="pp-boot-track"><i></i></div>
     <div class="pp-boot-tip">正在加载控制台…</div>
-    <div class="pp-boot-retry" id="pp-boot-retry" hidden>加载时间较长，<a href="" onclick="location.reload();return false;">刷新页面</a></div>
+    <div class="pp-boot-retry" id="pp-boot-retry" hidden>加载时间较长，<a href="" id="pp-reload-link">刷新页面</a></div>
   </div>
 </div>
 <script data-cfasync="false">window.__PP_BOOT__=` + h.bootJSON(mode) + `;</script>
@@ -167,9 +213,17 @@ func (h *handlers) shellHTML(mode string) string {
   var retry = document.getElementById('pp-boot-retry');
   function showRetry(message) {
     if (!retry || !document.querySelector('.pp-boot')) return;
-    if (message) retry.innerHTML = message + '，<a href="" onclick="location.reload();return false;">刷新页面</a>';
+    if (message) retry.innerHTML = message + '，<a href="" id="pp-reload-link">刷新页面</a>';
     retry.hidden = false;
   }
+  // 强制 CSP 不允许 onclick 内联事件处理器，这里用事件委托实现「刷新页面」。
+  document.addEventListener('click', function (e) {
+    var el = e.target;
+    while (el && el !== document) {
+      if (el.id === 'pp-reload-link') { e.preventDefault(); location.reload(); return; }
+      el = el.parentNode;
+    }
+  });
   window.setTimeout(function () { showRetry('加载时间较长'); }, 12000);
   window.addEventListener('error', function () { showRetry('资源加载失败'); }, true);
 })();
@@ -177,7 +231,7 @@ func (h *handlers) shellHTML(mode string) string {
 <script data-cfasync="false" src="/admin-app.js?v=` + ver + `" defer fetchpriority="high"></script>
 <noscript><p style="font-family:system-ui;padding:24px">当前界面需要启用 JavaScript。</p></noscript>
 </body>
-</html>`
+</html>`, nonce)
 }
 
 var bootScriptRe = regexp.MustCompile(`window\.__PP_BOOT__\s*=\s*[^;]+;`)
@@ -201,7 +255,7 @@ func (h *handlers) serveCustomIndex(w http.ResponseWriter, r *http.Request, mode
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
-	_, _ = w.Write([]byte(html))
+	_, _ = w.Write([]byte(injectCSPNonce(html, cspNonce(r))))
 	return true
 }
 
@@ -228,7 +282,7 @@ func (h *handlers) pageIndex(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	ver := h.assetVersion()
 	w.Header().Set("Link", "</admin-app.js?v="+ver+">; rel=preload; as=script, </admin-app.css?v="+ver+">; rel=preload; as=style")
-	_, _ = w.Write([]byte(h.shellHTML(mode)))
+	_, _ = w.Write([]byte(h.shellHTML(mode, cspNonce(r))))
 }
 
 func serveEmbeddedAsset(w http.ResponseWriter, r *http.Request, body []byte, contentType, etag string) {

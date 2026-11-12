@@ -17,6 +17,28 @@ import (
 
 var backupTableRe = regexp.MustCompile(`^[A-Za-z0-9_]+$`)
 
+// backupImportForbiddenTables 导入时禁止整表替换的安全关键表：
+//   - admin_users / admin_oidc_identities / mfa_backup_codes：整表替换可植入攻击者账号、
+//     覆盖超管口令哈希或 MFA 状态，等于直接夺取唯一超管边界；
+//   - app_settings：内含 jwt_secret / agent_key_secret，覆盖后可签发任意令牌、
+//     解密其它密文（导出侧已剔除密钥，恢复时必须沿用本机密钥，不能从备份改写）。
+//
+// schema_migrations 另由版本管理排除，不参与导入。
+var backupImportForbiddenTables = map[string]bool{
+	"admin_users":           true,
+	"admin_oidc_identities": true,
+	"mfa_backup_codes":      true,
+	"app_settings":          true,
+}
+
+// backupImportTableAllowed 判断某张表是否允许由备份导入覆盖。
+func backupImportTableAllowed(table string) bool {
+	if table == "schema_migrations" {
+		return false
+	}
+	return !backupImportForbiddenTables[table]
+}
+
 // POST /api/backup/import —— 导入 backupExport 生成的 ZIP。
 // 数据库先在一个事务里整表替换，桶文件在事务提交后覆盖写入。
 func (h *handlers) backupImport(w http.ResponseWriter, r *http.Request) {
@@ -136,16 +158,22 @@ func (h *handlers) backupImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tables, rows := 0, int64(0)
+	skipped := []string{}
 	for _, f := range zr.File {
 		name := strings.ReplaceAll(f.Name, "\\", "/")
 		if !strings.HasPrefix(name, "db/") || !strings.HasSuffix(name, ".json") {
 			continue
 		}
 		table := strings.TrimSuffix(strings.TrimPrefix(name, "db/"), ".json")
-		if !backupTableRe.MatchString(table) || table == "schema_migrations" {
+		if !backupTableRe.MatchString(table) {
 			continue
 		}
 		if !existing[table] {
+			continue
+		}
+		if !backupImportTableAllowed(table) {
+			// 安全关键表一律跳过：备份不能改写账号 / 密钥 / 迁移版本。
+			skipped = append(skipped, table)
 			continue
 		}
 		n, err := importBackupTable(r.Context(), tx, table, f)
@@ -179,9 +207,10 @@ func (h *handlers) backupImport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.recordNodeLog(r.Context(), 0, 0, "backup-import", "success", 0,
-		fmt.Sprintf("导入备份 %s（表 %d 个，行 %d，文件 %d）", manifest, tables, rows, files), "", "admin")
+		fmt.Sprintf("导入备份 %s（表 %d 个，行 %d，文件 %d，跳过安全关键表 %d 个）", manifest, tables, rows, files, len(skipped)), "", "admin")
 	writeJSON(w, http.StatusOK, map[string]any{
 		"success": true, "version": manifest, "tables": tables, "rows": rows, "files": files,
+		"skipped_tables": skipped,
 	})
 }
 
@@ -230,6 +259,10 @@ func backupExistingTables(ctx context.Context, tx *sql.Tx) (map[string]bool, err
 }
 
 func importBackupTable(ctx context.Context, tx *sql.Tx, table string, f *zip.File) (int64, error) {
+	// 防御性二次校验：即使调用方漏判，也绝不整表替换安全关键表。
+	if !backupImportTableAllowed(table) {
+		return 0, fmt.Errorf("表 %s 不允许从备份导入", table)
+	}
 	rc, err := f.Open()
 	if err != nil {
 		return 0, err

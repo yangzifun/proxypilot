@@ -20,7 +20,7 @@ func (h *handlers) portalSession(r *http.Request) (string, bool) {
 		return "", false
 	}
 	claims, err := auth.Parse(strings.TrimSpace(strings.TrimPrefix(raw, "Bearer ")), h.cfg.JWTSecret)
-	if err != nil || claims.Role != "user" || claims.Sub == "" {
+	if err != nil || !claims.IsAccessToken() || claims.Role != "user" || claims.Sub == "" {
 		return "", false
 	}
 	return normalizeEmail(claims.Sub), true

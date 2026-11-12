@@ -19,6 +19,10 @@ func (h *handlers) adminOrPortal(r *http.Request) (email string, admin bool, ok 
 	if err != nil {
 		return "", false, false
 	}
+	// mfa / email_login 事务票据不是会话，不能当管理员或门户用户使用。
+	if !claims.IsAccessToken() {
+		return "", false, false
+	}
 	if claims.Role == "user" {
 		return normalizeEmail(claims.Sub), false, true
 	}

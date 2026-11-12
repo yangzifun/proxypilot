@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"html"
 	"io"
 	"net/http"
 	"strings"
@@ -135,11 +136,29 @@ func (h *handlers) clientAuthApprove(w http.ResponseWriter, r *http.Request) {
 // GET /client-auth?code=...  —— 独立授权页（不依赖管理端 SPA）
 func (h *handlers) clientAuthPage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	code := strings.TrimSpace(r.URL.Query().Get("code"))
-	siteKey := h.turnstileSiteKey(r.Context())
+	w.Header().Set("Cache-Control", "no-store")
+	// code 来自 URL 查询串且本页未鉴权：必须先做 HTML 转义再回显，
+	// 否则可构造 </span><script>…</script> 在面板源执行任意脚本（反射 XSS）。
+	// 页面脚本只通过 document.getElementById('code').textContent 读取，不会二次解码实体。
+	code := html.EscapeString(strings.TrimSpace(r.URL.Query().Get("code")))
+	siteKey := sanitizeTurnstileSiteKey(h.turnstileSiteKey(r.Context()))
 	page := strings.ReplaceAll(clientAuthHTML, "__CODE__", code)
 	page = strings.ReplaceAll(page, "__TURNSTILE_SITE_KEY__", siteKey)
-	_, _ = w.Write([]byte(page))
+	page = injectCSPNonce(page, cspNonce(r))
+	_, _ = io.WriteString(w, page)
+}
+
+// sanitizeTurnstileSiteKey 只保留 Site Key 的合法字符集：
+// 它同时被拼进 HTML 属性与 JS 字符串，必须防止引号/尖括号等破坏页面结构。
+func sanitizeTurnstileSiteKey(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 const clientAuthHTML = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
