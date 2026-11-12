@@ -21,6 +21,9 @@ const (
 	settingAgentMeshSync = "agent_mesh_sync"
 	settingAgentBinaryBase = "agent_binary_base_url"
 	settingComponentBase   = "component_base_url"
+	// sing-box 组件的版本与各架构 sha256：安装时下发给节点做校验
+	settingComponentVersion = "component_version"
+	settingComponentSHA     = "component_sha"
 	settingPasswordEnabled = "auth_password_enabled"
 	settingEmailCode       = "auth_email_code_enabled"
 	settingOIDCEnabled     = "auth_oidc_enabled"
@@ -70,6 +73,9 @@ var settingDefs = []settingDef{
 	{Key: settingAgentMeshSync, Bool: true},
 	{Key: settingAgentBinaryBase},
 	{Key: settingComponentBase},
+	{Key: settingComponentVersion},
+	{Key: settingComponentSHA + "_amd64"},
+	{Key: settingComponentSHA + "_arm64"},
 	{Key: settingPasswordEnabled, Bool: true},
 	{Key: settingEmailCode, Bool: true},
 	{Key: settingOIDCEnabled, Bool: true},
