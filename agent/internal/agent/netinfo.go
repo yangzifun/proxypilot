@@ -76,7 +76,32 @@ func detectPublicIP(ctx context.Context) string {
 	return ""
 }
 
+// meshIfaceHints 组网网卡的常见名称（Cloudflare WARP / wgcf / tailscale / wireguard）。
+// 与 metrics 包 net.go 的 meshIfaceNameHints 保持同一口径（两个包各有用途，故各留一份）。
+var meshIfaceHints = []string{"cloudflarewarp", "warp", "wgcf", "tailscale", "wireguard"}
+
+// isMeshIface 判断网卡是否为 WARP/组网隧道网卡。
+// 除关键字外，还兼容 wireguard 的默认命名 wg0 / wg1 等。
+func isMeshIface(name string) bool {
+	n := strings.ToLower(strings.TrimSpace(name))
+	if n == "" {
+		return false
+	}
+	for _, hint := range meshIfaceHints {
+		if strings.Contains(n, hint) {
+			return true
+		}
+	}
+	if len(n) >= 3 && strings.HasPrefix(n, "wg") && n[2] >= '0' && n[2] <= '9' {
+		return true
+	}
+	return false
+}
+
 // detectPrivateIPv4 返回本机第一个内网 IPv4（10/172.16/192.168/CGNAT）。
+//
+// 跳过 WARP/组网网卡：WARP 会分配 100.64/10（或 172.16.0.2）组网地址，
+// 那不是主机的内网 IP，报了会让面板把它当成主机地址显示。
 func detectPrivateIPv4() string {
 	ifaces, err := net.Interfaces()
 	if err != nil {
@@ -84,6 +109,9 @@ func detectPrivateIPv4() string {
 	}
 	for _, it := range ifaces {
 		if it.Flags&net.FlagUp == 0 || it.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		if isMeshIface(it.Name) {
 			continue
 		}
 		addrs, err := it.Addrs()
@@ -113,7 +141,7 @@ func isPrivateV4(s string) bool {
 	if v4 == nil {
 		return false
 	}
-	return v4.IsPrivate() ||     // 10/8, 172.16/12, 192.168/16
+	return v4.IsPrivate() || // 10/8, 172.16/12, 192.168/16
 		v4.IsLoopback() ||
 		v4.IsLinkLocalUnicast() ||
 		(v4[0] == 100 && v4[1] >= 64 && v4[1] <= 127) // CGNAT 100.64/10（WARP 组网）
@@ -143,9 +171,6 @@ func (a *Agent) currentPrivateIP() string {
 	return agentPrivateIP.get()
 }
 
-// meshIfaceHints 组网网卡的常见名称（Cloudflare WARP / wgcf / tailscale 等）
-var meshIfaceHints = []string{"cloudflarewarp", "warp", "wgcf", "tailscale", "wg0"}
-
 // detectMeshIPs 返回组网网卡上的 IPv4 / IPv6（Cloudflare WARP 同时会分配两者）。
 func detectMeshIPs() (string, string) {
 	ifaces, err := net.Interfaces()
@@ -153,18 +178,7 @@ func detectMeshIPs() (string, string) {
 		return "", ""
 	}
 	for _, it := range ifaces {
-		if it.Flags&net.FlagUp == 0 {
-			continue
-		}
-		name := strings.ToLower(it.Name)
-		matched := false
-		for _, hint := range meshIfaceHints {
-			if strings.Contains(name, hint) {
-				matched = true
-				break
-			}
-		}
-		if !matched {
+		if it.Flags&net.FlagUp == 0 || !isMeshIface(it.Name) {
 			continue
 		}
 		addrs, err := it.Addrs()

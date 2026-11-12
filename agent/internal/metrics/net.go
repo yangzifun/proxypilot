@@ -96,35 +96,138 @@ func sumNet(list ...NetStats) NetStats {
 // PrimaryIP 返回本机默认路由出口网卡上的全局单播地址（IPv4 优先）。
 // 用途：Agent 走直连/非 Cloudflare 链路时，Worker 拿不到 cf-connecting-ip，
 // 由 Agent 自己上报一个可用地址，后台监控就不会显示「未上报 IP」。
+//
+// 这不是「公网出口 IP」的探测，只读本机网卡，所以必须排除 WARP/组网网卡：
+// 否则节点装上 Cloudflare WARP 后，这里会把组网地址（IPv4 100.64/10 CGNAT、
+// IPv6 2606:4700::/32）当成主机 IP 上报，面板「IP / 主机」列就会显示 WARP 地址。
 func PrimaryIP() string {
+	return pickPrimaryIP(snapshotIfaces())
+}
+
+// PrimaryIPv6 返回本机真实网卡上的 IPv6（V11.25）。
+// 跳过 loopback / 链路本地 / 未指定 / IPv4 映射地址，并排除 WARP/组网网卡
+// 及其 2606:4700::/32 等 WARP 地址段；公网 2000::/3 优先，
+// 没有公网时回落到真实网卡上的 ULA（fc00::/7）；都没有则返回空串。
+//
+// 绝不回落到 WARP 地址：那会让面板把组网 IPv6 显示成「主机 IP」。
+func PrimaryIPv6() string {
+	return pickPrimaryIPv6(snapshotIfaces())
+}
+
+// ifaceView 是网卡枚举的可测试快照。
+// net.Interface.Addrs 只能在真实系统上调用，单测无法伪造，所以抽成这个视图。
+type ifaceView struct {
+	name  string
+	flags net.Flags
+	addrs []net.IP
+}
+
+// snapshotIfaces 枚举本机网卡与地址。
+func snapshotIfaces() []ifaceView {
 	ifaces, err := net.Interfaces()
 	if err != nil {
-		return ""
+		return nil
 	}
-	var v6 string
-	for _, iface := range ifaces {
-		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
-			continue
-		}
-		addrs, err := iface.Addrs()
-		if err != nil {
-			continue
-		}
-		for _, a := range addrs {
-			var ip net.IP
-			switch v := a.(type) {
-			case *net.IPNet:
-				ip = v.IP
-			case *net.IPAddr:
-				ip = v.IP
+	out := make([]ifaceView, 0, len(ifaces))
+	for _, it := range ifaces {
+		v := ifaceView{name: it.Name, flags: it.Flags}
+		if addrs, err := it.Addrs(); err == nil {
+			for _, a := range addrs {
+				switch x := a.(type) {
+				case *net.IPNet:
+					v.addrs = append(v.addrs, x.IP)
+				case *net.IPAddr:
+					v.addrs = append(v.addrs, x.IP)
+				}
 			}
-			if ip == nil || ip.IsLoopback() || ip.IsLinkLocalUnicast() {
+		}
+		out = append(out, v)
+	}
+	return out
+}
+
+// meshIfaceNameHints 是 WARP / 组网隧道网卡的名称关键字（小写包含匹配）。
+// 与 agent 包 netinfo.go 的 meshIfaceHints 保持同一口径（两个包各有用途，故各留一份）。
+var meshIfaceNameHints = []string{"cloudflarewarp", "warp", "wgcf", "tailscale", "wireguard"}
+
+// isMeshIfaceName 判断网卡是否为 WARP/组网隧道网卡。
+// 除关键字外，还兼容 wireguard 的默认命名 wg0 / wg1 等。
+func isMeshIfaceName(name string) bool {
+	n := strings.ToLower(strings.TrimSpace(name))
+	if n == "" {
+		return false
+	}
+	for _, hint := range meshIfaceNameHints {
+		if strings.Contains(n, hint) {
+			return true
+		}
+	}
+	if len(n) >= 3 && strings.HasPrefix(n, "wg") && n[2] >= '0' && n[2] <= '9' {
+		return true
+	}
+	return false
+}
+
+// warpIPv6CIDRs 是 Cloudflare WARP 的 IPv6 段。
+//
+// 2606:4700::/32 是 WARP 设备地址/网关所在的主段；2602:fa4f::/32 是现场
+// 面板「主机 IP」列里出现过的 WARP 段。网卡名被改得不像 WARP 时，用地址段兜底。
+var warpIPv6CIDRs = []string{
+	"2606:4700::/32",
+	"2602:fa4f::/32",
+}
+
+var warpIPv6Nets = func() []*net.IPNet {
+	out := make([]*net.IPNet, 0, len(warpIPv6CIDRs))
+	for _, c := range warpIPv6CIDRs {
+		if _, n, err := net.ParseCIDR(c); err == nil {
+			out = append(out, n)
+		}
+	}
+	return out
+}()
+
+// isWARPIPv6 判断地址是否落在 Cloudflare WARP 的 IPv6 段。
+func isWARPIPv6(ip net.IP) bool {
+	if ip == nil {
+		return false
+	}
+	for _, n := range warpIPv6Nets {
+		if n.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+// isCGNATIPv4 判断是否 100.64.0.0/10（CGNAT，WARP 组网 IPv4 常用此段）。
+func isCGNATIPv4(v4 net.IP) bool {
+	return len(v4) == net.IPv4len && v4[0] == 100 && v4[1] >= 64 && v4[1] <= 127
+}
+
+// pickPrimaryIP 从网卡快照里挑 IPv4（IPv4 优先，没有时回落到 IPv6）。
+func pickPrimaryIP(views []ifaceView) string {
+	var v6 string
+	for _, v := range views {
+		if v.flags&net.FlagUp == 0 || v.flags&net.FlagLoopback != 0 {
+			continue
+		}
+		// WARP/组网网卡上的地址不是主机地址，整条网卡跳过
+		if isMeshIfaceName(v.name) {
+			continue
+		}
+		for _, ip := range v.addrs {
+			if ip == nil || ip.IsLoopback() || ip.IsLinkLocalUnicast() ||
+				ip.IsUnspecified() || ip.IsMulticast() || ip.IsLinkLocalMulticast() {
 				continue
 			}
 			if ip4 := ip.To4(); ip4 != nil {
+				if isCGNATIPv4(ip4) { // WARP 组网地址，不是主机 IP
+					continue
+				}
 				return ip4.String()
 			}
-			if v6 == "" {
+			if v6 == "" && !isWARPIPv6(ip) {
 				v6 = ip.String()
 			}
 		}
@@ -132,41 +235,24 @@ func PrimaryIP() string {
 	return v6
 }
 
-// PrimaryIPv6 返回本机第一个可用的全局 IPv6（V11.25）。
-// 跳过 loopback / 链路本地 / 未指定 / IPv4 映射地址；公网 2000::/3 优先，
-// 没有公网时回落到 ULA（fc00::/7），两者都没有则返回空串。
-func PrimaryIPv6() string {
-	ifaces, err := net.Interfaces()
-	if err != nil {
-		return ""
-	}
+// pickPrimaryIPv6 从网卡快照里挑真实网卡的 IPv6。
+func pickPrimaryIPv6(views []ifaceView) string {
 	var cands []net.IP
-	for _, iface := range ifaces {
-		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+	for _, v := range views {
+		if v.flags&net.FlagUp == 0 || v.flags&net.FlagLoopback != 0 {
 			continue
 		}
-		addrs, err := iface.Addrs()
-		if err != nil {
+		if isMeshIfaceName(v.name) {
 			continue
 		}
-		for _, a := range addrs {
-			var ip net.IP
-			switch v := a.(type) {
-			case *net.IPNet:
-				ip = v.IP
-			case *net.IPAddr:
-				ip = v.IP
-			}
-			if ip != nil {
-				cands = append(cands, ip)
-			}
-		}
+		cands = append(cands, v.addrs...)
 	}
 	return pickIPv6(cands)
 }
 
 // pickIPv6 从候选地址里挑一个：公网优先，其次 ULA，都没有返回空串。
 // 抽成纯函数方便单测（不依赖真实网卡）。
+// WARP 地址（2606:4700::/32 等）一律跳过，宁可返回空串也不冒充主机 IPv6。
 func pickIPv6(cands []net.IP) string {
 	var ula string
 	for _, ip := range cands {
@@ -175,6 +261,9 @@ func pickIPv6(cands []net.IP) string {
 		}
 		ip6 := ip.To16()
 		if ip6 == nil || ip6.IsUnspecified() || ip6.IsLoopback() || ip6.IsLinkLocalUnicast() || ip6.IsLinkLocalMulticast() {
+			continue
+		}
+		if isWARPIPv6(ip6) {
 			continue
 		}
 		if ip6[0]&0xfe == 0xfc { // fc00::/7 唯一本地地址，可用但不优先
