@@ -1,5 +1,5 @@
 /* =================================================================
- *  用户中心 · 登录（邮箱验证码 + Turnstile）
+ *  用户中心 · 登录（密码 / 邮箱验证码 + Turnstile）
  *  桌面：左侧深色品牌面板 + 右侧表单；移动端：品牌收成顶部条，表单通栏
  * ================================================================= */
 import React, { useEffect, useState } from 'react';
@@ -22,7 +22,7 @@ export default function PortalLogin({ onLoggedIn }) {
   const [err, setErr] = useState('');
   const [countdown, setCountdown] = useState(0);
   const [tsOpen, setTsOpen] = useState(false);
-  // 人机验证通过后要执行的动作：send=发验证码 / sso=跳转单点登录
+  // 人机验证通过后要执行的动作：send=发验证码 / sso=跳转单点登录 / pwd=密码登录
   const [pending, setPending] = useState(null);
   // 登录方式：code=邮箱验证码 / password=密码
   const [mode, setMode] = useState('code');
@@ -97,6 +97,36 @@ export default function PortalLogin({ onLoggedIn }) {
     }
   };
 
+  // 密码登录的真实请求：Turnstile 已通过（或环境未配置 SITE_KEY）后调用。
+  // 未配置 SITE_KEY 时不带 cf_turnstile_response，保持旧环境行为不变。
+  const doPasswordLogin = async (tsToken) => {
+    const token = tsToken || turnstile.getToken();
+    setBusy('login');
+    setErr('');
+    try {
+      const body = { email: email.trim(), password };
+      if (token) body.cf_turnstile_response = token;
+      const res = await portalApi('portal/login/password', {
+        method: 'POST',
+        body,
+        auth: false,
+      });
+      portalSetToken(res.token || '');
+      if (res.must_change_password) {
+        message.warning('这是初始密码，请尽快在「账号」里修改');
+      } else {
+        message.success('登录成功');
+      }
+      onLoggedIn(res.email || email.trim(), { mustChangePassword: !!res.must_change_password });
+    } catch (e) {
+      setErr(e.message || '登录失败');
+      // Turnstile token 是一次性的：登录失败后重置，下次点击重新验证
+      turnstile.reset();
+    } finally {
+      setBusy('');
+    }
+  };
+
   const sendCode = async () => {
     if (!emailOk) {
       setErr('请填写正确的邮箱地址');
@@ -118,6 +148,10 @@ export default function PortalLogin({ onLoggedIn }) {
     setPending(null);
     if (action === 'sso') {
       startSSO(turnstile.token);
+      return;
+    }
+    if (action === 'pwd') {
+      doPasswordLogin(turnstile.token);
       return;
     }
     doSend();
@@ -160,26 +194,14 @@ export default function PortalLogin({ onLoggedIn }) {
       setErr('请输入密码');
       return;
     }
-    setBusy('login');
-    setErr('');
-    try {
-      const res = await portalApi('portal/login/password', {
-        method: 'POST',
-        body: { email: email.trim(), password },
-        auth: false,
-      });
-      portalSetToken(res.token || '');
-      if (res.must_change_password) {
-        message.warning('这是初始密码，请尽快在「账号」里修改');
-      } else {
-        message.success('登录成功');
-      }
-      onLoggedIn(res.email || email.trim(), { mustChangePassword: !!res.must_change_password });
-    } catch (e) {
-      setErr(e.message || '登录失败');
-    } finally {
-      setBusy('');
+    // 配置了 SITE_KEY 且还没有 token：先弹「人机验证」Modal，通过后自动登录
+    if (SITE_KEY && !turnstile.getToken()) {
+      setErr('');
+      setPending('pwd');
+      setTsOpen(true);
+      return;
     }
+    await doPasswordLogin(turnstile.getToken());
   };
 
   return (
@@ -382,7 +404,11 @@ export default function PortalLogin({ onLoggedIn }) {
           </div>
         ) : null}
         <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', marginTop: 10 }}>
-          {pending === 'sso' ? '完成验证后将跳转到单点登录' : '完成验证后将自动发送验证码'}
+          {pending === 'sso'
+            ? '完成验证后将跳转到单点登录'
+            : pending === 'pwd'
+              ? '完成验证后将自动登录'
+              : '完成验证后将自动发送验证码'}
         </div>
       </Modal>
     </div>

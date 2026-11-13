@@ -102,11 +102,26 @@ func (h *handlers) findPortalPasswordByEmail(ctx context.Context, emailNorm stri
 	return row, err
 }
 
+// portalTurnstileVerify 校验用户中心密码登录携带的人机验证 token。
+//
+// 默认实现走 handlers.verifyTurnstile：配置了 secret 时请求 Cloudflare
+// siteverify，未配置时直接放行（保持旧环境可用）。抽成包级变量是为了让单测
+// 能替换成假实现，不联网也能覆盖「校验通过 / 校验失败」两条分支；
+// 生产代码不会修改它。
+var portalTurnstileVerify = func(h *handlers, r *http.Request, token string) error {
+	return h.verifyTurnstile(r, token)
+}
+
 // POST /api/portal/login/password —— 邮箱 + 密码登录
+//
+// 校验顺序：JSON 解码 → 邮箱/密码非空 → Turnstile → 限速 → 查库 → 验密，
+// 与 portal send-code / 管理端登录保持一致：人机验证失败直接 403，
+// 不消耗登录失败额度、也不触碰用户口令数据。
 func (h *handlers) portalLoginPassword(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
+		Email     string `json:"email"`
+		Password  string `json:"password"`
+		Turnstile string `json:"cf_turnstile_response"`
 	}
 	if err := decodeJSON(w, r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "无效 JSON")
@@ -119,6 +134,12 @@ func (h *handlers) portalLoginPassword(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Password == "" {
 		writeError(w, http.StatusBadRequest, "请输入密码")
+		return
+	}
+
+	// 人机验证放在限速/查库之前：拿不到有效 token 就不该尝试任何口令。
+	if err := portalTurnstileVerify(h, r, req.Turnstile); err != nil {
+		writeError(w, http.StatusForbidden, err.Error())
 		return
 	}
 
