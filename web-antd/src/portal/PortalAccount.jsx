@@ -1,11 +1,12 @@
-﻿/* =================================================================
+/* =================================================================
  *  用户中心 · 顶部账号卡（左：登录邮箱；右：当前 UUID 的信息）
  *  合并了原来的「账号信息面板」与「信息与邮箱」页签
  * ================================================================= */
 import React, { useCallback, useEffect, useState } from 'react';
 import { App as AntdApp, Button, Input, Modal, Skeleton, Space, Tag } from 'antd';
-import { EditOutlined, MailOutlined, KeyOutlined } from '@ant-design/icons';
+import { EditOutlined, MailOutlined, KeyOutlined, SwapOutlined } from '@ant-design/icons';
 import { portalReq } from './portalApi';
+import { UuidRotateModal } from './PortalUuid';
 import EmailChange from './EmailChange';
 import PasswordChange from './PasswordChange';
 import { CopyText } from '../components';
@@ -21,6 +22,7 @@ export default function PortalAccount({ email, count, uuid, sub, onEmailChanged,
   const { message } = AntdApp.useApp();
   const [mailOpen, setMailOpen] = useState(false);
   const [pwdOpen, setPwdOpen] = useState(false);
+  const [rotateOpen, setRotateOpen] = useState(false);
   const [state, setState] = useState({ loading: !!uuid, data: null, error: null });
   const [editing, setEditing] = useState(null);
 
@@ -99,6 +101,14 @@ export default function PortalAccount({ email, count, uuid, sub, onEmailChanged,
                 <span>更新</span>
                 <b>{fmtAgo(sub.updated_at)}</b>
               </div>
+            </div>
+            <div className="pp-account-actions" style={{ marginTop: 10 }}>
+              <Button danger icon={<SwapOutlined />} onClick={() => setRotateOpen(true)}>
+                更换 UUID
+              </Button>
+              <span className="pp-account-meta" style={{ marginLeft: 8 }}>
+                旧订阅链接与旧配置会立即失效
+              </span>
             </div>
           </>
         ) : null}
@@ -180,6 +190,8 @@ export default function PortalAccount({ email, count, uuid, sub, onEmailChanged,
       ) : null}
 
       <PasswordChange open={pwdOpen} onClose={() => setPwdOpen(false)} />
+
+      <UuidRotateModal open={rotateOpen} uuid={uuid || (sub && sub.uuid) || ''} onClose={() => setRotateOpen(false)} />
 
       <EmailChange
         open={mailOpen}

@@ -10,9 +10,10 @@ import {
 } from 'antd';
 import {
   ArrowLeftOutlined, CheckCircleOutlined, CloudDownloadOutlined, DeleteOutlined, EditOutlined, HistoryOutlined, LinkOutlined,
-  MailOutlined, PlusOutlined, QrcodeOutlined, ReloadOutlined, SearchOutlined, SyncOutlined,
+  MailOutlined, PlusOutlined, QrcodeOutlined, ReloadOutlined, SearchOutlined, SafetyOutlined, SwapOutlined, SyncOutlined,
 } from '@ant-design/icons';
-import { portalReq } from './portalApi';
+import { portalReq, portalApi } from './portalApi';
+import { useTurnstile } from '../hooks';
 import { useUuidConfigs, useUuidStats } from './hooks/usePortalData';
 import { CopyText } from '../components';
 import { AreaChart, ChartLegend, DonutChart } from '../charts';
@@ -82,6 +83,7 @@ export default function PortalUuid({ uuid, onBack, onUnauthorized, embedded = fa
   const isPc = useIsPc();
   const { message } = AntdApp.useApp();
   const [tab, setTab] = useState('configs');
+  const [rotateOpen, setRotateOpen] = useState(false); // 更换 UUID 弹窗
 
   /* ---------------- 配置列表（数据逻辑在 hooks 里） ---------------- */
   const configsHook = useUuidConfigs(uuid, onUnauthorized);
@@ -432,6 +434,15 @@ export default function PortalUuid({ uuid, onBack, onUnauthorized, embedded = fa
                       </div>
                     </Guide>
 
+                    <Space wrap style={{ marginBottom: 12 }}>
+                      <Button danger icon={<SwapOutlined />} onClick={() => setRotateOpen(true)}>
+                        更换 UUID
+                      </Button>
+                      <span className="pp-muted" style={{ fontSize: 12 }}>
+                        旧订阅链接与旧配置会立即失效，客户端需要重新导入
+                      </span>
+                    </Space>
+
                     <div className="pp-fmt">
                       <Segmented
                         block
@@ -722,7 +733,13 @@ export default function PortalUuid({ uuid, onBack, onUnauthorized, embedded = fa
                           <Button icon={<MailOutlined />} onClick={() => setMailOpen(true)}>
                             更换绑定邮箱
                           </Button>
+                          <Button danger icon={<SwapOutlined />} onClick={() => setRotateOpen(true)}>
+                            更换 UUID
+                          </Button>
                         </Space>
+                        <div style={{ marginTop: 10, fontSize: 12, color: '#94a3b8', lineHeight: 1.7 }}>
+                          更换 UUID 会立即作废旧订阅链接与已下发的节点配置，客户端需要重新导入新链接。
+                        </div>
                       </>
                     ) : null}
                   </div>
@@ -774,7 +791,12 @@ export default function PortalUuid({ uuid, onBack, onUnauthorized, embedded = fa
                 <div className="pp-portal-brand-sub pp-mono">{uuid}</div>
               </div>
             </div>
-            <CopyText value={uuid} display={<Button size="small" icon={<LinkOutlined />}>复制 UUID</Button>} />
+            <Space size={8} wrap style={{ justifyContent: 'flex-end' }}>
+              <CopyText value={uuid} display={<Button size="small" icon={<LinkOutlined />}>复制 UUID</Button>} />
+              <Button size="small" danger icon={<SwapOutlined />} onClick={() => setRotateOpen(true)}>
+                更换 UUID
+              </Button>
+            </Space>
           </header>
         )}
 
@@ -907,6 +929,8 @@ export default function PortalUuid({ uuid, onBack, onUnauthorized, embedded = fa
         onDone={() => loadInfo()}
       />
 
+      <UuidRotateModal open={rotateOpen} uuid={uuid} onClose={() => setRotateOpen(false)} />
+
       {/* 只有完整的「页签视图」自己带底部导航；分区嵌入模式由外层页面提供 */}
       {!embedded && !isPc && !onlySections ? (
         <PortalNav
@@ -924,5 +948,328 @@ export default function PortalUuid({ uuid, onBack, onUnauthorized, embedded = fa
       ) : null}
 
     </div>
+  );
+}
+
+/* =================================================================
+ *  更换 UUID 弹窗（用户端）
+ *  · 二次认证：账号有密码 → 输入当前密码；没有密码 → 绑定邮箱 6 位验证码
+ *  · 发送验证码前：站点配置了 Turnstile 时先过人机验证（复用 useTurnstile）
+ *  · 成功后展示新 UUID 与三种新订阅链接；旧订阅链接与旧配置立即失效
+ *  · 页面其它数据都按旧 UUID 加载，成功后需要刷新页面重新拉 /api/portal/uuids
+ * ================================================================= */
+const PORTAL_BOOT = (typeof window !== 'undefined' && window.__PP_BOOT__) || {};
+const PORTAL_TURNSTILE_KEY = String(PORTAL_BOOT.turnstile || '');
+
+/** 按后端规则生成三种订阅链接；响应里带 sub 时以响应为准。 */
+export function uuidSubLinks(newUuid, sub) {
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const u = encodeURIComponent(String(newUuid || ''));
+  const s = sub || {};
+  return [
+    { key: 'raw', label: '原始订阅', url: s.raw || `${origin}/sub/${u}` },
+    { key: 'batch', label: '批量配置', url: s.batch || `${origin}/batch-configs/${u}` },
+    { key: 'clash', label: 'Clash 订阅', url: s.clash || `${origin}/clash-config?uuid=${u}` },
+  ];
+}
+
+/** 换 UUID 成功后刷新页面数据：清掉移动端深链 hash，保留路径与查询串。 */
+export function reloadPortalAfterUuidRotate() {
+  try {
+    const u = new URL(window.location.href);
+    u.hash = '';
+    window.location.replace(u.toString());
+  } catch (e) {
+    window.location.reload();
+  }
+}
+
+export function UuidRotateModal({ open, uuid, onClose }) {
+  const { message } = AntdApp.useApp();
+  const turnstile = useTurnstile(PORTAL_TURNSTILE_KEY);
+  const [pwd, setPwd] = useState({ loading: true, hasPassword: false, error: null });
+  const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
+  const [countdown, setCountdown] = useState(0);
+  const [sending, setSending] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [result, setResult] = useState(null);
+  const [tsOpen, setTsOpen] = useState(false);
+
+  /* 打开时先确认账号有没有设置密码，决定二次认证方式 */
+  const loadPwdStatus = useCallback(() => {
+    setPwd({ loading: true, hasPassword: false, error: null });
+    portalApi('portal/password')
+      .then((r) => setPwd({ loading: false, hasPassword: !!(r && r.has_password), error: null }))
+      .catch((e) => setPwd({ loading: false, hasPassword: false, error: e }));
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    setPassword('');
+    setCode('');
+    setCountdown(0);
+    setSending(false);
+    setBusy(false);
+    setErr('');
+    setResult(null);
+    setTsOpen(false);
+    loadPwdStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  useEffect(() => {
+    if (countdown <= 0) return undefined;
+    const t = setTimeout(() => setCountdown((n) => n - 1), 1000);
+    return () => clearTimeout(t);
+  }, [countdown]);
+
+  const sendCodeNow = async (tsToken) => {
+    setSending(true);
+    setErr('');
+    try {
+      const body = {};
+      if (tsToken) body.cf_turnstile_response = tsToken;
+      const res = await portalApi('portal/uuid/rotate/send-code', { method: 'POST', body });
+      setCountdown(60);
+      message.success(`验证码已发送至 ${(res && res.email) || '绑定邮箱'}，10 分钟内有效`);
+    } catch (e) {
+      setErr(e.message || '验证码发送失败');
+      // 账号其实设置了密码（本地状态过期）：切回密码确认方式，避免用户卡在验证码流程
+      if (e && String(e.message || '').includes('已设置密码')) loadPwdStatus();
+      turnstile.reset();
+    } finally {
+      setSending(false);
+    }
+  };
+
+  /* 配置了 Turnstile：先弹人机验证，通过后自动发验证码 */
+  const sendCode = () => {
+    if (PORTAL_TURNSTILE_KEY && !turnstile.getToken()) {
+      setErr('');
+      setTsOpen(true);
+      return;
+    }
+    sendCodeNow(turnstile.getToken());
+  };
+
+  useEffect(() => {
+    if (!tsOpen || !turnstile.token) return;
+    setTsOpen(false);
+    sendCodeNow(turnstile.getToken());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tsOpen, turnstile.token]);
+
+  const submit = async () => {
+    if (pwd.loading) {
+      setErr('正在读取账号状态，请稍候再试');
+      return;
+    }
+    if (pwd.hasPassword) {
+      if (!password.trim()) {
+        setErr('请输入当前登录密码');
+        return;
+      }
+    } else if (!/^\d{6}$/.test(code.trim())) {
+      setErr('请输入绑定邮箱收到的 6 位验证码');
+      return;
+    }
+    setBusy(true);
+    setErr('');
+    try {
+      const body = pwd.hasPassword ? { password } : { code: code.trim() };
+      const res = await portalApi('portal/uuid/rotate', { method: 'POST', body });
+      setPassword('');
+      setCode('');
+      setResult(res || { success: true });
+      turnstile.reset();
+      /* 重新拉一次订阅列表：确认后端已经切换到新 UUID（失败不阻塞结果展示） */
+      portalApi('portal/uuids').catch(() => {});
+      message.success((res && res.message) || 'UUID 已更换，旧链接已失效');
+    } catch (e) {
+      // 后端契约：本接口只有 portal token 失效才返回 401（密码/验证码错误是 400），
+      // 因此 401 说明登录过期，交给 portalApi 清理登录态即可。
+      setErr(e.message || '更换失败，请重试');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const done = !!(result && (result.success || result.new_uuid));
+  const newUuid = done ? String((result && result.new_uuid) || '') : '';
+  const newLinks = done ? uuidSubLinks(newUuid, result && result.sub) : [];
+
+  return (
+    <>
+      <Modal
+        open={open}
+        title={done ? 'UUID 已更换' : '更换 UUID'}
+        onCancel={() => {
+          if (done) return;
+          if (onClose) onClose();
+        }}
+        closable={!done}
+        mask={{ closable: !done }}
+        keyboard={!done}
+        footer={
+          done ? (
+            <Space wrap>
+              <Button type="primary" onClick={reloadPortalAfterUuidRotate}>
+                我已保存新链接，刷新页面
+              </Button>
+            </Space>
+          ) : undefined
+        }
+        onOk={done ? undefined : submit}
+        okText="确认更换"
+        cancelText="取消"
+        okButtonProps={done ? undefined : { danger: true }}
+        confirmLoading={busy}
+        width={560}
+        centered
+        destroyOnHidden
+      >
+        {done ? (
+          <div style={{ paddingTop: 4 }}>
+            <Alert
+              type="success"
+              showIcon
+              style={{ borderRadius: 10, marginBottom: 14 }}
+              message="更换成功，旧 UUID 已作废"
+              description="旧订阅链接与已下发的旧配置已全部失效，请在客户端里重新导入下面的新链接；旧链接不会再恢复。"
+            />
+            <div style={{ fontSize: 13, color: '#64748b', marginBottom: 6 }}>新 UUID</div>
+            <CopyText
+              value={newUuid}
+              display={<span className="pp-mono" style={{ fontSize: 13, wordBreak: 'break-all' }}>{newUuid}</span>}
+              tip="点击复制新 UUID"
+            />
+            <div style={{ height: 16 }} />
+            <div style={{ fontSize: 13, color: '#64748b', marginBottom: 6 }}>新的订阅链接</div>
+            <Space orientation="vertical" size={10} style={{ width: '100%' }}>
+              {newLinks.map((it) => (
+                <div key={it.key} className="pp-sub-link">
+                  <div className="pp-sub-link-main">
+                    <div className="pp-sub-link-label">{it.label}</div>
+                    <div
+                      className="pp-mono"
+                      title={it.url}
+                      style={{ fontSize: 11.5, color: '#64748b', marginTop: 3, wordBreak: 'break-all' }}
+                    >
+                      {it.url}
+                    </div>
+                  </div>
+                  <div className="pp-sub-link-actions">
+                    <CopyText value={it.url} display={<Button size="small" icon={<CloudDownloadOutlined />}>复制</Button>} />
+                  </div>
+                </div>
+              ))}
+            </Space>
+            {result && result.warning ? (
+              <Alert type="warning" showIcon style={{ marginTop: 14 }} message={String(result.warning)} />
+            ) : null}
+            <div style={{ marginTop: 14, fontSize: 12, color: '#94a3b8', lineHeight: 1.8 }}>
+              页面数据仍按旧 UUID 加载：请先复制上面的新链接，再点下方按钮刷新页面；
+              刷新后会重新拉取 /api/portal/uuids 并显示新 UUID。
+            </div>
+          </div>
+        ) : (
+          <div style={{ paddingTop: 4 }}>
+            <Alert
+              type="warning"
+              showIcon
+              style={{ borderRadius: 10, marginBottom: 14 }}
+              message="旧订阅链接与旧配置将立即失效"
+              description="更换后，原 UUID 的订阅链接、已下发的节点配置全部作废，所有客户端必须重新导入新链接；此操作不可撤销。"
+            />
+            <div style={{ fontSize: 13, color: '#64748b', marginBottom: 6 }}>当前 UUID</div>
+            <CopyText
+              value={uuid || ''}
+              display={<span className="pp-mono" style={{ fontSize: 13, wordBreak: 'break-all' }}>{uuid || '—'}</span>}
+              tip="点击复制当前 UUID"
+            />
+            <div style={{ height: 16 }} />
+            {pwd.loading ? <Skeleton active paragraph={{ rows: 2 }} title={false} /> : null}
+            {!pwd.loading && pwd.error ? (
+              <Alert
+                type="error"
+                showIcon
+                message={`读取账号密码状态失败：${pwd.error.message || '网络异常'}`}
+                action={<Button size="small" onClick={loadPwdStatus}>重试</Button>}
+              />
+            ) : null}
+            {!pwd.loading && !pwd.error && pwd.hasPassword ? (
+              <>
+                <div style={{ fontSize: 13, color: '#64748b', marginBottom: 6 }}>
+                  二次认证：输入当前登录密码
+                </div>
+                <Input.Password
+                  value={password}
+                  onChange={(e) => { setPassword(e.target.value); setErr(''); }}
+                  onPressEnter={submit}
+                  placeholder="当前登录密码"
+                  prefix={<SafetyOutlined style={{ color: '#94a3b8' }} />}
+                  autoComplete="current-password"
+                />
+                <div style={{ marginTop: 6, fontSize: 12, color: '#94a3b8' }}>
+                  密码只用于本次校验，不会保存或写入日志。
+                </div>
+              </>
+            ) : null}
+            {!pwd.loading && !pwd.error && !pwd.hasPassword ? (
+              <>
+                <div style={{ fontSize: 13, color: '#64748b', marginBottom: 6 }}>
+                  二次认证：账号还没有设置密码，改为向绑定邮箱发送 6 位验证码
+                </div>
+                <Space.Compact style={{ width: '100%' }}>
+                  <Input
+                    value={code}
+                    onChange={(e) => { setCode(e.target.value.replace(/\D/g, '').slice(0, 6)); setErr(''); }}
+                    onPressEnter={submit}
+                    placeholder="6 位验证码"
+                    inputMode="numeric"
+                    maxLength={6}
+                  />
+                  <Button onClick={sendCode} loading={sending} disabled={countdown > 0}>
+                    {countdown > 0 ? `${countdown}s 后重发` : '发送验证码'}
+                  </Button>
+                </Space.Compact>
+                <div style={{ marginTop: 6, fontSize: 12, color: '#94a3b8' }}>
+                  验证码发送到绑定邮箱，10 分钟内有效，且只能使用一次。
+                </div>
+              </>
+            ) : null}
+            {err ? <Alert type="error" showIcon style={{ marginTop: 12 }} message={err} /> : null}
+          </div>
+        )}
+      </Modal>
+
+      {/* 人机验证：通过后自动发送验证码（与登录页同一套流程） */}
+      <Modal
+        open={tsOpen}
+        onCancel={() => {
+          setTsOpen(false);
+          turnstile.reset();
+        }}
+        footer={null}
+        title="人机验证"
+        width={360}
+        centered
+        destroyOnHidden
+      >
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 4px' }}>
+          <div className="pp-turnstile" ref={turnstile.slotRef} />
+        </div>
+        {turnstile.status === 'error' ? (
+          <div style={{ fontSize: 12, color: '#f43f5e', textAlign: 'center', marginTop: 8 }}>
+            验证组件加载失败，<a onClick={() => turnstile.reload()}>点此重试</a>
+          </div>
+        ) : null}
+        <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', marginTop: 10 }}>
+          完成验证后将自动发送验证码
+        </div>
+      </Modal>
+    </>
   );
 }

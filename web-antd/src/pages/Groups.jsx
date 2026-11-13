@@ -11,17 +11,20 @@ import {
   PlusOutlined,
   ReloadOutlined,
   SearchOutlined,
+  SwapOutlined,
 } from '@ant-design/icons';
 import {
   Alert,
   App as AntdApp,
   Button,
+  Checkbox,
   Col,
   Descriptions,
   Drawer,
   Form,
   Input,
   Modal,
+  Radio,
   Row,
   Select,
   Space,
@@ -62,6 +65,7 @@ export default function Groups() {
   const [compose, setCompose] = useState(null); // { mode:'create'|'edit', row }
   const [detail, setDetail] = useState(null); // uuid
   const [pushOpen, setPushOpen] = useState(false);
+  const [rotateRow, setRotateRow] = useState(null); // 要更换 UUID 的行
   const [saving, setSaving] = useState(false);
   const [form] = Form.useForm();
 
@@ -194,7 +198,7 @@ export default function Groups() {
     },
     {
       title: '操作',
-      width: 150,
+      width: 192,
       fixed: 'right',
       render: (_, row) => (
         <Space size={0}>
@@ -208,6 +212,7 @@ export default function Groups() {
               message.success('已复制 Mihomo 订阅链接');
             }}
           />
+          <IconAction title="更换 UUID" icon={<SwapOutlined />} onClick={() => setRotateRow(row)} />
           <IconAction title="编辑" icon={<EditOutlined />} onClick={() => openEdit(row)} />
           <IconAction title="删除" icon={<DeleteOutlined />} danger onClick={() => remove(row)} />
         </Space>
@@ -303,7 +308,7 @@ export default function Groups() {
             columns={columns}
             dataSource={rows}
             loading={loading}
-            scroll={{ x: 1240 }}
+            scroll={{ x: 1282 }}
             onChange={(pg, filters, sorter) => {
               if (sorter && sorter.field) {
                 setSort({
@@ -395,6 +400,17 @@ export default function Groups() {
       {/* ---------- 详情 ---------- */}
       <GroupDetail uuid={detail} onClose={() => setDetail(null)} />
       <BatchPushModal open={pushOpen} onClose={() => setPushOpen(false)} />
+      <RotateUuidModal
+        open={!!rotateRow}
+        row={rotateRow}
+        onClose={() => setRotateRow(null)}
+        onRotated={(res) => {
+          const oldUuid = (res && res.old_uuid) || (rotateRow && rotateRow.uuid) || '';
+          reload().catch(() => {});
+          // 详情抽屉如果还停在旧 UUID，直接关掉，避免继续拉旧 uuid 报错
+          if (detail && oldUuid && detail === oldUuid) setDetail(null);
+        }}
+      />
     </div>
   );
 }
@@ -511,6 +527,213 @@ function BatchPushModal({ open, onClose }) {
           <Switch size="small" checked={push} onChange={setPush} />
         </div>
       </Space>
+    </Modal>
+  );
+}
+
+/* ---------------- 更换 UUID：自动/自定义 + 二次确认 + 新订阅链接 ---------------- */
+const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
+/** 订阅链接按后端规则拼接；rotate 响应里带 sub 时以响应为准。 */
+function rotateSubLinks(newUuid, sub) {
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const u = encodeURIComponent(String(newUuid || ''));
+  const s = sub || {};
+  return [
+    { key: 'raw', label: '原始订阅', url: s.raw || `${origin}/sub/${u}` },
+    { key: 'batch', label: '批量配置', url: s.batch || `${origin}/batch-configs/${u}` },
+    { key: 'clash', label: 'Clash 订阅', url: s.clash || `${origin}/clash-config?uuid=${u}` },
+  ];
+}
+
+function RotateUuidModal({ open, row, onClose, onRotated }) {
+  const { message } = AntdApp.useApp();
+  const [mode, setMode] = useState('auto'); // auto=服务端生成 / custom=自定义
+  const [newUuid, setNewUuid] = useState('');
+  const [confirmText, setConfirmText] = useState('');
+  const [agree, setAgree] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [result, setResult] = useState(null);
+  const oldUuid = row ? String(row.uuid || '') : '';
+
+  useEffect(() => {
+    if (!open) return;
+    setMode('auto');
+    setNewUuid('');
+    setConfirmText('');
+    setAgree(false);
+    setBusy(false);
+    setErr('');
+    setResult(null);
+  }, [open]);
+
+  const custom = mode === 'custom';
+  const confirmOk = agree || (!!confirmText.trim() && confirmText.trim().toLowerCase() === oldUuid.toLowerCase());
+
+  const submit = async () => {
+    if (!oldUuid) return;
+    if (custom) {
+      const v = newUuid.trim();
+      if (!UUID_RE.test(v)) {
+        setErr('新 UUID 格式不对，应为 8-4-4-4-12 的标准 UUID');
+        return;
+      }
+      if (v.toLowerCase() === oldUuid.toLowerCase()) {
+        setErr('新 UUID 不能与旧 UUID 相同');
+        return;
+      }
+    }
+    if (!confirmOk) {
+      setErr('为防止误操作：请粘贴旧 UUID，或勾选「我确认旧链接与旧配置将立即失效」');
+      return;
+    }
+    setBusy(true);
+    setErr('');
+    try {
+      const body = { confirm: oldUuid };
+      if (custom) body.new_uuid = newUuid.trim();
+      const res = await api(`uuids/${encodeURIComponent(oldUuid)}/rotate`, { method: 'POST', body });
+      setResult(res || { success: true });
+      if (onRotated) onRotated(res || {});
+      message.success((res && res.message) || 'UUID 已更换，旧链接与旧配置已失效');
+    } catch (e) {
+      setErr(e.message || '更换失败，请重试');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const done = !!(result && (result.success || result.new_uuid));
+  const resultUuid = done ? String((result && result.new_uuid) || '') : '';
+  const links = done ? rotateSubLinks(resultUuid, result && result.sub) : [];
+  const stats = done
+    ? [
+        { k: 'configs_updated', label: '更新配置' },
+        { k: 'tables_updated', label: '更新数据表' },
+        { k: 'nodes_updated', label: '更新节点' },
+        { k: 'nodes_deployed', label: '已下发节点' },
+      ].filter((it) => result && result[it.k] !== undefined && result[it.k] !== null)
+    : [];
+
+  return (
+    <Modal
+      open={open}
+      title={done ? 'UUID 已更换' : '更换 UUID'}
+      onCancel={onClose}
+      footer={done ? <Button type="primary" onClick={onClose}>完成</Button> : undefined}
+      onOk={done ? undefined : submit}
+      okText="确认更换"
+      cancelText="取消"
+      okButtonProps={done ? undefined : { danger: true }}
+      confirmLoading={busy}
+      width={620}
+      centered
+      destroyOnHidden
+    >
+      {done ? (
+        <div style={{ paddingTop: 4 }}>
+          <Alert
+            type="success"
+            showIcon
+            style={{ borderRadius: 10, marginBottom: 14 }}
+            message="更换成功，旧 UUID 已作废"
+            description="旧订阅链接与旧节点配置已全部失效；客户端还在用旧链接会立即拉不到配置。请把新链接发给用户重新导入。"
+          />
+          <Descriptions column={1} size="small" bordered style={{ marginBottom: 14 }}>
+            <Descriptions.Item label="旧 UUID">
+              <span className="pp-mono" style={{ fontSize: 12 }}>{oldUuid}</span>
+            </Descriptions.Item>
+            <Descriptions.Item label="新 UUID">
+              <CopyText
+                value={resultUuid}
+                display={<span className="pp-mono" style={{ fontSize: 12 }}>{resultUuid || '—'}</span>}
+                tip="点击复制新 UUID"
+              />
+            </Descriptions.Item>
+          </Descriptions>
+          <div style={{ fontSize: 13, color: '#64748b', marginBottom: 8 }}>新订阅链接</div>
+          <Space orientation="vertical" size={8} style={{ width: '100%' }}>
+            {links.map((it) => (
+              <div key={it.key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Tag color="blue" style={{ marginInlineEnd: 0, flex: 'none' }}>{it.label}</Tag>
+                <span className="pp-mono" style={{ flex: 1, minWidth: 0, fontSize: 12, wordBreak: 'break-all' }}>{it.url}</span>
+                <CopyText value={it.url} display={<Button size="small" icon={<CopyOutlined />}>复制</Button>} />
+              </div>
+            ))}
+          </Space>
+          {stats.length ? (
+            <div style={{ marginTop: 14, fontSize: 12, color: '#64748b' }}>
+              {stats.map((it) => `${it.label} ${Number(result[it.k]) || 0}`).join(' · ')}
+            </div>
+          ) : null}
+          {result && result.warning ? (
+            <Alert type="warning" showIcon style={{ marginTop: 14 }} message={String(result.warning)} />
+          ) : null}
+          <div style={{ marginTop: 12, color: '#94a3b8', fontSize: 12 }}>
+            列表已自动刷新；详情抽屉如停在旧 UUID 已关闭。
+          </div>
+        </div>
+      ) : (
+        <div style={{ paddingTop: 4 }}>
+          <Alert
+            type="warning"
+            showIcon
+            style={{ borderRadius: 10, marginBottom: 14 }}
+            message="更换后旧链接与旧配置立即失效"
+            description="旧 UUID 的订阅链接、节点配置与各节点授权会被替换成新 UUID；用户必须重新导入新订阅链接。此操作不可撤销。"
+          />
+          <Descriptions column={1} size="small" bordered style={{ marginBottom: 14 }}>
+            <Descriptions.Item label="旧 UUID">
+              <CopyText
+                value={oldUuid}
+                display={<span className="pp-mono" style={{ fontSize: 12 }}>{oldUuid || '—'}</span>}
+                tip="点击复制旧 UUID"
+              />
+            </Descriptions.Item>
+            {row && (row.owner || row.email) ? (
+              <Descriptions.Item label="用户">
+                {[row.owner, row.email].filter(Boolean).join(' · ')}
+              </Descriptions.Item>
+            ) : null}
+          </Descriptions>
+
+          <div style={{ fontSize: 13, color: '#64748b', marginBottom: 6 }}>新 UUID</div>
+          <Radio.Group
+            value={mode}
+            onChange={(e) => { setMode(e.target.value); setErr(''); }}
+            style={{ marginBottom: 10 }}
+          >
+            <Radio value="auto">自动生成（推荐）</Radio>
+            <Radio value="custom">自定义</Radio>
+          </Radio.Group>
+          {custom ? (
+            <Input
+              className="pp-mono"
+              placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+              value={newUuid}
+              onChange={(e) => { setNewUuid(e.target.value); setErr(''); }}
+              allowClear
+            />
+          ) : (
+            <div style={{ fontSize: 12, color: '#94a3b8' }}>提交后由服务端生成一个全新的 UUID（v4），无需手工填写。</div>
+          )}
+
+          <div style={{ fontSize: 13, color: '#64748b', margin: '16px 0 6px' }}>二次确认（防止误操作）</div>
+          <Input
+            className="pp-mono"
+            placeholder="粘贴旧 UUID"
+            value={confirmText}
+            onChange={(e) => { setConfirmText(e.target.value); setErr(''); }}
+          />
+          <div style={{ marginTop: 8 }}>
+            <Checkbox checked={agree} onChange={(e) => setAgree(e.target.checked)}>
+              我确认旧链接与旧配置将立即失效，用户需要重新导入
+            </Checkbox>
+          </div>
+          {err ? <Alert type="error" showIcon style={{ marginTop: 12 }} message={err} /> : null}
+        </div>
+      )}
     </Modal>
   );
 }

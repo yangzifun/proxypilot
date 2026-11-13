@@ -3,15 +3,16 @@
  *  登录后展示该邮箱名下的 UUID（节点数 / 状态 / 三种订阅链接 / 二维码）
  * ================================================================= */
 import React, { useCallback, useEffect, useState } from 'react';
-import { App as AntdApp, Button, Col, Empty, Modal, QRCode, Row, Skeleton, Tag } from 'antd';
+import { App as AntdApp, Button, Col, Dropdown, Empty, Modal, QRCode, Row, Skeleton, Tag } from 'antd';
 import {
   CloudDownloadOutlined,
-  LogoutOutlined,
-  MailOutlined,
+  DownOutlined,
   InfoCircleOutlined,
+  LogoutOutlined,
   QrcodeOutlined,
   ReloadOutlined,
   SettingOutlined,
+  UserOutlined,
 } from '@ant-design/icons';
 import { portalApi, portalSetToken } from './portalApi';
 import { CopyText } from '../components';
@@ -42,7 +43,7 @@ export default function PortalHome({ email, onLogout }) {
   const [picked, setPicked] = useState('');
   const [state, setState] = useState({ data: [], email: email || '', loading: true, error: null });
   const [qr, setQr] = useState(null); // { title, url }
-  const [profileOpen, setProfileOpen] = useState(false); // 点头像：账号与信息
+  const [profileOpen, setProfileOpen] = useState(false); // 点右上用户入口：账号与信息
 
   const load = useCallback(async () => {
     setState((s) => ({ ...s, loading: true, error: null }));
@@ -79,26 +80,62 @@ export default function PortalHome({ email, onLogout }) {
     setQr({ title: `${item.remark || item.owner || shortUuid(item.uuid)} · ${link.label}`, url: item.sub[link.key] });
   };
 
+  const userEmail = state.email || email;
+
+  /* 右上角用户下拉：账号与信息 / 退出登录（刷新按钮始终在头部可见） */
+  const userMenu = {
+    items: [
+      { key: 'account', icon: <SettingOutlined />, label: '账号与信息' },
+      { type: 'divider' },
+      { key: 'logout', icon: <LogoutOutlined />, danger: true, label: '退出登录' },
+    ],
+    onClick: ({ key }) => {
+      if (key === 'account') setProfileOpen(true);
+      if (key === 'logout') logout();
+    },
+  };
+
   return (
     <div className={`pp-portal${!isPc ? ' pp-has-nav' : ''}`}>
       <div className="pp-portal-wide">
         <header className="pp-portal-top">
+          {/* 左上角：纯品牌标识（网站图标 + ProxyPilot + 用户中心），不再承担账号信息入口 */}
           <div className="pp-portal-brand pp-portal-brand-sm">
-            <button type="button" className="pp-avatar-btn" onClick={() => setProfileOpen(true)} title="账号与信息">
-              <img src={LOGO_URL} alt="ProxyPilot" className="pp-portal-logo" />
-            </button>
+            <img src={LOGO_URL} alt="ProxyPilot" className="pp-portal-logo" />
             <div>
               <div className="pp-portal-brand-title">ProxyPilot</div>
-              <div className="pp-portal-brand-sub pp-portal-email">{state.email || email}</div>
+              <div className="pp-portal-brand-sub">用户中心</div>
             </div>
           </div>
+          {/* 右上角：刷新（常驻） + 独立用户信息入口（头像 + 邮箱 + 下拉） */}
           <div className="pp-portal-top-actions">
             <Button size="small" icon={<ReloadOutlined />} onClick={load} loading={state.loading}>
               刷新
             </Button>
-            <Button size="small" icon={<LogoutOutlined />} onClick={logout}>
-              退出
-            </Button>
+            <div className="pp-portal-user-chip">
+              <button
+                type="button"
+                className="pp-portal-user-main"
+                onClick={() => setProfileOpen(true)}
+                title={userEmail || '账号与信息'}
+                aria-label="打开账号与信息"
+              >
+                <span className="pp-portal-user-avatar" aria-hidden="true">
+                  <UserOutlined />
+                </span>
+                <span className="pp-portal-user-mail">{userEmail || '我的账号'}</span>
+              </button>
+              <Dropdown menu={userMenu} trigger={['click']} placement="bottomRight">
+                <button
+                  type="button"
+                  className="pp-portal-user-caret"
+                  title="账号与信息 / 退出登录"
+                  aria-label="用户菜单"
+                >
+                  <DownOutlined />
+                </button>
+              </Dropdown>
+            </div>
           </div>
         </header>
 
@@ -245,7 +282,7 @@ export default function PortalHome({ email, onLogout }) {
         />
       ) : null}
 
-      {/* 点头像：账号与信息（邮箱换绑 + 用户信息编辑） */}
+      {/* 点右上用户入口：账号与信息（邮箱换绑 + 用户信息编辑） */}
       <Modal
         open={profileOpen}
         title="账号与信息"

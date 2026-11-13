@@ -98,6 +98,9 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /api/portal/oidc/login", h.portalOIDCLogin)
 	mux.HandleFunc("GET /api/portal/password", h.portalPasswordStatus)
 	mux.HandleFunc("POST /api/portal/password", h.portalPasswordChange)
+	// UUID 更换（用户端）：先 send-code 拿验证码（无密码账号），再 rotate 二次确认后更换
+	mux.HandleFunc("POST /api/portal/uuid/rotate", h.portalUUIDRotate)
+	mux.HandleFunc("POST /api/portal/uuid/rotate/send-code", h.portalUUIDRotateSendCode)
 	mux.HandleFunc("GET /api/portal/uuids", h.portalUuids)
 	mux.HandleFunc("GET /api/portal/traffic", h.portalTraffic)
 	mux.HandleFunc("GET /api/portal/masque", h.masqueWarpPortal)
@@ -133,6 +136,7 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /api/uuids/{uuid}", h.authed(authOpts{}, h.uuidDetail))
 	mux.HandleFunc("PUT /api/uuids/{uuid}", h.authed(authOpts{}, h.uuidDetail))
 	mux.HandleFunc("POST /api/uuids/{uuid}/password", h.authed(authOpts{}, h.uuidResetPassword))
+	mux.HandleFunc("POST /api/uuids/{uuid}/rotate", h.authed(authOpts{}, h.uuidRotateAdmin))
 	mux.HandleFunc("DELETE /api/uuids/{uuid}", h.authed(authOpts{}, h.uuidDetail))
 	mux.HandleFunc("GET /api/uuids/{uuid}/nodes", h.authed(authOpts{}, h.uuidNodes))
 	mux.HandleFunc("GET /api/uuids/{uuid}/services", h.authed(authOpts{}, h.uuidServices))
