@@ -349,7 +349,7 @@
 | `GET` | `/api/masque/warp/settings` | `authed` | 管理员 |
 | `PUT` | `/api/masque/warp/settings` | `authed` | 管理员 |
 
-## CDN 优选（11）
+## CDN 优选（12）
 
 | 方法 | 路径 | Handler | 权限 |
 |---|---|---|---|
@@ -358,12 +358,46 @@
 | `PUT` | `/api/cdn-preferred/{id}` | `authed` | 仅超管 |
 | `DELETE` | `/api/cdn-preferred/{id}` | `authed` | 仅超管 |
 | `POST` | `/api/cdn-preferred/check` | `authed` | 仅超管 |
+| `POST` | `/api/cdn-preferred/test` | `authed` | 管理员 |
 | `GET` | `/api/cdn-preferred/enabled` | `authed` | 管理员 |
 | `PUT` | `/api/cdn-preferred/enabled` | `authed` | 仅超管 |
 | `GET` | `/api/cdn-preferred/groups` | `authed` | 管理员 |
 | `POST` | `/api/cdn-preferred/import` | `authed` | 仅超管 |
 | `GET` | `/api/cdn-preferred/settings` | `authed` | 管理员 |
 | `PUT` | `/api/cdn-preferred/settings` | `authed` | 仅超管 |
+
+### CDN 优选：单地址测试（task-18）
+
+`POST /api/cdn-preferred/test` 由**面板进程本身**发起 TCP→TLS→HTTP 测试（不经过节点/Agent），
+用于「检测设置」里对某条记录或任意地址单独测速。复用 SSRF 防护：解析结果命中内网/保留地址直接拒绝。
+
+请求二选一：
+
+```json
+{"id": 123}
+{"address": "162.159.198.1", "port": 443, "sni": "cdn.example.com", "path": "/vlws"}
+```
+
+- `id`：取库里该记录的 `address`/`port`（记录不存在 404）；`address`：直接测试任意地址；
+- `port` 默认 443；`sni`/`path` 不传时取全局检测设置（`/api/cdn-preferred/settings`），
+  显式传空串表示跳过该阶段；
+- 成功 200：
+
+```json
+{"success": true, "data": {
+  "address": "162.159.198.1", "port": 443, "resolved": ["104.16.x.x"],
+  "ok": true, "latency_ms": 42,
+  "tcp_ok": true, "tls_ok": true, "http_status": 101, "error": ""
+}}
+```
+
+- 测试失败仍返回 200（`ok=false`，`error` 以 `TCP:` / `TLS:` / `HTTP:` / `目标地址不允许` 开头说明阶段）；
+  参数错误 400、id 不存在 404。`http_status` 仅在配置了 `path` 时非 0；未配置 SNI 时只做 TCP 连通性检查。
+
+> 分组说明：默认分组已从 `default` 改名为 `cloudflare`（迁移 `0056_cdn_preferred_cloudflare_group.sql`）。
+> 创建/更新/导入时 `group_name` 为空或 `default` 会统一写入 `cloudflare`；模板里显式配置
+> `group=default` 的旧配置仍然映射到 `cloudflare`。其它分组（如 `aliyun`/`tencent`/`overseas`）
+> 原样保留并隔离，用于其他类型 CDN 优选。
 
 ## 统计与日志（19）
 

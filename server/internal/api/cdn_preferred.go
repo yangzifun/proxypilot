@@ -24,6 +24,22 @@ type cdnPrefer struct {
 	Latency     int    `json:"last_latency_ms"`
 }
 
+// cdnPreferredDefaultGroup 默认分组名（原 default 已改名为 cloudflare）。
+// 其它自定义分组（aliyun/tencent/overseas 等）原样保留，用于其他类型 CDN 优选。
+const cdnPreferredDefaultGroup = "cloudflare"
+
+// normalizeCDNPreferredGroup 归一化分组名：
+//   - 空串 / default（大小写、空格容忍）→ cloudflare（兼容旧卡片与旧模板配置）；
+//   - cloudflare 本身保持 cloudflare；
+//   - 其它自定义分组名原样保留（仅去首尾空格，不改变大小写）。
+func normalizeCDNPreferredGroup(raw string) string {
+	group := strings.TrimSpace(raw)
+	if group == "" || strings.EqualFold(group, "default") {
+		return cdnPreferredDefaultGroup
+	}
+	return group
+}
+
 var (
 	cdnPreferMu       sync.RWMutex
 	cdnPreferCache    []cdnPrefer
@@ -52,6 +68,8 @@ func ReloadCDNPreferred(ctx context.Context, db *sql.DB) {
 	for rows.Next() {
 		var p cdnPrefer
 		if rows.Scan(&p.ID, &p.Group, &p.Address, &p.Port, &p.Remark, &p.Enabled, &p.Sort) == nil {
+			// 兼容迁移前仍存在的 group_name='default' 行：载入时即归一化为 cloudflare。
+			p.Group = normalizeCDNPreferredGroup(p.Group)
 			list = append(list, p)
 		}
 	}
@@ -63,17 +81,15 @@ func ReloadCDNPreferred(ctx context.Context, db *sql.DB) {
 	cdnPreferMu.Unlock()
 }
 
-// cdnPreferredForGroup 返回指定分组的优选地址；group 为空时用 default。
+// cdnPreferredForGroup 返回指定分组的优选地址；group 为空或旧的 "default" 都映射到
+// cloudflare（兼容模板里显式配置 group=default 的旧数据）。
 func cdnPreferredForGroup(group string) []cdnPrefer {
-	group = strings.TrimSpace(group)
-	if group == "" {
-		group = "default"
-	}
+	want := normalizeCDNPreferredGroup(group)
 	cdnPreferMu.RLock()
 	defer cdnPreferMu.RUnlock()
 	out := make([]cdnPrefer, 0, len(cdnPreferCache))
 	for _, p := range cdnPreferCache {
-		if p.Group == group {
+		if normalizeCDNPreferredGroup(p.Group) == want {
 			out = append(out, p)
 		}
 	}
@@ -87,8 +103,15 @@ func (h *handlers) cdnPreferredList(w http.ResponseWriter, r *http.Request) {
 	query := "SELECT id, group_name, address, port, COALESCE(remark,'') AS remark, enabled, sort, COALESCE(last_check_at,0) AS last_check_at, COALESCE(last_check_ok,0) AS last_check_ok, COALESCE(last_latency_ms,0) AS last_latency_ms, COALESCE(fail_count,0) AS fail_count FROM cdn_preferred_addresses"
 	args := []any{}
 	if group != "" {
-		query += " WHERE group_name = ?"
-		args = append(args, group)
+		normalized := normalizeCDNPreferredGroup(group)
+		if normalized == cdnPreferredDefaultGroup {
+			// 迁移前后都兼容：cloudflare 与遗留 default 行一起返回。
+			query += " WHERE LOWER(TRIM(group_name)) IN (?, 'default')"
+			args = append(args, strings.ToLower(normalized))
+		} else {
+			query += " WHERE TRIM(group_name) = ?"
+			args = append(args, normalized)
+		}
 	}
 	query += " ORDER BY sort ASC, id ASC"
 	rows, err := queryRowsAsMaps(r.Context(), h.db, query, args...)
@@ -134,10 +157,7 @@ func (h *handlers) cdnPreferredCreate(w http.ResponseWriter, r *http.Request) {
 	if body.Port <= 0 {
 		body.Port = 443
 	}
-	group := strings.TrimSpace(body.Group)
-	if group == "" {
-		group = "default"
-	}
+	group := normalizeCDNPreferredGroup(body.Group)
 	enabled := 1
 	if body.Enabled != nil && !*body.Enabled {
 		enabled = 0
@@ -176,7 +196,7 @@ func (h *handlers) cdnPreferredUpdate(w http.ResponseWriter, r *http.Request) {
 	var args []any
 	if body.Group != nil {
 		sets = append(sets, "group_name = ?")
-		args = append(args, strings.TrimSpace(*body.Group))
+		args = append(args, normalizeCDNPreferredGroup(*body.Group))
 	}
 	if body.Address != nil {
 		addr := strings.TrimSpace(*body.Address)
@@ -245,10 +265,7 @@ func (h *handlers) cdnPreferredImport(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "请求体无效")
 		return
 	}
-	group := strings.TrimSpace(body.Group)
-	if group == "" {
-		group = "default"
-	}
+	group := normalizeCDNPreferredGroup(body.Group)
 	added, skipped := 0, 0
 	now := nowMillis()
 	for _, line := range strings.Split(body.Text, "\n") {

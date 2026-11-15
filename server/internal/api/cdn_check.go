@@ -1,16 +1,12 @@
 package api
 
 import (
-	"bufio"
 	"context"
-	"crypto/tls"
 	"fmt"
-	"net"
 	"net/http"
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 )
 
 // CDN 优选健康检查：
@@ -41,75 +37,24 @@ func (h *handlers) cdnCheckParams(ctx context.Context) (string, string) {
 //
 // 之前的检测会对数据库里的任意 address:port 发起 TCP/TLS/HTTP 请求，普通管理员
 // 可借此探测内网端口。这里在拨号前解析并拒绝任一私网/保留结果；解析失败也拒绝。
+// 解析函数与单地址测试共用 cdnTestResolve（单测可注入）。
 func cdnTargetAllowed(ctx context.Context, addr string) bool {
 	addr = strings.TrimSpace(addr)
 	if addr == "" {
 		return false
 	}
-	if ip := net.ParseIP(addr); ip != nil {
-		return !isBlockedIP(ip)
-	}
-	lookupCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	ips, err := net.DefaultResolver.LookupIP(lookupCtx, "ip", addr)
-	if err != nil || len(ips) == 0 {
+	resolved, err := cdnTestResolve(ctx, addr)
+	if err != nil {
 		return false
 	}
-	for _, ip := range ips {
-		if isBlockedIP(ip) {
-			return false
-		}
-	}
-	return true
+	return cdnResolvedAllowed(resolved)
 }
 
 // probeCDNAddress 探测单个地址，返回是否可用、耗时、错误信息。
+// 批量检测与单地址测试共用同一套阶段实现（见 cdn_test_api.go）。
 func probeCDNAddress(ctx context.Context, addr string, port int, sni, path string) (bool, int, string) {
-	if !cdnTargetAllowed(ctx, addr) {
-		return false, 0, "目标地址不允许（内网/保留地址或无法解析）"
-	}
-	target := net.JoinHostPort(addr, strconv.Itoa(port))
-	start := time.Now()
-	dialer := &net.Dialer{Timeout: 3 * time.Second}
-	conn, err := dialer.Dial("tcp", target)
-	if err != nil {
-		return false, int(time.Since(start).Milliseconds()), err.Error()
-	}
-	defer conn.Close()
-	if sni == "" {
-		return true, int(time.Since(start).Milliseconds()), ""
-	}
-	tlsConn := tls.Client(conn, &tls.Config{ServerName: sni, MinVersion: tls.VersionTLS12})
-	_ = tlsConn.SetDeadline(time.Now().Add(5 * time.Second))
-	if err := tlsConn.Handshake(); err != nil {
-		return false, int(time.Since(start).Milliseconds()), "TLS: " + err.Error()
-	}
-	if path == "" {
-		return true, int(time.Since(start).Milliseconds()), ""
-	}
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
-	req, _ := http.NewRequest(http.MethodGet, "https://"+sni+path, nil)
-	req.Host = sni
-	req.Header.Set("User-Agent", "ProxyPilot-CDN-Check")
-	// WS 端点需带 Upgrade 头，否则会被后端挂起直到超时
-	req.Header.Set("Connection", "Upgrade")
-	req.Header.Set("Upgrade", "websocket")
-	req.Header.Set("Sec-WebSocket-Version", "13")
-	req.Header.Set("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
-	if err := req.Write(tlsConn); err != nil {
-		return false, int(time.Since(start).Milliseconds()), "HTTP: " + err.Error()
-	}
-	resp, err := http.ReadResponse(bufio.NewReader(tlsConn), req)
-	if err != nil {
-		return false, int(time.Since(start).Milliseconds()), "HTTP: " + err.Error()
-	}
-	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusSwitchingProtocols && resp.StatusCode >= 400 {
-		return false, int(time.Since(start).Milliseconds()), fmt.Sprintf("HTTP %d", resp.StatusCode)
-	}
-	return true, int(time.Since(start).Milliseconds()), ""
+	detail := probeCDNAddressDetail(ctx, addr, port, sni, path)
+	return detail.OK, detail.LatencyMS, detail.Error
 }
 
 // runCDNPreferChecks 检测全部地址并维护连续失败计数/自动停用。
