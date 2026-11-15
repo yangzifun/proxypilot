@@ -45,7 +45,7 @@ import { CopyText, ErrorBlock, JsonView, StatCard, StatusPill } from '../compone
 import { watchBatch } from './JobCenter';
 import RemoteShell from './RemoteShell';
 import { chartPalette } from '../theme';
-import { fmtAgo, fmtBytes, fmtTime, fmtUptime, levelColor, splitIps } from '../format';
+import { fmtAgo, fmtBytes, fmtTime, fmtUptime, levelColor, splitIps, versionStatus } from '../format';
 
 const SVC_TEXT = {
   online: ['online', '在线'],
@@ -57,6 +57,11 @@ const SVC_TEXT = {
   unknown: ['unknown', '未知'],
   offline: ['offline', '离线'],
 };
+
+// 最新可用版本缓存：抽屉常驻、切换节点频繁，同一会话内 5 分钟只请求一次，
+// 避免每打开一个节点就重复打 /api/versions/latest（后端本身也有 30min 缓存）。
+let LATEST_VERSIONS_CACHE = { at: 0, data: null };
+const LATEST_VERSIONS_TTL = 5 * 60 * 1000;
 
 /**
  * 服务器详情抽屉：资源折线 / 快捷操作（单台全部动作） / 服务状态 / 运行信息 / 下发配置
@@ -80,6 +85,8 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
   const [traffic, setTraffic] = useState(null);
   const [trafficOpen, setTrafficOpen] = useState(false);
   const [trafficForm, setTrafficForm] = useState({});
+  // cloudflared / warp-svc 的最新可用版本（单项失败不影响展示已装版本）
+  const [latestVersions, setLatestVersions] = useState({ data: null, error: null, loading: false });
 
   const load = useCallback(async () => {
     if (!serverId) return;
@@ -110,6 +117,29 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
     if (serverId) load();
     else setState({ data: null, metrics: [], configs: [], loading: false, error: null });
   }, [serverId, load]);
+
+  /* 最新版本：只在打开抽屉时拉一次（模块级 5 分钟缓存），失败不阻塞抽屉 */
+  const loadLatestVersions = useCallback(async () => {
+    const now = Date.now();
+    if (LATEST_VERSIONS_CACHE.data && now - LATEST_VERSIONS_CACHE.at < LATEST_VERSIONS_TTL) {
+      setLatestVersions({ data: LATEST_VERSIONS_CACHE.data, error: null, loading: false });
+      return;
+    }
+    setLatestVersions((s) => ({ ...s, loading: true }));
+    try {
+      const res = await api('versions/latest');
+      const data = (res && res.data) || {};
+      LATEST_VERSIONS_CACHE = { at: now, data };
+      setLatestVersions({ data, error: null, loading: false });
+    } catch (e) {
+      setLatestVersions({ data: null, error: e, loading: false });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (serverId) loadLatestVersions();
+    else setLatestVersions({ data: null, error: null, loading: false });
+  }, [serverId, loadLatestVersions]);
 
   const loadTraffic = useCallback(async () => {
     if (!serverId) { setTraffic(null); return; }
@@ -202,14 +232,29 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
     const map = m.services || {};
     const vers = m.versions || {};
     if (!Object.keys(map).length) return [];
+    const latestData = latestVersions.data || {};
+    const latestInfoFor = (name) => {
+      const item = latestData[name];
+      if (!item) return null;
+      return {
+        latest: String(item.latest || ''),
+        source: String(item.source || ''),
+        checkedAt: Number(item.checked_at) || 0,
+        error: String(item.error || ''),
+      };
+    };
     return MONITOR_SERVICES.map((name) => {
       const state = String(map[name] || 'not-installed');
       // 版本：优先组件自报，其次用 Agent 心跳里的版本兜底
       let version = String(vers[name] || '');
       if (!version && name === 'proxypilot-agent') version = String((d && d.agent_version) || m.agent_version || '');
-      return { name, label: SERVICE_LABELS[name] || name, state, version };
+      // 只有 cloudflared / warp-svc 有「最新版本」可比；未装或版本缺失时不给出升级结论
+      const latestInfo = name === 'cloudflared' || name === 'warp-svc' ? latestInfoFor(name) : null;
+      const latest = latestInfo ? latestInfo.latest : '';
+      const status = latest && version ? versionStatus(version, latest) : 'unknown';
+      return { name, label: SERVICE_LABELS[name] || name, state, version, latest, latestInfo, status };
     });
-  }, [m.services, m.versions, m.agent_version, d && d.agent_version]);
+  }, [m.services, m.versions, m.agent_version, d && d.agent_version, latestVersions.data]);
 
   const chartRows = useMemo(
     () =>
@@ -627,6 +672,8 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
             <Space orientation="vertical" style={{ width: '100%' }} size={8}>
               {services.map((svc) => {
                 const meta = SVC_TEXT[svc.state] || ['unknown', svc.state];
+                const hasLatestTarget = svc.name === 'cloudflared' || svc.name === 'warp-svc';
+                const showLatest = hasLatestTarget && !!svc.version && svc.state !== 'not-installed';
                 return (
                   <div
                     key={svc.name}
@@ -639,14 +686,46 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
                       border: '1px solid #eef2f7',
                       borderRadius: 10,
                       background: '#fbfcfe',
+                      flexWrap: 'wrap',
                     }}
                   >
                     <i className={`pp-dot ${meta[0]}`} />
                     <span style={{ fontWeight: 500 }}>{svc.label || svc.name}</span>
-                    {svc.version ? <span className="pp-mono pp-muted" style={{ fontSize: 12 }}>v{svc.version}</span> : null}
+                    {svc.version ? (
+                      <span className="pp-mono pp-muted" style={{ fontSize: 12 }}>
+                        {hasLatestTarget ? '已装 v' : 'v'}
+                        {svc.version}
+                      </span>
+                    ) : null}
+                    {showLatest && svc.latest ? (
+                      <Tooltip
+                        title={
+                          [svc.latestInfo && svc.latestInfo.source ? `来源 ${svc.latestInfo.source}` : '',
+                            svc.latestInfo && svc.latestInfo.checkedAt ? `检查于 ${fmtTime(svc.latestInfo.checkedAt)}` : '']
+                            .filter(Boolean)
+                            .join(' · ') || undefined
+                        }
+                      >
+                        <span className="pp-mono pp-muted" style={{ fontSize: 12 }}>· 最新 v{svc.latest}</span>
+                      </Tooltip>
+                    ) : showLatest && svc.latestInfo && svc.latestInfo.error ? (
+                      <Tooltip title={`最新版本获取失败：${svc.latestInfo.error}`}>
+                        <span style={{ fontSize: 12, color: '#d97706', borderBottom: '1px dotted #d97706' }}>
+                          · 最新查询失败
+                        </span>
+                      </Tooltip>
+                    ) : null}
                     <Tag color={meta[0] === 'online' ? 'success' : meta[0] === 'offline' ? 'error' : 'default'} style={{ marginInlineEnd: 0 }}>
                       {meta[1]}
                     </Tag>
+                    {showLatest && svc.latest ? (
+                      <Tag
+                        color={svc.status === 'update' ? 'warning' : svc.status === 'latest' ? 'success' : 'default'}
+                        style={{ marginInlineEnd: 0 }}
+                      >
+                        {svc.status === 'update' ? '可升级' : svc.status === 'latest' ? '已最新' : '未知'}
+                      </Tag>
+                    ) : null}
                     <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                       {svc.name === 'proxypilot-agent' && !local && svc.state !== 'not-installed' ? (
                         <Popconfirm

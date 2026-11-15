@@ -90,6 +90,53 @@ export function shortUuid(uuid) {
   return s.slice(0, 8) + '…' + s.slice(-4);
 }
 
+/* -----------------------------------------------------------------
+ * 版本号：归一化 / 比较 / 升级状态
+ *
+ * 不能字符串直接比较（"2026.10.7" > "2026.11.0" 会误判），也不能把
+ * "2026.8.2115" 与 "2026.8.2115.0" 当成不同版本。规则：
+ *   · 去掉前导 v / V、首尾空格；
+ *   · 去掉 build 元数据（+xxx）与预发布后缀（-rc1 / -beta.2）——预发布不提示升级；
+ *   · 按 . 或 _ 拆成数字段（兼容 2026.8.2115.0 这种四段 WARP 版本）；
+ *   · 缺失的段按 0 补齐后逐段数值比较。
+ * 任一侧无法解析（空串/含非数字）返回 null，调用方按「未知」处理、不误报升级。
+ * ----------------------------------------------------------------- */
+
+/** 版本号 → 数字段数组；无法解析返回 []。 */
+export function normalizeVersion(v) {
+  const raw = String(v === null || v === undefined ? '' : v).trim().replace(/^v/i, '');
+  if (!raw) return [];
+  const core = raw.split('+')[0].split('-')[0].trim();
+  if (!core) return [];
+  const parts = core.split(/[._]/).map((p) => {
+    const m = String(p).match(/^\d+/);
+    return m ? Number(m[0]) : NaN;
+  });
+  if (!parts.length || parts.some((n) => !Number.isFinite(n))) return [];
+  return parts;
+}
+
+/** 比较两个版本号：a<b → -1，相等 → 0，a>b → 1；无法比较 → null。 */
+export function compareVersions(a, b) {
+  const pa = normalizeVersion(a);
+  const pb = normalizeVersion(b);
+  if (!pa.length || !pb.length) return null;
+  const n = Math.max(pa.length, pb.length);
+  for (let i = 0; i < n; i += 1) {
+    const x = pa[i] || 0;
+    const y = pb[i] || 0;
+    if (x !== y) return x > y ? 1 : -1;
+  }
+  return 0;
+}
+
+/** 版本状态：'update'（可升级）/ 'latest'（已最新）/ 'unknown'（缺失或无法比较）。 */
+export function versionStatus(installed, latest) {
+  const c = compareVersions(installed, latest);
+  if (c === null) return 'unknown';
+  return c < 0 ? 'update' : 'latest';
+}
+
 // Cloudflare WARP 的 IPv6 段（与前端无关的服务端口径一致，见 server/internal/api/agent_ip.go）。
 const WARP_IPV6_PREFIXES = ['2606:4700:', '2602:fa4f:'];
 

@@ -31,13 +31,14 @@ import {
   PlusOutlined,
   ReloadOutlined,
   SafetyCertificateOutlined,
+  SyncOutlined,
   ThunderboltOutlined,
 } from '@ant-design/icons';
 import { api, apiPost, apiDelete } from '../api';
 import { useAsync, usePolling } from '../hooks';
 import { ErrorBlock, PageCard, StatCard } from '../components';
 import RemoteShell from '../components/RemoteShell';
-import { fmtBytes, fmtNum, fmtUptime, levelColor } from '../format';
+import { fmtBytes, fmtNum, fmtTime, fmtUptime, levelColor, versionStatus } from '../format';
 
 const { Dragger } = Upload;
 
@@ -62,6 +63,8 @@ export default function LocalServer() {
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState('');
   const [termOpen, setTermOpen] = useState(false);
+  // 最新可用版本（后端缓存 30min；refresh=1 强制刷新）；失败不阻塞页面
+  const [latest, setLatest] = useState({ loading: true, data: null, error: null });
 
   const load = useCallback(async () => {
     try {
@@ -73,9 +76,23 @@ export default function LocalServer() {
     }
   }, []);
 
+  /** 拉取 cloudflared / WARP 的最新版本；返回是否成功（失败时页面仍显示已装版本）。 */
+  const loadLatest = useCallback(async (refresh = false) => {
+    setLatest((s) => ({ ...s, loading: true }));
+    try {
+      const res = await api('versions/latest', refresh ? { query: { refresh: 1 } } : undefined);
+      setLatest({ loading: false, data: (res && res.data) || {}, error: null });
+      return true;
+    } catch (e) {
+      setLatest({ loading: false, data: null, error: e });
+      return false;
+    }
+  }, []);
+
   useEffect(() => {
     load();
-  }, [load]);
+    loadLatest(false);
+  }, [load, loadLatest]);
   usePolling(() => load().catch(() => {}), 5000);
 
   const procs = useAsync(() => api('local/processes'), []);
@@ -91,21 +108,19 @@ export default function LocalServer() {
   const warpVersion = String(versions['warp-svc'] || versions['warp'] || '');
   const cfVersion = String(versions.cloudflared || '');
 
-  const updateWarp = async () => {
-    if (!overview) return;
-    setBusy('warp');
-    try {
-      const res = await apiPost('jobs', { kind: 'warp.update', params: { server_id: overview.id } });
-      message.success((res && res.message) || '已下发 WARP 更新，进度见右上角「任务」');
-      setTimeout(() => load().catch(() => {}), 3000);
-    } catch (e) {
-      message.error(e.message || '操作失败');
-    } finally {
-      setBusy('');
-    }
-  };
+  // 最新版本：cloudflared / warp-svc 各有 latest/error；单项失败只影响对应行
+  const latestData = latest.data || {};
+  const latestCf = latestData.cloudflared || null;
+  const latestWarp = latestData['warp-svc'] || null;
+  const cfLatest = String((latestCf && latestCf.latest) || '');
+  const warpLatest = String((latestWarp && latestWarp.latest) || '');
+  const apiErrText = latest.error ? latest.error.message || String(latest.error) : '';
+  const cfLatestErr = String((latestCf && latestCf.error) || apiErrText || '');
+  const warpLatestErr = String((latestWarp && latestWarp.error) || apiErrText || '');
+  const cfUpgrade = versionStatus(cfVersion, cfLatest);
+  const warpUpgrade = versionStatus(warpVersion, warpLatest);
 
-  // 本机服务更新（cloudflared）是异步任务：POST 启动，轮询 GET 进度；
+  // 本机服务更新（cloudflared / warp-svc）是异步任务：POST 启动，轮询 GET 进度；
   // 与节点 Agent 任务完全解耦，避免误触发全部节点。
   const pollLocalUpdate = useCallback(async (service) => {
     for (let i = 0; i < 150; i += 1) {
@@ -136,6 +151,26 @@ export default function LocalServer() {
         message.success('已开始更新本机 cloudflared（不会更新节点服务器）');
       }
       await pollLocalUpdate('cloudflared');
+    } catch (e) {
+      message.error(e.message || '操作失败');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  // WARP 客户端更新：走本机专用异步接口（与节点 Agent 任务解耦），
+  // 绝不再调 /api/jobs，避免误更新全部节点。
+  const updateWarp = async () => {
+    if (!overview) return;
+    setBusy('warp');
+    try {
+      const res = await apiPost('local/services/warp-svc/update', {});
+      if (res && res.started === false) {
+        message.info(res.message || '正在更新中，请稍候');
+      } else {
+        message.success('已开始更新本机 WARP 客户端（仅本机，不会更新节点服务器）');
+      }
+      await pollLocalUpdate('warp-svc');
     } catch (e) {
       message.error(e.message || '操作失败');
     } finally {
@@ -270,6 +305,16 @@ export default function LocalServer() {
           title={<span className="pp-section-title">安全与隧道</span>}
           extra={
             <Space>
+              <Button
+                icon={<SyncOutlined />}
+                loading={latest.loading}
+                onClick={async () => {
+                  const ok = await loadLatest(true);
+                  if (ok) message.success('已检查并刷新最新版本信息');
+                }}
+              >
+                检查更新
+              </Button>
               <Button icon={<ReloadOutlined />} onClick={() => load()} loading={busy === 'reload'}>
                 刷新
               </Button>
@@ -288,13 +333,22 @@ export default function LocalServer() {
             />
             <Row gutter={[12, 12]}>
               <Col xs={24} md={12}>
-                <div className="pp-svc-row" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', border: '1px solid #eef2f7', borderRadius: 10, background: '#fbfcfe' }}>
+                <div className="pp-svc-row" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', border: '1px solid #eef2f7', borderRadius: 10, background: '#fbfcfe', flexWrap: 'wrap' }}>
                   <i className={`pp-dot ${cfState === 'active' ? 'online' : cfState === 'not-installed' ? 'unknown' : 'warn'}`} />
                   <span style={{ fontWeight: 500 }}>cloudflared</span>
-                  {cfVersion ? <span className="pp-mono pp-muted" style={{ fontSize: 12 }}>v{cfVersion}</span> : null}
+                  <VersionPair
+                    installed={cfVersion}
+                    latest={cfLatest}
+                    error={cfLatestErr}
+                    loading={latest.loading}
+                    source={latestCf && latestCf.source}
+                    checkedAt={latestCf && latestCf.checked_at}
+                    onRetry={() => loadLatest(true)}
+                  />
                   <Tag color={cfState === 'active' ? 'success' : cfState === 'not-installed' ? 'default' : 'warning'} style={{ marginInlineEnd: 0 }}>
                     {cfState === 'active' ? '运行' : cfState === 'not-installed' ? '未安装' : cfState}
                   </Tag>
+                  <VersionTag status={cfUpgrade} installed={cfVersion} latest={cfLatest} />
                   <span style={{ marginLeft: 'auto' }}>
                     <Popconfirm
                       title="更新本机 cloudflared？"
@@ -310,17 +364,26 @@ export default function LocalServer() {
                 </div>
               </Col>
               <Col xs={24} md={12}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', border: '1px solid #eef2f7', borderRadius: 10, background: '#fbfcfe' }}>
+                <div className="pp-svc-row" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', border: '1px solid #eef2f7', borderRadius: 10, background: '#fbfcfe', flexWrap: 'wrap' }}>
                   <i className={`pp-dot ${warpState === 'active' ? 'online' : warpState === 'not-installed' ? 'unknown' : 'warn'}`} />
                   <span style={{ fontWeight: 500 }}>WARP 客户端</span>
-                  {warpVersion ? <span className="pp-mono pp-muted" style={{ fontSize: 12 }}>v{warpVersion}</span> : null}
+                  <VersionPair
+                    installed={warpVersion}
+                    latest={warpLatest}
+                    error={warpLatestErr}
+                    loading={latest.loading}
+                    source={latestWarp && latestWarp.source}
+                    checkedAt={latestWarp && latestWarp.checked_at}
+                    onRetry={() => loadLatest(true)}
+                  />
                   <Tag color={warpState === 'active' ? 'success' : warpState === 'not-installed' ? 'default' : 'warning'} style={{ marginInlineEnd: 0 }}>
                     {warpState === 'active' ? '运行' : warpState === 'not-installed' ? '未安装' : warpState}
                   </Tag>
+                  <VersionTag status={warpUpgrade} installed={warpVersion} latest={warpLatest} />
                   <span style={{ marginLeft: 'auto' }}>
                     <Popconfirm
-                      title="更新 WARP 客户端？"
-                      description="通过包管理器升级 cloudflare-warp 并重启 warp-svc；组网连接会短暂中断。"
+                      title="更新本机 WARP 客户端？"
+                      description="仅升级本机（控制服务器）的 cloudflare-warp 并重启 warp-svc；不会更新任何节点服务器，组网连接会短暂中断。"
                       okText="更新"
                       onConfirm={updateWarp}
                     >
@@ -616,4 +679,48 @@ export default function LocalServer() {
       ) : null}
     </div>
   );
+}
+
+/**
+ * 版本展示：已装 v<installed> · 最新 v<latest>。
+ * 最新获取失败时只显示已装版本，用虚线下划线 + 悬停展示 error，且可点击重试（refresh=1）；
+ * 成功时悬停显示数据来源与检查时间（checked_at 命中缓存时为首次查询时间）。
+ */
+function VersionPair({ installed, latest, error, loading, source, checkedAt, onRetry }) {
+  if (!installed) {
+    return <span className="pp-muted" style={{ fontSize: 12 }}>{loading ? '读取版本中…' : '版本未知'}</span>;
+  }
+  const metaTip = [source ? `来源 ${source}` : '', checkedAt ? `检查于 ${fmtTime(checkedAt)}` : '']
+    .filter(Boolean)
+    .join(' · ');
+  return (
+    <Space size={5} wrap>
+      <span className="pp-mono pp-muted" style={{ fontSize: 12 }}>已装 v{installed}</span>
+      {latest ? (
+        <Tooltip title={metaTip || undefined}>
+          <span className="pp-mono pp-muted" style={{ fontSize: 12 }}>· 最新 v{latest}</span>
+        </Tooltip>
+      ) : error ? (
+        <Tooltip title={`最新版本获取失败：${error}（点击重试，强制刷新）`}>
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={() => onRetry && onRetry()}
+            onKeyDown={(e) => { if (e.key === 'Enter' && onRetry) onRetry(); }}
+            style={{ fontSize: 12, color: '#d97706', borderBottom: '1px dotted #d97706', cursor: 'pointer' }}
+          >
+            {loading ? '检查最新版本中…' : '最新查询失败'}
+          </span>
+        </Tooltip>
+      ) : null}
+    </Space>
+  );
+}
+
+/** 升级状态标签：已装或最新任一缺失时不显示，避免误报。 */
+function VersionTag({ status, installed, latest }) {
+  if (!installed || !latest) return null;
+  if (status === 'update') return <Tag color="warning" style={{ marginInlineEnd: 0 }}>可升级</Tag>;
+  if (status === 'latest') return <Tag color="success" style={{ marginInlineEnd: 0 }}>已最新</Tag>;
+  return <Tag style={{ marginInlineEnd: 0 }}>未知</Tag>;
 }

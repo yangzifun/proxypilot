@@ -39,8 +39,10 @@ var localUpdateState = struct {
 }
 
 // localUpdateScripts 是允许在本机执行更新的固定脚本（白名单）。
+// warp-svc 用系统服务名命名（包名 cloudflare-warp，服务/单元名 warp-svc）。
 var localUpdateScripts = map[string]func() string{
 	"cloudflared": cloudflaredUpdateCommand,
+	"warp-svc":    warpUpdateCommand,
 }
 
 // runLocalUpdateScript 供测试替换。
@@ -60,7 +62,9 @@ func localUpdateService(raw string) (string, bool) {
 	return name, ok
 }
 
-// buildLocalUpdateResult 把脚本输出整理成稳定结构（cloudflared 专用摘要）。
+// buildLocalUpdateResult 把脚本输出整理成稳定结构。
+// cloudflared 与 warp-svc 的更新脚本都输出 OLD=/NEW=/ACTIVE=/ALREADY=，
+// 共用同一套摘要解析；其它服务只给通用文案。
 func buildLocalUpdateResult(service string, ok bool, out string, started, finished int64) localUpdateResult {
 	res := localUpdateResult{
 		OK:         ok,
@@ -68,7 +72,8 @@ func buildLocalUpdateResult(service string, ok bool, out string, started, finish
 		StartedAt:  started,
 		FinishedAt: finished,
 	}
-	if service != "cloudflared" {
+	hasVersionLines := service == "cloudflared" || service == "warp-svc"
+	if !hasVersionLines {
 		if ok {
 			res.Message = "更新完成"
 		} else {

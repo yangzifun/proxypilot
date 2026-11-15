@@ -28,10 +28,28 @@ func TestLocalUpdateServiceAllowlist(t *testing.T) {
 	if name, ok := localUpdateService(" CloudFlared "); !ok || name != "cloudflared" {
 		t.Fatalf("cloudflared 应被允许，得到 %q ok=%v", name, ok)
 	}
-	for _, bad := range []string{"", "nginx", "cloudflared;rm -rf /", "cloudflared/../x"} {
+	// 本机 WARP 更新用系统服务名 warp-svc（对应 cloudflare-warp 包）
+	if name, ok := localUpdateService(" WARP-SVC "); !ok || name != "warp-svc" {
+		t.Fatalf("warp-svc 应被允许，得到 %q ok=%v", name, ok)
+	}
+	for _, bad := range []string{"", "nginx", "warp", "warp-cli", "cloudflared;rm -rf /", "cloudflared/../x"} {
 		if _, ok := localUpdateService(bad); ok {
 			t.Fatalf("非法服务名 %q 不应通过白名单", bad)
 		}
+	}
+	// 白名单脚本必须固定存在且非空；warp-svc 应复用现有 warpUpdateCommand
+	for _, name := range []string{"cloudflared", "warp-svc"} {
+		gen, ok := localUpdateScripts[name]
+		if !ok || gen == nil {
+			t.Fatalf("白名单缺少固定脚本：%s", name)
+		}
+		if strings.TrimSpace(gen()) == "" {
+			t.Fatalf("%s 更新脚本为空", name)
+		}
+	}
+	warpCmd := localUpdateScripts["warp-svc"]()
+	if !strings.Contains(warpCmd, "cloudflare-warp") || !strings.Contains(warpCmd, "warp-svc") {
+		t.Fatalf("warp-svc 脚本内容不符合预期：%q", warpCmd)
 	}
 }
 
@@ -55,6 +73,21 @@ func TestBuildLocalUpdateResult(t *testing.T) {
 	r = buildLocalUpdateResult("cloudflared", false, failed, 1, 2)
 	if r.OK || !strings.Contains(r.Message, "更新失败") {
 		t.Fatalf("失败结果不符合预期：%+v", r)
+	}
+}
+
+func TestBuildLocalUpdateResultWarpSvc(t *testing.T) {
+	out := "OLD=warp-cli version 2026.7.1.0\nNEW=warp-cli version 2026.8.2115.0\nACTIVE=active\n"
+	r := buildLocalUpdateResult("warp-svc", true, out, 1, 2)
+	if !r.OK || r.Old != "warp-cli version 2026.7.1.0" || r.New != "warp-cli version 2026.8.2115.0" || r.Active != "active" {
+		t.Fatalf("warp-svc 更新结果解析失败：%+v", r)
+	}
+	if !strings.Contains(r.Message, "已更新") {
+		t.Fatalf("warp-svc 更新消息不符合预期：%q", r.Message)
+	}
+	// 其它服务保持通用文案（仍不解析 OLD/NEW）
+	if r := buildLocalUpdateResult("other-service", true, "OLD=x\nNEW=y\n", 1, 2); r.Message != "更新完成" {
+		t.Fatalf("未知服务消息应保持通用：%q", r.Message)
 	}
 }
 

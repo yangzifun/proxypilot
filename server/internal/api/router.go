@@ -1,4 +1,4 @@
-﻿package api
+package api
 
 import (
 	"database/sql"
@@ -268,6 +268,8 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("DELETE /api/local/files/{name}", h.authed(authOpts{}, h.localFileDelete))
 	mux.HandleFunc("POST /api/local/services/{name}/update", h.authed(authOpts{}, h.localServiceUpdateStart))
 	mux.HandleFunc("GET /api/local/services/{name}/update", h.authed(authOpts{}, h.localServiceUpdateStatus))
+	// 组件最新可用版本（本机 + 节点共用；cloudflared / warp-svc，30 分钟缓存）
+	mux.HandleFunc("GET /api/versions/latest", h.authed(authOpts{}, h.latestVersions))
 	mux.HandleFunc("GET /api/servers/{id}/ssh-guard", h.authed(authOpts{}, h.serverSSHGuardStatus))
 	mux.HandleFunc("POST /api/servers/{id}/ssh-guard", h.authed(authOpts{}, h.serverSSHGuard))
 	mux.HandleFunc("GET /api/servers/{id}/traffic-limit", h.authed(authOpts{}, h.serverTrafficLimitGet))
