@@ -442,6 +442,8 @@ func patchTemplateSection(content, section string, data json.RawMessage) (string
 	if err != nil {
 		return "", templateSections{}, nil, nil, err
 	}
+	// 关键：patch 后的摘要必须反映新内容体积（前端用它展示/判断是否被改过）。
+	sections.Summary.SizeBytes = len(newContent)
 	validation := validateTemplateContent(newContent)
 	return newContent, sections, validation.Warnings, validation.Errors, nil
 }
@@ -457,6 +459,27 @@ type templateValidationResult struct {
 
 var templateProxyGroupTypes = map[string]bool{
 	"select": true, "url-test": true, "fallback": true, "load-balance": true, "relay": true,
+}
+
+// templateRuleKnownTypes 已知的 Clash/Mihomo 规则类型（用于减少"未知类型"误报）。
+// 未列出的类型只给 warning，不阻断发布；这里尽量覆盖 mihomo 文档中的常用类型。
+var templateRuleKnownTypes = map[string]bool{
+	"MATCH": true, "GEOIP": true, "GEOSITE": true,
+	"IP-CIDR": true, "IP-CIDR6": true, "IP-SUFFIX": true,
+	"SRC-IP-CIDR": true, "SRC-IP-SUFFIX": true,
+	"DOMAIN": true, "DOMAIN-SUFFIX": true, "DOMAIN-KEYWORD": true, "DOMAIN-REGEX": true, "DOMAIN-WILDCARD": true,
+	"PROCESS-NAME": true, "PROCESS-PATH": true, "PROCESS-NAME-REGEX": true, "PROCESS-PATH-REGEX": true,
+	"RULE-SET": true, "AND": true, "OR": true, "NOT": true, "SUB-RULE": true,
+	"DST-PORT": true, "SRC-PORT": true, "IN-PORT": true, "IN-TYPE": true, "IN-NAME": true, "IN-MARK": true,
+	"NETWORK": true, "DSCP": true, "IP-ASN": true, "ASN": true, "SRC-IP-ASN": true,
+	"SRC-GEOIP": true, "SRC-GEOSITE": true, "UID": true,
+	"WIFI-SSID": true, "WIFI-BSSID": true,
+}
+
+// templateRuleTrailingOptions 规则末尾的可选参数，不属于目标策略（例如
+// `IP-CIDR,1.2.3.0/24,DIRECT,no-resolve` 的最后一个逗号段是 no-resolve）。
+var templateRuleTrailingOptions = map[string]bool{
+	"no-resolve": true,
 }
 
 var templateRuleProviderTypes = map[string]bool{"http": true, "file": true, "inline": true}
@@ -567,8 +590,12 @@ func validateTemplateContent(content string) templateValidationResult {
 				res.Errors = append(res.Errors, fmt.Sprintf("proxy-groups（%s）url 需以 http:// 或 https:// 开头", name))
 			}
 			if filter := templateAsString(m["filter"]); filter != "" {
+				// Clash 客户端可能支持负向前瞻等 Go regexp 不支持的语法（如线上 lite 模板
+				// `^((?!(回国|中国|China|CN|Mainland)).)*$`）。这里只提示兼容性风险，
+				// 不能阻断已有模板的保存/发布。
 				if _, err := regexp.Compile(filter); err != nil {
-					res.Errors = append(res.Errors, fmt.Sprintf("proxy-groups（%s）filter 不是合法正则：%v", name, err))
+					res.Warnings = append(res.Warnings, fmt.Sprintf(
+						"proxy-groups（%s）filter 不是合法 Go 正则（客户端兼容性需确认，可能是负向前瞻等语法）：%v", name, err))
 				}
 			}
 			if iv, ok := templateAsNumber(m["interval"]); ok && iv <= 0 {
@@ -648,23 +675,25 @@ func validateTemplateContent(content string) templateValidationResult {
 				res.Errors = append(res.Errors, fmt.Sprintf("rules[%d] 规则类型应大写：%s", idx, rule))
 				continue
 			}
+			// 去掉末尾可选参数（如 no-resolve），它不属于目标策略。
+			for len(parts) > 2 && templateRuleTrailingOptions[strings.ToLower(parts[len(parts)-1])] {
+				parts = parts[:len(parts)-1]
+			}
 			if len(parts) < 2 {
 				res.Errors = append(res.Errors, fmt.Sprintf("rules[%d] 缺少目标策略：%s", idx, rule))
 				continue
 			}
 			target := parts[len(parts)-1]
-			if typ != "MATCH" && typ != "GEOIP" && typ != "GEOSITE" && typ != "IP-CIDR" &&
-				typ != "IP-CIDR6" && typ != "DOMAIN" && typ != "DOMAIN-SUFFIX" && typ != "DOMAIN-KEYWORD" &&
-				typ != "PROCESS-NAME" && typ != "RULE-SET" && typ != "AND" && typ != "OR" && typ != "NOT" &&
-				typ != "DST-PORT" && typ != "SRC-PORT" && typ != "NETWORK" && typ != "IN-PORT" {
+			if !templateRuleKnownTypes[typ] {
 				res.Warnings = append(res.Warnings, fmt.Sprintf("rules[%d] 未识别的规则类型：%s", idx, typ))
 			}
-			if typ == "RULE-SET" || typ == "AND" || typ == "OR" || typ == "NOT" {
-				if len(parts) >= 3 {
-					ref := parts[1]
-					if !providerNames[ref] {
-						res.Warnings = append(res.Warnings, fmt.Sprintf("rules[%d] 引用的 rule-provider 不存在：%s", idx, ref))
-					}
+			// 只有 RULE-SET 才按「provider 名」校验引用；AND/OR/NOT 的 payload
+			// 内含逗号/括号（形如 ((NETWORK,UDP),(DOMAIN,x))），不能按普通
+			// rule-set 解析，否则会误报「((NETWORK」之类的 provider 缺失。
+			if typ == "RULE-SET" && len(parts) >= 3 {
+				ref := parts[1]
+				if ref != "" && !strings.ContainsAny(ref, "()") && !providerNames[ref] {
+					res.Warnings = append(res.Warnings, fmt.Sprintf("rules[%d] 引用的 rule-provider 不存在：%s", idx, ref))
 				}
 			}
 			if typ == "MATCH" {

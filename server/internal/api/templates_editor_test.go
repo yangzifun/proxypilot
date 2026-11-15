@@ -284,8 +284,6 @@ func TestValidateTemplateContentErrors(t *testing.T) {
 			"type: select", "type: unknown-type", 1), "type=unknown-type 不支持"},
 		{"策略组重名", strings.Replace(templateEditorSample,
 			"name: 自动选择\n    type: url-test", "name: 🚀 节点选择\n    type: url-test", 1), "名称重复"},
-		{"filter 非法正则", strings.Replace(templateEditorSample,
-			"tolerance: 50", "tolerance: 50\n    filter: \"([\"", 1), "filter 不是合法正则"},
 		{"provider behavior 非法", strings.Replace(templateEditorSample,
 			"behavior: domain, interval: 300}", "behavior: nope, interval: 300}", 1), "behavior=nope 不支持"},
 		{"provider 缺 url", strings.Replace(templateEditorSample,
@@ -320,6 +318,57 @@ func TestValidateTemplateContentWarnings(t *testing.T) {
 	joined := strings.Join(res.Warnings, "\n")
 	if !strings.Contains(joined, "rule-provider 不存在") || !strings.Contains(joined, "目标策略不存在") {
 		t.Fatalf("缺少引用警告：%v", res.Warnings)
+	}
+}
+
+// 热修（task-22）：线上 lite 模板的 filter 含负向前瞻 `(?!...)`，Go regexp 不支持，
+// 必须降级为 warning（客户端兼容性需确认），不能阻断发布。
+func TestValidateTemplateContentLookaheadFilterWarning(t *testing.T) {
+	content := strings.Replace(templateEditorSample,
+		"tolerance: 50", "tolerance: 50\n    filter: \"^((?!(回国|中国|China|CN|Mainland)).)*$\"", 1)
+	res := validateTemplateContent(content)
+	if !res.OK || len(res.Errors) != 0 {
+		t.Fatalf("负向前瞻 filter 不应阻断发布：errors=%v", res.Errors)
+	}
+	joined := strings.Join(res.Warnings, "\n")
+	if !strings.Contains(joined, "filter 不是合法 Go 正则") || !strings.Contains(joined, "客户端兼容性需确认") {
+		t.Fatalf("缺少 filter 兼容性 warning：%v", res.Warnings)
+	}
+}
+
+// 热修（task-22）：规则解析不能误报——no-resolve 不是目标策略、AND/OR/NOT 不按
+// rule-set 校验 provider、IP-ASN 是已知类型。
+func TestValidateTemplateContentRuleNoFalseWarnings(t *testing.T) {
+	oldRules := "rules:\n  - RULE-SET,domain-list,🚀 节点选择\n  - MATCH,🚀 节点选择"
+	if !strings.Contains(templateEditorSample, oldRules) {
+		t.Fatal("测试样例 rules 段落已变化，请同步更新用例")
+	}
+	newRules := `rules:
+  - IP-CIDR,198.18.0.0/16,DIRECT,no-resolve
+  - GEOIP,CN,DIRECT,no-resolve
+  - IP-ASN,13335,DIRECT
+  - AND,((NETWORK,UDP),(DOMAIN-SUFFIX,example.com)),🚀 节点选择
+  - RULE-SET,domain-list,🚀 节点选择
+  - MATCH,🚀 节点选择`
+	content := strings.Replace(templateEditorSample, oldRules, newRules, 1)
+	res := validateTemplateContent(content)
+	if !res.OK {
+		t.Fatalf("合法规则不应产生 error：%v", res.Errors)
+	}
+	if len(res.Warnings) != 0 {
+		t.Fatalf("规则不应产生误报 warning（实际 %d 条）：%v", len(res.Warnings), res.Warnings)
+	}
+}
+
+// 热修（task-22）：patch-section 后 summary.size_bytes 必须等于新内容字节数。
+func TestPatchTemplateSectionSummarySizeBytes(t *testing.T) {
+	content, sections, _, verrs, err := patchTemplateSection(templateEditorSample, "rules",
+		json.RawMessage(`["IP-CIDR,198.18.0.0/16,DIRECT,no-resolve","MATCH,🚀 节点选择"]`))
+	if err != nil || len(verrs) != 0 {
+		t.Fatalf("patch 失败：%v %v", err, verrs)
+	}
+	if sections.Summary.SizeBytes != len(content) || sections.Summary.SizeBytes <= 0 {
+		t.Fatalf("size_bytes = %d，期望 %d（内容长度）", sections.Summary.SizeBytes, len(content))
 	}
 }
 
