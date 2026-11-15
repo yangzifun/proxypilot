@@ -722,7 +722,7 @@ function VpnGrants({ uuid }) {
         columns={columns}
         dataSource={state.data}
         pagination={false}
-        locale={{ emptyText: '还没有 VPN 节点，先到「节点绑定 → VPN 节点绑定」创建' }}
+        locale={{ emptyText: '还没有 VPN 节点，先到「代理节点绑定 → VPN 节点绑定」创建' }}
       />
     </>
   );

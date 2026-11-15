@@ -222,7 +222,7 @@ export default function NodeBindings() {
   return (
     <>
       <PageCard
-      title="节点绑定"
+      title="代理节点绑定"
       extra={
         <Space>
           <Button type="primary" icon={<CloudUploadOutlined />} loading={applyingAll} onClick={applyAll}>

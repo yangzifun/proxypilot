@@ -61,7 +61,7 @@ export const PAGE_META = {
     accent: '#0ea5e9',
   },
   bindings: {
-    title: '节点绑定',
+    title: '代理节点绑定',
     subtitle: '一台服务器同时绑定 sing-box / mihomo / MTProto',
     icon: <DeploymentUnitOutlined />,
     group: '节点运维',
