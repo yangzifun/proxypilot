@@ -1,6 +1,7 @@
-﻿import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   CloudOutlined,
+  CodeOutlined,
   DeleteOutlined,
   EditOutlined,
   FileTextOutlined,
@@ -33,6 +34,7 @@ import { useAsync, readForm } from '../hooks';
 import { ErrorBlock, IconAction, PageCard, StatCard, Toolbar } from '../components';
 import { fmtAgo, fmtBytes, fmtTime } from '../format';
 import { chartPalette } from '../theme';
+import TemplateEditor from './TemplateEditor';
 
 export default function Templates() {
   return (
@@ -54,6 +56,7 @@ function TemplateList() {
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(10);
   const [compose, setCompose] = useState(null);
+  const [editor, setEditor] = useState(null); // 当前打开内容编辑器的模板行
   const [saving, setSaving] = useState(false);
   const [form] = Form.useForm();
 
@@ -171,16 +174,25 @@ function TemplateList() {
     },
     {
       title: '操作',
-      width: 130,
+      width: 236,
       render: (_, row) => (
         <Space size={0}>
+          <Button
+            size="small"
+            type="link"
+            icon={<CodeOutlined />}
+            style={{ paddingInline: 4 }}
+            onClick={() => setEditor(row)}
+          >
+            编辑内容
+          </Button>
           <IconAction
             title="设为默认"
             icon={<StarOutlined />}
             disabled={Number(row.is_default) === 1}
             onClick={() => setDefault(row)}
           />
-          <IconAction title="编辑" icon={<EditOutlined />} onClick={() => openEdit(row)} />
+          <IconAction title="编辑元数据" icon={<EditOutlined />} onClick={() => openEdit(row)} />
           <Popconfirm
             title="删除该模板？"
             description="已使用该模板的订阅不会自动切换。"
@@ -306,6 +318,14 @@ function TemplateList() {
           </Form.Item>
         </Form>
       </Modal>
+
+      {/* 内容编辑器（全屏 Drawer）：解析分区表单 + 原始 YAML + 校验/预览/发布/版本 */}
+      <TemplateEditor
+        id={editor ? editor.id : undefined}
+        open={!!editor}
+        onClose={() => setEditor(null)}
+        onChanged={() => reload().catch(() => {})}
+      />
     </div>
   );
 }

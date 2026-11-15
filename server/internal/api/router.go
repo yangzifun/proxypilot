@@ -159,6 +159,18 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /api/templates/manage/{id}", h.authed(authOpts{}, h.templateItemGet))
 	mux.HandleFunc("PUT /api/templates/manage/{id}", h.authed(authOpts{}, h.templateItemPut))
 	mux.HandleFunc("DELETE /api/templates/manage/{id}", h.authed(authOpts{}, h.templateDelete))
+	// 模板编辑器：草稿/校验/区段编辑/预览/发布/版本（编辑与发布仅超管）
+	mux.HandleFunc("GET /api/templates/manage/{id}/content", h.authed(authOpts{}, h.templateContentGet))
+	mux.HandleFunc("PUT /api/templates/manage/{id}/content", h.authed(authOpts{superOnly: true}, h.templateContentSave))
+	mux.HandleFunc("POST /api/templates/manage/{id}/validate", h.authed(authOpts{}, h.templateValidate))
+	mux.HandleFunc("POST /api/templates/manage/{id}/parse", h.authed(authOpts{}, h.templateParse))
+	mux.HandleFunc("POST /api/templates/manage/{id}/patch-section", h.authed(authOpts{}, h.templatePatchSection))
+	mux.HandleFunc("POST /api/templates/manage/{id}/publish", h.authed(authOpts{superOnly: true}, h.templatePublish))
+	mux.HandleFunc("POST /api/templates/manage/{id}/import-url", h.authed(authOpts{superOnly: true}, h.templateImportURL))
+	mux.HandleFunc("POST /api/templates/manage/{id}/preview", h.authed(authOpts{}, h.templatePreview))
+	mux.HandleFunc("GET /api/templates/manage/{id}/versions", h.authed(authOpts{}, h.templateVersions))
+	mux.HandleFunc("GET /api/templates/manage/{id}/versions/{vid}", h.authed(authOpts{}, h.templateVersionGet))
+	mux.HandleFunc("POST /api/templates/manage/{id}/versions/{vid}/restore", h.authed(authOpts{superOnly: true}, h.templateVersionRestore))
 
 	// 统计与日志
 	mux.HandleFunc("GET /api/stats", h.authed(authOpts{}, h.statsOverview))
@@ -508,34 +520,3 @@ func (h *handlers) health(w http.ResponseWriter, r *http.Request) {
 		"db":      status,
 	})
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -144,7 +144,7 @@
 | `GET` | `/api/uuids/{uuid}/services` | `authed` | 管理员 |
 | `PUT` | `/api/uuids/{uuid}/services` | `authed` | 管理员 |
 
-## 订阅与模板（14）
+## 订阅与模板（25）
 
 | 方法 | 路径 | Handler | 权限 |
 |---|---|---|---|
@@ -162,6 +162,49 @@
 | `PUT` | `/api/templates/manage/{id}` | `authed` | 管理员 |
 | `DELETE` | `/api/templates/manage/{id}` | `authed` | 管理员 |
 | `POST` | `/api/templates/manage/set-default` | `authed` | 管理员 |
+| `GET` | `/api/templates/manage/{id}/content` | `authed` | 管理员 |
+| `PUT` | `/api/templates/manage/{id}/content` | `authed` | 仅超管 |
+| `POST` | `/api/templates/manage/{id}/validate` | `authed` | 管理员 |
+| `POST` | `/api/templates/manage/{id}/parse` | `authed` | 管理员 |
+| `POST` | `/api/templates/manage/{id}/patch-section` | `authed` | 管理员 |
+| `POST` | `/api/templates/manage/{id}/publish` | `authed` | 仅超管 |
+| `POST` | `/api/templates/manage/{id}/import-url` | `authed` | 仅超管 |
+| `POST` | `/api/templates/manage/{id}/preview` | `authed` | 管理员 |
+| `GET` | `/api/templates/manage/{id}/versions` | `authed` | 管理员 |
+| `GET` | `/api/templates/manage/{id}/versions/{vid}` | `authed` | 管理员 |
+| `POST` | `/api/templates/manage/{id}/versions/{vid}/restore` | `authed` | 仅超管 |
+
+### 订阅模板编辑器（Clash/Mihomo，task-20）
+
+模板内容不再只依赖 R2 URL：`config_templates` 增加 `draft_content` / `published_content`
+与版本表 `config_template_versions`（迁移 `0057_template_editor.sql`）。
+运行时 `GET /clash-config?uuid=&template=` **优先使用 `published_content`**（秒级生效、
+不受 S3/CF 抖动影响），为空才回退模板 URL；响应头 `X-Template-Source: db|url`，
+`X-Template-Used` 保持兼容（URL）。
+
+- `GET .../content`：返回 `draft_content`/`published_content`/`draft_sha256`/`published_sha256`/
+  `content_version`/`source`（draft|published|url）/`content`/`summary`/`managed`/`publishable`；
+  无草稿时自动回退已发布内容或 URL。
+- `PUT .../content` `{content, base_sha256?}`：保存草稿；`base_sha256` 与当前草稿（无草稿时为
+  已发布）不一致返回 409（乐观锁）。
+- `POST .../validate` `{content?}`：YAML 语法/重复键/顶层 map、proxy-groups 类型/重名/正则、
+  rules 格式与引用（警告）、rule-providers 必填/URL/behavior、dns/tun 类型、proxies 保护。
+- `POST .../parse` `{content?}`：返回 `sections{base,dns,tun,proxy_groups,rules,rule_providers}`
+  与 `summary{top_keys,proxy_groups,rules,rule_providers,proxies,anchors,aliases,comments,size_bytes}`。
+- `POST .../patch-section` `{content,section,data}`：只替换目标区段（保留其它区段注释/锚点），
+  `section` 支持 `base/dns/tun/proxy_groups/rules/rule_providers`（也接受 `proxy-groups` 等别名），
+  `proxies` 禁止编辑；`base` 语义为按键替换/新增（值为 null 删除），其余区段整体替换。
+- `POST .../publish` `{content?}`：校验 → 备份旧 R2 对象到 `rule/configs/.versions/` →
+  写回原 URL → 更新 `published_content`/版本/审计；仅允许受管 R2（URL host 为
+  `s3.proxypilot.yangzifun.org` 或 `cdn_base_url` 配置域，且 path 以 `/rule/configs/` 开头、
+  以 `.yaml/.yml` 结尾），外部模板返回 400「外部模板只读」。
+- `POST .../import-url`：从当前 URL 拉取内容写入草稿（迁移/首次编辑）。
+- `POST .../preview` `{content?,uuid?}`：用真实 UUID 的订阅节点注入 proxies，返回完整 YAML 与
+  统计；**不写访问日志**。
+- `GET .../versions`、`GET .../versions/{vid}`、`POST .../versions/{vid}/restore`（恢复为草稿）。
+
+安全：内容 ≤1MB、UTF-8、禁止自定义 YAML tag、别名 ≤500、节点数/嵌套深度限制；
+`proxies` 为系统注入位，只允许空或直连占位。
 
 ## 服务器与 Agent（67）
 

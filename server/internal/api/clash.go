@@ -2,11 +2,10 @@ package api
 
 import (
 	"context"
-	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -728,42 +727,18 @@ func (h *handlers) clashConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	templateURL := template
-	if !strings.HasPrefix(template, "http://") && !strings.HasPrefix(template, "https://") {
-		err := h.db.QueryRowContext(r.Context(),
-			`SELECT url FROM config_templates WHERE name = ? LIMIT 1`, template).Scan(&templateURL)
-		if err != nil {
-			if err == sql.ErrNoRows {
-				writeError(w, http.StatusNotFound, "未在数据库中找到模板 \""+template+"\"")
-			} else {
-				writeError(w, http.StatusInternalServerError, "查询模板失败")
-			}
-			return
+	// 模板解析：优先 DB 已发布内容（秒级生效、不受 S3/CF 抖动影响），否则回退 URL。
+	resolved, rerr := h.resolveClashTemplateContent(r.Context(), template)
+	if rerr != nil {
+		if errors.Is(rerr, errTemplateNotFound) {
+			writeError(w, http.StatusNotFound, rerr.Error())
+		} else {
+			writeError(w, http.StatusBadGateway, rerr.Error())
 		}
-	}
-
-	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.Get(templateURL)
-	if err != nil {
-		writeError(w, http.StatusBadGateway, "模板载入失败: "+err.Error())
-		return
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 400 {
-		writeError(w, http.StatusBadGateway, fmt.Sprintf("模板载入失败: HTTP %d", resp.StatusCode))
-		return
-	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
-	if err != nil {
-		writeError(w, http.StatusBadGateway, "模板载入失败: 读取失败")
-		return
-	}
-	if strings.TrimSpace(string(body)) == "" {
-		writeError(w, http.StatusBadGateway, "模板载入失败: 内容为空")
 		return
 	}
 
-	finalConfig := injectClashProxies(string(body), proxies)
+	finalConfig := injectClashProxies(resolved.Content, proxies)
 
 	queryType := "subscription"
 	if ref := r.Header.Get("Referer"); ref != "" && strings.Contains(ref, requestOrigin(r)) {
@@ -789,7 +764,8 @@ func (h *handlers) clashConfig(w http.ResponseWriter, r *http.Request) {
 		uuid, time.Now().UTC().Format("2006-01-02")))
 	w.Header().Set("X-Generated-Date", time.Now().UTC().Format(time.RFC3339))
 	w.Header().Set("X-Total-Proxies-Unique", strconv.Itoa(len(proxies)))
-	w.Header().Set("X-Template-Used", templateURL)
+	w.Header().Set("X-Template-Used", resolved.URL)
+	w.Header().Set("X-Template-Source", resolved.Source)
 	w.Header().Set("X-Supported-Protocols", strings.Join(mapKeys(protocols), ","))
 	w.Header().Set("X-Protocol-Counts", summaryPairs(protocols))
 	w.Header().Set("X-Skipped-Configs", strconv.Itoa(skippedCount))
