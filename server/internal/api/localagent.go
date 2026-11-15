@@ -128,6 +128,15 @@ func localComponentVersions() map[string]string {
 	return out
 }
 
+// invalidateLocalVersionCache 强制下一次采集重新读取本机组件版本。
+// 本机 cloudflared/WARP 更新完成后调用，避免 5 分钟缓存让页面继续显示旧版本。
+func invalidateLocalVersionCache() {
+	localVersionCache.Lock()
+	localVersionCache.at = time.Time{}
+	localVersionCache.data = map[string]string{}
+	localVersionCache.Unlock()
+}
+
 func collectLocal() localSample {
 	out := localSample{summary: map[string]any{}, services: map[string]string{}, versions: map[string]string{}}
 	if runtime.GOOS != "linux" {

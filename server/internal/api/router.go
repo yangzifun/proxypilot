@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"database/sql"
@@ -266,6 +266,8 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /api/local/files", h.authed(authOpts{}, h.localFiles))
 	mux.HandleFunc("POST /api/local/upload", h.authed(authOpts{}, h.localUpload))
 	mux.HandleFunc("DELETE /api/local/files/{name}", h.authed(authOpts{}, h.localFileDelete))
+	mux.HandleFunc("POST /api/local/services/{name}/update", h.authed(authOpts{}, h.localServiceUpdateStart))
+	mux.HandleFunc("GET /api/local/services/{name}/update", h.authed(authOpts{}, h.localServiceUpdateStatus))
 	mux.HandleFunc("GET /api/servers/{id}/ssh-guard", h.authed(authOpts{}, h.serverSSHGuardStatus))
 	mux.HandleFunc("POST /api/servers/{id}/ssh-guard", h.authed(authOpts{}, h.serverSSHGuard))
 	mux.HandleFunc("GET /api/servers/{id}/traffic-limit", h.authed(authOpts{}, h.serverTrafficLimitGet))

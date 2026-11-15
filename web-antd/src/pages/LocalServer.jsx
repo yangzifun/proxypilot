@@ -105,13 +105,37 @@ export default function LocalServer() {
     }
   };
 
+  // 本机服务更新（cloudflared）是异步任务：POST 启动，轮询 GET 进度；
+  // 与节点 Agent 任务完全解耦，避免误触发全部节点。
+  const pollLocalUpdate = useCallback(async (service) => {
+    for (let i = 0; i < 150; i += 1) {
+      await new Promise((r) => setTimeout(r, 2000));
+      const r = await api(`local/services/${service}/update`);
+      if (!r || !r.running) {
+        const last = (r && r.last) || null;
+        if (last && last.ok) message.success(last.message || `${service} 更新完成`);
+        else if (last) message.error(last.message || `${service} 更新失败`);
+        else message.warning(`${service} 更新状态未知，请刷新查看`);
+        load().catch(() => {});
+        setTimeout(() => load().catch(() => {}), 6000);
+        return last;
+      }
+    }
+    message.warning('更新仍在进行，请稍后刷新查看');
+    return null;
+  }, [message, load]);
+
   const updateCloudflared = async () => {
     if (!overview) return;
     setBusy('cf');
     try {
-      const res = await apiPost('jobs', { kind: 'cloudflared.update', params: { server_ids: [overview.id] } });
-      message.success((res && res.message) || '已创建更新任务，进度见右上角「任务」');
-      setTimeout(() => load().catch(() => {}), 2000);
+      const res = await apiPost('local/services/cloudflared/update', {});
+      if (res && res.started === false) {
+        message.info(res.message || '正在更新中，请稍候');
+      } else {
+        message.success('已开始更新本机 cloudflared（不会更新节点服务器）');
+      }
+      await pollLocalUpdate('cloudflared');
     } catch (e) {
       message.error(e.message || '操作失败');
     } finally {
@@ -273,8 +297,8 @@ export default function LocalServer() {
                   </Tag>
                   <span style={{ marginLeft: 'auto' }}>
                     <Popconfirm
-                      title="更新 cloudflared？"
-                      description="会下载最新版本并重启隧道服务。"
+                      title="更新本机 cloudflared？"
+                      description="仅下载最新版本并重启本机（控制服务器）的隧道服务，不会更新节点服务器。"
                       okText="更新"
                       onConfirm={updateCloudflared}
                     >
