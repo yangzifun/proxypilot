@@ -10,6 +10,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -46,6 +47,10 @@ type dnsRelay struct {
 	// 统计（只用于日志）
 	queries uint64
 	failed  uint64
+	// 调试统计（PP_TUNNEL_DEBUG=1 时打印前 N 条查询/回包，定位 MASQUE 降级问题）。
+	debugQueries atomic.Uint64
+	debugReplies atomic.Uint64
+	debugErrors  atomic.Uint64
 }
 
 // newDNSRelay 创建转发器；listen 形如 10.88.2.1:53。
@@ -145,6 +150,9 @@ func (d *dnsRelay) serveUDP() {
 		if n < 12 { // 比 DNS 头还短，丢掉
 			continue
 		}
+		if masqueDebugEnabled && d.debugQueries.Add(1) <= 10 {
+			d.log.Info("DNS 转发调试", "event", "query", "client", src.String(), "len", n)
+		}
 		q := make([]byte, n)
 		copy(q, buf[:n])
 
@@ -172,9 +180,16 @@ func (d *dnsRelay) handleUDP(query []byte, client *net.UDPAddr) {
 			d.log.Warn("DNS 转发：上游无应答", "upstream", strings.Join(d.upstreams, ","),
 				"client", client.String(), "err", err)
 		}
+		if masqueDebugEnabled && d.debugErrors.Add(1) <= 5 {
+			d.log.Warn("DNS 转发调试", "event", "upstream_error", "client", client.String(),
+				"err", err)
+		}
 		return
 	}
 	d.queries++
+	if masqueDebugEnabled && d.debugReplies.Add(1) <= 10 {
+		d.log.Info("DNS 转发调试", "event", "reply", "client", client.String(), "len", len(resp))
+	}
 	if _, werr := d.udp.WriteToUDP(resp, client); werr != nil {
 		d.log.Warn("DNS 转发：回写客户端失败", "client", client.String(), "err", werr)
 	}

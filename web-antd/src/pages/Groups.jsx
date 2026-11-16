@@ -12,6 +12,7 @@ import {
   ReloadOutlined,
   SearchOutlined,
   SwapOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons';
 import {
   Alert,
@@ -55,6 +56,52 @@ const statusTag = (status) => {
   );
 };
 
+// 生成 RFC 4122 UUID v4：优先 crypto.randomUUID，回退 crypto.getRandomValues。
+// 禁止 Math.random：UUID 是订阅/授权标识，弱随机可被猜测。
+export function generateUUIDv4() {
+  const c = typeof globalThis !== 'undefined' ? globalThis.crypto : undefined;
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+  if (c && typeof c.randomUUID === 'function') {
+    try {
+      const out = String(c.randomUUID()).toLowerCase();
+      if (uuidRe.test(out)) return out;
+    } catch (e) {
+      /* 非安全上下文/旧 WebView 的 randomUUID 可能抛错，继续走 getRandomValues 回退 */
+    }
+  }
+  if (c && typeof c.getRandomValues === 'function') {
+    const bytes = new Uint8Array(16);
+    c.getRandomValues(bytes);
+    bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
+    bytes[8] = (bytes[8] & 0x3f) | 0x80; // variant 10xxxxxx
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
+  throw new Error('当前环境不支持安全随机数（crypto.randomUUID / getRandomValues），请手动填写 UUID');
+}
+
+// ---------- 邮箱 / 字段长度校验（与后端 normalizeEmail 语义对齐，并额外禁止非 ASCII 字符） ----------
+const EMAIL_MAX = 254;
+// 常见 ASCII 邮箱：local 允许 .!#$%&'*+/=?^_`{|}~-；域名各段 1-63 字符、至少一个点，禁止空格与中文。
+const EMAIL_RE = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
+const FIELD_LIMITS = { owner: 128, contact_info: 256, remark: 512 };
+
+// 与后端 normalizeEmail 一致：去首尾空格 + 转小写（空字符串表示不绑定邮箱）。
+export function normalizeEmail(raw) {
+  return String(raw == null ? '' : raw).trim().toLowerCase();
+}
+
+// 返回空字符串表示合法；否则返回中文错误文案（表单 rules 与测试共用）。
+export function validateEmail(raw) {
+  const v = normalizeEmail(raw);
+  if (!v) return ''; // 邮箱可选
+  if (v.length > EMAIL_MAX) return `邮箱长度不能超过 ${EMAIL_MAX} 个字符`;
+  if (/\s/.test(v)) return '邮箱不能包含空格';
+  if (/[\u4e00-\u9fff]/.test(v)) return '邮箱不能包含中文字符';
+  if (!EMAIL_RE.test(v)) return '请输入正确的邮箱，例如 user@example.com';
+  return '';
+}
+
 export default function Groups() {
   const { message, modal } = AntdApp.useApp();
   const [q, setQ] = useState('');
@@ -67,6 +114,8 @@ export default function Groups() {
   const [pushOpen, setPushOpen] = useState(false);
   const [rotateRow, setRotateRow] = useState(null); // 要更换 UUID 的行
   const [saving, setSaving] = useState(false);
+  const [pwdModal, setPwdModal] = useState(null); // { uuid, email, password, mustChange, isNew }
+  const [resetting, setResetting] = useState(''); // 正在重置密码的 uuid（防重复点击）
   const [form] = Form.useForm();
 
   const { data, loading, error, reload } = useAsync(
@@ -82,6 +131,64 @@ export default function Groups() {
     const ac = rows.reduce((s, r) => s + (Number(r.access_count) || 0), 0);
     return { nt, ac };
   }, [rows]);
+
+  // 随机生成 UUID（仅新建模式）：写入表单后重新校验该字段，通过时自动清掉旧错误提示。
+  const generateUuid = () => {
+    try {
+      form.setFieldValue('uuid', generateUUIDv4());
+      form.validateFields(['uuid']).catch(() => {});
+    } catch (e) {
+      message.error(e.message || '生成 UUID 失败');
+    }
+  };
+
+  // 密码展示（新建用户返回 initial_password / 管理员重置密码后共用）：
+  // 密码只存在组件 state，不写列表/URL/localStorage，关闭弹窗即清空。
+  const showPassword = ({ uuid, email, password, initial_password: initialPassword, must_change_password: mustChange, isNew }) => {
+    setPwdModal({
+      uuid: uuid || '',
+      email: email || '',
+      password: password || initialPassword || '',
+      mustChange: mustChange !== false,
+      isNew: !!isNew,
+    });
+  };
+
+  // 重置用户密码：body 留空由服务端随机生成，明文只返回一次。
+  const resetPassword = (row) => {
+    if (resetting) return;
+    modal.confirm({
+      title: '重置该用户密码？',
+      content: (
+        <div style={{ fontSize: 13, lineHeight: 1.8 }}>
+          将为 <b className="pp-mono">{shortUuid(row.uuid)}</b> 生成新的随机密码；
+          旧密码立即失效，用户首次登录需要修改密码。
+        </div>
+      ),
+      okText: '重置密码',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        setResetting(row.uuid);
+        try {
+          const res = await api(`uuids/${encodeURIComponent(row.uuid)}/password`, {
+            method: 'POST',
+            body: {},
+          });
+          showPassword({
+            uuid: (res && res.uuid) || row.uuid,
+            email: (res && res.email) || row.email || '',
+            password: res && res.password,
+            must_change_password: res && res.must_change_password,
+            isNew: false,
+          });
+        } catch (e) {
+          message.error(e.message || '重置密码失败');
+        } finally {
+          setResetting('');
+        }
+      },
+    });
+  };
 
   const openCreate = () => {
     setCompose({ mode: 'create', row: null });
@@ -104,14 +211,23 @@ export default function Groups() {
   const submit = async () => {
     const values = await readForm(form);
     if (!values) return;
+    // 提交前统一规范化：email 去空格转小写（与后端 normalizeEmail 一致），其它文本字段去首尾空格。
+    const payload = {
+      ...values,
+      uuid: String(values.uuid || '').trim(),
+      owner: String(values.owner || '').trim(),
+      email: normalizeEmail(values.email),
+      contact_info: String(values.contact_info || '').trim(),
+      remark: String(values.remark || '').trim(),
+    };
     setSaving(true);
     try {
       const isEdit = compose.mode === 'edit';
-      const res = await api('uuids', { method: isEdit ? 'PUT' : 'POST', body: values });
+      const res = await api('uuids', { method: isEdit ? 'PUT' : 'POST', body: payload });
       setCompose(null);
       reload().catch(() => {});
       if (!isEdit && res && res.initial_password) {
-        showPassword({ ...res, isNew: true });
+        showPassword({ ...res, email: payload.email, isNew: true });
       } else {
         message.success(isEdit ? '用户已更新' : '用户已创建');
       }
@@ -198,7 +314,7 @@ export default function Groups() {
     },
     {
       title: '操作',
-      width: 192,
+      width: 220,
       fixed: 'right',
       render: (_, row) => (
         <Space size={0}>
@@ -211,6 +327,12 @@ export default function Groups() {
               navigator.clipboard?.writeText(url);
               message.success('已复制 Mihomo 订阅链接');
             }}
+          />
+          <IconAction
+            title="重置密码"
+            icon={<KeyOutlined />}
+            onClick={() => resetPassword(row)}
+            disabled={resetting === row.uuid}
           />
           <IconAction title="更换 UUID" icon={<SwapOutlined />} onClick={() => setRotateRow(row)} />
           <IconAction title="编辑" icon={<EditOutlined />} onClick={() => openEdit(row)} />
@@ -349,6 +471,7 @@ export default function Groups() {
           <Form.Item
             name="uuid"
             label="UUID"
+            normalize={(v) => String(v || '').trim().toLowerCase()}
             rules={[
               { required: true, message: '请填写 UUID' },
               {
@@ -361,21 +484,45 @@ export default function Groups() {
               className="pp-mono"
               placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
               disabled={compose && compose.mode === 'edit'}
+              addonAfter={
+                compose && compose.mode === 'create' ? (
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<ThunderboltOutlined />}
+                    htmlType="button"
+                    title="生成随机 UUID（RFC 4122 v4）"
+                    onClick={generateUuid}
+                    style={{ paddingInline: 4 }}
+                  >
+                    随机生成
+                  </Button>
+                ) : null
+              }
             />
           </Form.Item>
           <Row gutter={12}>
             <Col span={12}>
-              <Form.Item name="owner" label="所有者">
-                <Input placeholder="可为空" />
+              <Form.Item name="owner" label="所有者" rules={[{ max: FIELD_LIMITS.owner, message: `所有者最多 ${FIELD_LIMITS.owner} 个字符` }]}>
+                <Input placeholder="可为空" maxLength={FIELD_LIMITS.owner} />
               </Form.Item>
             </Col>
             <Col span={12}>
               <Form.Item
                 name="email"
                 label="绑定邮箱"
-                extra="一个邮箱只能绑定一个 UUID（用于用户端邮箱登录）"
+                extra="一个邮箱只能绑定一个 UUID（用于用户端邮箱登录）；填写时会自动去空格并转小写"
+                normalize={normalizeEmail}
+                rules={[
+                  {
+                    validator: (_, v) => {
+                      const err = validateEmail(v);
+                      return err ? Promise.reject(new Error(err)) : Promise.resolve();
+                    },
+                  },
+                ]}
               >
-                <Input placeholder="user@example.com" />
+                <Input placeholder="user@example.com" allowClear maxLength={EMAIL_MAX} />
               </Form.Item>
             </Col>
           </Row>
@@ -386,15 +533,66 @@ export default function Groups() {
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item name="contact_info" label="联系方式">
-                <Input placeholder="TG / QQ 等，可为空" />
+              <Form.Item
+                name="contact_info"
+                label="联系方式"
+                rules={[{ max: FIELD_LIMITS.contact_info, message: `联系方式最多 ${FIELD_LIMITS.contact_info} 个字符` }]}
+              >
+                <Input placeholder="TG / QQ 等，可为空" maxLength={FIELD_LIMITS.contact_info} />
               </Form.Item>
             </Col>
           </Row>
-          <Form.Item name="remark" label="备注">
-            <Input.TextArea rows={2} placeholder="用途 / 到期时间等" />
+          <Form.Item
+            name="remark"
+            label="备注"
+            rules={[{ max: FIELD_LIMITS.remark, message: `备注最多 ${FIELD_LIMITS.remark} 个字符` }]}
+          >
+            <Input.TextArea rows={2} placeholder="用途 / 到期时间等" maxLength={FIELD_LIMITS.remark} showCount />
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* ---------- 随机密码展示（新建成功 / 重置密码后，仅显示一次） ---------- */}
+      <Modal
+        open={!!pwdModal}
+        title={pwdModal && pwdModal.isNew ? '用户已创建' : '密码已重置'}
+        onCancel={() => setPwdModal(null)}
+        footer={(
+          <Button type="primary" onClick={() => setPwdModal(null)}>
+            我已知晓
+          </Button>
+        )}
+        mask={{ closable: false }}
+        destroyOnHidden
+        width={520}
+      >
+        {pwdModal ? (
+          <div>
+            <Alert
+              type="warning"
+              showIcon
+              message="密码只显示这一次，请立即复制并妥善保存；关闭后无法再次查看。"
+              style={{ marginBottom: 14 }}
+            />
+            <Descriptions column={1} size="small" bordered>
+              <Descriptions.Item label="UUID">
+                <span className="pp-mono">{pwdModal.uuid}</span>
+              </Descriptions.Item>
+              <Descriptions.Item label="邮箱">{pwdModal.email || '未绑定'}</Descriptions.Item>
+              <Descriptions.Item label="随机密码">
+                <Space>
+                  <span className="pp-mono" style={{ letterSpacing: 1 }}>{pwdModal.password}</span>
+                  <CopyText value={pwdModal.password} display={<span className="pp-mono">复制</span>} tip="复制密码" />
+                </Space>
+              </Descriptions.Item>
+            </Descriptions>
+            <div style={{ marginTop: 12, fontSize: 12.5, color: 'var(--muted)' }}>
+              {pwdModal.mustChange
+                ? '该用户首次登录后需要修改密码（password_must_change=1）。'
+                : '该用户可直接使用新密码登录。'}
+            </div>
+          </div>
+        ) : null}
       </Modal>
 
       {/* ---------- 详情 ---------- */}

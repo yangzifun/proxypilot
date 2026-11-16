@@ -219,7 +219,7 @@ type Session interface {
 
 ## 6. 与现有方案的关系
 
-- 现有 `tunnel/`（自研 HTTP/3 隧道 + DATAGRAM + FEC）继续作为主通道，MASQUE 是**第二条可选通道**；
+- 现有 `tunnel/`（PilotLink：自研 HTTP/3 隧道 + DATAGRAM + FEC）继续作为主通道，MASQUE 是**第二条可选通道**；
 - 两者在客户端共用 TUN / 路由 / DNS 守卫，只是「包从哪来」不同（见 3.3 的 `packetSource` 抽象）；
 - MASQUE 的优势是：协议标准、无自研载荷、可直连 Cloudflare 出口；
   劣势是：需要 sing-box 1.15+ 或 CF 凭据、每次升级要跟草案版本。

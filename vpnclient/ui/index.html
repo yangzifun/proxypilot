@@ -484,8 +484,8 @@
           <div class="group-title">传输协议</div>
           <div class="field"><label>协议</label>
             <select id="fProtocol" style="width:100%;padding:8px 10px;border-radius:8px;background:var(--card,#111);color:inherit;border:1px solid var(--line,#333)">
-              <option value="auto">自动（优先私有，失败回退 MASQUE）</option>
-              <option value="private">私有协议（自研 HTTP/3）</option>
+              <option value="auto">自动（优先 PilotLink，失败回退 MASQUE）</option>
+              <option value="private">PilotLink（私有协议 / 自研 HTTP/3）</option>
               <option value="masque">MASQUE（标准 CONNECT-IP）</option>
             </select>
           </div>
@@ -824,8 +824,8 @@ function render(){
 
   // 认证状态（checking/valid/invalid/unknown）：只有 valid 才允许连接，
   // 其它状态显示登录框并禁用连接 dial，避免「令牌失效仍显示主界面」。
-  // 当前连接实际使用的传输协议（MASQUE/私有/自动回退）。
-  const protoLabel = ({ private: '私有协议', masque: 'MASQUE' })[state.protocol] || '';
+  // 当前连接实际使用的传输协议（PilotLink/MASQUE/自动回退）。
+  const protoLabel = ({ private: 'PilotLink', masque: 'MASQUE' })[state.protocol] || '';
   const rp = $('rProtocol');
   if (rp) {
     rp.textContent = state.protocol ? ((protoLabel || state.protocol) + (state.transport_fallback ? '（自动回退）' : '')) : '—';

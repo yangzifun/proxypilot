@@ -166,7 +166,7 @@ func TestMasqueConnectIPEndToEnd(t *testing.T) {
 	}()
 
 	// 上行：客户端发一个 IPv4 包（src=10.88.3.10，dst=1.1.1.1，ICMP）。
-	up := makeIPv4(1, net.ParseIP("10.88.3.10").To4(), net.ParseIP("1.1.1.1").To4(), []byte{8, 0, 0, 0})
+	up := makeIPv4(1, net.ParseIP("10.88.3.10").To4(), net.ParseIP("1.1.1.1").To4(), []byte{8, 0, 0, 0, 0, 1, 0, 0})
 	if err := reqStream.SendDatagram(masqueDatagramPayload(up)); err != nil {
 		t.Fatal(err)
 	}
@@ -231,4 +231,164 @@ func makeIPv4(proto byte, src, dst net.IP, payload []byte) []byte {
 	copy(pkt[16:20], dst.To4())
 	copy(pkt[20:], payload)
 	return pkt
+}
+
+// TestMasqueUplinkChecksumFixEndToEnd：task-34 回归。
+// 手工探针/校验和卸载可能产生 IPv4 头校验和为 0 / 错误的包；服务端必须在写 TUN
+// 前修正，否则内核 ip_rcv 静默丢弃 → 会话 tx 增长但 rx=0（现象：DNS 永不回包）。
+// 本测试覆盖：坏 IPv4 校验和 → 修正后写入 TUN → 内核「回包」→ 下行 SendDatagram → 客户端收到。
+func TestMasqueUplinkChecksumFixEndToEnd(t *testing.T) {
+	fake := newFakeTUN()
+	fake.uplink = make(chan []byte, 16)
+	srv, priv := masqueTestServer(t)
+	srv.tun = fake
+	go srv.tunLoop()
+	defer fake.Close()
+
+	ln, err := quic.ListenAddr("127.0.0.1:0", &tls.Config{
+		Certificates: []tls.Certificate{masqueTestTLS(t)},
+		NextProtos:   []string{"h3"},
+		MinVersion:   tls.VersionTLS13,
+	}, &quic.Config{EnableDatagrams: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := &http3.Server{
+		Handler:         srv,
+		EnableDatagrams: true,
+		ConnContext: func(ctx context.Context, c *quic.Conn) context.Context {
+			return context.WithValue(ctx, connKey{}, c)
+		},
+	}
+	go func() { _ = server.ServeListener(ln) }()
+	defer func() { _ = server.Close(); _ = ln.Close() }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	conn, err := quic.DialAddr(ctx, ln.Addr().String(), &tls.Config{
+		InsecureSkipVerify: true, NextProtos: []string{"h3"}, MinVersion: tls.VersionTLS13,
+	}, &quic.Config{EnableDatagrams: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.CloseWithError(0, "test done")
+	tr := &http3.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true, NextProtos: []string{"h3"}, MinVersion: tls.VersionTLS13},
+		EnableDatagrams: true,
+	}
+	defer tr.Close()
+	reqStream, err := tr.NewClientConn(conn).OpenRequestStream(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reqURL, _ := url.Parse("https://localhost/.well-known/masque/ip/*/*/")
+	req := &http.Request{
+		Method: http.MethodConnect, Proto: "connect-ip", URL: reqURL, Host: "localhost",
+		Header: http.Header{
+			"Authorization":    {"Bearer " + masqueTestClaims(t, priv, "10.88.3.10")},
+			"Capsule-Protocol": {"?1"},
+		},
+	}
+	if err := reqStream.SendRequestHeader(req); err != nil {
+		t.Fatal(err)
+	}
+	resp, err := reqStream.ReadResponse()
+	if err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("CONNECT-IP 失败：%v status=%v", err, resp)
+	}
+	// 读掉服务端主动下发的 ADDRESS_ASSIGN / ROUTE_ADVERTISEMENT（确保会话已注册）。
+	br := bufio.NewReader(reqStream)
+	for i := 0; i < 2; i++ {
+		if _, _, err := readCapsule(br); err != nil {
+			t.Fatalf("读取初始化 capsule 失败：%v", err)
+		}
+	}
+
+	ip := net.ParseIP("10.88.3.10").To4()
+	set := srv.lookup(ip)
+	if set == nil || set.masque == nil {
+		t.Fatal("MASQUE 会话未注册")
+	}
+	sess := set.masque
+	src := [4]byte{10, 88, 3, 10}
+	dstGW := [4]byte{10, 88, 3, 1}
+	dns := []byte{0x12, 0x34, 0x01, 0x00, 0, 1, 0, 0, 0, 0, 0, 0, 3, 'w', 'w', 'w', 0, 0, 1, 0, 1}
+
+	// 1) IPv4 头校验和 0（模拟校验和卸载）→ 服务端应修正后写 TUN。
+	badL3 := testUDPPacket(src, dstGW, 40010, 53, dns, false)
+	binary.BigEndian.PutUint16(badL3[10:12], 0)
+	if err := reqStream.SendDatagram(masqueDatagramPayload(badL3)); err != nil {
+		t.Fatal(err)
+	}
+	var written []byte
+	select {
+	case written = <-fake.uplink:
+	case <-time.After(3 * time.Second):
+		t.Fatal("上行未写入 TUN（超时）")
+	}
+	if !ipv4HeaderChecksumOK(written[:20]) {
+		t.Fatalf("写入 TUN 的 IPv4 校验和未修正：% x", written[:20])
+	}
+	waitFor(t, 2*time.Second, func() bool { return sess.masqueFixedL3 == 1 && sess.tx == 1 })
+
+	// 2) UDP 校验和错误 → 服务端应修正 L4 后写 TUN。
+	badL4 := testUDPPacket(src, dstGW, 40011, 53, dns, false)
+	binary.BigEndian.PutUint16(badL4[26:28], 0xbeef)
+	if err := reqStream.SendDatagram(masqueDatagramPayload(badL4)); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case written = <-fake.uplink:
+	case <-time.After(3 * time.Second):
+		t.Fatal("上行未写入 TUN（超时）")
+	}
+	if !l4ChecksumOK(written, 20, 17) {
+		t.Fatal("写入 TUN 的 UDP 校验和未修正")
+	}
+	waitFor(t, 2*time.Second, func() bool { return sess.masqueFixedL4 == 1 && sess.tx == 2 })
+
+	// 3) 模拟内核回包（交换五元组并重算校验和）→ 走 tunLoop/pick/kindMasque/send。
+	reply := make([]byte, len(written))
+	copy(reply, written)
+	copy(reply[12:16], written[16:20])
+	copy(reply[16:20], written[12:16])
+	// 交换 UDP 端口并重算 L4/IPv4 校验和。
+	reply[20], reply[22] = written[22], written[20]
+	reply[21], reply[23] = written[23], written[21]
+	binary.BigEndian.PutUint16(reply[10:12], 0)
+	binary.BigEndian.PutUint16(reply[10:12], ipv4HeaderChecksum(reply[:20]))
+	binary.BigEndian.PutUint16(reply[26:28], 0)
+	setL4Checksum(reply, 20, 17, 6)
+	fake.ch <- reply
+	rctx, rcancel := context.WithTimeout(ctx, 5*time.Second)
+	defer rcancel()
+	payload, err := reqStream.ReceiveDatagram(rctx)
+	if err != nil {
+		t.Fatalf("接收下行 datagram 失败：%v", err)
+	}
+	ctxID, data, err := parseMasqueDatagram(payload)
+	if err != nil || ctxID != 0 {
+		t.Fatalf("下行 datagram 解析失败：ctx=%d err=%v", ctxID, err)
+	}
+	if len(data) < 28 || data[9] != 17 || binary.BigEndian.Uint16(data[20:22]) != 53 {
+		t.Fatalf("下行报文不是 DNS 响应：% x", data)
+	}
+	if !l4ChecksumOK(data, 20, 17) {
+		t.Fatal("下行 DNS 响应校验和异常")
+	}
+	if sess.rx != 1 {
+		t.Fatalf("会话 rx=%d，期望 1", sess.rx)
+	}
+}
+
+func waitFor(t *testing.T, timeout time.Duration, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("等待条件超时")
 }

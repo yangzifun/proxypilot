@@ -1,4 +1,4 @@
-# Agent 1.3 发布说明（节点侧 · 私有协议 UDP 下行修复）
+# Agent 1.3 发布说明（节点侧 · PilotLink（私有协议）UDP 下行修复）
 
 - 版本：Agent `1.3`（`agent/internal/agent/agent.go` → `const Version = "1.3"`）
 - 日期：2026-11-16

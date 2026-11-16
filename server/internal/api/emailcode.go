@@ -21,6 +21,18 @@ const (
 	emailCodeAttempts = 5
 )
 
+// emailCodeRateError 表示验证码发送触发限速；Wait 是建议重试秒数。
+type emailCodeRateError struct {
+	Wait int
+}
+
+func (e *emailCodeRateError) Error() string {
+	if e.Wait > 0 {
+		return fmt.Sprintf("发送过于频繁，请 %d 秒后重试", e.Wait)
+	}
+	return "验证码发送过于频繁，请稍后再试"
+}
+
 var (
 	errCodeNotFound = errors.New("请先获取验证码")
 	errCodeExpired  = errors.New("验证码已过期，请重新获取")
@@ -68,8 +80,15 @@ func (h *handlers) issueEmailCode(ctx context.Context, email, username, purpose 
 	var lastCreated, hourCount int64
 	_ = tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(created_at),0) FROM admin_email_codes WHERE email = ? AND purpose = ?`, email, purpose).Scan(&lastCreated)
 	_ = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM admin_email_codes WHERE email = ? AND purpose = ? AND created_at > ?`, email, purpose, now-3600*1000).Scan(&hourCount)
-	if (lastCreated > 0 && now-lastCreated < 60*1000) || hourCount >= 10 {
-		return "", errors.New("验证码发送过于频繁，请稍后再试")
+	if lastCreated > 0 && now-lastCreated < 60*1000 {
+		wait := int((60*1000 - (now - lastCreated)) / 1000)
+		if wait < 1 {
+			wait = 1
+		}
+		return "", &emailCodeRateError{Wait: wait}
+	}
+	if hourCount >= 10 {
+		return "", &emailCodeRateError{}
 	}
 
 	if _, err := tx.ExecContext(ctx,
@@ -165,7 +184,7 @@ type portalBinding struct {
 func (h *handlers) bindingByEmail(ctx context.Context, email string) (portalBinding, bool) {
 	var b portalBinding
 	err := h.db.QueryRowContext(ctx,
-		`SELECT uuid, email FROM uuid_info WHERE LOWER(email) = ? ORDER BY id ASC LIMIT 1`, email).
+		`SELECT uuid, email FROM uuid_info WHERE LOWER(TRIM(email)) = ? ORDER BY id ASC LIMIT 1`, email).
 		Scan(&b.UUID, &b.Email)
 	if err != nil {
 		return b, false
@@ -180,9 +199,64 @@ func (h *handlers) emailTakenBy(ctx context.Context, email, exceptUUID string) (
 	}
 	var uuid string
 	err := h.db.QueryRowContext(ctx,
-		`SELECT uuid FROM uuid_info WHERE LOWER(email) = ? AND uuid <> ? LIMIT 1`, email, exceptUUID).Scan(&uuid)
+		`SELECT uuid FROM uuid_info WHERE LOWER(TRIM(email)) = ? AND uuid <> ? LIMIT 1`, email, exceptUUID).Scan(&uuid)
 	if err != nil {
 		return "", false
 	}
 	return uuid, true
+}
+
+// ---- 发信辅助：配置预检 / 重试 / 用户安全文案 / request_id ----
+
+// mailDeliver 是统一发信注入点（单测可替换）。
+var mailDeliver = func(h *handlers, to, subject, body string) error {
+	return h.sendMail(to, subject, body)
+}
+
+// newRequestID 生成短 request_id，用于把用户看到的错误与服务端日志对上。
+func newRequestID() string {
+	b := make([]byte, 6)
+	if _, err := rand.Read(b); err != nil {
+		return fmt.Sprintf("r%d", time.Now().UnixNano())
+	}
+	return hex.EncodeToString(b)
+}
+
+// mailPreflight 在真正查账号/发码之前检查邮件通道是否可用。
+// 这是全局配置问题，返回的 503 不会泄露「某个邮箱是否已绑定」。
+func (h *handlers) mailPreflight(ctx context.Context) error {
+	mc := h.effectiveMail(ctx)
+	switch mc.ResolvedProvider() {
+	case "builtin":
+		if !mc.BuiltinReady() {
+			return errMailNotConfigured
+		}
+		return nil
+	case "smtp":
+		if !mc.SMTPReady() {
+			return errMailNotConfigured
+		}
+		return nil
+	default:
+		return errMailNotConfigured
+	}
+}
+
+// deliverMailWithRetry 发信失败重试一次；返回 (用户安全文案, 原始错误)。
+// 登录验证码场景不能把 SMTP/核心错误原文暴露给客户端。
+func (h *handlers) deliverMailWithRetry(to, subject, body string) (string, error) {
+	var last error
+	for attempt := 0; attempt < 2; attempt++ {
+		last = mailDeliver(h, to, subject, body)
+		if last == nil {
+			return "", nil
+		}
+		if errors.Is(last, errMailNotConfigured) {
+			return "邮件服务未配置，请联系管理员", last
+		}
+		if attempt == 0 {
+			time.Sleep(150 * time.Millisecond)
+		}
+	}
+	return "邮件服务暂时不可用，请稍后重试", last
 }

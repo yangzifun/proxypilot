@@ -1,6 +1,6 @@
 # Agent 开发与任务协议
 
-> 版本 1.3（2026-11-16：同步 vendored tunnel，修复私有协议 UDP/DNS 下行黑洞）。源码：`agent/`，模块名 `proxypilot-agent`。
+> 版本 1.3（2026-11-16：同步 vendored tunnel，修复 PilotLink（私有协议）UDP/DNS 下行黑洞）。源码：`agent/`，模块名 `proxypilot-agent`。
 > Agent 是节点上唯一的常驻进程，同时承担心跳、指标、任务执行与**内嵌 HTTP/3 VPN 节点**。
 
 ## 1. 进程结构
@@ -202,7 +202,7 @@ go mod vendor             # 同步 vendor（改完 tunnel/ 后必须执行）
 
 - 禁止用 `-mod=mod` 绕过 vendor（会重新引入漂移）；发布 Agent 请用 `agent/build.sh`。
 
-### 7.2 1.3 变更（私有协议）
+### 7.2 1.3 变更（PilotLink / 私有协议）
 
 - `tunnel/node` 同步到工作区当前版本：`单连接双通道`、`H3-Datagram` 能力协商、
   `X-VPN-Lane` 多路通道、客户端未声明能力时 `已停用 DATAGRAM` 走可靠流回退、

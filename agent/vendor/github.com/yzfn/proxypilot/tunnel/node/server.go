@@ -88,6 +88,16 @@ type session struct {
 	// 解码端（readSession / 客户端 dualPacketConn）本来就是每会话一个解码器，
 	// 编码器必须按同样粒度分组。只在 tunLoop 单协程里读写，无需加锁。
 	fecEnc *fecEncoder
+
+	// MASQUE 上行统计（仅 kindMasque 使用）：masqueDatagramLoop 单协程写，
+	// handler 在 wg.Wait() 之后读，故无需原子操作。
+	masqueUplinkPackets uint64
+	masqueBadPkt        uint64 // 无法解析/长度非法
+	masqueBadSrc        uint64 // 源地址与分配 IP 不符
+	masqueFixedL3       uint64 // IPv4 头校验和错误/缺失，已修正
+	masqueFixedL4       uint64 // UDP/TCP/ICMP 校验和错误，已修正
+	masqueFragmented    uint64 // 分片包（跳过 L4 校验）
+	masqueTunWriteFail  uint64
 }
 
 // Server 是自研 HTTP/3 隧道节点：私有协议（/ + /tunnel）与标准 MASQUE
@@ -743,6 +753,10 @@ func (s *Server) tunLoop() {
 				sess = set.stream
 			}
 		}
+		if masqueDebugEnabled && sess != nil && sess.kind == kindMasque && sess.rx < 3 {
+			s.log.Info("MASQUE 下行调试", "ip", sess.ip.String(), "proto", innerProto(pkt),
+				"len", len(pkt), "rx", sess.rx, "dst_matched", true)
+		}
 		sent := false
 		// 下行 FEC：只作用于 DATAGRAM 通道，每组校验帧都发给**同一个会话**。
 		// 组内丢 1 个可由对端还原 —— 这是 81% 丢包唯一的补救手段。
@@ -768,6 +782,10 @@ func (s *Server) tunLoop() {
 				sent = true
 			} else {
 				sess.sendFail.Add(1)
+				if sess.kind == kindMasque && (sess.sendFail.Load() == 1 || masqueDebugEnabled) {
+					s.log.Warn("MASQUE 下行发送失败", "ip", sess.ip.String(),
+						"len", len(pkt), "err", err)
+				}
 			}
 		}
 		if !sent {

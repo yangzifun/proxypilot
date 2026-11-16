@@ -1,6 +1,6 @@
 ﻿# ProxyPilot
 
-![Go](https://img.shields.io/badge/Go-1.24+-00ADD8?logo=go&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white) ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black) ![Ant Design](https://img.shields.io/badge/Ant%20Design-6-1677FF?logo=antdesign&logoColor=white) ![Agent](https://img.shields.io/badge/Agent-Go-00ADD8?logo=go&logoColor=white) ![Version](https://img.shields.io/badge/Version-V1.4-blue.svg) ![License](https://img.shields.io/badge/License-MIT-green.svg)
+![Go](https://img.shields.io/badge/Go-1.24+-00ADD8?logo=go&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white) ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black) ![Ant Design](https://img.shields.io/badge/Ant%20Design-6-1677FF?logo=antdesign&logoColor=white) ![Agent](https://img.shields.io/badge/Agent-Go-00ADD8?logo=go&logoColor=white) ![Version](https://img.shields.io/badge/Version-V1.4.1-blue.svg) ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
 ---
 
@@ -157,7 +157,7 @@ proxypilot/
 │   └── dist/                   # 构建产物（会同步进 server/internal/api/assets_web/）
 ├── deploy/                     # 单机安装 / 升级 / 卸载脚本与站点加固
 ├── agent/                      # Go Agent + install.sh + build.sh + dist/
-├── tunnel/                     # 自研 HTTP/3 隧道节点（36.0 由 masque/ 更名）
+├── tunnel/                     # PilotLink 隧道节点（自研 HTTP/3，36.0 由 masque/ 更名）
 ├── vpnclient/                  # VPN 客户端（Wails v3 桌面端 + CLI，含组网模式）
 ├── .github/                    # CI：Release 构建与安全扫描
 ├── rule/                       # Clash / Mihomo 模板与规则
@@ -256,8 +256,8 @@ proxypilot/
 ## VPN 与组网协议栈
 
 > 术语：面板里的「组网」早期按 MASQUE 命名（目录 `masque/`、JWT `aud=masque-node`），
-> 但实现是**自研的 HTTP/3 可靠流隧道**，不实现 RFC 9484 CONNECT-IP 与 RFC 9297 HTTP Datagram。
-> 下文统一称「隧道」，并在末尾说明与标准 MASQUE 的差异。
+> 但实现是 **PilotLink（私有协议）**——自研的 HTTP/3 可靠流隧道；不实现 RFC 9484 CONNECT-IP 与 RFC 9297 HTTP Datagram。
+> 下文统一称「PilotLink 隧道」（简称「隧道」），并在末尾说明与标准 MASQUE 的差异。
 
 ### 1. 分层封装总览
 

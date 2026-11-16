@@ -28,7 +28,7 @@
 
 ## 1. 项目概览
 
-ProxyPilot 是一套「面板 + Agent + 客户端 + 自研隧道」的代理编排与 VPN 系统：
+ProxyPilot 是一套「面板 + Agent + 客户端 + PilotLink（自研隧道）」的代理编排与 VPN 系统：
 
 ```
 浏览器 ──▶ 面板（Go，单二进制，内嵌前端）

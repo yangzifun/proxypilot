@@ -123,7 +123,7 @@ func (h *handlers) adminUsersCreate(w http.ResponseWriter, r *http.Request) {
 	if email != "" {
 		var dupUser string
 		err := h.db.QueryRowContext(r.Context(),
-			`SELECT username FROM admin_users WHERE LOWER(email) = ? LIMIT 1`, email).Scan(&dupUser)
+			`SELECT username FROM admin_users WHERE LOWER(TRIM(email)) = ? LIMIT 1`, email).Scan(&dupUser)
 		if err == nil {
 			writeError(w, http.StatusConflict, "该邮箱已绑定给账号 "+dupUser)
 			return

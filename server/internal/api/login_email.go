@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"html"
 	"net/http"
@@ -23,7 +24,7 @@ func (h *handlers) findAdminByVerifiedEmail(ctx context.Context, email string) (
 	)
 	err := h.db.QueryRowContext(ctx,
 		`SELECT username, COALESCE(mfa_enabled,0), COALESCE(mfa_secret,'')
-		   FROM admin_users WHERE LOWER(email) = ? AND COALESCE(email_verified,0) = 1 LIMIT 1`, email).
+		   FROM admin_users WHERE LOWER(TRIM(email)) = ? AND COALESCE(email_verified,0) = 1 LIMIT 1`, email).
 		Scan(&username, &mfa, &secret)
 	if err != nil {
 		return "", 0, "", false
@@ -57,11 +58,19 @@ func (h *handlers) loginEmailCodeSend(w http.ResponseWriter, r *http.Request) {
 		writeError(w, code, msg)
 		return
 	}
+	// 全局配置问题（邮件未配置/不可用）对所有邮箱统一 503，不泄露账号是否存在。
+	if err := h.mailPreflight(r.Context()); err != nil {
+		writeErrorWithRequestID(w, http.StatusServiceUnavailable,
+			"邮件服务暂时不可用，请联系管理员", newRequestID())
+		return
+	}
+	requestID := newRequestID()
 	// 审计低-04：不再对未绑定邮箱返回 404（可枚举管理员邮箱）；统一响应。
 	generic := map[string]any{
 		"success":     true,
 		"ttl_minutes": 10,
-		"message":     "如果该邮箱已绑定管理员账号，验证码将发送到邮箱",
+		"request_id":  requestID,
+		"message":     "如果该邮箱已绑定管理员账号，验证码将发送到邮箱；若未收到请检查垃圾箱，60 秒后可重试",
 	}
 	username, _, _, ok := h.findAdminByVerifiedEmail(r.Context(), email)
 	if !ok {
@@ -70,7 +79,14 @@ func (h *handlers) loginEmailCodeSend(w http.ResponseWriter, r *http.Request) {
 	}
 	code, err := h.issueEmailCode(r.Context(), email, username, emailLoginPurpose)
 	if err != nil {
-		h.log.Error("生成验证码失败", "err", err)
+		var rate *emailCodeRateError
+		if errors.As(err, &rate) {
+			writeErrorWithRequestID(w, http.StatusTooManyRequests, rate.Error(), requestID)
+			return
+		}
+		// 写库失败只在服务端留痕；仍返回统一成功文案，避免通过差异化响应枚举管理员邮箱。
+		h.log.Error("登录验证码写库失败", "request_id", requestID,
+			"email", maskEmailForLog(email), "err", err)
 		writeJSON(w, http.StatusOK, generic)
 		return
 	}
@@ -87,11 +103,19 @@ func (h *handlers) loginEmailCodeSend(w http.ResponseWriter, r *http.Request) {
 	}
 	intro += `<br><br>请输入下面的 6 位验证码完成登录。如非本人操作，请立即修改密码并检查登录记录。`
 	mailBody := emailHTML("管理后台登录验证码", intro, code, 10)
-	if err := h.sendMail(email, "【代理配置管理】登录验证码", mailBody); err != nil {
-		// 发信失败也不回显给调用方，避免通过不同响应推断邮箱是否绑定。
-		h.log.Warn("登录验证码邮件发送失败", "err", err)
+	if safeMsg, derr := h.deliverMailWithRetry(email, "【代理配置管理】登录验证码", mailBody); derr != nil {
+		// 发送失败不再静默：后台留详细错误，客户端拿到可区分的 502 重试提示。
+		h.log.Error("登录验证码邮件发送失败", "request_id", requestID,
+			"email", maskEmailForLog(email), "err", derr)
+		writeErrorWithRequestID(w, http.StatusBadGateway, safeMsg, requestID)
+		return
 	}
 	writeJSON(w, http.StatusOK, generic)
+}
+
+// writeErrorWithRequestID 统一错误体，附带 request_id 便于用户报障时定位日志。
+func writeErrorWithRequestID(w http.ResponseWriter, status int, msg, requestID string) {
+	writeJSON(w, status, map[string]any{"error": msg, "request_id": requestID})
 }
 
 // POST /api/login/email-code/verify

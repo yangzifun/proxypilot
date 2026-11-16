@@ -87,7 +87,11 @@ export default function PortalLogin({ onLoggedIn }) {
         method: 'POST',
         body: { email: email.trim(), cf_turnstile_response: turnstile.getToken() },
       });
-      message.success(`验证码已发送至 ${(res && res.email) || email.trim()}，10 分钟内有效`);
+      // Turnstile token 是一次性的：发送后立即重置，重发时重新弹验证，避免复用已消费 token 被 403。
+      turnstile.reset();
+      // 服务端对「未绑定邮箱」也返回统一成功文案（防枚举），因此直接展示服务端 message，
+      // 不再声称“已发送至某邮箱”，避免用户误以为邮件一定在路上。
+      message.success((res && res.message) || '验证码发送请求已受理，请查收邮箱（10 分钟内有效）');
       setCountdown(60);
     } catch (e) {
       setErr(e.message || '发送失败');
@@ -234,7 +238,7 @@ export default function PortalLogin({ onLoggedIn }) {
 
           <Tabs
             activeKey={mode}
-            onChange={(k) => { setMode(k); setErr(''); }}
+            onChange={(k) => { setMode(k); setErr(''); turnstile.reset(); }}
             items={[
               { key: 'code', label: '邮箱验证码' },
               { key: 'password', label: '密码登录' },

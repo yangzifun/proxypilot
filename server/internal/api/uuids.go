@@ -194,6 +194,21 @@ func (h *handlers) uuidsSave(w http.ResponseWriter, r *http.Request) {
 	}
 	owner := pick(req.Owner, curOwner)
 	email := pick(req.Email, curEmail)
+	// 绑定邮箱必须做格式校验与规范化（trim+小写）：历史上入库未校验，库里出现过
+	// `xxx@@domain` / 前后空格 / 大小写混用，导致用户端邮箱验证码登录永远查不到绑定。
+	// 仅在本次显式提交 email 时校验；编辑其它字段不会被历史脏数据卡住。
+	if req.Email != nil {
+		raw := strings.TrimSpace(*req.Email)
+		if raw == "" {
+			email = ""
+		} else {
+			email = normalizeEmail(raw)
+			if email == "" {
+				writeError(w, http.StatusBadRequest, "邮箱格式不正确，例如 user@example.com")
+				return
+			}
+		}
+	}
 	contact := pick(req.ContactInfo, curContact)
 	remark := pick(req.Remark, curRemark)
 	status := normalizeUuidStatus(curStatus.String)

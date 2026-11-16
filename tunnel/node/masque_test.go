@@ -6,6 +6,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/binary"
 	"io"
 	"log/slog"
 	"net"
@@ -526,5 +527,197 @@ func TestMasquePathRejectsOtherConnect(t *testing.T) {
 	s.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("兼容头 status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+// ---- 上行校验和规范化（task-34：修「tx 增长但 rx=0」） ----
+
+func testIPPacket(src, dst [4]byte, proto byte, l4 []byte) []byte {
+	total := 20 + len(l4)
+	pkt := make([]byte, total)
+	pkt[0] = 0x45
+	binary.BigEndian.PutUint16(pkt[2:4], uint16(total))
+	pkt[8] = 64
+	pkt[9] = proto
+	copy(pkt[12:16], src[:])
+	copy(pkt[16:20], dst[:])
+	copy(pkt[20:], l4)
+	binary.BigEndian.PutUint16(pkt[10:12], ipv4HeaderChecksum(pkt[:20]))
+	return pkt
+}
+
+func testUDPPacket(src, dst [4]byte, sport, dport uint16, payload []byte, zeroChecksum bool) []byte {
+	udp := make([]byte, 8+len(payload))
+	binary.BigEndian.PutUint16(udp[0:2], sport)
+	binary.BigEndian.PutUint16(udp[2:4], dport)
+	binary.BigEndian.PutUint16(udp[4:6], uint16(len(udp)))
+	copy(udp[8:], payload)
+	pkt := testIPPacket(src, dst, 17, udp)
+	if !zeroChecksum {
+		setL4Checksum(pkt, 20, 17, 6)
+	}
+	return pkt
+}
+
+func testTCPPacket(src, dst [4]byte, sport, dport uint16) []byte {
+	tcp := make([]byte, 20)
+	binary.BigEndian.PutUint16(tcp[0:2], sport)
+	binary.BigEndian.PutUint16(tcp[2:4], dport)
+	tcp[12] = 5 << 4
+	tcp[13] = 0x02
+	pkt := testIPPacket(src, dst, 6, tcp)
+	setL4Checksum(pkt, 20, 6, 16)
+	return pkt
+}
+
+func testICMPPacket(src, dst [4]byte, seq uint16) []byte {
+	icmp := make([]byte, 8)
+	icmp[0] = 8
+	binary.BigEndian.PutUint16(icmp[4:6], seq)
+	pkt := testIPPacket(src, dst, 1, icmp)
+	setL4Checksum(pkt, 20, 1, 2)
+	return pkt
+}
+
+func TestNormalizeMasqueUplink(t *testing.T) {
+	src := [4]byte{10, 88, 3, 10}
+	dst := [4]byte{10, 88, 3, 1}
+	dns := []byte{0x12, 0x34, 0x01, 0x00, 0, 1, 0, 0, 0, 0, 0, 0, 3, 'w', 'w', 'w', 0, 0, 1, 0, 1}
+
+	// 1) 合法报文：不做任何修改。
+	valid := testUDPPacket(src, dst, 40000, 53, dns, false)
+	out, fix, err := normalizeMasqueUplink(valid)
+	if err != nil || fix != (masqueUplinkFix{}) {
+		t.Fatalf("合法报文不应修改：fix=%+v err=%v", fix, err)
+	}
+	if !bytes.Equal(out, valid) {
+		t.Fatal("合法报文内容被改写")
+	}
+	if !ipv4HeaderChecksumOK(out[:20]) || !l4ChecksumOK(out, 20, 17) {
+		t.Fatal("合法报文校验和异常")
+	}
+
+	// 1b) 合法 TCP / ICMP 也不应被修改（避免校验和重算误伤）。
+	validTCP := testTCPPacket(src, [4]byte{1, 1, 1, 1}, 40007, 443)
+	if _, fix, err := normalizeMasqueUplink(validTCP); err != nil || fix != (masqueUplinkFix{}) {
+		t.Fatalf("合法 TCP 不应修改：fix=%+v err=%v", fix, err)
+	}
+	validICMP := testICMPPacket(src, dst, 9)
+	if _, fix, err := normalizeMasqueUplink(validICMP); err != nil || fix != (masqueUplinkFix{}) {
+		t.Fatalf("合法 ICMP 不应修改：fix=%+v err=%v", fix, err)
+	}
+
+	// 2) IPv4 头校验和为 0（校验和卸载/手工构造常见）→ 修正，L4 不动。
+	zeroIP := testUDPPacket(src, dst, 40001, 53, dns, false)
+	binary.BigEndian.PutUint16(zeroIP[10:12], 0)
+	out, fix, err = normalizeMasqueUplink(zeroIP)
+	if err != nil || !fix.FixedL3 || fix.FixedL4 {
+		t.Fatalf("IPv4 校验和 0 应被修正：fix=%+v err=%v", fix, err)
+	}
+	if !ipv4HeaderChecksumOK(out[:20]) || out[0] != 0x45 {
+		t.Fatal("IPv4 校验和修正失败")
+	}
+
+	// 3) IPv4 头校验和错误 → 修正。
+	badIP := testUDPPacket(src, dst, 40002, 53, dns, false)
+	binary.BigEndian.PutUint16(badIP[10:12], 0xdead)
+	out, fix, err = normalizeMasqueUplink(badIP)
+	if err != nil || !fix.FixedL3 || !ipv4HeaderChecksumOK(out[:20]) {
+		t.Fatalf("IPv4 校验和错误应被修正：fix=%+v err=%v", fix, err)
+	}
+
+	// 4) UDP 校验和错误 → 修正。
+	badUDP := testUDPPacket(src, dst, 40003, 53, dns, false)
+	binary.BigEndian.PutUint16(badUDP[26:28], 0xbeef)
+	out, fix, err = normalizeMasqueUplink(badUDP)
+	if err != nil || !fix.FixedL4 || fix.FixedL3 {
+		t.Fatalf("UDP 校验和错误应被修正：fix=%+v err=%v", fix, err)
+	}
+	if !l4ChecksumOK(out, 20, 17) {
+		t.Fatal("UDP 校验和修正失败")
+	}
+
+	// 5) UDP 校验和 0 是 IPv4 合法值：保留 0，不触发修正。
+	zeroUDP := testUDPPacket(src, dst, 40004, 53, dns, true)
+	out, fix, err = normalizeMasqueUplink(zeroUDP)
+	if err != nil || fix.FixedL4 {
+		t.Fatalf("UDP 校验和 0 不应被改：fix=%+v err=%v", fix, err)
+	}
+	if binary.BigEndian.Uint16(out[26:28]) != 0 {
+		t.Fatal("UDP 校验和 0 被改写")
+	}
+
+	// 6) TCP 校验和错误 → 修正。
+	tcp := testTCPPacket(src, [4]byte{1, 1, 1, 1}, 40005, 443)
+	binary.BigEndian.PutUint16(tcp[36:38], 0x1111)
+	out, fix, err = normalizeMasqueUplink(tcp)
+	if err != nil || !fix.FixedL4 || !l4ChecksumOK(out, 20, 6) {
+		t.Fatalf("TCP 校验和错误应被修正：fix=%+v err=%v", fix, err)
+	}
+
+	// 7) ICMP 校验和错误 → 修正。
+	icmp := testICMPPacket(src, dst, 7)
+	binary.BigEndian.PutUint16(icmp[22:24], 0x2222)
+	out, fix, err = normalizeMasqueUplink(icmp)
+	if err != nil || !fix.FixedL4 || !l4ChecksumOK(out, 20, 1) {
+		t.Fatalf("ICMP 校验和错误应被修正：fix=%+v err=%v", fix, err)
+	}
+
+	// 8) 分片包（MF）：不碰 L4，只标记 Fragmented。
+	frag := testUDPPacket(src, dst, 40006, 53, dns, false)
+	binary.BigEndian.PutUint16(frag[6:8], 0x2000)
+	binary.BigEndian.PutUint16(frag[26:28], 0xbeef)
+	out, fix, err = normalizeMasqueUplink(frag)
+	if err != nil || !fix.Fragmented || fix.FixedL4 {
+		t.Fatalf("分片包应跳过 L4 修正：fix=%+v err=%v", fix, err)
+	}
+	if binary.BigEndian.Uint16(out[26:28]) != 0xbeef {
+		t.Fatal("分片包的 L4 字段不应被改写")
+	}
+
+	// 9) 尾部多余字节：按 IP 总长度裁剪。
+	pad := append(append([]byte(nil), valid...), 0xaa, 0xbb, 0xcc)
+	out, _, err = normalizeMasqueUplink(pad)
+	if err != nil || len(out) != len(valid) {
+		t.Fatalf("尾部填充未裁剪：len=%d err=%v", len(out), err)
+	}
+}
+
+func TestNormalizeMasqueUplinkRejects(t *testing.T) {
+	src := [4]byte{10, 88, 3, 10}
+	dst := [4]byte{10, 88, 3, 1}
+	dns := []byte{0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+	valid := testUDPPacket(src, dst, 40000, 53, dns, false)
+
+	cases := map[string][]byte{
+		"空/过短":      {0x45, 0, 0},
+		"IPv6":      {0x60, 0, 0, 0},
+		"IHL 超长":    func() []byte { p := append([]byte(nil), valid...); p[0] = 0x4f; return p }(),
+		"总长度小于 IHL": func() []byte { p := append([]byte(nil), valid...); binary.BigEndian.PutUint16(p[2:4], 10); return p }(),
+		"总长度超过实际长度": func() []byte { p := append([]byte(nil), valid...); binary.BigEndian.PutUint16(p[2:4], 200); return p }(),
+		"UDP 长度非法":  func() []byte { p := append([]byte(nil), valid...); binary.BigEndian.PutUint16(p[24:26], 4); return p }(),
+		"TCP 头长度非法": func() []byte {
+			p := testTCPPacket(src, dst, 1, 443)
+			p[32] = 2 << 4 // data offset = 8 < 20
+			return p
+		}(),
+	}
+	for name, pkt := range cases {
+		if _, _, err := normalizeMasqueUplink(pkt); err == nil {
+			t.Fatalf("%s 应被拒绝", name)
+		}
+	}
+}
+
+func TestMasqueDebugEnv(t *testing.T) {
+	for _, v := range []string{"1", "true", "on", "YES", "debug"} {
+		if !parseDebugEnv(v) {
+			t.Fatalf("%q 应视为开启", v)
+		}
+	}
+	for _, v := range []string{"", "0", "false", "off", "no"} {
+		if parseDebugEnv(v) {
+			t.Fatalf("%q 应视为关闭", v)
+		}
 	}
 }

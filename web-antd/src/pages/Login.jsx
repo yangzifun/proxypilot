@@ -113,14 +113,17 @@ export default function Login() {
     setBusy(true);
     try {
       const email = String(values.email || '').trim();
-      await sendEmailCode({ email, turnstileToken: turnstile.getToken() });
+      const res = await sendEmailCode({ email, turnstileToken: turnstile.getToken() });
+      // Turnstile token 是一次性的：成功/失败后都重置，避免 60 秒后「重新发送」复用
+      // 已被消费的 token 被服务端 403（实测表现为“重发永远失败”）。
+      turnstile.reset();
       setEmailState({ email, ticket: '' });
       setStep('code');
       startCountdown(60);
-      message.success('验证码已发送，请查收邮箱（10 分钟内有效）');
+      message.success((res && res.message) || '验证码发送请求已受理，请查收邮箱（10 分钟内有效）');
     } catch (e) {
-      setErr(e.message || '发送失败');
       turnstile.reset();
+      setErr(e.message || '发送失败');
     } finally {
       setBusy(false);
     }
@@ -301,19 +304,6 @@ export default function Login() {
                   autoComplete="current-password"
                 />
               </Form.Item>
-              {SITE_KEY ? (
-                <div style={{ marginBottom: 16 }}>
-                  <div className="pp-turnstile" ref={turnstile.slotRef} />
-                  {turnstile.status === 'error' ? (
-                    <div style={{ fontSize: 12, color: '#f43f5e', marginTop: 4, textAlign: 'center' }}>
-                      人机验证加载失败，
-                      <a onClick={() => turnstile.reload()}>点此重试</a>
-                    </div>
-                  ) : turnstile.status === 'loading' ? (
-                    <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4, textAlign: 'center' }}>人机验证加载中…</div>
-                  ) : null}
-                </div>
-              ) : null}
               <Button type="primary" htmlType="submit" block size="large" loading={busy} icon={<LoginOutlined />}>
                 登录
               </Button>
@@ -381,19 +371,6 @@ export default function Login() {
                   autoComplete="email"
                 />
               </Form.Item>
-              {SITE_KEY ? (
-                <div style={{ marginBottom: 16 }}>
-                  <div className="pp-turnstile" ref={turnstile.slotRef} />
-                  {turnstile.status === 'error' ? (
-                    <div style={{ fontSize: 12, color: '#f43f5e', marginTop: 4, textAlign: 'center' }}>
-                      人机验证加载失败，
-                      <a onClick={() => turnstile.reload()}>点此重试</a>
-                    </div>
-                  ) : turnstile.status === 'loading' ? (
-                    <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4, textAlign: 'center' }}>人机验证加载中…</div>
-                  ) : null}
-                </div>
-              ) : null}
               <Button type="primary" htmlType="submit" block size="large" loading={busy}>
                 发送登录验证码
               </Button>
@@ -449,6 +426,21 @@ export default function Login() {
               </Button>
             </Form>
           )}
+
+          {/* 统一的 Turnstile 挂载点：密码/邮箱各步骤共用，避免切步骤后 widget 被卸载
+              导致 token 丢失或复用已消费 token（重发验证码时会被服务端 403）。 */}
+          {SITE_KEY && ((mode === 'password' && step !== 'totp') || (mode === 'email' && step !== 'mfa')) ? (
+            <div style={{ marginTop: 4, marginBottom: 16 }}>
+              <div className="pp-turnstile" ref={turnstile.slotRef} />
+              {turnstile.status === 'error' ? (
+                <div style={{ fontSize: 12, color: '#f43f5e', marginTop: 4, textAlign: 'center' }}>
+                  人机验证加载失败，<a onClick={() => turnstile.reload()}>点此重试</a>
+                </div>
+              ) : turnstile.status === 'loading' ? (
+                <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4, textAlign: 'center' }}>人机验证加载中…</div>
+              ) : null}
+            </div>
+          ) : null}
 
           {OIDC.enabled ? (
             <>

@@ -82,7 +82,7 @@ func main() {
 
 	app := application.New(application.Options{
 		Name:        "ProxyPilot",
-		Description: "ProxyPilot VPN 客户端（自研 HTTP/3 隧道）",
+		Description: "ProxyPilot VPN 客户端（PilotLink 协议）",
 		Icon:        appIcon,
 		Windows: application.WindowsOptions{
 			WebviewUserDataPath: webviewDataDir(),

@@ -31,12 +31,12 @@ func TestNormalizeNodeDomainRejectsShellInjection(t *testing.T) {
 		}
 	}
 	good := map[string]string{
-		"  VPN01.Example.COM ":          "vpn01.example.com",
-		"https://vpn.example.com/path":  "vpn.example.com",
-		"vpn.example.com":               "vpn.example.com",
-		"vpn.example.com.":              "vpn.example.com",
-		"1.2.3.4":                       "1.2.3.4",
-		"2001:db8::1":                   "2001:db8::1",
+		"  VPN01.Example.COM ":         "vpn01.example.com",
+		"https://vpn.example.com/path": "vpn.example.com",
+		"vpn.example.com":              "vpn.example.com",
+		"vpn.example.com.":             "vpn.example.com",
+		"1.2.3.4":                      "1.2.3.4",
+		"2001:db8::1":                  "2001:db8::1",
 	}
 	for in, want := range good {
 		got, err := normalizeNodeDomain(in)
@@ -259,7 +259,9 @@ func TestClientAuthPollReturnsTokenWithinWindow(t *testing.T) {
 
 func TestLoginEmailCodeSendDoesNotEnumerate(t *testing.T) {
 	_, db := newFakeDB(t)
-	h := &handlers{db: db, log: testLogger()}
+	h := &handlers{db: db, log: testLogger(), cfg: config.Config{
+		MailProvider: "smtp", SMTPAddr: "smtp.example.com:587", MailFrom: "noreply@example.com",
+	}}
 	req := httptest.NewRequest(http.MethodPost, "/api/login/email-code",
 		strings.NewReader(`{"email":"nobody@example.com"}`))
 	rec := httptest.NewRecorder()
@@ -274,7 +276,9 @@ func TestLoginEmailCodeSendDoesNotEnumerate(t *testing.T) {
 
 func TestPortalSendCodeDoesNotEnumerate(t *testing.T) {
 	_, db := newFakeDB(t)
-	h := &handlers{db: db, log: testLogger()}
+	h := &handlers{db: db, log: testLogger(), cfg: config.Config{
+		MailProvider: "smtp", SMTPAddr: "smtp.example.com:587", MailFrom: "noreply@example.com",
+	}}
 	req := httptest.NewRequest(http.MethodPost, "/api/portal/send-code",
 		strings.NewReader(`{"email":"nobody@example.com"}`))
 	rec := httptest.NewRecorder()

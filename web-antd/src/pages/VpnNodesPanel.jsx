@@ -37,7 +37,7 @@ const EMPTY_NODE = {
   cert_mode: 'internal_ca',
   listen_port: 443,
   capacity: 500,
-  // 协议能力：旧节点默认仅私有协议；MASQUE 需显式开启并等待数据面就绪
+  // 协议能力：旧节点默认仅 PilotLink；MASQUE 需显式开启并等待数据面就绪
   private_enabled: true,
   masque_enabled: false,
   masque_path: '/.well-known/masque/ip/0.0.0.0/0/',
@@ -68,12 +68,12 @@ function protocolTags(node) {
   return (
     <Space size={4} wrap>
       <Tag color={p.private_enabled ? 'geekblue' : 'default'}>
-        {p.private_enabled ? 'private' : 'private 关'}
+        {p.private_enabled ? 'PilotLink' : 'PilotLink 关'}
       </Tag>
       {p.masque_enabled ? (
-        <Tag color={masqueColor}>{`masque · ${p.masque_state}`}</Tag>
+        <Tag color={masqueColor}>{`MASQUE · ${p.masque_state}`}</Tag>
       ) : (
-        <Tag>masque 关</Tag>
+        <Tag>MASQUE 关</Tag>
       )}
     </Space>
   );
@@ -333,9 +333,9 @@ export default function VpnNodesPanel() {
           <Space size={24} wrap>
             <Form.Item
               name="private_enabled"
-              label="私有协议（private）"
+              label="PilotLink（private）"
               valuePropName="checked"
-              extra="自研 QUIC 数据面，旧节点默认启用"
+              extra="PilotLink 数据面（自研 HTTP/3），旧节点默认启用"
             >
               <Switch />
             </Form.Item>

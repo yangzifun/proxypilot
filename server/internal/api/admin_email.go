@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"html"
 	"net/http"
@@ -54,7 +55,7 @@ func (h *handlers) adminEmailCodeSend(w http.ResponseWriter, r *http.Request) {
 	}
 	var taken int64
 	_ = h.db.QueryRowContext(r.Context(),
-		`SELECT COUNT(*) FROM admin_users WHERE LOWER(email) = ? AND username <> ?`, email, username).Scan(&taken)
+		`SELECT COUNT(*) FROM admin_users WHERE LOWER(TRIM(email)) = ? AND username <> ?`, email, username).Scan(&taken)
 	if taken > 0 {
 		writeError(w, http.StatusConflict, "该邮箱已被其他管理员绑定")
 		return
@@ -63,9 +64,20 @@ func (h *handlers) adminEmailCodeSend(w http.ResponseWriter, r *http.Request) {
 		writeError(w, code, msg)
 		return
 	}
+	if err := h.mailPreflight(r.Context()); err != nil {
+		writeError(w, http.StatusServiceUnavailable, "邮件服务暂时不可用，请联系管理员")
+		return
+	}
+	requestID := newRequestID()
 	code, err := h.issueEmailCode(r.Context(), email, username, bindEmailPurpose)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "生成验证码失败")
+		var rate *emailCodeRateError
+		if errors.As(err, &rate) {
+			writeErrorWithRequestID(w, http.StatusTooManyRequests, rate.Error(), requestID)
+			return
+		}
+		h.log.Error("绑定邮箱验证码写库失败", "request_id", requestID, "email", maskEmailForLog(email), "err", err)
+		writeErrorWithRequestID(w, http.StatusInternalServerError, "生成验证码失败，请稍后重试", requestID)
 		return
 	}
 	intro := fmt.Sprintf(`管理员账号：<b>%s</b><br>时间：%s<br>操作 IP：%s`,
@@ -75,11 +87,13 @@ func (h *handlers) adminEmailCodeSend(w http.ResponseWriter, r *http.Request) {
 	}
 	intro += `<br><br>请输入下面的 6 位验证码完成邮箱绑定。如非本人操作，请忽略本邮件。`
 	mailBody := emailHTML("绑定管理员邮箱", intro, code, 10)
-	if err := h.sendMail(email, "【代理配置管理】绑定邮箱验证码", mailBody); err != nil {
-		writeError(w, http.StatusBadGateway, "发送失败："+err.Error())
+	if safeMsg, derr := h.deliverMailWithRetry(email, "【代理配置管理】绑定邮箱验证码", mailBody); derr != nil {
+		h.log.Error("绑定邮箱验证码发送失败", "request_id", requestID,
+			"email", maskEmailForLog(email), "err", derr)
+		writeErrorWithRequestID(w, http.StatusBadGateway, safeMsg, requestID)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"success": true, "ttl_minutes": 10})
+	writeJSON(w, http.StatusOK, map[string]any{"success": true, "request_id": requestID, "ttl_minutes": 10})
 }
 
 // POST /api/admin/users/email/verify —— 校验并完成绑定

@@ -13,6 +13,9 @@ func TestNormalizeProtocol(t *testing.T) {
 		"private":    protocolPrivate,
 		"private ":   protocolPrivate,
 		"tunnel":     protocolPrivate,
+		"pilotlink":  protocolPrivate,
+		"PilotLink":  protocolPrivate,
+		"pilot-link": protocolPrivate,
 		"masque":     protocolMasque,
 		"MQ":         protocolMasque,
 		"connect-ip": protocolMasque,
@@ -77,7 +80,7 @@ func TestMasquePathDefault(t *testing.T) {
 }
 
 func TestProtocolLabel(t *testing.T) {
-	if protocolLabel("masque") != "MASQUE" || protocolLabel("private") != "私有协议" || protocolLabel("auto") != "自动" {
+	if protocolLabel("masque") != "MASQUE" || protocolLabel("private") != "PilotLink" || protocolLabel("auto") != "自动" {
 		t.Fatalf("协议展示名异常：%q %q %q", protocolLabel("masque"), protocolLabel("private"), protocolLabel("auto"))
 	}
 }

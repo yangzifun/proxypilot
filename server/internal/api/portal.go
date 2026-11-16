@@ -49,16 +49,24 @@ func (h *handlers) portalSendCode(w http.ResponseWriter, r *http.Request) {
 		writeError(w, code, msg)
 		return
 	}
+	// 全局配置问题（邮件未配置/不可用）对所有邮箱统一 503，不泄露账号是否存在。
+	if err := h.mailPreflight(r.Context()); err != nil {
+		writeErrorWithRequestID(w, http.StatusServiceUnavailable,
+			"邮件服务暂时不可用，请联系管理员", newRequestID())
+		return
+	}
+	requestID := newRequestID()
 	// 审计低-04：不再对「未绑定 UUID」返回 404（该响应可枚举账号）。
 	// 统一返回「如邮箱存在将发送验证码」，绑定与否由服务端内部决定。
 	generic := map[string]any{
 		"success":    true,
-		"message":    "如果该邮箱已绑定订阅，验证码将发送到邮箱",
+		"request_id": requestID,
+		"message":    "如果该邮箱已绑定订阅，验证码将发送到邮箱；若未收到请检查垃圾箱，60 秒后可重试",
 		"expires_in": int(emailCodeTTL.Seconds()),
 	}
 	var bound int
 	if err := h.db.QueryRowContext(r.Context(),
-		`SELECT COUNT(*) FROM uuid_info WHERE LOWER(email) = ?`, email).Scan(&bound); err != nil {
+		`SELECT COUNT(*) FROM uuid_info WHERE LOWER(TRIM(email)) = ?`, email).Scan(&bound); err != nil {
 		bound = 0
 	}
 	if bound == 0 {
@@ -67,15 +75,24 @@ func (h *handlers) portalSendCode(w http.ResponseWriter, r *http.Request) {
 	}
 	code, err := h.issueEmailCode(r.Context(), email, email, portalLoginPurpose)
 	if err != nil {
-		h.log.Error("写入验证码失败", "err", err)
+		var rate *emailCodeRateError
+		if errors.As(err, &rate) {
+			writeErrorWithRequestID(w, http.StatusTooManyRequests, rate.Error(), requestID)
+			return
+		}
+		h.log.Error("用户中心验证码写库失败", "request_id", requestID,
+			"email", maskEmailForLog(email), "err", err)
 		writeJSON(w, http.StatusOK, generic)
 		return
 	}
 	ttl := int(emailCodeTTL.Minutes())
-	if err := h.sendMail(email, "【ProxyPilot】用户中心登录验证码",
-		emailHTML("用户中心登录验证码", "您正在登录 ProxyPilot 用户中心，请在页面中输入下面的 6 位验证码：", code, ttl)); err != nil {
-		// 发信失败也不回显给调用方，避免通过不同响应推断邮箱是否绑定。
-		h.log.Warn("用户中心验证码邮件发送失败", "err", err)
+	if safeMsg, derr := h.deliverMailWithRetry(email, "【ProxyPilot】用户中心登录验证码",
+		emailHTML("用户中心登录验证码", "您正在登录 ProxyPilot 用户中心，请在页面中输入下面的 6 位验证码：", code, ttl)); derr != nil {
+		// 发送失败不再静默：后台留详细错误，客户端拿到可区分的 502 重试提示。
+		h.log.Error("用户中心验证码邮件发送失败", "request_id", requestID,
+			"email", maskEmailForLog(email), "err", derr)
+		writeErrorWithRequestID(w, http.StatusBadGateway, safeMsg, requestID)
+		return
 	}
 	writeJSON(w, http.StatusOK, generic)
 }
@@ -256,24 +273,34 @@ func (h *handlers) portalEmailSendCode(w http.ResponseWriter, r *http.Request) {
 		writeError(w, code, msg)
 		return
 	}
+	if err := h.mailPreflight(r.Context()); err != nil {
+		writeError(w, http.StatusServiceUnavailable, "邮件服务暂时不可用，请联系管理员")
+		return
+	}
+	requestID := newRequestID()
 	code, err := h.issueEmailCode(r.Context(), email, target, portalEmailPurpose)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "验证码写入失败")
+		var rate *emailCodeRateError
+		if errors.As(err, &rate) {
+			writeErrorWithRequestID(w, http.StatusTooManyRequests, rate.Error(), requestID)
+			return
+		}
+		h.log.Error("修改绑定邮箱验证码写库失败", "request_id", requestID, "err", err)
+		writeErrorWithRequestID(w, http.StatusInternalServerError, "验证码写入失败，请稍后重试", requestID)
 		return
 	}
 	ttl := int(emailCodeTTL.Minutes())
-	if err := h.sendMail(target, "【ProxyPilot】修改绑定邮箱验证码",
-		emailHTML("修改绑定邮箱", "您正在把 ProxyPilot 账号邮箱修改为当前地址，请输入下面的验证码完成验证：", code, ttl)); err != nil {
-		if errors.Is(err, errMailNotConfigured) {
-			writeError(w, http.StatusServiceUnavailable, err.Error())
-			return
-		}
-		writeError(w, http.StatusBadGateway, "验证码邮件发送失败："+err.Error())
+	if safeMsg, derr := h.deliverMailWithRetry(target, "【ProxyPilot】修改绑定邮箱验证码",
+		emailHTML("修改绑定邮箱", "您正在把 ProxyPilot 账号邮箱修改为当前地址，请输入下面的验证码完成验证：", code, ttl)); derr != nil {
+		h.log.Error("修改绑定邮箱验证码发送失败", "request_id", requestID,
+			"email", maskEmailForLog(target), "err", derr)
+		writeErrorWithRequestID(w, http.StatusBadGateway, safeMsg, requestID)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"success":    true,
 		"email":      target,
+		"request_id": requestID,
 		"expires_in": int(emailCodeTTL.Seconds()),
 	})
 }

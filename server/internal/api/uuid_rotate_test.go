@@ -607,7 +607,7 @@ func TestPortalUUIDRotateSendCodeRejectsPasswordAccount(t *testing.T) {
 	fdb, db := newFakeDB(t)
 	fdb.onQuery = func(q string, args []driver.Value) (driver.Rows, error) {
 		switch {
-		case strings.Contains(q, "FROM uuid_info WHERE LOWER(email)"):
+		case strings.Contains(q, "FROM uuid_info WHERE LOWER(TRIM(email))"):
 			return fakeRowsSet([]string{"uuid", "email"}, []driver.Value{testRotateOldUUID, email}), nil
 		case strings.Contains(q, "FROM uuid_info WHERE email_norm"):
 			return fakeRowsSet(

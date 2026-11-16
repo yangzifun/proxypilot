@@ -15,8 +15,8 @@ import (
 )
 
 // 传输协议选择（客户端设置项 protocol）：
-//   - auto：先私有协议，失败回退 MASQUE（默认）
-//   - private：只用自研 HTTP/3 隧道
+//   - auto：先 PilotLink（私有协议），失败回退 MASQUE（默认）
+//   - private：只用 PilotLink（自研 HTTP/3 隧道）
 //   - masque：只用标准 MASQUE CONNECT-IP
 const (
 	protocolAuto    = "auto"
@@ -29,7 +29,7 @@ func normalizeProtocol(v string) string {
 	switch strings.ToLower(strings.TrimSpace(v)) {
 	case protocolMasque, "mq", "connect-ip", "connectip":
 		return protocolMasque
-	case protocolPrivate, "tunnel", "pp":
+	case protocolPrivate, "tunnel", "pp", "pilotlink", "pilot-link":
 		return protocolPrivate
 	default:
 		return protocolAuto
@@ -42,7 +42,7 @@ func protocolLabel(proto string) string {
 	case protocolMasque:
 		return "MASQUE"
 	case protocolPrivate:
-		return "私有协议"
+		return "PilotLink"
 	default:
 		return "自动"
 	}
@@ -88,11 +88,11 @@ func masquePath(prof *profile) string {
 	return masque.DefaultPath
 }
 
-// dataPlane 是建立好的数据面（私有多流/双通道 或 MASQUE）。
+// dataPlane 是建立好的数据面（PilotLink 多流/双通道 或 MASQUE）。
 type dataPlane struct {
 	conn     packetConn
 	quicConn *quic.Conn
-	streamPC *streamPacketConn // 私有协议主可靠流（用于上行丢包统计），MASQUE 为 nil
+	streamPC *streamPacketConn // PilotLink 主可靠流（用于上行丢包统计），MASQUE 为 nil
 	dual     *dualPacketConn
 	protocol string
 	fallback string
@@ -126,13 +126,13 @@ func (s *uiServer) dialDataPlane(ctx context.Context, attempt int64, cfg uiSetti
 	return nil, fmt.Errorf("所有传输方式均失败：%s", strings.Join(failures, "；"))
 }
 
-// dialPrivateTransport 建立现有私有协议数据面（自研 HTTP/3 可靠流 + 可选 DATAGRAM 双通道）。
+// dialPrivateTransport 建立现有 PilotLink（私有协议）数据面（自研 HTTP/3 可靠流 + 可选 DATAGRAM 双通道）。
 func (s *uiServer) dialPrivateTransport(ctx context.Context, attempt int64, prof *profile, pick node, sni string, skipVerify bool) (*dataPlane, error) {
 	assigned, authConn, err := authHTTP3(ctx, pick.Endpoint, sni, prof.Token, skipVerify)
 	if err != nil {
 		return nil, fmt.Errorf("HTTP/3 鉴权失败: %w", err)
 	}
-	log.Printf("私有协议：HTTP/3 鉴权成功（节点分配 %s）", assigned)
+	log.Printf("PilotLink（私有协议）：HTTP/3 鉴权成功（节点分配 %s）", assigned)
 
 	pc, streamConn, nodeHasDatagram, cleanupStream, serr := openTunnelStream(ctx, pick.Endpoint, sni, prof.Token, skipVerify)
 	lanes := make([]packetConn, 0, multiLaneCount)
@@ -141,7 +141,7 @@ func (s *uiServer) dialPrivateTransport(ctx context.Context, attempt int64, prof
 		for li := 1; li <= multiLaneCount; li++ {
 			lpc, _, _, lclean, lerr := openTunnelStreamLane(ctx, pick.Endpoint, sni, prof.Token, skipVerify, li)
 			if lerr != nil {
-				log.Printf("私有协议：lane %d 建立失败（%v），本次只用 %d 条可靠流", li, lerr, len(lanes)+1)
+				log.Printf("PilotLink：lane %d 建立失败（%v），本次只用 %d 条可靠流", li, lerr, len(lanes)+1)
 				break
 			}
 			laneCleanups = append(laneCleanups, lclean)
@@ -170,14 +170,14 @@ func (s *uiServer) dialPrivateTransport(ctx context.Context, attempt int64, prof
 	var dual *dualPacketConn
 	switch {
 	case !prof.DatagramEnabled:
-		log.Printf("私有协议：面板已关闭 DATAGRAM，全部走可靠流")
+		log.Printf("PilotLink：面板已关闭 DATAGRAM，全部走可靠流")
 	case !nodeHasDatagram || !supportsDatagrams(streamConn):
-		log.Printf("私有协议：对端未协商 DATAGRAM，全部走可靠流")
+		log.Printf("PilotLink：对端未协商 DATAGRAM，全部走可靠流")
 	default:
 		dual = newDualPacketConnLanes(pc, lanes, quicDatagramPeer{conn: streamConn}, maxDatagramPayload, fecGroup)
 		pconn = dual
 		s.setFor(attempt, func(st *sessionState) { st.dualConn = dual })
-		log.Printf("私有协议：双通道已启用（UDP→DATAGRAM，TCP/ICMP→可靠流，FEC=%d）", fecGroup)
+		log.Printf("PilotLink：双通道已启用（UDP→DATAGRAM，TCP/ICMP→可靠流，FEC=%d）", fecGroup)
 	}
 	cleanupConn := func() {
 		_ = pconn.Close()

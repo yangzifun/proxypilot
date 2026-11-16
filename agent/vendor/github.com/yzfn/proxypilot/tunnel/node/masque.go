@@ -22,6 +22,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -401,6 +402,171 @@ func masqueIPSource(pkt []byte) (net.IP, error) {
 	}
 }
 
+// ---- 上行合法性检查与校验和修复（MASQUE 专用） ----
+//
+// 背景（task-34）：手工构造的探针把 IPv4 头校验和留 0/写错时，包虽然被
+// 服务端写入 TUN，但内核 `ip_rcv` 会静默丢弃（rx=0、send_fail=0），表现为
+// 「上行计数正常、DNS 永不回包」。真实客户端走 TUN 时，Windows 校验和卸载
+// 也可能留下不完整校验和。这里在写 TUN 前做一次规范化：
+//   - IPv4 头校验和始终重算（错误/缺失会被修正，并计入 fixed_l3）；
+//   - UDP/TCP/ICMP 校验和错误时重算（计入 fixed_l4；UDP 校验和 0 是 IPv4 合法值，保留）；
+//   - 分片包不碰 L4（无法安全重算），只保留解析/长度校验；
+//   - 畸形包（长度字段非法等）丢弃并计数。
+//
+// 只作用于 MASQUE 上行，私有协议路径不做任何改变。
+
+// masqueDebugEnabled 由 PP_TUNNEL_DEBUG=1 打开定向日志（生产默认关闭）。
+var masqueDebugEnabled = parseDebugEnv(os.Getenv("PP_TUNNEL_DEBUG"))
+
+func parseDebugEnv(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "1", "true", "yes", "on", "debug":
+		return true
+	default:
+		return false
+	}
+}
+
+// onesComplementSum 计算 16-bit 反码和。
+func onesComplementSum(b []byte) uint32 {
+	var sum uint32
+	for i := 0; i+1 < len(b); i += 2 {
+		sum += uint32(binary.BigEndian.Uint16(b[i : i+2]))
+	}
+	if len(b)%2 == 1 {
+		sum += uint32(b[len(b)-1]) << 8
+	}
+	return sum
+}
+
+func foldChecksum(sum uint32) uint16 {
+	for sum>>16 != 0 {
+		sum = (sum & 0xffff) + (sum >> 16)
+	}
+	return ^uint16(sum)
+}
+
+// ipv4HeaderChecksum 计算 IPv4 头校验和（传入完整头，或至少 ihl 字节）。
+func ipv4HeaderChecksum(header []byte) uint16 {
+	return foldChecksum(onesComplementSum(header))
+}
+
+// ipv4HeaderChecksumOK 判断 IPv4 头校验和是否正确（含校验和字段本身全为 1 时）。
+func ipv4HeaderChecksumOK(header []byte) bool {
+	return foldChecksum(onesComplementSum(header)) == 0
+}
+
+// l4ChecksumOK 校验 UDP/TCP/ICMP 校验和（pkt 为整个 IP 报文）。
+func l4ChecksumOK(pkt []byte, ihl int, proto byte) bool {
+	l4 := pkt[ihl:]
+	var sum uint32
+	if proto == 17 || proto == 6 {
+		pseudo := make([]byte, 12)
+		copy(pseudo[0:4], pkt[12:16])
+		copy(pseudo[4:8], pkt[16:20])
+		pseudo[9] = proto
+		binary.BigEndian.PutUint16(pseudo[10:12], uint16(len(l4)))
+		sum = onesComplementSum(pseudo) + onesComplementSum(l4)
+	} else {
+		sum = onesComplementSum(l4)
+	}
+	return foldChecksum(sum) == 0
+}
+
+// setL4Checksum 重算校验和并写回指定偏移。
+func setL4Checksum(pkt []byte, ihl int, proto byte, off int) {
+	l4 := pkt[ihl:]
+	var sum uint32
+	if proto == 17 || proto == 6 {
+		pseudo := make([]byte, 12)
+		copy(pseudo[0:4], pkt[12:16])
+		copy(pseudo[4:8], pkt[16:20])
+		pseudo[9] = proto
+		binary.BigEndian.PutUint16(pseudo[10:12], uint16(len(l4)))
+		binary.BigEndian.PutUint16(l4[off:off+2], 0)
+		sum = onesComplementSum(pseudo) + onesComplementSum(l4)
+	} else {
+		binary.BigEndian.PutUint16(l4[off:off+2], 0)
+		sum = onesComplementSum(l4)
+	}
+	c := foldChecksum(sum)
+	if proto == 17 && c == 0 {
+		c = 0xffff // UDP：计算值为 0 时用 0xffff（0 表示无校验和）
+	}
+	binary.BigEndian.PutUint16(l4[off:off+2], c)
+}
+
+type masqueUplinkFix struct {
+	FixedL3    bool
+	FixedL4    bool
+	Fragmented bool
+}
+
+// normalizeMasqueUplink 校验并规范化一条 MASQUE 上行 IPv4 报文。
+// 返回的 pkt 已按 IP 头总长度裁剪；错误表示该包应丢弃（畸形）。
+func normalizeMasqueUplink(pkt []byte) ([]byte, masqueUplinkFix, error) {
+	var fix masqueUplinkFix
+	if len(pkt) < 20 || pkt[0]>>4 != 4 {
+		return nil, fix, ErrBadPacket
+	}
+	ihl := int(pkt[0]&0x0f) * 4
+	if ihl < 20 || ihl > len(pkt) {
+		return nil, fix, fmt.Errorf("IPv4 头长度非法：%d", ihl)
+	}
+	total := int(binary.BigEndian.Uint16(pkt[2:4]))
+	if total < ihl || total > len(pkt) {
+		return nil, fix, fmt.Errorf("IPv4 总长度非法：%d（实际 %d）", total, len(pkt))
+	}
+	pkt = pkt[:total]
+	if !ipv4HeaderChecksumOK(pkt[:ihl]) {
+		binary.BigEndian.PutUint16(pkt[10:12], 0)
+		binary.BigEndian.PutUint16(pkt[10:12], ipv4HeaderChecksum(pkt[:ihl]))
+		fix.FixedL3 = true
+	}
+	// 分片包（MF 或 offset!=0）不重算 L4。
+	if frag := binary.BigEndian.Uint16(pkt[6:8]); frag&0x3fff != 0 {
+		fix.Fragmented = true
+		return pkt, fix, nil
+	}
+	switch pkt[9] {
+	case 17: // UDP
+		if len(pkt) < ihl+8 {
+			return nil, fix, fmt.Errorf("UDP 头不完整")
+		}
+		ulen := int(binary.BigEndian.Uint16(pkt[ihl+4 : ihl+6]))
+		if ulen < 8 || ihl+ulen > total {
+			return nil, fix, fmt.Errorf("UDP 长度非法：%d", ulen)
+		}
+		if csum := binary.BigEndian.Uint16(pkt[ihl+6 : ihl+8]); csum != 0 && !l4ChecksumOK(pkt[:ihl+ulen], ihl, 17) {
+			setL4Checksum(pkt[:ihl+ulen], ihl, 17, 6)
+			fix.FixedL4 = true
+		}
+	case 6: // TCP
+		if len(pkt) < ihl+20 {
+			return nil, fix, fmt.Errorf("TCP 头不完整")
+		}
+		doff := int(pkt[ihl+12]>>4) * 4
+		if doff < 20 || ihl+doff > total {
+			return nil, fix, fmt.Errorf("TCP 头长度非法：%d", doff)
+		}
+		if !l4ChecksumOK(pkt, ihl, 6) {
+			setL4Checksum(pkt, ihl, 6, 16)
+			fix.FixedL4 = true
+		}
+	case 1: // ICMP
+		if len(pkt) < ihl+8 {
+			return nil, fix, fmt.Errorf("ICMP 头不完整")
+		}
+		if !l4ChecksumOK(pkt, ihl, 1) {
+			setL4Checksum(pkt, ihl, 1, 2)
+			fix.FixedL4 = true
+		}
+	default:
+		// 其它协议不做 L4 校验。
+	}
+	return pkt, fix, nil
+}
+
 // ---- 会话数据面 ----
 
 // masqueSendAssignment 下发地址与默认路由（RFC 9484 §4.7.1/§4.7.3）。
@@ -555,16 +721,20 @@ func (s *Server) serveMASQUE(w http.ResponseWriter, r *http.Request) {
 	mu.Lock()
 	err := firstErr
 	mu.Unlock()
-	if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, io.EOF) {
-		s.log.Info("MASQUE 会话结束", "ip", ip.String(), "device", claims.Subject,
-			"duration", time.Since(sess.started).Round(time.Second),
-			"rx", sess.rx, "tx", sess.tx, "send_fail", sess.sendFail.Load(),
-			"err", err.Error())
-	} else {
-		s.log.Info("MASQUE 会话结束", "ip", ip.String(), "device", claims.Subject,
-			"duration", time.Since(sess.started).Round(time.Second),
-			"rx", sess.rx, "tx", sess.tx, "send_fail", sess.sendFail.Load())
+	// 定向统计：上行包数、内核层校验和修复/丢弃计数，便于定位「tx 增长但 rx=0」。
+	fields := []any{
+		"ip", ip.String(), "device", claims.Subject,
+		"duration", time.Since(sess.started).Round(time.Second),
+		"rx", sess.rx, "tx", sess.tx, "send_fail", sess.sendFail.Load(),
+		"uplink", sess.masqueUplinkPackets,
+		"bad_pkt", sess.masqueBadPkt, "bad_src", sess.masqueBadSrc,
+		"fixed_l3", sess.masqueFixedL3, "fixed_l4", sess.masqueFixedL4,
+		"fragmented", sess.masqueFragmented, "tun_write_fail", sess.masqueTunWriteFail,
 	}
+	if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, io.EOF) {
+		fields = append(fields, "err", err.Error())
+	}
+	s.log.Info("MASQUE 会话结束", fields...)
 }
 
 // masqueCapsuleLoop 读取控制流上的 capsule，响应 ADDRESS_REQUEST。
@@ -637,8 +807,12 @@ func (s *Server) masqueCapsuleLoop(ctx context.Context, str *http3.Stream, sess 
 }
 
 // masqueDatagramLoop 接收 HTTP Datagram（Context ID 0 = IP 报文）并写入 TUN。
+//
+// 写 TUN 前会做上游合法性规范化（normalizeMasqueUplink）：修正 IPv4 头校验和、
+// 修正错误的 UDP/TCP/ICMP 校验和、裁剪尾部多余字节；畸形包丢弃并计数。
+// 这是 task-34 的关键修复：手工探针/校验和卸载可能产生「头校验和错误」的包，
+// 内核会在 ip_rcv 静默丢弃，导致「服务端 tx 增长但 rx 永远 0」。
 func (s *Server) masqueDatagramLoop(ctx context.Context, str *http3.Stream, sess *session) error {
-	var badPkt, badSrc, writeFail int
 	for {
 		payload, err := str.ReceiveDatagram(ctx)
 		if err != nil {
@@ -646,32 +820,60 @@ func (s *Server) masqueDatagramLoop(ctx context.Context, str *http3.Stream, sess
 		}
 		ctxID, data, perr := parseMasqueDatagram(payload)
 		if perr != nil {
-			badPkt++
+			sess.masqueBadPkt++
 			continue
 		}
 		if ctxID != masqueContextIDIP {
 			// 未知 Context ID：按 RFC 9484 §5 静默丢弃。
 			continue
 		}
-		src, ierr := masqueIPSource(data)
+		sess.masqueUplinkPackets++
+		pkt, fix, nerr := normalizeMasqueUplink(data)
+		if nerr != nil {
+			sess.masqueBadPkt++
+			if sess.masqueBadPkt == 1 || masqueDebugEnabled {
+				s.log.Warn("MASQUE 丢弃畸形上行报文", "ip", sess.ip.String(),
+					"len", len(data), "err", nerr)
+			}
+			continue
+		}
+		if fix.FixedL3 {
+			sess.masqueFixedL3++
+		}
+		if fix.FixedL4 {
+			sess.masqueFixedL4++
+		}
+		if fix.Fragmented {
+			sess.masqueFragmented++
+		}
+		src, ierr := masqueIPSource(pkt)
 		if ierr != nil {
-			badPkt++
-			if badPkt == 1 {
-				s.log.Warn("MASQUE 丢弃无法解析的 IP 报文", "ip", sess.ip.String(), "len", len(data), "err", ierr)
+			sess.masqueBadPkt++
+			if sess.masqueBadPkt == 1 || masqueDebugEnabled {
+				s.log.Warn("MASQUE 丢弃无法解析的 IP 报文", "ip", sess.ip.String(), "len", len(pkt), "err", ierr)
 			}
 			continue
 		}
 		if !src.Equal(sess.ip) {
-			badSrc++
-			if badSrc == 1 {
+			sess.masqueBadSrc++
+			if sess.masqueBadSrc == 1 || masqueDebugEnabled {
 				s.log.Warn("MASQUE 丢弃源地址不符报文", "sess_ip", sess.ip.String(), "src", src.String())
 			}
 			continue
 		}
-		if _, werr := s.tun.Write(data); werr != nil {
-			writeFail++
-			if writeFail == 1 {
-				s.log.Warn("MASQUE 写入 TUN 失败", "err", werr, "len", len(data), "ip", sess.ip.String())
+		if masqueDebugEnabled {
+			if sess.masqueUplinkPackets <= 5 || fix.FixedL3 || fix.FixedL4 {
+				ihl := int(pkt[0]&0x0f) * 4
+				s.log.Info("MASQUE 上行调试", "ip", sess.ip.String(), "n", sess.masqueUplinkPackets,
+					"len", len(pkt), "proto", pkt[9], "src", src.String(),
+					"fixed_l3", fix.FixedL3, "fixed_l4", fix.FixedL4, "frag", fix.Fragmented,
+					"l4_len", len(pkt)-ihl)
+			}
+		}
+		if _, werr := s.tun.Write(pkt); werr != nil {
+			sess.masqueTunWriteFail++
+			if sess.masqueTunWriteFail == 1 {
+				s.log.Warn("MASQUE 写入 TUN 失败", "err", werr, "len", len(pkt), "ip", sess.ip.String())
 			}
 			continue
 		}

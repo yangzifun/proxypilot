@@ -1,4 +1,6 @@
 # 客户端开发详解
+> 数据面协议显示名称：**PilotLink**（私有协议；自研 HTTP/3 可靠流隧道）。协议 ID 仍为 `private`。
+
 
 > 版本 2.7。源码 `vpnclient/`，模块 `github.com/yzfn/proxypilot/vpnclient`。
 > 同一份代码产出三种形态：CLI、桌面（Wails v3）、安装器。
