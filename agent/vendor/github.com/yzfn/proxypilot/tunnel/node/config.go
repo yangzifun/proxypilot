@@ -112,7 +112,7 @@ func (c *Config) Normalize() error {
 		c.Issuer = "proxypilot"
 	}
 	if strings.TrimSpace(c.Audience) == "" {
-		c.Audience = "masque-node"
+		c.Audience = "pp-tunnel"
 	}
 	if c.CertFile == "" || c.KeyFile == "" {
 		return fmt.Errorf("cert_file 与 key_file 必填")

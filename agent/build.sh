@@ -13,6 +13,7 @@
 #    manifest.json                                 与二进制一起上传到对象存储（安装脚本据此校验 sha256）
 #
 #  要求：Go >= 1.21（脚本内固定 GOTOOLCHAIN=local，使用本机工具链，不联网下载）
+#  vendor 守卫：构建前自动执行 check-vendor.sh；vendor 与工作区 tunnel/ 不一致直接失败
 # =================================================================
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -40,6 +41,15 @@ if [ "$GO_MAJOR" -lt "$GO_MIN_MAJOR" ] || { [ "$GO_MAJOR" -eq "$GO_MIN_MAJOR" ] 
     exit 1
 fi
 echo "==> Go：$GO_VER_RAW"
+
+# vendor 守卫（task-25）：vendor/ 必须与工作区模块（tunnel/ 等）一致。
+# 历史事故：agent/vendor 的 tunnel 陈旧，线上 Agent 把 UDP（含 DNS）下行塞进
+# 客户端未协商的 QUIC DATAGRAM 通道且无回退，导致 UDP/DNS 全部超时。
+# 不一致时请先执行：cd agent && go mod vendor（禁止用 -mod=mod 绕过）。
+if ! bash ./check-vendor.sh; then
+    echo "构建中止：agent/vendor 与工作区模块不一致（修复：cd agent && go mod vendor）" >&2
+    exit 1
+fi
 
 VERSION="${VERSION:-}"
 if [ -z "$VERSION" ]; then

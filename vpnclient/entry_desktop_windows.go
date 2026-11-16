@@ -100,10 +100,10 @@ func main() {
 
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:     "ProxyPilot v" + Version,
-		Width:     420,
-		Height:    780,
-		MinWidth:  380,
-		MinHeight: 640,
+		Width:     960,
+		Height:    640,
+		MinWidth:  860,
+		MinHeight: 560,
 		URL:       "http://" + addr + "/",
 		Hidden:    startHidden,
 	})

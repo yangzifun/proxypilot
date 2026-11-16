@@ -33,6 +33,9 @@ func fakeShell(calls *[]shellCall, out string, code int) ShellRunner {
 func newRunner(t *testing.T, out string, code int) (*Runner, *[]shellCall, string) {
 	t.Helper()
 	dir := t.TempDir()
+	// deploy 的路径白名单只允许 /etc/... 前缀（safeConfigPath），测试用临时目录时
+	// 必须注入等价的「只允许 dir 内」校验，否则 deploy 分支会全部被拒绝。
+	allowTempDeploy(t, dir)
 	calls := &[]shellCall{}
 	r := &Runner{
 		Shell: fakeShell(calls, out, code),

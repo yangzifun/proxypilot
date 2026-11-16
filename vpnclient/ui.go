@@ -1492,13 +1492,62 @@ func (s *uiServer) resolveDevice(ctx context.Context, cfg uiSettings) (int64, er
 	return fallback, nil
 }
 
+// logOpenRecord 是最近一次「打开日志目录」的尝试结果。
+// Windows 实现会写入方式与每一级尝试记录；其他平台保持零值（ok 时 method 为空）。
+type logOpenRecord struct {
+	Method   string
+	Attempts []string
+	Err      error
+}
+
+var (
+	logOpenDetail logOpenRecord
+	logOpenMu     sync.Mutex
+)
+
+func logOpenSet(rec logOpenRecord) {
+	logOpenMu.Lock()
+	logOpenDetail = rec
+	logOpenMu.Unlock()
+}
+
+func logOpenSnapshot() logOpenRecord {
+	logOpenMu.Lock()
+	defer logOpenMu.Unlock()
+	return logOpenRecord{
+		Method:   logOpenDetail.Method,
+		Attempts: append([]string(nil), logOpenDetail.Attempts...),
+		Err:      logOpenDetail.Err,
+	}
+}
+
 // POST /api/logs/open —— 在资源管理器里打开日志目录
+//
+// 失败时返回 ok:false + error（含失败原因与逐级尝试记录），前端据此 toast 明确提示；
+// 成功时返回 ok:true + path + method（explorer / cmd-start / rundll32），便于排查环境差异。
 func (s *uiServer) handleLogsOpen(w http.ResponseWriter, r *http.Request) {
+	path := logFilePath()
 	if !openLogFolder() {
-		writeJSON(w, map[string]any{"ok": false, "error": "无法打开日志目录", "path": logFilePath()})
+		rec := logOpenSnapshot()
+		msg := "无法打开日志目录"
+		if rec.Err != nil {
+			msg += "：" + rec.Err.Error()
+		}
+		writeJSON(w, map[string]any{
+			"ok":       false,
+			"error":    msg,
+			"path":     path,
+			"attempts": rec.Attempts,
+		})
 		return
 	}
-	writeJSON(w, map[string]any{"ok": true, "path": logFilePath()})
+	rec := logOpenSnapshot()
+	writeJSON(w, map[string]any{
+		"ok":       true,
+		"path":     path,
+		"method":   rec.Method,
+		"attempts": rec.Attempts,
+	})
 }
 
 // filepathDir 取目录部分（避免在多个平台文件里重复引入 path/filepath）。

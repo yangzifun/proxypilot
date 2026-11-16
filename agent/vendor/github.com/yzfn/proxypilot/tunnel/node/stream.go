@@ -3,6 +3,7 @@ package node
 import (
 	"bufio"
 	"encoding/binary"
+	"strconv"
 	"fmt"
 	"io"
 	"net"
@@ -28,7 +29,9 @@ const maxStreamFrame = 4096
 // 改成「每会话有界队列 + 聚合写」，tunLoop 只做入队。
 const (
 	streamQueueDepth = 2048
-	streamBatchMax   = 64 * 1024
+	// 下行同样从 64KB 降到 8KB：突发是双向都会被路径丢弃的，
+	// 下载慢同样要吃这个亏。详见 vpnclient/stream_tunnel.go 的说明。
+	streamBatchMax   = 8 * 1024
 	streamBatchDelay = 2 * time.Millisecond
 )
 
@@ -134,8 +137,16 @@ func (s *Server) serveStream(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
+	// 多路复用：客户端在主可靠流之外开附加流时带 X-VPN-Lane。
+	// lane=0（缺省）就是主可靠流，行为与以前完全一致。
+	lane := 0
+	if v := r.Header.Get("X-VPN-Lane"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 64 {
+			lane = n
+		}
+	}
 	sess := &session{
-		kind: kindStream,
+		kind: kindStream, lane: lane,
 		jti: claims.JTI, ip: ip, device: claims.Subject, grantID: claims.GrantID,
 		started: time.Now(),
 	}
@@ -169,14 +180,63 @@ func (s *Server) serveStream(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	// 双通道（36.3 起）：DATAGRAM 与隧道流**共用这条连接**。
+	//
+	// 之前 DATAGRAM 走的是 GET / 那条鉴权连接，它在鉴权返回后就没有流量了，
+	// cwnd 回落到初始值、连接也可能已被回收，而 UDP 没有 FIN，
+	// SendDatagram 在本地排队即成功 —— 实测「客户端发出 343 个、节点只收到
+	// 129 个，双方都没有错误计数」。绑到隧道流这条连接后，DATAGRAM 与流
+	// 共享同一个 cwnd 与存活状态。
+	//
+	// 注意：这条会话与流共享连接，绝不能在自己的清理里关闭连接，
+	// 否则会把隧道流一起弄断（closeFn 置为空实现）。
+	//
+	// 能力协商（MASQUE/RFC 9297 风格）：客户端在请求头声明是否支持 HTTP Datagram。
+	// **必须先读能力头，再决定是否注册 datagram 会话**（P1 修复）：
+	// 反过来会先注册 datagram 会话（conn 就是本条隧道流用的连接），紧接着发现
+	// 客户端不支持、dropDatagramChannel 关掉这条共享连接 → 刚建立的隧道流
+	// 一起被断，客户端表现为连上即断、反复重连，回退到可靠流的设计完全失效。
+	clientDatagram := r.Header.Get("H3-Datagram") != ""
+	useDatagram := s.negotiateDatagram(clientDatagram)
+	conn, _ := r.Context().Value(connKey{}).(*quic.Conn)
+	var curConn datagramConn
+	if conn != nil {
+		curConn = conn
+	}
+	if useDatagram && conn != nil {
+		dsess := &session{
+			jti: claims.JTI, kind: kindDatagram, ip: ip, device: claims.Subject,
+			grantID: claims.GrantID, conn: conn, started: time.Now(),
+		}
+		dsess.send = func(p []byte) error { return dsess.conn.SendDatagram(p) }
+		dsess.closeFn = func() {} // 共享连接，不在这里关闭
+		if s.register(dsess) {
+			s.log.Info("单连接双通道", "ip", ip.String(), "remote", r.RemoteAddr)
+			go s.readSession(dsess)
+		}
+	}
+
 	if !s.register(sess) {
 		http.Error(w, "ip already in use", http.StatusConflict)
 		return
 	}
 
+	if !useDatagram {
+		// 客户端没声明支持（旧版客户端）：只清残留的 datagram 槽位，让 pick()
+		// 回退到可靠流；绝不能关连接 —— 它正承载本次隧道流。
+		s.dropDatagramChannel(ip, curConn)
+	}
+
 	h := w.Header()
 	h.Set("X-VPN-Auth", "Success")
 	h.Set("X-VPN-Assigned-IPv4", ip.String())
+
+	// 只有双方都支持才回能力位；否则节点继续用 DATAGRAM 发 UDP 而客户端不读，
+	// 回包就静默消失（表现为 DNS 完全不通）。
+	if useDatagram {
+		h.Set("Capsule-Protocol", "?1")
+		h.Set("H3-Datagram", "?1")
+	}
 	h.Set("Cache-Control", "no-store")
 	h.Set("Content-Type", "application/octet-stream")
 	w.WriteHeader(http.StatusOK)

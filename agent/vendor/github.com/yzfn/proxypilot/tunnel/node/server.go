@@ -1,6 +1,7 @@
 package node
 
 import (
+	"sync/atomic"
 	"context"
 	"crypto/tls"
 	"fmt"
@@ -58,6 +59,8 @@ func (k sessionKind) String() string {
 type session struct {
 	jti     string
 	kind    sessionKind
+	// lane 是客户端多路复用时的流编号：0 = 主可靠流，>0 = 附加独立流。
+	lane    int
 	ip      net.IP
 	device  string
 	grantID int64
@@ -68,6 +71,18 @@ type session struct {
 	started time.Time
 	tx      uint64
 	rx      uint64
+	// sendFail 统计下行发送失败次数（DATAGRAM 缓冲满/连接关闭等），
+	// 是「节点发了但客户端没收到」的唯一线索。
+	sendFail atomic.Uint64
+
+	// fecEnc 是**该会话独享**的下行 FEC 编码器（仅 kindDatagram 使用）。
+	//
+	// 曾经在 tunLoop 里只建一个全局共享编码器：一个 FEC 组里混入发往不同客户端的
+	// 包，凑满组时校验帧只发给「触发凑满的那个包」的会话，其余客户端永远缺包，
+	// Decode 判定 missingCount>1 直接放弃 —— FEC 只烧 1/K 带宽、完全无法还原。
+	// 解码端（readSession / 客户端 dualPacketConn）本来就是每会话一个解码器，
+	// 编码器必须按同样粒度分组。只在 tunLoop 单协程里读写，无需加锁。
+	fecEnc *fecEncoder
 }
 
 // Server 是自研 HTTP/3 隧道节点（非标准 MASQUE）。
@@ -201,6 +216,10 @@ func (s *Server) Run(ctx context.Context) error {
 	s.srv = &http3.Server{
 		TLSConfig:  tlsConf,
 		QUICConfig: quicConf,
+		// HTTP/3 层必须显式开启 datagram，否则不协商 SETTINGS_H3_DATAGRAM，
+		// 客户端 ReceiveDatagram 一律返回 "datagram support disabled"。
+		// 光设 quic.Config.EnableDatagrams 不够（quic-go http3/server.go:137）。
+		EnableDatagrams: true,
 		Handler:    s,
 		ConnContext: func(ctx context.Context, c *quic.Conn) context.Context {
 			return context.WithValue(ctx, connKey{}, c)
@@ -291,6 +310,22 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	sess.send = func(p []byte) error { return sess.conn.SendDatagram(p) }
 	sess.closeFn = func() { _ = sess.conn.CloseWithError(0, "session closed") }
+
+	// 面板关掉 DATAGRAM 时**不要注册 datagram 会话**。
+	// 否则 tunLoop 的 pick() 会继续把 UDP 下行塞进 DATAGRAM，
+	// 而客户端此时只读可靠流 —— UDP 回包（DNS 应答）全被静默丢弃，
+	// 表现就是「ICMP 通、网页打不开」。
+	// 不注册后 pick() 自动回退到可靠流，两端行为一致。
+	if !s.cfg.DatagramEnabled {
+		h := w.Header()
+		h.Set("X-VPN-Auth", "Success")
+		h.Set("X-VPN-Assigned-IPv4", ip.String())
+		h.Set("X-VPN-Max-Datagram", "0")
+		h.Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	if !s.register(sess) {
 		http.Error(w, "ip already in use", http.StatusConflict)
 		return
@@ -300,6 +335,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.Set("X-VPN-Auth", "Success")
 	h.Set("X-VPN-Assigned-IPv4", ip.String())
 	h.Set("X-VPN-Max-Datagram", fmt.Sprintf("%d", s.cfg.MaxDatagram))
+	h.Set("Capsule-Protocol", "?1")
+	h.Set("H3-Datagram", "?1")
 	h.Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
 
@@ -316,17 +353,28 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 type sessionSet struct {
 	stream   *session
 	datagram *session
+	// lanes 是多路复用的附加可靠流（lane>=1），与主可靠流互相独立：
+	// 每条都是独立 QUIC 流，各有自己的流控与重传队列，一条丢包不连累其他。
+	lanes map[int]*session
 }
 
 // pick 按内层协议号选通道。
 //
 // proto 取自内层 IPv4 头的协议字段（6=TCP, 17=UDP, 1=ICMP）。
-func (set *sessionSet) pick(proto byte) *session {
+func (set *sessionSet) pick(pkt []byte) *session {
 	if set == nil {
 		return nil
 	}
+	proto := innerProto(pkt)
 	if proto == 17 && set.datagram != nil && set.datagram.send != nil {
 		return set.datagram
+	}
+	// 多路复用：按五元组哈希选 lane，与客户端的 flowLane 完全一致，
+	// 保证「下行回包写回客户端发它时用的那条流」。
+	if len(set.lanes) > 0 {
+		if s := set.lanes[flowLane(pkt, multiLaneCount)]; s != nil && s.send != nil {
+			return s
+		}
 	}
 	if set.stream != nil && set.stream.send != nil {
 		return set.stream
@@ -345,9 +393,136 @@ func (set *sessionSet) slot(kind sessionKind) **session {
 	return &set.stream
 }
 
+// other 返回另一条通道（用于发送失败时回退）。
+func (set *sessionSet) other(s *session) *session {
+	if set == nil {
+		return nil
+	}
+	if s != nil && s.kind == kindDatagram {
+		return set.stream
+	}
+	if s != nil && s.kind == kindStream {
+		return set.datagram
+	}
+	if set.stream != nil {
+		return set.stream
+	}
+	return set.datagram
+}
+
+// writeDatagramToTun 把一条已解码的内层报文写入 TUN，并做源地址校验。
+//
+// 从 readSession 抽出来，是因为引入 FEC 后一个 DATAGRAM 可能产出 0 或 1 个
+// 完整报文，校验与写入逻辑需要被复用，避免复制粘贴两份。
+func (s *Server) writeDatagramToTun(sess *session, data []byte, badPkt, badSrc, writeFail *int) {
+	pkt, src, _, perr := StripPadding(data)
+	if perr != nil {
+		*badPkt++
+		if *badPkt == 1 {
+			s.log.Warn("丢弃无法解析的报文", "ip", sess.ip.String(), "len", len(data), "err", perr.Error())
+		}
+		return
+	}
+	if !src.Equal(sess.ip) {
+		*badSrc++
+		if *badSrc == 1 {
+			s.log.Warn("丢弃源地址不符的报文", "sess_ip", sess.ip.String(), "src", src.String())
+		}
+		return
+	}
+	if _, werr := s.tun.Write(pkt); werr != nil {
+		*writeFail++
+		if *writeFail == 1 {
+			s.log.Warn("写入 TUN 失败", "err", werr, "len", len(pkt), "ip", sess.ip.String())
+		}
+		return
+	}
+	sess.tx++
+}
+// multiLaneCount 必须与客户端 vpnclient.multiLaneCount 保持一致。
+const multiLaneCount = 3
+
+// innerProto 取内层 IPv4 头的协议号；取不到返回 0。
+func innerProto(pkt []byte) byte {
+	if len(pkt) < 20 || pkt[0]>>4 != 4 {
+		return 0
+	}
+	return pkt[9]
+}
+
+// flowLane 与客户端同算法：同一条内层连接永远落在同一条 lane 上。
+func flowLane(pkt []byte, n int) int {
+	if n <= 1 || len(pkt) < 20 || pkt[0]>>4 != 4 {
+		return 0
+	}
+	ihl := int(pkt[0]&0x0f) * 4
+	h := uint32(2166136261)
+	for _, b := range pkt[12:16] {
+		h = (h ^ uint32(b)) * 16777619
+	}
+	if len(pkt) >= ihl+4 {
+		for _, b := range pkt[ihl : ihl+4] {
+			h = (h ^ uint32(b)) * 16777619
+		}
+	}
+	return int(h % uint32(n))
+}
+
+// isDNSPacket 判断是否为 DNS 报文（UDP 且源/目的端口为 53）。
+//
+// 与客户端 vpnclient/dual_tunnel.go 的同名函数保持一致的判定，
+// 保证两个方向的 DNS 都走可靠流。
+func isDNSPacket(pkt []byte) bool {
+	if len(pkt) < 28 || pkt[0]>>4 != 4 || pkt[9] != 17 {
+		return false
+	}
+	ihl := int(pkt[0]&0x0f) * 4
+	if ihl < 20 || len(pkt) < ihl+8 {
+		return false
+	}
+	sport := int(pkt[ihl])<<8 | int(pkt[ihl+1])
+	dport := int(pkt[ihl+2])<<8 | int(pkt[ihl+3])
+	return sport == 53 || dport == 53
+}
+// negotiateDatagram 判断本次隧道流是否启用 DATAGRAM：
+// 节点开了 DATAGRAM 且客户端在请求头声明支持，两者缺一不可。
+//
+// 必须在注册 datagram 会话之前调用：先注册后判断会走「注册了再回退」的路径，
+// 而回退要清掉共享连接上的会话，容易误关正在承载隧道流的连接。
+func (s *Server) negotiateDatagram(clientDeclared bool) bool {
+	return s.cfg.DatagramEnabled && clientDeclared
+}
+
+// dropDatagramChannel 清掉某设备的 datagram 槽位，让 pick() 回退到可靠流。
+//
+// 用于「客户端明确不支持 DATAGRAM」时：必须让 pick() 回退到可靠流，
+// 否则节点会继续把 UDP 下行塞进 DATAGRAM，而客户端不读 datagram，
+// 回包直接消失 —— 实测表现为 nslookup 全部超时、ping 公网 IP 正常。
+//
+// keepConn 是本次请求正在使用的连接（DATAGRAM 与隧道流共用同一条 QUIC 连接）：
+// **绝不能关闭它**，否则会把刚建立的隧道流一起断掉。只有残留的 datagram 会话
+// 跑在别的连接上时才关闭旧连接（那才是安全的清理）。
+func (s *Server) dropDatagramChannel(ip net.IP, keepConn datagramConn) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	key := ip.String()
+	set := s.sessions[key]
+	if set == nil || set.datagram == nil {
+		return
+	}
+	cur := set.datagram
+	set.datagram = nil
+	if set.empty() {
+		delete(s.sessions, key)
+	}
+	if cur.conn != nil && cur.conn != keepConn {
+		_ = cur.conn.CloseWithError(0, "client datagram unsupported")
+	}
+	s.log.Info("已停用 DATAGRAM 通道", "ip", key, "reason", "客户端未声明支持")
+}
 // empty 表示两条通道都没了。
 func (set *sessionSet) empty() bool {
-	return set == nil || (set.stream == nil && set.datagram == nil)
+	return set == nil || (set.stream == nil && set.datagram == nil && len(set.lanes) == 0)
 }
 
 func (s *Server) register(sess *session) bool {
@@ -358,6 +533,17 @@ func (s *Server) register(sess *session) bool {
 	if set == nil {
 		set = &sessionSet{}
 		s.sessions[key] = set
+	}
+	if sess.kind == kindStream && sess.lane > 0 {
+		if set.lanes == nil {
+			set.lanes = make(map[int]*session)
+		}
+		if cur := set.lanes[sess.lane]; cur != nil && cur.conn != nil {
+			_ = cur.conn.CloseWithError(0, "lane replaced")
+		}
+		set.lanes[sess.lane] = sess
+		s.log.Info("lane 会话注册", "ip", key, "lane", sess.lane)
+		return true
 	}
 	// 只替换**同一种承载**的旧会话。
 	// 客户端重启后旧会话往往来不及清理（对端进程被杀），同 kind 直接接管，
@@ -381,6 +567,15 @@ func (s *Server) unregister(sess *session) {
 	key := sess.ip.String()
 	set := s.sessions[key]
 	if set == nil {
+		return
+	}
+	if sess.kind == kindStream && sess.lane > 0 {
+		if set.lanes != nil && set.lanes[sess.lane] == sess {
+			delete(set.lanes, sess.lane)
+		}
+		if set.empty() {
+			delete(s.sessions, key)
+		}
 		return
 	}
 	// 只清自己那个槽位；另一条通道还在就保留集合
@@ -412,47 +607,60 @@ func (s *Server) readSession(sess *session) {
 			"duration", time.Since(sess.started).Round(time.Second))
 	}()
 	var badPkt, badSrc int
+	var writeFail int
+	// 每个 datagram 会话一个解码器，按 session 生命周期存活。
+	// FEC 是「81% 丢包」的补救手段：DATAGRAM 不重传，只有冗余能救。
+	var fecDec *fecDecoder
+	if s.cfg.FECMode == "xor" && s.cfg.FECGroup > 1 {
+		fecDec = newFECDecoder()
+	}
 	lastStats := time.Now()
 	for {
 		data, err := sess.conn.ReceiveDatagram(sess.conn.Context())
 		if err != nil {
 			s.log.Info("会话数据面结束", "ip", sess.ip.String(), "err", err.Error(),
-				"rx", sess.rx, "tx", sess.tx, "bad_pkt", badPkt, "bad_src", badSrc)
+				"rx", sess.rx, "tx", sess.tx,
+				"dropped", sess.sendFail.Load()+uint64(writeFail),
+				"bad_pkt", badPkt, "bad_src", badSrc)
 			return
 		}
-		pkt, src, _, perr := StripPadding(data)
-		if perr != nil {
-			badPkt++
-			if badPkt == 1 {
-				s.log.Warn("丢弃无法解析的报文", "ip", sess.ip.String(), "len", len(data), "err", perr.Error())
+		frames := [][]byte{data}
+		if fecDec != nil {
+			decoded, ferr := fecDec.Decode(data)
+			if ferr != nil {
+				badPkt++
+				if badPkt == 1 {
+					s.log.Warn("FEC 解码失败", "ip", sess.ip.String(), "len", len(data), "err", ferr.Error())
+				}
+				continue
 			}
-			continue
+			if len(decoded) == 0 {
+				continue
+			}
+			frames = decoded
 		}
-		if !src.Equal(sess.ip) {
-			badSrc++
-			if badSrc == 1 {
-				s.log.Warn("丢弃源地址不符的报文", "sess_ip", sess.ip.String(), "src", src.String())
-			}
-			continue
+		for _, frame := range frames {
+			s.writeDatagramToTun(sess, frame, &badPkt, &badSrc, &writeFail)
 		}
 		if time.Since(lastStats) > 30*time.Second {
-			s.log.Info("会话流量", "ip", sess.ip.String(), "rx", sess.rx, "tx", sess.tx,
+			// 命名对齐可靠流那边的「流隧道流量」，方便两侧对照排查：
+			//   tx      上行：客户端发来、已写入 TUN 的包数
+			//   rx      下行：节点发回客户端的包数（由 tunLoop 计数）
+			//   dropped 上行写 TUN 失败 + 下行发送失败
+			s.log.Info("DATAGRAM 流量", "ip", sess.ip.String(),
+				"rx", sess.rx, "tx", sess.tx,
+				"dropped", sess.sendFail.Load()+uint64(writeFail),
 				"bad_pkt", badPkt, "bad_src", badSrc)
 			lastStats = time.Now()
 		}
-		if _, werr := s.tun.Write(pkt); werr != nil {
-			// 单个报文写失败（例如超过 TUN MTU）不能终止会话，
-			// 否则后续所有流量都会被静默丢弃、表现为「已连接但完全不通」。
-			s.log.Warn("写入 TUN 失败", "err", werr, "len", len(pkt), "ip", sess.ip.String())
-			continue
-		}
-		sess.tx++
 	}
 }
 
 // tunLoop 读取 TUN，把下行报文发给对应客户端；客户端互访直接丢弃。
 func (s *Server) tunLoop() {
 	buf := make([]byte, 65535)
+	// 下行 FEC 开关（仅 DATAGRAM 通道使用）；编码器按会话持有，见 session.fecEnc。
+	fecDownOn := s.cfg.FECMode == "xor" && s.cfg.FECGroup > 1
 	for {
 		n, err := s.tun.Read(buf)
 		if err != nil {
@@ -483,18 +691,57 @@ func (s *Server) tunLoop() {
 			continue
 		}
 		// 按内层协议号选通道：UDP 走 DATAGRAM，其余走可靠流；某一路缺失则回退
-		var proto byte
-		if len(pkt) >= 10 {
-			proto = pkt[9]
+		// DNS 固定走可靠流：DATAGRAM 不重传，实测 81% 的 UDP 回包丢失，
+		// 而 DNS 客户端 2 秒超时，丢了就是用户等好几秒。其余 UDP 仍走 DATAGRAM。
+		sess := set.pick(pkt)
+		if isDNSPacket(pkt) {
+			if set.stream != nil && set.stream.send != nil {
+				sess = set.stream
+			}
 		}
-		sess := set.pick(proto)
-		if sess == nil || sess.send == nil {
-			continue
+		sent := false
+		// 下行 FEC：只作用于 DATAGRAM 通道，每组校验帧都发给**同一个会话**。
+		// 组内丢 1 个可由对端还原 —— 这是 81% 丢包唯一的补救手段。
+		// 校验帧比原始报文多 4+K*2 字节头，超 MaxDatagram 时跳过（否则必然发送失败，
+		// 该组失去恢复能力且日志无痕）。
+		if fecDownOn && sess != nil && sess.kind == kindDatagram && sess.send != nil && len(pkt) <= s.cfg.MaxDatagram {
+			if sess.fecEnc == nil {
+				sess.fecEnc = newFECEncoder(s.cfg.FECGroup)
+			}
+			data, parity := sess.fecEnc.Encode(pkt)
+			if err := sess.send(data); err == nil {
+				sess.rx++
+				if len(parity) > 0 && len(parity) <= s.cfg.MaxDatagram {
+					_ = sess.send(parity)
+				}
+				continue
+			}
+			sess.sendFail.Add(1)
 		}
-		if err := sess.send(pkt); err != nil {
-			continue
+		if sess != nil && sess.send != nil {
+			if err := sess.send(pkt); err == nil {
+				sess.rx++
+				sent = true
+			} else {
+				sess.sendFail.Add(1)
+			}
 		}
-		sess.rx++
+		if !sent {
+			// 首选通道发不出去（连接已关闭 / DATAGRAM 缓冲满）时**回退到另一条通道**。
+			// 没有这层回退时，一条通道坏掉就等于下行全黑：
+			// 实测出现过 frames=553 tx=552 但 rx=50 —— 节点把上行都转发进 TUN 了，
+			// 下行却因为 pick() 选中的通道发不出去而几乎全部丢弃，
+			// 客户端表现为「网页打不开、ping 也不通」。
+			alt := set.other(sess)
+			if alt != nil && alt.send != nil {
+				if err := alt.send(pkt); err == nil {
+					alt.rx++
+					sent = true
+				} else {
+					alt.sendFail.Add(1)
+				}
+			}
+		}
 	}
 }
 

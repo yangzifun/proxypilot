@@ -45,7 +45,10 @@ import (
 // 1.8.7：新增 inspect 动作（只读检查配置文件，供 UUID 一致性巡检核对机器实际配置）
 // 1.2：主机 IPv6/IPv4 采集只取真实网卡，排除 WARP/组网网卡与 WARP 地址段（ee3d04af 采集侧修复；
 // 现网 1.1 二进制构建于修复提交之前，因此递增到 1.2 以便面板区分旧二进制）
-const Version = "1.2"
+// 1.3：同步 vendored tunnel 到当前工作区（单连接双通道 / H3-Datagram 能力协商 /
+// X-VPN-Lane 多路通道 / 已停用 DATAGRAM 回退），修复节点把 UDP（含 DNS）下行塞进
+// 客户端未协商的 QUIC DATAGRAM 黑洞通道、导致 UDP/DNS 全部超时的私有协议问题（task-25）
+const Version = "1.3"
 
 // maxActionsPerRound 单轮执行任务数上限（服务端 AGENT_ACTIONS_PER_POLL = 5，这里留足余量）。
 const maxActionsPerRound = 20

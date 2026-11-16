@@ -1,6 +1,6 @@
 # Agent 开发与任务协议
 
-> 版本 2.1.1。源码：`agent/`，模块名 `proxypilot-agent`。
+> 版本 1.3（2026-11-16：同步 vendored tunnel，修复私有协议 UDP/DNS 下行黑洞）。源码：`agent/`，模块名 `proxypilot-agent`。
 > Agent 是节点上唯一的常驻进程，同时承担心跳、指标、任务执行与**内嵌 HTTP/3 VPN 节点**。
 
 ## 1. 进程结构
@@ -38,7 +38,7 @@ proxypilot-agent
 
 ```
 POST /api/agent/register
-{ "key": "<一次性令牌>", "name": "台北", "platform": "linux/amd64", "version": "2.1.1" }
+{ "key": "<一次性令牌>", "name": "台北", "platform": "linux/amd64", "version": "1.3" }
 → { "server_id": 16, "secret": "<长期密钥>" }
 ```
 
@@ -51,7 +51,7 @@ POST /api/agent/poll
 X-Agent-Key: <secret>
 {
   "server_id": 16,
-  "version": "2.1.1",
+  "version": "1.3",
   "metrics": {
     "cpuPercent": 19.3, "memPercent": 58.1, "diskPercent": 11,
     "load1": 0.61, "procs": 115, "uptimeSec": 1104716,
@@ -60,14 +60,14 @@ X-Agent-Key: <secret>
     "conn": {"total": 42, "established": 12},
     "services": {"sshd":"active","sing-box":"active"},
     "versions": {"sing-box":"1.11.0"},
-    "agentVersion": "2.1.1"
+    "agentVersion": "1.3"
   }
 }
 → {
   "ok": true,
   "tasks": [ { "id": 3445, "type": "exec", "payload": {...} } ],
   "next_poll_sec": 60,
-  "agent_latest": "2.1.1",
+  "agent_latest": "1.3",
   "config_version": 12
 }
 ```
@@ -167,15 +167,50 @@ WS /api/agent/ws?key=<secret>
 
 ## 7. 构建与测试
 
+**构建入口统一用 `agent/build.sh`**（构建前自动执行 vendor 守卫，再编译 amd64 + arm64 静态二进制，生成 SHA256SUMS / manifest.json）：
+
 ```bash
 cd agent
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-  go build -trimpath -ldflags "-s -w" -o dist/proxypilot-agent-linux-amd64 ./cmd/proxypilot-agent
-
-go test ./...
+./build.sh                       # 版本取自 internal/agent.Version
+TARGETS="linux/amd64" ./build.sh # 只构建单架构
 ```
 
-版本常量：`internal/agent/agent.go` → `const Version = "2.1.1"`。
+单步调试 / 测试：
+
+```bash
+cd agent
+go build ./... && go vet ./... && go test ./...
+```
+
+版本常量：`internal/agent/agent.go` → `const Version = "1.3"`。
+
+### 7.1 vendor 守卫（禁止用 -mod=mod 绕过）
+
+`agent/vendor/` 是提交进仓库的完整依赖副本，线上 Agent 二进制默认走 vendor 构建。
+一旦 vendor 与工作区模块（尤其 `tunnel/`，通过 `replace ../tunnel` 引入）不一致，
+线上包就会内嵌陈旧代码（历史事故：旧 tunnel 把 UDP/DNS 下行塞进客户端未协商的
+QUIC DATAGRAM 通道且无回退，导致 UDP/DNS 全部超时）。
+
+- `agent/build.sh` 构建前自动执行 `agent/check-vendor.sh`；不一致直接失败并打印 diff。
+- 手动校验 / 修复：
+
+```bash
+cd agent
+bash check-vendor.sh      # 一致 exit 0；不一致打印 diff 并 exit 1
+go mod vendor             # 同步 vendor（改完 tunnel/ 后必须执行）
+```
+
+- 禁止用 `-mod=mod` 绕过 vendor（会重新引入漂移）；发布 Agent 请用 `agent/build.sh`。
+
+### 7.2 1.3 变更（私有协议）
+
+- `tunnel/node` 同步到工作区当前版本：`单连接双通道`、`H3-Datagram` 能力协商、
+  `X-VPN-Lane` 多路通道、客户端未声明能力时 `已停用 DATAGRAM` 走可靠流回退、
+  DNS 强制走可靠流。
+- 修复：节点把 UDP（含 DNS）下行塞进客户端不读的 QUIC DATAGRAM 黑洞通道
+  （现象：`ping 1.1.1.1` 通、DNS/域名全部超时）。
+- 版本号 1.2 → 1.3；构建产物应包含上述字符串（可用 `grep -a` 校验）。
+- 发布前验证：`bash check-vendor.sh` 通过 + `go build/vet/test` 全绿 + 二进制字符串齐全。
 
 ## 8. 排障
 
@@ -185,4 +220,5 @@ go test ./...
 | 任务一直 `sent` | 任务里重启了 Agent 自己 → 改用异步重启 |
 | 内嵌节点没起 | `ls /etc/proxypilot/agent/vpn.json`、`ss -lunp \| grep 443` |
 | VPN 连不上 | 证书是否覆盖域名：`openssl x509 -in cert.pem -noout -ext subjectAltName` |
+| VPN `ping` 通但 DNS / 域名超时 | Agent 是否为 1.3+（`strings /usr/local/bin/proxypilot-agent \| grep -a 单连接双通道`）；vendor 是否同步（`cd agent && bash check-vendor.sh`） |
 | 升级后版本没变 | 检查 bin 路径与 systemd `ExecStart` 是否一致 |
