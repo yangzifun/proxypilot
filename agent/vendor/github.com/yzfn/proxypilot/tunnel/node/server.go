@@ -1,7 +1,6 @@
 package node
 
 import (
-	"sync/atomic"
 	"context"
 	"crypto/tls"
 	"fmt"
@@ -10,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/quic-go/quic-go"
@@ -43,6 +43,9 @@ type sessionKind int
 const (
 	kindStream   sessionKind = iota + 1 // POST /tunnel 可靠流
 	kindDatagram                        // GET / DATAGRAM
+	// kindMasque 是标准 MASQUE CONNECT-IP 会话（RFC 9484）：
+	// 一条 Extended CONNECT 请求流承载控制 capsule，IP 包走 HTTP Datagram。
+	kindMasque
 )
 
 func (k sessionKind) String() string {
@@ -51,14 +54,16 @@ func (k sessionKind) String() string {
 		return "stream"
 	case kindDatagram:
 		return "datagram"
+	case kindMasque:
+		return "masque"
 	default:
 		return "unknown"
 	}
 }
 
 type session struct {
-	jti     string
-	kind    sessionKind
+	jti  string
+	kind sessionKind
 	// lane 是客户端多路复用时的流编号：0 = 主可靠流，>0 = 附加独立流。
 	lane    int
 	ip      net.IP
@@ -85,7 +90,8 @@ type session struct {
 	fecEnc *fecEncoder
 }
 
-// Server 是自研 HTTP/3 隧道节点（非标准 MASQUE）。
+// Server 是自研 HTTP/3 隧道节点：私有协议（/ + /tunnel）与标准 MASQUE
+// CONNECT-IP（masque.go）共用同一 TUN/NAT/会话表。
 type Server struct {
 	cfg      Config
 	log      *slog.Logger
@@ -220,7 +226,7 @@ func (s *Server) Run(ctx context.Context) error {
 		// 客户端 ReceiveDatagram 一律返回 "datagram support disabled"。
 		// 光设 quic.Config.EnableDatagrams 不够（quic-go http3/server.go:137）。
 		EnableDatagrams: true,
-		Handler:    s,
+		Handler:         s,
 		ConnContext: func(ctx context.Context, c *quic.Conn) context.Context {
 			return context.WithValue(ctx, connKey{}, c)
 		},
@@ -268,8 +274,18 @@ func (s *Server) Close() {
 	})
 }
 
-// ServeHTTP 处理客户端的 HTTP/3 鉴权请求。
+// ServeHTTP 处理客户端的 HTTP/3 请求。
+//
+// 三条路径：
+//   - CONNECT + :protocol=connect-ip → 标准 MASQUE CONNECT-IP（masque.go）；
+//   - POST /tunnel → 私有可靠流隧道；
+//   - GET / → 私有鉴权 + DATAGRAM 会话。
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodConnect &&
+		(r.Proto == "connect-ip" || r.Header.Get("Connect-Protocol") == "connect-ip") {
+		s.serveMASQUE(w, r)
+		return
+	}
 	if r.URL.Path == "/tunnel" {
 		s.serveStream(w, r)
 		return
@@ -345,14 +361,17 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		"node", claims.NodeID, "remote", r.RemoteAddr)
 }
 
-// sessionSet 是同一设备的两条承载通道。
+// sessionSet 是同一设备的多条承载通道。
 //
-// 选路原则：UDP 优先走 DATAGRAM（不被可靠流的队头阻塞拖累），
-// 其余（TCP/ICMP）走可靠流；某一路未建立时**回退**到另一路，
-// 避免静默丢包。
+// 选路原则：
+//   - MASQUE CONNECT-IP 会话存在时优先（一条流承载该 IP 的全部收发）；
+//   - 否则 UDP 优先走 DATAGRAM（不被可靠流的队头阻塞拖累），
+//     TCP/ICMP 走可靠流；某一路未建立时**回退**到另一路，避免静默丢包。
 type sessionSet struct {
 	stream   *session
 	datagram *session
+	// masque 是标准 MASQUE CONNECT-IP 会话（RFC 9484），与私有双通道互斥使用。
+	masque *session
 	// lanes 是多路复用的附加可靠流（lane>=1），与主可靠流互相独立：
 	// 每条都是独立 QUIC 流，各有自己的流控与重传队列，一条丢包不连累其他。
 	lanes map[int]*session
@@ -364,6 +383,10 @@ type sessionSet struct {
 func (set *sessionSet) pick(pkt []byte) *session {
 	if set == nil {
 		return nil
+	}
+	// MASQUE 会话拥有该 IP 的全部下行流量（客户端只从 CONNECT-IP 流收包）。
+	if set.masque != nil && set.masque.send != nil {
+		return set.masque
 	}
 	proto := innerProto(pkt)
 	if proto == 17 && set.datagram != nil && set.datagram.send != nil {
@@ -387,16 +410,23 @@ func (set *sessionSet) pick(pkt []byte) *session {
 
 // slot 返回该 kind 对应的槽位指针（用于写入）。
 func (set *sessionSet) slot(kind sessionKind) **session {
-	if kind == kindDatagram {
+	switch kind {
+	case kindDatagram:
 		return &set.datagram
+	case kindMasque:
+		return &set.masque
+	default:
+		return &set.stream
 	}
-	return &set.stream
 }
 
 // other 返回另一条通道（用于发送失败时回退）。
 func (set *sessionSet) other(s *session) *session {
 	if set == nil {
 		return nil
+	}
+	if s != nil && s.kind == kindMasque {
+		return nil // MASQUE 是独占承载，没有可回退的私有通道
 	}
 	if s != nil && s.kind == kindDatagram {
 		return set.stream
@@ -407,7 +437,10 @@ func (set *sessionSet) other(s *session) *session {
 	if set.stream != nil {
 		return set.stream
 	}
-	return set.datagram
+	if set.datagram != nil {
+		return set.datagram
+	}
+	return set.masque
 }
 
 // writeDatagramToTun 把一条已解码的内层报文写入 TUN，并做源地址校验。
@@ -439,6 +472,7 @@ func (s *Server) writeDatagramToTun(sess *session, data []byte, badPkt, badSrc, 
 	}
 	sess.tx++
 }
+
 // multiLaneCount 必须与客户端 vpnclient.multiLaneCount 保持一致。
 const multiLaneCount = 3
 
@@ -484,6 +518,7 @@ func isDNSPacket(pkt []byte) bool {
 	dport := int(pkt[ihl+2])<<8 | int(pkt[ihl+3])
 	return sport == 53 || dport == 53
 }
+
 // negotiateDatagram 判断本次隧道流是否启用 DATAGRAM：
 // 节点开了 DATAGRAM 且客户端在请求头声明支持，两者缺一不可。
 //
@@ -520,9 +555,10 @@ func (s *Server) dropDatagramChannel(ip net.IP, keepConn datagramConn) {
 	}
 	s.log.Info("已停用 DATAGRAM 通道", "ip", key, "reason", "客户端未声明支持")
 }
-// empty 表示两条通道都没了。
+
+// empty 表示所有承载通道都没了。
 func (set *sessionSet) empty() bool {
-	return set == nil || (set.stream == nil && set.datagram == nil && len(set.lanes) == 0)
+	return set == nil || (set.stream == nil && set.datagram == nil && set.masque == nil && len(set.lanes) == 0)
 }
 
 func (s *Server) register(sess *session) bool {
@@ -552,7 +588,14 @@ func (s *Server) register(sess *session) bool {
 	if cur := *slot; cur != nil {
 		s.log.Warn("接管同通道旧会话", "ip", key, "kind", sess.kind.String(),
 			"old_device", cur.device, "old_duration", time.Since(cur.started).Round(time.Second))
-		if cur.conn != nil {
+		if sess.kind == kindMasque {
+			// MASQUE 会话与其它请求共用同一 QUIC 连接，**绝不能**在这里
+			// CloseWithError 整条连接（会把新会话一起断掉）；只关闭旧流的
+			// 读写方向，让旧 handler 的循环退出。
+			if cur.closeFn != nil {
+				cur.closeFn()
+			}
+		} else if cur.conn != nil {
 			_ = cur.conn.CloseWithError(0, "session replaced")
 		}
 	}
@@ -690,11 +733,12 @@ func (s *Server) tunLoop() {
 		if set == nil {
 			continue
 		}
-		// 按内层协议号选通道：UDP 走 DATAGRAM，其余走可靠流；某一路缺失则回退
-		// DNS 固定走可靠流：DATAGRAM 不重传，实测 81% 的 UDP 回包丢失，
+		// 按内层协议号选通道：MASQUE 会话独占；否则 UDP 走 DATAGRAM、其余走可靠流。
+		// 私有协议里 DNS 固定走可靠流：DATAGRAM 不重传，实测 81% 的 UDP 回包丢失，
 		// 而 DNS 客户端 2 秒超时，丢了就是用户等好几秒。其余 UDP 仍走 DATAGRAM。
+		// （MASQUE 会话存在时 pick 已返回 MASQUE，不能再被 DNS 特判改回私有 stream。）
 		sess := set.pick(pkt)
-		if isDNSPacket(pkt) {
+		if isDNSPacket(pkt) && set.masque == nil {
 			if set.stream != nil && set.stream.send != nil {
 				sess = set.stream
 			}

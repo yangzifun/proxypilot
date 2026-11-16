@@ -1,4 +1,4 @@
-﻿package api
+package api
 
 import (
 	"net/http"
@@ -106,9 +106,26 @@ func (h *handlers) vpnPortalNodes(w http.ResponseWriter, r *http.Request) {
 		MaxDevices int    `json:"max_devices"`
 		QuotaBytes int64  `json:"quota_bytes"`
 		UsedBytes  int64  `json:"used_bytes"`
+
+		// protocols：可用协议 id 的字符串数组（客户端按此选择协议，如 ["private","masque"]）
+		Protocols []string `json:"protocols"`
+		// protocol_details：协议明细（enabled/state/path/port/auth），供需要区分状态的客户端使用
+		ProtocolDetails []map[string]any `json:"protocol_details"`
+		PrivateEnabled  bool             `json:"private_enabled"`
+		MasqueEnabled   bool             `json:"masque_enabled"`
+		MasqueState     string           `json:"masque_state"`
+		MasquePath      string           `json:"masque_path"`
+		MasquePort      int              `json:"masque_port"`
+		MasqueAuth      string           `json:"masque_auth"`
 	}
+	ids := make([]int64, 0, len(list))
+	for _, v := range list {
+		ids = append(ids, v.Node.ID)
+	}
+	protocols := h.loadNodeProtocolsBatch(r.Context(), ids)
 	out := make([]nodeView, 0, len(list))
 	for _, v := range list {
+		p := protocols[v.Node.ID].normalized()
 		out = append(out, nodeView{
 			ID:         v.Node.ID,
 			Name:       v.Node.Name,
@@ -119,12 +136,18 @@ func (h *handlers) vpnPortalNodes(w http.ResponseWriter, r *http.Request) {
 			MaxDevices: v.MaxDevices,
 			QuotaBytes: v.QuotaBytes,
 			UsedBytes:  v.UsedBytes,
+
+			Protocols:       p.protocolIDs(),
+			ProtocolDetails: p.protocolDetails(),
+			PrivateEnabled:  p.PrivateEnabled,
+			MasqueEnabled:   p.MasqueEnabled,
+			MasqueState:     p.MasqueState,
+			MasquePath:      p.MasquePath,
+			MasquePort:      p.MasquePort,
+			MasqueAuth:      p.MasqueAuth,
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"uuid": uuid, "enabled": true, "nodes": out,
 	})
 }
-
-
-

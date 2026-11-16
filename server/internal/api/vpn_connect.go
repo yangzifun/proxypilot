@@ -23,8 +23,9 @@ func (h *handlers) vpnPortalConnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		DeviceID int64 `json:"device_id"`
-		NodeID   int64 `json:"node_id"`
+		DeviceID int64  `json:"device_id"`
+		NodeID   int64  `json:"node_id"`
+		Protocol string `json:"protocol"`
 	}
 	if err := decodeJSON(w, r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, "参数错误")
@@ -63,6 +64,15 @@ func (h *handlers) vpnPortalConnect(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "查询节点失败")
 		return
 	}
+
+	// 协议选择：默认 private；只允许节点已启用且就绪的协议。
+	// MASQUE 未启用/未就绪时明确拒绝，绝不返回「看似成功」的连接配置。
+	nodeProtocols := h.loadNodeProtocols(r.Context(), node.ID)
+	protocol, perr := resolveConnectProtocol(nodeProtocols, body.Protocol)
+	if perr != nil {
+		writeVPNProtocolError(w, perr)
+		return
+	}
 	access, err := h.vpnStore().GetAccess(r.Context(), uuid)
 	if err != nil {
 		writeDenied(w, vpn.Deny(vpn.CodeUserNotAuthorized, "用户未开通 VPN"))
@@ -90,15 +100,15 @@ func (h *handlers) vpnPortalConnect(w http.ResponseWriter, r *http.Request) {
 	nodeSessions, _ := h.vpnStore().ActiveSessionCount(r.Context(), node.ID, uuid)
 
 	authErr := vpn.Authorize(vpn.AuthInput{
-		Now: time.Now(),
+		Now:      time.Now(),
 		UserUUID: uuid,
 		Access: vpn.Access{
 			Enabled: access.Enabled, ExpiresAt: access.ExpiresAt,
 			MaxDevices: access.MaxDevices, QuotaBytes: access.QuotaBytes, UsedBytes: access.UsedBytes,
 		},
-		Node:  vpn.Node{ID: node.ID, State: node.State, Endpoint: node.Endpoint},
-		Grant: &vpn.Grant{ID: grant.ID, NodeID: grant.NodeID, SubjectID: grant.SubjectID, Enabled: grant.Enabled, ExpiresAt: grant.ExpiresAt, MaxDevices: grant.MaxDevices, QuotaBytes: grant.QuotaBytes, UsedBytes: grant.UsedBytes},
-		Device: vpn.Device{ID: dev.ID, UUID: dev.UUID, State: dev.State},
+		Node:            vpn.Node{ID: node.ID, State: node.State, Endpoint: node.Endpoint},
+		Grant:           &vpn.Grant{ID: grant.ID, NodeID: grant.NodeID, SubjectID: grant.SubjectID, Enabled: grant.Enabled, ExpiresAt: grant.ExpiresAt, MaxDevices: grant.MaxDevices, QuotaBytes: grant.QuotaBytes, UsedBytes: grant.UsedBytes},
+		Device:          vpn.Device{ID: dev.ID, UUID: dev.UUID, State: dev.State},
 		UserDeviceCount: userDevices,
 		NodeDeviceCount: nodeSessions,
 	})
@@ -140,40 +150,78 @@ func (h *handlers) vpnPortalConnect(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "创建会话失败")
 		return
 	}
+	// 记录本次连接使用的协议；失败则清理会话，避免留下协议不明的记录。
+	if err := h.updateSessionProtocol(r.Context(), sessionID, protocol); err != nil {
+		if h.log != nil {
+			h.log.Error("记录会话协议失败", "session_id", sessionID, "protocol", protocol, "err", err)
+		}
+		_ = h.vpnStore().CloseSession(r.Context(), sessionID, "session_protocol_error")
+		writeError(w, http.StatusInternalServerError, "创建会话失败：无法记录连接协议")
+		return
+	}
 	_ = h.vpnStore().TouchDevice(r.Context(), dev.ID, ip4)
-	h.vpnAudit(r.Context(), "portal:"+uuid, "vpn.connect", fmt.Sprintf("node=%d", node.ID), ip4)
+	h.vpnAudit(r.Context(), "portal:"+uuid, "vpn.connect",
+		fmt.Sprintf("node=%d protocol=%s", node.ID, protocol), ip4)
 
 	host, _, _ := net.SplitHostPort(node.Endpoint)
 	sni := node.Domain
 	if sni == "" {
 		sni = host
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	mp := nodeProtocols.normalized()
+	resp := map[string]any{
 		"session_id": sessionID,
+		"protocol":   protocol,
 		"node": map[string]any{
 			"id": node.ID, "name": node.Name, "region": node.Region, "endpoint": node.Endpoint,
 		},
 		"token": token,
 		"ip4":   ip4,
 		"mtu":   settings.MTU,
-		// 36.0 数据面双通道与 FEC（面板可配，客户端不自行决定）
-		"datagram_enabled": settings.DatagramEnabled,
-		"fec_mode":         settings.FECMode,
-		"fec_group":        settings.FECGroup,
 		// 组网网段与节点客户端子网由服务端下发，客户端不再自行填写
 		"mesh_cidr":   settings.MeshCIDR4,
 		"client_cidr": node.ClientCIDR,
-		"dns":   []string{cidrGateway(node.ClientCIDR)},
-		"routes": []map[string]string{
-			{"dst": "0.0.0.0/0", "note": "全流量（节点 NAT）"},
-			{"dst": node.ClientCIDR, "note": "本节点客户端子网"},
-		},
+		"expires_in":  settings.TokenTTLSeconds,
+		// 两种协议都返回 TLS 参数：客户端统一用 tls.server_name 作为 SNI
 		"tls": map[string]string{
 			"server_name": sni,
 			"mode":        node.CertMode,
 		},
-		"expires_in": settings.TokenTTLSeconds,
-	})
+	}
+	if protocol == vpnProtocolMasque {
+		// MASQUE 数据面参数（数据面实现由 tunnel/Agent 侧完成）：
+		// 客户端按 endpoint/sni/path/mtu/auth 建立 HTTP/3 CONNECT-IP 会话。
+		// 同时提供顶层平铺字段（客户端 profile 直接读取 masque_path 等）与嵌套 masque 对象。
+		endpoint := masqueEndpoint(node, mp)
+		sniName := masqueServerName(node)
+		resp["masque"] = map[string]any{
+			"endpoint":    endpoint,
+			"sni":         sniName,
+			"path":        mp.MasquePath,
+			"mtu":         settings.MTU,
+			"auth":        mp.MasqueAuth,
+			"node_id":     node.ID,
+			"client_cidr": node.ClientCIDR,
+			"state":       mp.MasqueState,
+		}
+		resp["masque_endpoint"] = endpoint
+		resp["masque_sni"] = sniName
+		resp["masque_path"] = mp.MasquePath
+		resp["masque_mtu"] = settings.MTU
+		resp["masque_auth"] = mp.MasqueAuth
+		resp["masque_state"] = mp.MasqueState
+	} else {
+		// 私有协议（QUIC）：保持原有字段完全兼容
+		resp["datagram_enabled"] = settings.DatagramEnabled
+		resp["fec_mode"] = settings.FECMode
+		resp["fec_group"] = settings.FECGroup
+		resp["dns"] = []string{cidrGateway(node.ClientCIDR)}
+		resp["routes"] = []map[string]string{
+			{"dst": "0.0.0.0/0", "note": "全流量（节点 NAT）"},
+			{"dst": node.ClientCIDR, "note": "本节点客户端子网"},
+		}
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // POST /api/portal/vpn/disconnect

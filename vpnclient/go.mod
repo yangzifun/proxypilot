@@ -3,6 +3,7 @@ module github.com/yzfn/proxypilot/vpnclient
 go 1.26.0
 
 require (
+	github.com/quic-go/qpack v0.5.1
 	github.com/quic-go/quic-go v0.55.0
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/wailsapp/wails/v3 v3.1.0
@@ -15,7 +16,6 @@ require (
 	github.com/ebitengine/purego v0.11.1 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
-	github.com/quic-go/qpack v0.5.1 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/mod v0.41.0 // indirect
 	golang.org/x/net v0.60.0 // indirect

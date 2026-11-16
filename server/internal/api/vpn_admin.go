@@ -70,6 +70,45 @@ type vpnNodeReq struct {
 	ListenPort int    `json:"listen_port"`
 	Capacity   int    `json:"capacity"`
 	State      string `json:"state"`
+
+	// 协议能力（见 vpn_protocols.go）：
+	//   * 新建时未传 → 默认「仅 private」；
+	//   * 更新时未传 → 保持原协议能力不变；
+	//   * masque_port 传 0 表示沿用 listen_port。
+	PrivateEnabled *bool  `json:"private_enabled"`
+	MasqueEnabled  *bool  `json:"masque_enabled"`
+	MasquePath     string `json:"masque_path"`
+	MasquePort     *int   `json:"masque_port"`
+	MasqueAuth     string `json:"masque_auth"`
+	MasqueState    string `json:"masque_state"`
+}
+
+// mergeNodeProtocols 把请求中的协议字段合并到现有协议能力上。
+// create=true 表示新建节点（未传字段用默认值）。
+func mergeNodeProtocols(cur vpnNodeProtocols, in vpnNodeReq, create bool) (vpnNodeProtocols, error) {
+	if in.PrivateEnabled != nil {
+		cur.PrivateEnabled = *in.PrivateEnabled
+	} else if create {
+		cur.PrivateEnabled = true
+	}
+	if in.MasqueEnabled != nil {
+		cur.MasqueEnabled = *in.MasqueEnabled
+	}
+	if strings.TrimSpace(in.MasquePath) != "" {
+		cur.MasquePath = strings.TrimSpace(in.MasquePath)
+	}
+	if in.MasquePort != nil {
+		cur.MasquePort = *in.MasquePort
+	}
+	if strings.TrimSpace(in.MasqueAuth) != "" {
+		cur.MasqueAuth = strings.ToLower(strings.TrimSpace(in.MasqueAuth))
+	}
+	if strings.TrimSpace(in.MasqueState) != "" {
+		cur.MasqueState = strings.ToLower(strings.TrimSpace(in.MasqueState))
+	} else if create && cur.MasqueEnabled {
+		cur.MasqueState = masqueStatePending
+	}
+	return validateNodeProtocols(cur)
 }
 
 func (h *handlers) vpnAdminNodes(w http.ResponseWriter, r *http.Request) {
@@ -81,7 +120,16 @@ func (h *handlers) vpnAdminNodes(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"nodes": nodes})
+		ids := make([]int64, 0, len(nodes))
+		for _, n := range nodes {
+			ids = append(ids, n.ID)
+		}
+		protocols := h.loadNodeProtocolsBatch(r.Context(), ids)
+		views := make([]vpnAdminNodeView, 0, len(nodes))
+		for _, n := range nodes {
+			views = append(views, adminNodeView(n, protocols[n.ID]))
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"nodes": views})
 	case http.MethodPost:
 		var in vpnNodeReq
 		if err := decodeJSON(w, r, &in); err != nil {
@@ -115,6 +163,12 @@ func (h *handlers) vpnAdminNodes(w http.ResponseWriter, r *http.Request) {
 		if in.CertMode == "" {
 			in.CertMode = "internal_ca"
 		}
+		// 协议能力：未显式传时默认仅启用私有协议（旧客户端/旧前端无需改动）。
+		nodeProtocols, perr := mergeNodeProtocols(defaultNodeProtocols(), in, true)
+		if perr != nil {
+			writeError(w, http.StatusBadRequest, perr.Error())
+			return
+		}
 		id, err := st.CreateNode(r.Context(), vpn.NodeRecord{
 			ServerID:   in.ServerID,
 			Name:       strings.TrimSpace(in.Name),
@@ -130,6 +184,12 @@ func (h *handlers) vpnAdminNodes(w http.ResponseWriter, r *http.Request) {
 		})
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if err := h.applyNodeProtocols(r.Context(), id, nodeProtocols); err != nil {
+			// 补偿：节点已创建但协议能力写入失败，删除节点避免半成品
+			_ = st.DeleteNode(r.Context(), id)
+			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 		h.vpnAudit(r.Context(), actorOf(r), "vpn.node.create", strconv.FormatInt(id, 10), in.Name)
@@ -157,7 +217,7 @@ func (h *handlers) vpnAdminNodeItem(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		writeJSON(w, http.StatusOK, n)
+		writeJSON(w, http.StatusOK, adminNodeView(*n, h.loadNodeProtocols(r.Context(), id)))
 	case http.MethodPut:
 		var in vpnNodeReq
 		if err := decodeJSON(w, r, &in); err != nil {
@@ -211,12 +271,23 @@ func (h *handlers) vpnAdminNodeItem(w http.ResponseWriter, r *http.Request) {
 		if in.State != "" {
 			cur.State = in.State
 		}
+		// 协议能力：未传字段保持原值；传了 masque_state 才允许手动标记就绪/异常。
+		curProtocols := h.loadNodeProtocols(r.Context(), id)
+		curProtocols, perr := mergeNodeProtocols(curProtocols, in, false)
+		if perr != nil {
+			writeError(w, http.StatusBadRequest, perr.Error())
+			return
+		}
 		if err := st.UpdateNode(r.Context(), *cur); err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		if err := h.applyNodeProtocols(r.Context(), id, curProtocols); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
 		h.vpnAudit(r.Context(), actorOf(r), "vpn.node.update", strconv.FormatInt(id, 10), "")
-		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "protocols": curProtocols.protocolDetails()})
 	case http.MethodDelete:
 		if err := st.DeleteNode(r.Context(), id); err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
@@ -512,6 +583,7 @@ func shellSafeVPNHost(host string) bool {
 	}
 	return true
 }
+
 // GET /api/admin/vpn/users/{uuid}/grants — 用户可用于连接的 VPN 节点及授权状态。
 func (h *handlers) vpnAdminUserGrants(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {

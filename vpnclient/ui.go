@@ -11,6 +11,7 @@ import (
 	"embed"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -107,6 +108,8 @@ type uiSettings struct {
 	KillSwitch bool `json:"kill_switch"`
 	// 组网网段（默认 10.99.0.0/16）
 	MeshCIDR string `json:"mesh_cidr"`
+	// 传输协议：auto（私有优先，失败回退 MASQUE）| private | masque
+	Protocol string `json:"protocol"`
 }
 
 // configPathOverride 由 -config 指定；为空时用系统配置目录，写入失败再退到可执行文件同级。
@@ -162,6 +165,9 @@ func loadSettings(defaults uiSettings) uiSettings {
 	}
 	if s.API == "" {
 		s.API = defaults.API
+	}
+	if s.Protocol == "" {
+		s.Protocol = normalizeProtocol(defaults.Protocol)
 	}
 	if s.DNSAddr == "" {
 		s.DNSAddr = defaults.DNSAddr
@@ -262,6 +268,9 @@ type sessionState struct {
 	dnsGuard                       []string
 	ipv6Guard                      []string
 	killSwitchRules                []string
+	// 本次连接实际使用的传输协议与回退说明（UI/诊断展示）
+	protocol          string
+	transportFallback string
 }
 
 func (s *sessionState) snapshot() map[string]any {
@@ -329,6 +338,8 @@ func (s *sessionState) snapshot() map[string]any {
 		"dns_guard":         append([]string{}, s.dnsGuard...),
 		"ipv6_guard":        append([]string{}, s.ipv6Guard...),
 		"kill_switch_rules": append([]string{}, s.killSwitchRules...),
+		"protocol":           s.protocol,
+		"transport_fallback": s.transportFallback,
 	}
 }
 
@@ -377,6 +388,10 @@ type uiServer struct {
 	state      *sessionState
 	logs       *logRing
 	caBundle   []byte
+
+	// 认证状态（与 cfg 同锁保护）：checking | valid | invalid | unknown
+	authState string
+	authError string
 }
 
 // localGuard 给本地控制台加来源校验，防浏览器跨源静默调用。
@@ -437,6 +452,7 @@ func runUI(ctx context.Context, addr string, defaults uiSettings, openBrowser, d
 		cfg:        loadSettings(defaults),
 		state:      &sessionState{status: "idle", message: "未连接"},
 		logs:       ring,
+		authState:  authChecking,
 	}
 	if err := srv.cfg.validate(); err != nil {
 		log.Printf("配置提示：%v", err)
@@ -466,6 +482,10 @@ func runUI(ctx context.Context, addr string, defaults uiSettings, openBrowser, d
 	mux.HandleFunc("/api/install/launch", srv.localGuard(srv.handleInstallLaunch))
 	mux.HandleFunc("/api/install/exit", srv.localGuard(srv.handleInstallExit))
 	mux.HandleFunc("/api/logs/open", srv.localGuard(srv.handleLogsOpen))
+
+	// 启动时先异步校验已保存的令牌：校验完成前 auth_state=checking，
+	// 前端显示「正在验证登录状态…」，不会先闪主界面。
+	go srv.validateAuth(ctx)
 
 	httpSrv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	go func() {
@@ -532,6 +552,106 @@ func (s *uiServer) currentSettings() uiSettings {
 	return cfg
 }
 
+// 认证状态：启动时与运行中都会校验令牌是否仍有效，避免「令牌过期仍显示主界面」。
+const (
+	authChecking = "checking" // 正在校验（UI 显示加载态，不先闪主界面）
+	authValid    = "valid"
+	authInvalid  = "invalid"
+	authUnknown  = "unknown" // 网络错误/5xx/超时：不能确认，不能误清令牌
+
+	authHintNoToken    = "未登录，请先登录"
+	authHintExpired    = "登录已过期，请重新登录"
+	authHintUnverified = "暂时无法验证登录状态，请检查网络"
+	authHintLoggedOut  = "已退出登录，请重新登录"
+)
+
+// authCheckTimeout 是启动/重新登录时校验令牌的时限（需求要求 ≤8s）。
+const authCheckTimeout = 8 * time.Second
+
+func (s *uiServer) setAuthState(state, msg string) {
+	s.cfgMu.Lock()
+	s.authState, s.authError = state, msg
+	s.cfgMu.Unlock()
+}
+
+// authSnapshot 返回当前认证状态；未初始化时按「有令牌=unknown、无令牌=invalid」兜底。
+func (s *uiServer) authSnapshot() (string, string) {
+	s.cfgMu.Lock()
+	defer s.cfgMu.Unlock()
+	st, msg := s.authState, s.authError
+	if st == "" {
+		if strings.TrimSpace(s.cfg.Token) != "" {
+			st = authUnknown
+		} else {
+			st = authInvalid
+		}
+	}
+	return st, msg
+}
+
+// clearAuthToken 清除内存与落盘令牌（保留面板地址/设备等其它设置）。
+// 仅在「确认令牌失效（401/403）」时调用；网络错误绝不能调用，避免误清。
+func (s *uiServer) clearAuthToken(reason string) {
+	s.cfgMu.Lock()
+	had := strings.TrimSpace(s.cfg.Token) != ""
+	s.cfg.Token = ""
+	cfg := s.cfg
+	s.cfgMu.Unlock()
+	if !had {
+		return
+	}
+	if err := saveSettings(cfg); err != nil {
+		log.Printf("认证失效（%s）：清除本地令牌失败：%v", reason, err)
+		return
+	}
+	log.Printf("认证失效（%s）：已清除本地令牌", reason)
+}
+
+// markAuthInvalid 处理「确认令牌失效」：清令牌 + 切未认证态（不弹 toast，由前端显示登录页）。
+func (s *uiServer) markAuthInvalid(reason string) {
+	s.clearAuthToken(reason)
+	s.setAuthState(authInvalid, authHintExpired)
+}
+
+// isAuthExpired 判断错误是否为「令牌失效」（面板 401/403）。
+func isAuthExpired(err error) bool { return errors.Is(err, ErrSessionExpired) }
+
+// validateAuth 校验当前保存的令牌：
+//   - 200 → valid
+//   - 401/403 → invalid，清除内存+落盘令牌
+//   - 网络错误/5xx/超时 → unknown，保留令牌
+func (s *uiServer) validateAuth(parent context.Context) {
+	if s.demo {
+		s.setAuthState(authValid, "")
+		return
+	}
+	cfg := s.currentSettings()
+	token := strings.TrimSpace(cfg.Token)
+	if token == "" {
+		s.setAuthState(authInvalid, authHintNoToken)
+		return
+	}
+	ctx, cancel := context.WithTimeout(parent, authCheckTimeout)
+	defer cancel()
+	_, err := listNodes(ctx, cfg.API, token)
+	// 校验期间用户可能刚保存了新令牌：旧请求的结果必须丢弃，避免误清新令牌。
+	if cur := strings.TrimSpace(s.currentSettings().Token); cur != token {
+		log.Printf("登录状态校验：令牌已变更，忽略本次结果")
+		return
+	}
+	switch {
+	case err == nil:
+		s.setAuthState(authValid, "")
+		log.Printf("登录状态校验：有效（面板=%s）", cfg.API)
+	case isAuthExpired(err):
+		s.markAuthInvalid("启动校验返回 401/403")
+		log.Printf("登录状态校验：令牌已失效，已清除本地令牌，等待重新登录")
+	default:
+		s.setAuthState(authUnknown, authHintUnverified)
+		log.Printf("登录状态校验：暂时无法验证（%v），保留本地令牌", err)
+	}
+}
+
 func (s *uiServer) handleState(w http.ResponseWriter, r *http.Request) {
 	if s.demo {
 		writeJSON(w, demoState())
@@ -540,7 +660,15 @@ func (s *uiServer) handleState(w http.ResponseWriter, r *http.Request) {
 	cfg := s.currentSettings()
 	payload := s.state.snapshot()
 	payload["api"] = cfg.API
-	payload["logged_in"] = strings.TrimSpace(cfg.Token) != ""
+	authState, authError := s.authSnapshot()
+	hasToken := strings.TrimSpace(cfg.Token) != ""
+	payload["auth_state"] = authState
+	payload["auth_error"] = authError
+	payload["auth_valid"] = authState == authValid
+	payload["auth_invalid"] = authState == authInvalid
+	// 兼容旧字段：只有「有令牌且已校验有效」才算 logged_in；
+	// invalid/unknown/checking 都按未认证处理，真实原因在 auth_error。
+	payload["logged_in"] = hasToken && authState == authValid
 	payload["insecure"] = cfg.Insecure
 	payload["dns_addr"] = cfg.DNSAddr
 	payload["tun_mode"] = cfg.TunMode
@@ -554,6 +682,7 @@ func (s *uiServer) handleState(w http.ResponseWriter, r *http.Request) {
 	payload["secret_storage"] = secretStorageKind
 	payload["kill_switch"] = cfg.KillSwitch
 	payload["version"] = Version
+	payload["protocol_pref"] = normalizeProtocol(cfg.Protocol)
 	payload["selected_node"] = cfg.SelectedNode
 	writeJSON(w, payload)
 }
@@ -599,8 +728,18 @@ func (s *uiServer) handleSettings(w http.ResponseWriter, r *http.Request) {
 	s.cfg.TunName = ""
 	s.cfg.DNSAddr = defaultDNSAddr
 	s.cfg.Insecure = body.Insecure
+	if body.Protocol != "" {
+		s.cfg.Protocol = normalizeProtocol(body.Protocol)
+	}
 	cfg := s.cfg
 	s.cfgMu.Unlock()
+
+	// 保存了令牌或面板地址：重新校验登录状态（异步，不阻塞保存接口）
+	if strings.TrimSpace(body.Token) != "" || strings.TrimSpace(body.API) != "" {
+		s.setAuthState(authChecking, "")
+		// 等 saveSettings 落盘后再校验，避免「校验失败清令牌」与「保存新令牌」竞态
+		defer func() { go s.validateAuth(context.Background()) }()
+	}
 
 	if err := saveSettings(cfg); err != nil {
 		log.Printf("保存配置失败：%v", err)
@@ -633,6 +772,7 @@ func (s *uiServer) handleLogout(w http.ResponseWriter, r *http.Request) {
 	s.cfg.Token = ""
 	cfg := s.cfg
 	s.cfgMu.Unlock()
+	s.setAuthState(authInvalid, authHintLoggedOut)
 	if err := saveSettings(cfg); err != nil {
 		log.Printf("保存配置失败：%v", err)
 	}
@@ -686,12 +826,16 @@ func (s *uiServer) handleNodes(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	nodes, err := listNodes(ctx, cfg.API, cfg.Token)
 	if err != nil {
+		if isAuthExpired(err) {
+			s.markAuthInvalid("拉取节点返回 401/403")
+		}
 		log.Printf("拉取节点失败（面板 %s）：%v", cfg.API, err)
 		s.state.set(func(st *sessionState) {
 			st.nodesCount = 0
 			st.nodesErr = err.Error()
 		})
-		writeJSON(w, map[string]any{"nodes": []any{}, "error": err.Error()})
+		authState, authErr := s.authSnapshot()
+		writeJSON(w, map[string]any{"nodes": []any{}, "error": err.Error(), "auth_state": authState, "auth_error": authErr})
 		return
 	}
 	if len(nodes) == 0 {
@@ -699,6 +843,10 @@ func (s *uiServer) handleNodes(w http.ResponseWriter, r *http.Request) {
 			cfg.tokenHint(), cfg.API)
 	} else {
 		log.Printf("拉取节点成功：%d 个（%s）", len(nodes), cfg.API)
+	}
+	// 成功拉到节点即证明令牌有效（启动时 unknown/checking 可借此恢复为 valid）
+	if strings.TrimSpace(cfg.Token) != "" {
+		s.setAuthState(authValid, "")
 	}
 	s.state.set(func(st *sessionState) {
 		st.nodesCount = len(nodes)
@@ -844,6 +992,13 @@ func (s *uiServer) releasePanelSession(sessionID int64) {
 	}
 	defer resp.Body.Close()
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+	// 释放会话时若令牌已失效（401/403），同步把本地切到未认证态；
+	// 但仅当令牌未被用户换成新的时才处理，避免误清刚登录的令牌。
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		if strings.TrimSpace(s.currentSettings().Token) == strings.TrimSpace(cfg.Token) {
+			s.markAuthInvalid("释放面板会话返回 401/403")
+		}
+	}
 	log.Printf("已释放面板会话 %d（HTTP %d）", sessionID, resp.StatusCode)
 }
 
@@ -973,29 +1128,37 @@ func (s *uiServer) connect(nodeID int64) error {
 				rememberEndpointIP(host)
 			}
 		}
-		assigned, conn, err := authHTTP3(ctx, pick.Endpoint, sni, prof.Token, skipVerify)
-		_ = conn // 仅用于鉴权；数据面走可靠流
-		if err != nil {
-			s.fail(cancel, attempt, "HTTP/3 鉴权失败", err)
+		pref := normalizeProtocol(cfg.Protocol)
+		order := transportOrder(pref, pick)
+		dp, terr := s.dialDataPlane(ctx, attempt, cfg, prof, pick, sni, skipVerify, order)
+		if terr != nil {
+			s.fail(cancel, attempt, "建立数据面失败", terr)
 			return
 		}
+		defer dp.cleanup()
+		pconn := dp.conn
+		conn := dp.quicConn
+		pc := dp.streamPC
 		s.setFor(attempt, func(st *sessionState) {
 			st.sni = sni
 			st.conn = conn
-			st.message = "鉴权通过，正在做 DNS 探测…"
+			st.protocol = dp.protocol
+			st.transportFallback = dp.fallback
+			st.message = "数据面已建立（" + protocolLabel(dp.protocol) + "），正在接管系统网络…"
 		})
-		log.Printf("HTTP/3 鉴权成功：节点分配 %s（SNI=%s）", assigned, sni)
+		log.Printf("数据面已建立：协议=%s%s", protocolLabel(dp.protocol), dp.fallback)
 
-		s.setFor(attempt, func(st *sessionState) {
-			// 注意：这里不能把 probeOK 置真 —— 此时只是 HTTP/3 鉴权过了，
-			// 数据面一个包都还没通。真正的判定交给 runTunnelProbe。
-			st.probeOK = false
-			st.probeInfo = "鉴权通过，等待数据面探测"
-			st.message = "鉴权通过，正在建立隧道…"
-		})
-		log.Printf("HTTP/3 鉴权通过，开始建立可靠隧道（固定 DNS=%s）", cfg.DNSAddr)
+		// 解析 VPN 服务器地址：这些 IP 必须绕过隧道直连，否则会形成路由环
+		endpointIPs := resolveEndpointIPs(pick.Endpoint)
+		log.Printf("VPN 服务器地址解析：%v（原始 %s）", endpointIPs, pick.Endpoint)
 
-		// ---- 接管系统网络：创建虚拟网卡 + 配置地址 + 下发路由 ----
+		// 面板（控制面）同样加直连主机路由：客户端拉节点、续期、断开都靠它，
+		// 不能让这些请求走进隧道。
+		controlIPs := resolveEndpointIPs(cfg.API)
+		if len(controlIPs) > 0 {
+			log.Printf("控制面地址解析：%v（原始 %s），已排除出隧道", controlIPs, cfg.API)
+		}
+
 		mode := TunMode(cfg.TunMode)
 		if mode != TunModeFull {
 			mode = TunModeMesh
@@ -1049,88 +1212,6 @@ func (s *uiServer) connect(nodeID int64) error {
 		}
 		tunDNS = append(tunDNS, "1.1.1.1", "223.5.5.5")
 		log.Printf("隧道参数：地址=%s 网关=%s 网段=%s DNS=%v", prof.IP4, gateway, cidr, tunDNS)
-		pc, streamConn, nodeHasDatagram, cleanupStream, serr := openTunnelStream(ctx, pick.Endpoint, sni, prof.Token, skipVerify)
-		// 多路复用：在主可靠流之外再开 3 条独立 QUIC 流（同一条 QUIC 连接）。
-		// 每条流有独立的流控与重传队列，一条连接丢包不会连累其他连接。
-		// 失败就当作没有 lanes，自动退回单流 —— 不允许因为多流开不起来而断网。
-		lanes := make([]packetConn, 0, multiLaneCount)
-		for li := 1; li <= multiLaneCount; li++ {
-			lpc, _, _, lclean, lerr := openTunnelStreamLane(ctx, pick.Endpoint, sni, prof.Token, skipVerify, li)
-			if lerr != nil {
-				log.Printf("数据面：lane %d 建立失败（%v），本次只用 %d 条可靠流", li, lerr, len(lanes)+1)
-				break
-			}
-			defer lclean()
-			lanes = append(lanes, lpc)
-		}
-		if len(lanes) > 0 {
-			log.Printf("数据面：多路复用已启用（主可靠流 + %d 条 lane）", len(lanes))
-		}
-		if serr != nil {
-			s.fail(cancel, attempt, "建立隧道流失败", serr)
-			return
-		}
-		defer cleanupStream()
-		s.setFor(attempt, func(st *sessionState) { st.message = "隧道流已建立，正在接管系统网络…" })
-
-		// 双通道：UDP 走 QUIC DATAGRAM（不被可靠流的队头阻塞拖累），
-		// TCP/ICMP 仍走可靠流。对端没协商 DATAGRAM 时自动退回单流。
-		// 双通道与 FEC 均由面板配置（协议管理 → VPN）下发，客户端不自行决定。
-		// 注意：DATAGRAM 必须走 streamConn（隧道流那条连接），不能用鉴权连接 ——
-		// 鉴权连接在 GET / 之后就没有流量了，cwnd 极小甚至已被回收，
-		// 实测会出现「发出 343 个、对端只收到 129 个」的静默丢包。
-		fecGroup := 0
-		if prof.FECMode == "xor" && prof.FECGroup > 1 {
-			fecGroup = prof.FECGroup
-		}
-		var pconn packetConn = pc
-		switch {
-		case !prof.DatagramEnabled:
-			log.Printf("数据面：面板已关闭 DATAGRAM，全部走可靠流")
-		case !nodeHasDatagram || !supportsDatagrams(streamConn):
-			log.Printf("数据面：对端未协商 DATAGRAM，全部走可靠流")
-		default:
-			dual := newDualPacketConnLanes(pc, lanes, quicDatagramPeer{conn: streamConn}, maxDatagramPayload, fecGroup)
-			pconn = dual
-			s.setFor(attempt, func(st *sessionState) { st.dualConn = dual })
-			if fecGroup > 1 {
-				log.Printf("数据面：双通道已启用（UDP→DATAGRAM，TCP/ICMP→可靠流），FEC=xor 每组 %d 包", fecGroup)
-			} else {
-				log.Printf("数据面：双通道已启用（UDP→DATAGRAM，TCP/ICMP→可靠流），FEC 关闭")
-			}
-			// 每 30 秒打一行 FEC / 双通道统计 —— 之前只有快照接口能看到
-			// fec_recovered，日志里完全没有，导致没法判断 FEC 到底有没有生效。
-			if fecGroup > 1 {
-				go func(d *dualPacketConn) {
-					tk := time.NewTicker(30 * time.Second)
-					defer tk.Stop()
-					for {
-						select {
-						case <-ctx.Done():
-							return
-						case <-tk.C:
-							rec, drop := d.FECStats()
-							us, ur, ss, sr := d.PathStats()
-							log.Printf("数据面：FEC 还原 %d / 放弃 %d；UDP 发/收 %d/%d；流 发/收 %d/%d",
-								rec, drop, us, ur, ss, sr)
-						}
-					}
-				}(dual)
-			}
-		}
-		defer pconn.Close()
-
-		// 解析 VPN 服务器地址：这些 IP 必须绕过隧道直连，否则会形成路由环
-		endpointIPs := resolveEndpointIPs(pick.Endpoint)
-		log.Printf("VPN 服务器地址解析：%v（原始 %s）", endpointIPs, pick.Endpoint)
-
-		// 面板（控制面）同样加直连主机路由：客户端拉节点、续期、断开都靠它，
-		// 不能让这些请求走进隧道。
-		controlIPs := resolveEndpointIPs(cfg.API)
-		if len(controlIPs) > 0 {
-			log.Printf("控制面地址解析：%v（原始 %s），已排除出隧道", controlIPs, cfg.API)
-		}
-
 		tun, terr := StartTunnel(ctx, TunOptions{
 			Spec: TunSpec{
 				Name:        cfg.TunName,
@@ -1278,6 +1359,10 @@ func (s *uiServer) setFor(attempt int64, fn func(*sessionState)) {
 }
 
 func (s *uiServer) fail(cancel context.CancelFunc, attempt int64, stage string, err error) {
+	if isAuthExpired(err) {
+		s.markAuthInvalid(stage)
+		stage = authHintExpired
+	}
 	log.Printf("%s（尝试 %d）：%v", stage, attempt, err)
 	s.setFor(attempt, func(st *sessionState) {
 		st.status = "error"
@@ -1304,6 +1389,9 @@ func connectPortal(ctx context.Context, api, token string, deviceID, nodeID int6
 	}
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return nil, ErrSessionExpired
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(data)))
 	}
@@ -1356,7 +1444,7 @@ func demoState() map[string]any {
 		"probe_ok": true, "probe_info": "DNS 探测通过", "rtt_ms": 168,
 		"duration": 754, "rx": 18243561, "tx": 3218790, "started_at": 0,
 		"api": "https://proxypilot.yangzifun.org", "dns_addr": "1.1.1.1:53",
-		"logged_in": true, "insecure": false, "token_hint": "eyJh…9xQ2",
+		"logged_in": true, "insecure": false, "auth_state": "valid", "auth_error": "", "auth_valid": true, "auth_invalid": false, "protocol": "private", "protocol_pref": "auto", "token_hint": "eyJh…9xQ2",
 		"version": Version, "demo": true,
 	}
 }
@@ -1389,6 +1477,9 @@ func (s *uiServer) panelJSON(ctx context.Context, method, path string, body any,
 	var out map[string]any
 	if err := json.Unmarshal(raw, &out); err != nil {
 		return nil, fmt.Errorf("面板返回异常：%s", strings.TrimSpace(string(raw)))
+	}
+	if (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) && token != "" {
+		return out, ErrSessionExpired
 	}
 	if resp.StatusCode >= 300 {
 		if msg, _ := out["error"].(string); msg != "" {
@@ -1450,6 +1541,8 @@ func (s *uiServer) handleLoginPoll(w http.ResponseWriter, r *http.Request) {
 			}
 			log.Printf("网页登录成功：%s", email)
 			resp["email"] = email
+			s.setAuthState(authChecking, "")
+			go s.validateAuth(context.Background())
 		}
 	}
 	writeJSON(w, resp)

@@ -1,9 +1,13 @@
 // Package node 实现 ProxyPilot 的 HTTP/3 IP 隧道节点守护进程：
 // HTTP/3 接入（POST /tunnel 可靠流）、JWT 验签、TUN/NAT、用户隔离。
 //
-// 命名说明：包名/二进制名沿用历史命名 "masque"，但本实现并未采用 RFC 9484
-// CONNECT-IP 与 RFC 9297 HTTP Datagram，因此不具备与标准 MASQUE 客户端互通的
-// 能力；协议细节见 readme「VPN 与组网协议栈」。
+// 命名说明：包名/二进制名沿用历史命名 "masque"。当前同时支持两套数据面：
+//   - 私有协议：GET / 鉴权 + POST /tunnel 可靠流 + QUIC DATAGRAM 双通道；
+//   - 标准 MASQUE CONNECT-IP（RFC 9484 / RFC 9297）：HTTP Extended CONNECT
+//     (:protocol=connect-ip)、ADDRESS_ASSIGN/ADDRESS_REQUEST/ROUTE_ADVERTISEMENT
+//     capsule、Context ID 0 的 HTTP Datagram 承载 IP 报文，见 masque.go。
+//
+// 两者共用同一套 TUN/NAT/DNS 与会话表，互不干扰。
 package node
 
 import (
@@ -34,7 +38,7 @@ type Config struct {
 	DatagramEnabled bool   `json:"datagram_enabled"`
 	FECMode         string `json:"fec_mode"`
 	FECGroup        int    `json:"fec_group"`
-	WAN         string `json:"wan"` // 出口网卡，如 eth0；为空则自动探测默认路由
+	WAN             string `json:"wan"` // 出口网卡，如 eth0；为空则自动探测默认路由
 
 	// 连接令牌验签公钥（Ed25519，base64）。
 	PublicKey string `json:"public_key"`

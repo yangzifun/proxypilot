@@ -22,6 +22,8 @@ type fakeTUN struct {
 	ch      chan []byte
 	closed  chan struct{}
 	once    sync.Once
+	// uplink（可选）：Write 收到的报文副本，供 MASQUE 等测试断言上行写入。
+	uplink chan []byte
 }
 
 func newFakeTUN() *fakeTUN {
@@ -43,7 +45,16 @@ func (f *fakeTUN) Read(p []byte) (int, error) {
 	}
 }
 
-func (f *fakeTUN) Write(p []byte) (int, error) { return len(p), nil }
+func (f *fakeTUN) Write(p []byte) (int, error) {
+	if f.uplink != nil {
+		cp := append([]byte(nil), p...)
+		select {
+		case f.uplink <- cp:
+		default:
+		}
+	}
+	return len(p), nil
+}
 func (f *fakeTUN) Close() error {
 	f.once.Do(func() { close(f.closed) })
 	return nil
@@ -71,7 +82,7 @@ func (c *fakeConn) ReceiveDatagram(ctx context.Context) ([]byte, error) {
 }
 
 func (c *fakeConn) CloseWithError(code quic.ApplicationErrorCode, msg string) error { return nil }
-func (c *fakeConn) Context() context.Context                                       { return context.Background() }
+func (c *fakeConn) Context() context.Context                                        { return context.Background() }
 
 func (c *fakeConn) sent() [][]byte {
 	c.mu.Lock()

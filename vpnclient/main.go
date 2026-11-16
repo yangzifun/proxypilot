@@ -1,4 +1,4 @@
-// ProxyPilot VPN 客户端 1.0（联调用 CLI）
+﻿// ProxyPilot VPN 客户端 1.0（联调用 CLI）
 //
 // 流程：门户令牌 → 已绑定节点 → /api/portal/vpn/connect 换取连接 JWT →
 // HTTP/3 鉴权 → QUIC DATAGRAM 发送 DNS 探测包，验证节点数据面。
@@ -30,7 +30,7 @@ import (
 )
 
 // Version 是 VPN 客户端版本（V1.x）。
-const Version = "1.3"
+const Version = "1.4"
 
 var caPEM []byte
 
@@ -40,6 +40,8 @@ type node struct {
 	Region   string `json:"region"`
 	Endpoint string `json:"endpoint"`
 	Online   bool   `json:"online"`
+	// 节点支持的传输协议（面板下发；空=旧面板，按未知处理）
+	Protocols []string `json:"protocols,omitempty"`
 }
 
 type profile struct {
@@ -55,7 +57,10 @@ type profile struct {
 	// 服务端下发的组网网段与节点客户端子网（客户端不自填）
 	MeshCIDR   string `json:"mesh_cidr"`
 	ClientCIDR string `json:"client_cidr"`
-	Node      struct {
+	// MASQUE 协议（节点启用时由面板下发；path 缺省用标准值）
+	Protocol   string `json:"protocol,omitempty"`
+	MasquePath string `json:"masque_path,omitempty"`
+	Node       struct {
 		ID       int64  `json:"id"`
 		Name     string `json:"name"`
 		Endpoint string `json:"endpoint"`
@@ -97,6 +102,7 @@ func runCLI() {
 	tunSelftestMode := flag.String("tun-selftest-mode", "mesh", "自检接管模式：mesh|full")
 	tunSelftestKeep := flag.Int("tun-selftest-keep", 5, "自检保留秒数（到点自动清理）")
 	cfgPath := flag.String("config", "", "配置文件路径（默认用系统配置目录）")
+	protocolPref := flag.String("protocol", "auto", "传输协议：auto|private|masque")
 	timeout := flag.Duration("timeout", 20*time.Second, "整体超时")
 	flag.Parse()
 	if *caPath != "" {
@@ -150,6 +156,7 @@ func runCLI() {
 			Insecure: *insecure,
 			DNSAddr:  *dnsAddr,
 			NodeID:   *nodeID,
+			Protocol: normalizeProtocol(*protocolPref),
 		}
 		if err := runUI(uctx, *uiAddr, defaults, *uiOpen, *uiDemo); err != nil {
 			log.Fatalf("控制台启动失败：%v", err)
@@ -234,7 +241,7 @@ func listNodes(ctx context.Context, api, token string) ([]node, error) {
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if resp.StatusCode == http.StatusUnauthorized {
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		// 服务端校验令牌用途（V1.2 起），旧会话会拿到 401
 		return nil, ErrSessionExpired
 	}
@@ -261,7 +268,7 @@ func connect(ctx context.Context, api, token string, deviceID, nodeID int64) (*p
 	}
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if resp.StatusCode == http.StatusUnauthorized {
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		return nil, ErrSessionExpired
 	}
 	if resp.StatusCode != http.StatusOK {

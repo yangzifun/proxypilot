@@ -35,9 +35,23 @@ type vpnNodeConfig struct {
 	DatagramEnabled bool     `json:"datagram_enabled"`
 	FECMode         string   `json:"fec_mode"`
 	FECGroup        int      `json:"fec_group"`
-	DNSRelay    bool     `json:"dns_relay"`
-	DNSUpstream []string `json:"dns_upstream"`
-	Configure   bool     `json:"configure"`
+	DNSRelay        bool     `json:"dns_relay"`
+	DNSUpstream     []string `json:"dns_upstream"`
+	Configure       bool     `json:"configure"`
+
+	// 协议能力（vpn_protocols.go）：节点按此决定是否同时承载私有协议与 MASQUE 数据面。
+	// 旧版 Agent/节点反序列化时会忽略未知字段，因此新增字段向后兼容。
+	PrivateEnabled bool             `json:"private_enabled"`
+	Masque         masqueNodeConfig `json:"masque"`
+}
+
+// masqueNodeConfig 下发给节点/Agent 的 MASQUE 数据面参数。
+type masqueNodeConfig struct {
+	Enabled bool   `json:"enabled"`
+	State   string `json:"state"`
+	Path    string `json:"path"`
+	Port    int    `json:"port"`
+	Auth    string `json:"auth"`
 }
 
 // POST /api/admin/vpn/nodes/{id}/deploy
@@ -132,29 +146,39 @@ func (h *handlers) vpnAdminNodeDeploy(w http.ResponseWriter, r *http.Request) {
 			certPEM = certPEM + "\n" + stored.ChainPEM
 		}
 	}
+	// 协议能力：下发给节点/Agent，决定是否同时承载私有协议与 MASQUE 数据面。
+	nodeProtocols := h.loadNodeProtocols(r.Context(), node.ID)
 	cfg := vpnNodeConfig{
-		Listen:      fmt.Sprintf("0.0.0.0:%d", node.ListenPort),
-		CertFile:    "/etc/proxypilot/tunnel/tls/cert.pem",
-		KeyFile:     "/etc/proxypilot/tunnel/tls/key.pem",
-		NodeID:      node.ID,
-		MeshIPv4:    node.MeshIPv4,
-		ClientCIDR:  node.ClientCIDR,
-		Gateway4:    cidrGateway(node.ClientCIDR),
-		Tun:         "ppvpn0",
-		MTU:         settings.MTU,
-		MaxDatagram: settings.MTU + 80,
+		Listen:          fmt.Sprintf("0.0.0.0:%d", node.ListenPort),
+		CertFile:        "/etc/proxypilot/tunnel/tls/cert.pem",
+		KeyFile:         "/etc/proxypilot/tunnel/tls/key.pem",
+		NodeID:          node.ID,
+		MeshIPv4:        node.MeshIPv4,
+		ClientCIDR:      node.ClientCIDR,
+		Gateway4:        cidrGateway(node.ClientCIDR),
+		Tun:             "ppvpn0",
+		MTU:             settings.MTU,
+		MaxDatagram:     settings.MTU + 80,
 		DatagramEnabled: settings.DatagramEnabled,
 		FECMode:         settings.FECMode,
 		FECGroup:        settings.FECGroup,
-		PublicKey:   base64.StdEncoding.EncodeToString(signer.PublicKey()),
-		Issuer:      "proxypilot",
-		Audience:    "masque-node",
-		DNS:         []string{cidrGateway(node.ClientCIDR)},
+		PublicKey:       base64.StdEncoding.EncodeToString(signer.PublicKey()),
+		Issuer:          "proxypilot",
+		Audience:        "masque-node",
+		DNS:             []string{cidrGateway(node.ClientCIDR)},
 		// 客户端把 DNS 指向节点网关，节点必须真的在那里应答，
 		// 否则客户端连上后所有域名解析都会超时。
-		DNSRelay:    true,
-		DNSUpstream: []string{"1.1.1.1", "223.5.5.5"},
-		Configure:   true,
+		DNSRelay:       true,
+		DNSUpstream:    []string{"1.1.1.1", "223.5.5.5"},
+		Configure:      true,
+		PrivateEnabled: nodeProtocols.PrivateEnabled,
+		Masque: masqueNodeConfig{
+			Enabled: nodeProtocols.MasqueEnabled,
+			State:   nodeProtocols.MasqueState,
+			Path:    nodeProtocols.MasquePath,
+			Port:    nodeProtocols.MasquePort,
+			Auth:    nodeProtocols.MasqueAuth,
+		},
 	}
 	cfgJSON, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
@@ -178,8 +202,11 @@ func (h *handlers) vpnAdminNodeDeploy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.vpnAudit(r.Context(), actorOf(r), "vpn.node.deploy", strconv.FormatInt(node.ID, 10), binaryURL)
+	// 部署会重启节点数据面：MASQUE 之前的 ready 状态不再可信，回到 pending 等待节点上报。
+	_ = h.markMasquePending(r.Context(), node.ID)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok": true, "task_id": taskID, "server_id": node.ServerID, "embedded": true,
+		"protocols": nodeProtocols.protocolDetails(),
 	})
 }
 

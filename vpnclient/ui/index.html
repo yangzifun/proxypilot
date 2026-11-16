@@ -177,6 +177,8 @@
   .login{margin-top:14px;width:100%;text-align:center}
   .login .hint2{margin-top:8px;font-size:11px;color:var(--dim);line-height:1.6}
   .login button{width:100%}
+.dial:disabled{cursor:not-allowed}
+.dial:disabled .core{opacity:.55}
   @media (prefers-color-scheme: dark){ .notice{color:#fcd34d} }
 
   /* ---------------- 按钮 ---------------- */
@@ -443,6 +445,7 @@
 
         <!-- 连接信息 -->
         <div class="rows">
+          <div class="row"><span class="k">协议</span><span class="v" id="rProtocol">—</span></div>
           <div class="row clickable" id="rowNode"><span class="k">节点</span><span class="v" id="rNode">—</span></div>
           <div class="row"><span class="k">隧道流量</span><span class="v" id="rTraffic">—</span></div>
           <div class="row"><span class="k">连通检测</span><span class="v" id="rNet">—</span></div>
@@ -475,6 +478,18 @@
           <label class="check"><input type="checkbox" id="fInsecure"> 跳过节点证书校验</label>
           <label class="check"><input type="checkbox" id="fKillSwitch"> 断线保护（阻断隧道外流量）</label>
           <div class="hint2">开启后若客户端异常退出会暂时无法上网，重新打开客户端会自动恢复。</div>
+        </div>
+
+        <div class="group">
+          <div class="group-title">传输协议</div>
+          <div class="field"><label>协议</label>
+            <select id="fProtocol" style="width:100%;padding:8px 10px;border-radius:8px;background:var(--card,#111);color:inherit;border:1px solid var(--line,#333)">
+              <option value="auto">自动（优先私有，失败回退 MASQUE）</option>
+              <option value="private">私有协议（自研 HTTP/3）</option>
+              <option value="masque">MASQUE（标准 CONNECT-IP）</option>
+            </select>
+          </div>
+          <div class="hint2">MASQUE 需要节点启用；切换后下一次连接生效，连接详情会显示实际协议。</div>
         </div>
 
         <div class="group">
@@ -585,7 +600,7 @@
 
 <script>
 const $ = (id) => document.getElementById(id);
-let state = {}, nodes = [], selectedNode = 0, view = 'main';
+let state = { auth_state: 'checking' }, nodes = [], selectedNode = 0, view = 'main';
 let selectedSynced = false;
 
 const fmtDur = (s)=>{ s=Math.max(0,s|0); const h=(s/3600)|0,m=((s%3600)/60)|0,x=s%60;
@@ -806,12 +821,46 @@ function render(){
     $('badgeText').textContent = '未登录';
     $('badge').className = 'badge';
   }
+
+  // 认证状态（checking/valid/invalid/unknown）：只有 valid 才允许连接，
+  // 其它状态显示登录框并禁用连接 dial，避免「令牌失效仍显示主界面」。
+  // 当前连接实际使用的传输协议（MASQUE/私有/自动回退）。
+  const protoLabel = ({ private: '私有协议', masque: 'MASQUE' })[state.protocol] || '';
+  const rp = $('rProtocol');
+  if (rp) {
+    rp.textContent = state.protocol ? ((protoLabel || state.protocol) + (state.transport_fallback ? '（自动回退）' : '')) : '—';
+  }
+  const authState = String(state.auth_state || (logged ? 'valid' : 'invalid'));
+  const authError = String(state.auth_error || '');
+  const authOK = (authState === 'valid');
+  const dialEl = $('dial');
+  if (dialEl) {
+    const connected = (state.status === 'connected');
+    dialEl.disabled = (!authOK && !connected);
+    dialEl.setAttribute('title', authOK || connected ? '连接 / 断开' : '请先登录');
+  }
+  const loginBoxEl = $('loginBox');
+  if (loginBoxEl) loginBoxEl.hidden = authOK;
+  if (!authOK) {
+    $('stateText').textContent = authState === 'checking' ? '正在验证登录状态…' : '未认证';
+    $('stateHint').textContent = authState === 'checking' ? '请稍候' : '请先登录';
+    $('badgeText').textContent = authState === 'checking' ? '验证中' : '未登录';
+    $('badge').className = 'badge';
+    const hint = $('loginHint');
+    if (hint) {
+      hint.textContent = authState === 'checking' ? '正在验证登录状态…'
+        : authState === 'unknown' ? (authError || '暂时无法验证登录状态，请检查网络') + '。可点击「使用浏览器登录」重新登录。'
+        : (authError || '请先登录');
+    }
+  }
 }
 
 async function poll(){
   try{
     const r = await fetch('/api/state',{cache:'no-store'});
+    const prevAuthState = state.auth_state;
     state = await r.json();
+    if (state.auth_state === 'valid' && prevAuthState !== 'valid') { loadNodes(); }
     if(!selectedSynced && state.selected_node){
       selectedNode = Number(state.selected_node) || 0;
       selectedSynced = true;
@@ -969,6 +1018,7 @@ function openPicker(on){
 }
 
 async function toggle(){
+  if (String(state.auth_state || '') !== 'valid') { openSettings(); uiToast('请先登录后再连接', 'warn'); return; }
   if(!state.logged_in){ const b = $('btnLogin'); if(b) b.click(); return; }
   if(state.status==='connected' || state.status==='connecting'){
     await fetch('/api/disconnect',{method:'POST'}); setTimeout(poll,250); return;
@@ -996,6 +1046,7 @@ function openSettings(){
   $('fToken').value = '';
   $('fToken').placeholder = state.logged_in ? ('已保存：'+state.token_hint) : '粘贴门户登录令牌';
   $('fInsecure').checked = !!state.insecure;
+  if ($('fProtocol')) $('fProtocol').value = state.protocol_pref || 'auto';
   if ($('fKillSwitch')) $('fKillSwitch').checked = !!state.kill_switch;
   $('fLogPath').value = state.log_path || '';
 }
@@ -1238,7 +1289,8 @@ $('save').onclick = async ()=>{
       api: $('fAPI').value.trim(),
       token: $('fToken').value.trim(),
       insecure: $('fInsecure').checked,
-      kill_switch: $('fKillSwitch') ? $('fKillSwitch').checked : false
+      kill_switch: $('fKillSwitch') ? $('fKillSwitch').checked : false,
+      protocol: $('fProtocol') ? $('fProtocol').value : 'auto'
     })});
     if (!r.ok) throw new Error('HTTP ' + r.status);
     await poll(); closeSettings();
@@ -1253,7 +1305,7 @@ function applyHash(){
 window.addEventListener('hashchange', applyHash);
 applyHash();
 
-poll(); loadNodes(); setNav('connect');
+render(); poll(); loadNodes(); setNav('connect');
 setInterval(poll, 1000);
 </script>
 </body>

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   App as AntdApp,
   Button,
+  Divider,
   Form,
   Input,
   InputNumber,
@@ -9,6 +10,7 @@ import {
   Popconfirm,
   Select,
   Space,
+  Switch,
   Table,
   Tag,
 } from 'antd';
@@ -35,7 +37,47 @@ const EMPTY_NODE = {
   cert_mode: 'internal_ca',
   listen_port: 443,
   capacity: 500,
+  // 协议能力：旧节点默认仅私有协议；MASQUE 需显式开启并等待数据面就绪
+  private_enabled: true,
+  masque_enabled: false,
+  masque_path: '/.well-known/masque/ip/0.0.0.0/0/',
+  masque_port: 0,
+  masque_auth: 'none',
+  masque_state: 'disabled',
 };
+
+// 节点协议字段（后端 vpnAdminNodeView 平铺返回；兼容旧数据缺失时按默认值）
+function nodeProtocolValues(node) {
+  if (!node) return {};
+  const protoList = Array.isArray(node.protocols) ? node.protocols : [];
+  const priv = protoList.find((p) => p.id === 'private') || {};
+  const masque = protoList.find((p) => p.id === 'masque') || {};
+  return {
+    private_enabled: node.private_enabled != null ? !!node.private_enabled : (priv.enabled !== false),
+    masque_enabled: node.masque_enabled != null ? !!node.masque_enabled : !!masque.enabled,
+    masque_path: node.masque_path || masque.path || '/.well-known/masque/ip/0.0.0.0/0/',
+    masque_port: Number(node.masque_port ?? masque.port ?? 0) || 0,
+    masque_auth: node.masque_auth || masque.auth || 'none',
+    masque_state: node.masque_state || masque.state || 'disabled',
+  };
+}
+
+function protocolTags(node) {
+  const p = nodeProtocolValues(node);
+  const masqueColor = p.masque_state === 'ready' ? 'green' : p.masque_state === 'pending' ? 'gold' : p.masque_state === 'error' ? 'red' : 'default';
+  return (
+    <Space size={4} wrap>
+      <Tag color={p.private_enabled ? 'geekblue' : 'default'}>
+        {p.private_enabled ? 'private' : 'private 关'}
+      </Tag>
+      {p.masque_enabled ? (
+        <Tag color={masqueColor}>{`masque · ${p.masque_state}`}</Tag>
+      ) : (
+        <Tag>masque 关</Tag>
+      )}
+    </Space>
+  );
+}
 
 // VPN 节点绑定：只负责节点本身；用户授权在「订阅用户 → 授权服务」中完成。
 export default function VpnNodesPanel() {
@@ -96,6 +138,7 @@ export default function VpnNodesPanel() {
       cert_mode: node.cert_mode || 'selfsigned',
       listen_port: node.listen_port || 443,
       capacity: node.capacity || 500,
+      ...nodeProtocolValues(node),
     } : EMPTY_NODE);
     setNodeOpen(true);
   };
@@ -167,6 +210,12 @@ export default function VpnNodesPanel() {
     { title: '接入地址', dataIndex: 'endpoint', width: 210, render: (v) => v || '—' },
     { title: '客户端子网', dataIndex: 'client_cidr4', width: 130, render: (v) => v || '—' },
     { title: '状态', dataIndex: 'state', width: 90, render: stateTag },
+    {
+      title: '协议',
+      key: 'protocols',
+      width: 170,
+      render: (_, node) => protocolTags(node),
+    },
     {
       title: '操作',
       key: 'op',
@@ -277,6 +326,58 @@ export default function VpnNodesPanel() {
             </Form.Item>
             <Form.Item name="capacity" label="最大会话">
               <InputNumber min={1} max={100000} />
+            </Form.Item>
+          </Space>
+
+          <Divider orientation="left" style={{ margin: '4px 0 12px' }}>协议能力</Divider>
+          <Space size={24} wrap>
+            <Form.Item
+              name="private_enabled"
+              label="私有协议（private）"
+              valuePropName="checked"
+              extra="自研 QUIC 数据面，旧节点默认启用"
+            >
+              <Switch />
+            </Form.Item>
+            <Form.Item
+              name="masque_enabled"
+              label="MASQUE"
+              valuePropName="checked"
+              extra="HTTP/3 CONNECT-UDP 数据面，需节点就绪后客户端才能连接"
+            >
+              <Switch />
+            </Form.Item>
+          </Space>
+          <Form.Item
+            name="masque_path"
+            label="MASQUE 路径"
+            extra="标准 CONNECT-IP 路径（RFC 9484），需以 /.well-known/masque/ip/ 开头；默认 /.well-known/masque/ip/0.0.0.0/0/"
+          >
+            <Input placeholder="/.well-known/masque/ip/0.0.0.0/0/" />
+          </Form.Item>
+          <Space size={16} wrap>
+            <Form.Item name="masque_port" label="MASQUE 端口" extra="0 = 沿用监听端口">
+              <InputNumber min={0} max={65535} style={{ width: 140 }} />
+            </Form.Item>
+            <Form.Item name="masque_auth" label="MASQUE 鉴权">
+              <Select
+                style={{ width: 160 }}
+                options={[
+                  { value: 'none', label: '无额外鉴权' },
+                  { value: 'bearer', label: 'Bearer 令牌' },
+                ]}
+              />
+            </Form.Item>
+            <Form.Item name="masque_state" label="MASQUE 状态" extra="ready 才允许客户端连接">
+              <Select
+                style={{ width: 140 }}
+                options={[
+                  { value: 'disabled', label: '未启用' },
+                  { value: 'pending', label: '等待就绪' },
+                  { value: 'ready', label: '已就绪' },
+                  { value: 'error', label: '异常' },
+                ]}
+              />
             </Form.Item>
           </Space>
         </Form>
