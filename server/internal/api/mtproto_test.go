@@ -2,8 +2,10 @@ package api
 
 import (
 	"encoding/json"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -114,5 +116,73 @@ func TestMtprotoConfigValidation(t *testing.T) {
 	eff.BootstrapSecret = "bad"
 	if _, _, _, msg := mtprotoRenderConfig(&eff, nil); msg == "" {
 		t.Fatal("无可用 secret 应报错")
+	}
+}
+
+// TestMtprotoLinkHostPriority 覆盖 task-40 的主机选择顺序：
+// 配置域名 > 节点 Host（必须是域名）> 服务器 LastIP4/LastIP > srv.Host。
+func TestMtprotoLinkHostPriority(t *testing.T) {
+	srv := mtprotoServer{LastIP4: "203.0.113.7", LastIP: "198.51.100.9", Host: "server.example.net"}
+	cases := []struct {
+		name string
+		eff  mtprotoEffectiveConfig
+		srv  mtprotoServer
+		want string
+	}{
+		{"已配置域名时不用服务器 IP", mtprotoEffectiveConfig{Domain: "storage.googleapis.com", Host: "203.0.113.7"}, srv, "storage.googleapis.com"},
+		{"连接地址为域名时优先于伪装域名", mtprotoEffectiveConfig{Domain: "www.bing.com", Host: "hk1.pandajun.xyz"}, srv, "hk1.pandajun.xyz"},
+		{"配置域名大小写/空格规范化", mtprotoEffectiveConfig{Domain: " Storage.GoogleAPIs.com "}, srv, "storage.googleapis.com"},
+		{"无域名时用 Host 域名", mtprotoEffectiveConfig{Host: "front.example.com"}, srv, "front.example.com"},
+		{"Host 是 IP 时忽略并回落到 LastIP4", mtprotoEffectiveConfig{Host: "203.0.113.7"}, srv, "203.0.113.7"},
+		{"无 LastIP4 时回落到 LastIP", mtprotoEffectiveConfig{Host: ""}, mtprotoServer{LastIP: "198.51.100.9"}, "198.51.100.9"},
+		{"全部为空时回落到 srv.Host", mtprotoEffectiveConfig{}, mtprotoServer{Host: "edge.example.org"}, "edge.example.org"},
+		{"非法 Domain（IP）不误用", mtprotoEffectiveConfig{Domain: "1.2.3.4", Host: "front.example.com"}, srv, "front.example.com"},
+		{"非法 Domain（含非法字符）不误用", mtprotoEffectiveConfig{Domain: "bad_domain", Host: ""}, srv, "203.0.113.7"},
+		{"LastIP4 为 unknown 时继续用 LastIP", mtprotoEffectiveConfig{}, mtprotoServer{LastIP4: "unknown", LastIP: "198.51.100.9"}, "198.51.100.9"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := mtprotoLinkHost(&tc.eff, tc.srv); got != tc.want {
+				t.Fatalf("link host = %q，期望 %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestMtprotoClientLinkUsesDomain 验证 tg:// 与 t.me 链接都使用配置域名，
+// 且 domain 不会被服务器探测 IP 覆盖。
+func TestMtprotoClientLinkUsesDomain(t *testing.T) {
+	secret := mtprotoGenerateSecret("storage.googleapis.com")
+	if secret == "" {
+		t.Fatal("生成 secret 失败")
+	}
+	eff := mtprotoEffectiveConfig{
+		Domain: "storage.googleapis.com", Host: "203.0.113.7",
+		Port: 13709, SecretMode: "multi",
+	}
+	link := mtprotoClientLink(&eff, mtprotoServer{LastIP4: "203.0.113.7", LastIP: "203.0.113.7", Host: "203.0.113.7"},
+		&mtprotoClient{ID: 1, Secret: secret})
+	if got := mapStr(link, "host", ""); got != "storage.googleapis.com" {
+		t.Fatalf("link.host = %q，期望 storage.googleapis.com", got)
+	}
+	for _, key := range []string{"tg", "tme"} {
+		raw := mapStr(link, key, "")
+		u, err := url.Parse(raw)
+		if err != nil {
+			t.Fatalf("%s 链接非法: %v", key, err)
+		}
+		if got := u.Query().Get("server"); got != "storage.googleapis.com" {
+			t.Fatalf("%s server = %q，期望域名", key, got)
+		}
+		if got := u.Query().Get("secret"); got != secret {
+			t.Fatalf("%s secret 不匹配", key)
+		}
+		if got := u.Query().Get("port"); got != "13709" {
+			t.Fatalf("%s port = %q", key, got)
+		}
+	}
+	if !strings.Contains(mapStr(link, "tg", ""), "server=storage.googleapis.com") ||
+		!strings.Contains(mapStr(link, "tme", ""), "server=storage.googleapis.com") {
+		t.Fatalf("tg/tme 链接未使用域名：%v / %v", link["tg"], link["tme"])
 	}
 }

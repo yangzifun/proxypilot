@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"context"
@@ -109,7 +109,7 @@ func localComponentVersions() map[string]string {
 		arg      string
 	}{
 		{"sing-box", "sing-box", "version"},
-		{"mtg-multi", "mtg", "version"},
+		{"mtg-multi", "mtg", "--version"},
 		{"cloudflared", "cloudflared", "--version"},
 		{"warp-cli", "warp-svc", "--version"},
 	} {

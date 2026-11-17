@@ -383,13 +383,32 @@ type mtprotoServer struct {
 	Host    string `json:"host"`
 }
 
+// mtprotoLinkHost 决定客户端链接里的 server= 主机。
+// 优先级（task-40：配置域名必须优先于探测到的服务器 IP）：
+//  1. eff.Host 且必须是域名（UI 明确 host="连接地址（域名或 IP）"，用于生成 tg 链接；
+//     节点同时配置了伪装域名时，连接地址才是客户端真正该连的主机）；
+//  2. 配置的域名 eff.Domain（UI="伪装域名/FakeTLS SNI"；节点未填连接地址时用它兜底，
+//     满足“已配置域名不要被服务器 IP 覆盖”的诉求）；
+//  3. 服务器探测到的 LastIP4 / LastIP（fallback）；
+//  4. srv.Host（最后兜底，可能是域名或 IP）。
+//
+// 注意：这里只影响客户端 tg:// / t.me 链接；mtg 的监听、public-ipv4 与
+// [domain-fronting] 运行配置不变，见 mtprotoRenderConfig。
+//
+// 为什么 Host 域名排在 Domain 前面：线上存在节点把 Domain 配成纯伪装用的公共域名
+// （如 www.bing.com，仅作 SNI），若链接用它会让客户端连到公共网站；这类节点必须用
+// Host（例如 hk1.pandajun.xyz）作为连接地址。仅在 Host 为空或 IP 时才用 Domain 生成链接。
 func mtprotoLinkHost(eff *mtprotoEffectiveConfig, srv mtprotoServer) string {
-	if custom := strings.TrimSpace(eff.Host); custom != "" {
-		return custom
+	if host := mtprotoDomainOf(eff.Host); host != "" {
+		return host
 	}
-	ip := strings.TrimSpace(firstNonEmpty(srv.LastIP4, srv.LastIP))
-	if ip != "" && ip != "unknown" {
-		return ip
+	if domain := mtprotoDomainOf(eff.Domain); domain != "" {
+		return domain
+	}
+	for _, raw := range []string{srv.LastIP4, srv.LastIP} {
+		if ip := mtprotoIsIPv4(strings.TrimSpace(raw)); ip != "" {
+			return ip
+		}
 	}
 	return strings.TrimSpace(srv.Host)
 }

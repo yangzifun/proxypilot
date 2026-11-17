@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 
 const (
 	mtprotoReloadCmd = "systemctl enable mtg >/dev/null 2>&1; systemctl reload mtg 2>/dev/null || systemctl restart mtg"
-	mtprotoCheckCmd  = "mtg-multi version"
+	mtprotoCheckCmd  = "mtg-multi --version"
 )
 
 func mtprotoTemplateFromRow(row map[string]any) *mtprotoTemplate {
