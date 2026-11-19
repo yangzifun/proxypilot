@@ -7,27 +7,27 @@ import (
 
 // 安装命令必须使用「设定的分发基址」下的 install.sh，
 // 不能退化成内网地址（新机器还没接入内网，拉不到脚本）。
-// 审计低-07：命令里不能包含接入令牌（令牌改为 install.sh 交互读取）。
+// 安装命令需要包含接入密钥，便于用户复制执行；密钥仅在创建/轮换时返回一次。
 func TestBuildInstallCommand(t *testing.T) {
 	const tok = "ag_test"
 
 	// 1) 设定了分发基址：脚本走桶路径，--url 用伺服地址
 	got := buildInstallCommand("https://s3.example.com/agent/", "https://pp.example.com", tok)
-	want := "curl -fsSL https://s3.example.com/agent/install.sh | sudo sh -s -- --url https://pp.example.com"
+	want := "curl -fsSL https://s3.example.com/agent/install.sh | sudo sh -s -- --url https://pp.example.com --key ag_test"
 	if got != want {
 		t.Fatalf("带基址\n  got: %s\n want: %s", got, want)
 	}
 
 	// 2) 未设定基址：回落面板自身
 	got = buildInstallCommand("", "https://pp.example.com/", tok)
-	want = "curl -fsSL https://pp.example.com/api/agent/install.sh | sudo sh -s -- --url https://pp.example.com"
+	want = "curl -fsSL https://pp.example.com/api/agent/install.sh | sudo sh -s -- --url https://pp.example.com --key ag_test"
 	if got != want {
 		t.Fatalf("无基址\n  got: %s\n want: %s", got, want)
 	}
 
-	// 3) 令牌绝不能出现在命令里（历史泄露面）
-	if strings.Contains(got, tok) || strings.Contains(got, "--key") {
-		t.Fatalf("安装命令不应包含接入令牌：%s", got)
+	// 3) 命令必须包含 --key 与令牌，复制即可执行
+	if !strings.Contains(got, "--key") || !strings.Contains(got, tok) {
+		t.Fatalf("安装命令应包含接入令牌：%s", got)
 	}
 }
 
@@ -47,6 +47,7 @@ func TestIsPrivateHost(t *testing.T) {
 		}
 	}
 }
+
 // 安装命令里绝不能出现内网/组网地址：新节点此时还没组网，连不上就装不了。
 func TestInstallCommandNeverHasPrivateHost(t *testing.T) {
 	origin := "https://proxypilot.yangzifun.org"

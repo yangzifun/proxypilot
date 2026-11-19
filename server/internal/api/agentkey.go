@@ -1,8 +1,6 @@
 package api
 
 import (
-	"net"
-	"net/url"
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
@@ -13,6 +11,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
+	"net/url"
 	"strings"
 )
 
@@ -156,12 +156,15 @@ func decryptAgentToken(secret, enc string) string {
 //
 // 关键约束：**脚本地址必须公网可达**。
 // 之前这里用「Agent 访问地址」（内网 100.96.x.x）覆盖了 origin，结果生成的命令是
-//   curl -fsSL http://100.96.0.18:80/api/agent/install.sh | sudo sh
+//
+//	curl -fsSL http://100.96.0.18:80/api/agent/install.sh | sudo sh
+//
 // 新机器还没接入内网，这条命令根本拉不到脚本 —— 安装必然失败。
 //
 // 现在的分工：
-//   脚本地址  = 分发基址（对象存储桶）> 面板公网地址；永远不用内网地址
-//   --url     = Agent 的伺服地址，可以先用公网，Agent 上线后会自行切到内网通道
+//
+//	脚本地址  = 分发基址（对象存储桶）> 面板公网地址；永远不用内网地址
+//	--url     = Agent 的伺服地址，可以先用公网，Agent 上线后会自行切到内网通道
 func (h *handlers) agentInstallCommand(ctx context.Context, origin, token string) string {
 	origin = strings.TrimRight(strings.TrimSpace(origin), "/")
 
@@ -198,13 +201,16 @@ func (h *handlers) agentInstallCommand(ctx context.Context, origin, token string
 // 审计低-07：命令里不再拼接入令牌（命令行会进 history/ps/截图/聊天记录）；
 // install.sh 会通过 /dev/tty 交互读取令牌，需要自动化时可显式加 --key（自担风险）。
 func buildInstallCommand(base, origin, token string) string {
-	_ = token
 	base = strings.TrimRight(strings.TrimSpace(base), "/")
 	origin = strings.TrimRight(strings.TrimSpace(origin), "/")
-	if base != "" {
-		return fmt.Sprintf("curl -fsSL %s/install.sh | sudo sh -s -- --url %s", base, origin)
+	keyArg := ""
+	if tok := strings.TrimSpace(token); tok != "" {
+		keyArg = " --key " + tok
 	}
-	return fmt.Sprintf("curl -fsSL %s/api/agent/install.sh | sudo sh -s -- --url %s", origin, origin)
+	if base != "" {
+		return fmt.Sprintf("curl -fsSL %s/install.sh | sudo sh -s -- --url %s%s", base, origin, keyArg)
+	}
+	return fmt.Sprintf("curl -fsSL %s/api/agent/install.sh | sudo sh -s -- --url %s%s", origin, origin, keyArg)
 }
 
 // firstNonEmptyStr 返回第一个非空字符串。

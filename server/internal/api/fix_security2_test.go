@@ -145,10 +145,10 @@ func TestInstallScriptHardening(t *testing.T) {
 	if !strings.Contains(body, "/dev/tty") {
 		t.Fatal("install.sh 缺少交互式令牌输入（/dev/tty）")
 	}
-	// 低-07：生成的安装命令不再包含令牌
+	// 低-07 调整：安装命令需要包含令牌，方便复制执行；密钥仅本次返回。
 	cmd := buildInstallCommand("https://s3.example.com/agent", "https://pp.example.com", "ag_secret")
-	if strings.Contains(cmd, "ag_secret") || strings.Contains(cmd, "--key") {
-		t.Fatalf("安装命令仍包含令牌/--key：%s", cmd)
+	if !strings.Contains(cmd, "ag_secret") || !strings.Contains(cmd, "--key") {
+		t.Fatalf("安装命令应包含令牌/--key：%s", cmd)
 	}
 }
 

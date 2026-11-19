@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"context"
@@ -158,7 +158,7 @@ func (h *handlers) serverCreate(w http.ResponseWriter, r *http.Request) {
 		"data":            row,
 		"agent_token":     token,
 		"install_command": h.agentInstallCommand(r.Context(), origin, token),
-		"message":         "请复制 install_command 到服务器执行；执行时会提示粘贴上面的接入密钥（密钥不再放在命令里，避免历史泄露）",
+		"message":         "请复制 install_command 到服务器执行；命令已包含接入密钥，可直接执行（密钥仅本次显示，请妥善保管）",
 		"probe":           nil,
 	})
 }
