@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, App as AntdApp, Button, Divider, Form, Input, Tabs, Tag } from 'antd';
+import { Alert, App as AntdApp, Button, Divider, Form, Input, Modal, Tabs, Tag } from 'antd';
 import {
   ApiOutlined,
   CloudServerOutlined,
@@ -46,6 +46,10 @@ export default function Login() {
   const [countdown, setCountdown] = useState(0);
   const [backupMode, setBackupMode] = useState(false);
   const timerRef = useRef(null);
+  // 人机验证改为点击后在弹窗内完成（与用户中心一致）：
+  // tsOpen 控制「人机验证」弹窗，pending 记录验证通过后要自动执行的动作。
+  const [tsOpen, setTsOpen] = useState(false);
+  const [pending, setPending] = useState(null); // { kind: 'pwd'|'send', values? }（SSO 直接跳转，不经过弹窗）
 
   useEffect(() => () => timerRef.current && clearInterval(timerRef.current), []);
 
@@ -64,12 +68,10 @@ export default function Login() {
   };
 
   /* ---------- 账号密码 ---------- */
-  const submitPassword = async (values) => {
+  // 真正发起密码登录：Turnstile 已通过（或环境未配置 SITE_KEY）后调用。
+  // MFA/TOTP 二次验证阶段不再要求人机验证（第一步已消费 token）。
+  const doPasswordLogin = async (values, tsToken) => {
     setErr('');
-    if (step !== 'totp' && SITE_KEY && !turnstile.getToken()) {
-      setErr('请先完成下方的人机验证');
-      return;
-    }
     setBusy(true);
     try {
       if (step === 'totp') {
@@ -84,8 +86,7 @@ export default function Login() {
       const res = await loginPassword({
         username: String(values.username || '').trim(),
         password: values.password,
-        // 服务端 verifyTurnstileRequired 对空 token 会直接 400，所以这里先拦一道
-        turnstileToken: turnstile.getToken(),
+        turnstileToken: tsToken || turnstile.getToken(),
       });
       if (res.needMfa) {
         setCred({ username: String(values.username || '').trim() });
@@ -103,17 +104,25 @@ export default function Login() {
     }
   };
 
-  /* ---------- 邮箱验证码 ---------- */
-  const submitEmailSend = async (values) => {
+  const submitPassword = async (values) => {
     setErr('');
-    if (SITE_KEY && !turnstile.getToken()) {
-      setErr('请先完成下方的人机验证');
+    if (step !== 'totp' && SITE_KEY && !turnstile.getToken()) {
+      // 没有 token：先弹出人机验证，通过后自动用本次账号密码登录
+      setPending({ kind: 'pwd', values });
+      setTsOpen(true);
       return;
     }
+    await doPasswordLogin(values, turnstile.getToken());
+  };
+
+  /* ---------- 邮箱验证码 ---------- */
+  // 真正发送邮箱验证码：Turnstile 已通过（或环境未配置 SITE_KEY）后调用。
+  const doSendEmail = async (values, tsToken) => {
+    setErr('');
     setBusy(true);
     try {
       const email = String(values.email || '').trim();
-      const res = await sendEmailCode({ email, turnstileToken: turnstile.getToken() });
+      const res = await sendEmailCode({ email, turnstileToken: tsToken || turnstile.getToken() });
       // Turnstile token 是一次性的：成功/失败后都重置，避免 60 秒后「重新发送」复用
       // 已被消费的 token 被服务端 403（实测表现为“重发永远失败”）。
       turnstile.reset();
@@ -127,6 +136,17 @@ export default function Login() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const submitEmailSend = async (values) => {
+    setErr('');
+    if (SITE_KEY && !turnstile.getToken()) {
+      // 没有 token：先弹出人机验证，通过后自动发送（含「重新发送」）
+      setPending({ kind: 'send', values });
+      setTsOpen(true);
+      return;
+    }
+    await doSendEmail(values, turnstile.getToken());
   };
 
   const submitEmailVerify = async (values) => {
@@ -182,20 +202,27 @@ export default function Login() {
   }, []);
 
   /**
-   * 单点登录：后端 GET /api/oidc/login 会校验 Turnstile（?cf_turnstile_response=），
-   * 所以不能简单 href 跳转，必须先把当前 widget 的 token 带上。
+   * 单点登录：SSO 不做人机验证（与用户中心一致），直接跳转即可。
+   * 后端 OIDC 的 Turnstile 校验已移除，不再需要携带 cf_turnstile_response。
    */
   const startOidc = () => {
-    let qs = '';
-    if (SITE_KEY) {
-      if (!turnstile.getToken()) {
-        message.warning('请先完成下方的人机验证，再点单点登录');
-        return;
-      }
-      qs = '?cf_turnstile_response=' + encodeURIComponent(turnstile.getToken());
-    }
-    window.location.href = '/api/oidc/login' + qs;
+    window.location.href = '/api/oidc/login';
   };
+
+  // 人机验证通过后自动继续原操作（SSO 不做人机验证，不在此列）。
+  useEffect(() => {
+    if (!tsOpen || !turnstile.token || !pending) return;
+    setTsOpen(false);
+    const action = pending;
+    setPending(null);
+    const tsToken = turnstile.token;
+    if (action.kind === 'pwd') {
+      doPasswordLogin(action.values || {}, tsToken);
+      return;
+    }
+    doSendEmail(action.values || {}, tsToken);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tsOpen, turnstile.token, pending]);
 
   const emailSubStep = step === 'code' || step === 'mfa';
 
@@ -427,21 +454,6 @@ export default function Login() {
             </Form>
           )}
 
-          {/* 统一的 Turnstile 挂载点：密码/邮箱各步骤共用，避免切步骤后 widget 被卸载
-              导致 token 丢失或复用已消费 token（重发验证码时会被服务端 403）。 */}
-          {SITE_KEY && ((mode === 'password' && step !== 'totp') || (mode === 'email' && step !== 'mfa')) ? (
-            <div style={{ marginTop: 4, marginBottom: 16 }}>
-              <div className="pp-turnstile" ref={turnstile.slotRef} />
-              {turnstile.status === 'error' ? (
-                <div style={{ fontSize: 12, color: '#f43f5e', marginTop: 4, textAlign: 'center' }}>
-                  人机验证加载失败，<a onClick={() => turnstile.reload()}>点此重试</a>
-                </div>
-              ) : turnstile.status === 'loading' ? (
-                <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4, textAlign: 'center' }}>人机验证加载中…</div>
-              ) : null}
-            </div>
-          ) : null}
-
           {OIDC.enabled ? (
             <>
               <Divider plain style={{ color: '#cbd5e1', fontSize: 12, margin: '20px 0 14px' }}>
@@ -450,11 +462,6 @@ export default function Login() {
               <Button block size="large" onClick={startOidc}>
                 {OIDC.buttonText}
               </Button>
-              {SITE_KEY ? (
-                <div style={{ marginTop: 6, fontSize: 11.5, color: '#b6c2d1', lineHeight: 1.6 }}>
-                  单点登录同样需要通过人机验证：先在上面完成验证码，再点此按钮。
-                </div>
-              ) : null}
             </>
           ) : null}
 
@@ -466,6 +473,34 @@ export default function Login() {
           ) : null}
         </div>
       </div>
+
+      {/* 人机验证弹窗：仅密码登录 / 邮箱验证码发送需要；SSO 直接跳转不弹窗 */}
+      <Modal
+        open={tsOpen}
+        onCancel={() => {
+          setTsOpen(false);
+          setPending(null);
+          turnstile.reset();
+        }}
+        footer={null}
+        title="人机验证"
+        width={360}
+        centered
+      >
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 4px' }}>
+          <div className="pp-turnstile" ref={turnstile.slotRef} />
+        </div>
+        {turnstile.status === 'error' ? (
+          <div style={{ fontSize: 12, color: '#f43f5e', textAlign: 'center', marginTop: 8 }}>
+            验证组件加载失败，<a onClick={() => turnstile.reload()}>点此重试</a>
+          </div>
+        ) : null}
+        <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', marginTop: 10 }}>
+          {pending && pending.kind === 'pwd'
+            ? '完成验证后将自动登录'
+            : '完成验证后将自动发送验证码'}
+        </div>
+      </Modal>
     </div>
   );
 }

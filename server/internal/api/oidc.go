@@ -288,10 +288,8 @@ func (h *handlers) oidcLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "OIDC 未启用")
 		return
 	}
-	if err := h.verifyTurnstile(r, r.URL.Query().Get("cf_turnstile_response")); err != nil {
-		oidcFail(w, r, oidcModeAdmin, "turnstile_failed")
-		return
-	}
+	// 用户需求：管理后台 SSO 登录不做人机验证（Turnstile 仅用于密码登录/邮箱验证码）。
+	// 这里的 cf_turnstile_response 参数完全忽略；仍有 state/nonce/PKCE 与回调校验。
 	d, err := h.oidcDiscover(r)
 	if err != nil || d.AuthorizationEndpoint == "" {
 		writeError(w, http.StatusBadGateway, "OIDC 发现文档读取失败")

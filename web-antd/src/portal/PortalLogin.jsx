@@ -65,10 +65,9 @@ export default function PortalLogin({ onLoggedIn }) {
 
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim());
 
-  // 发起 SSO：配置了 Turnstile 时先过验证，再带 token 跳转
-  const startSSO = (tsToken) => {
-    const q = tsToken ? '?cf_turnstile_response=' + encodeURIComponent(tsToken) : '';
-    window.location.href = '/api/portal/oidc/login' + q;
+  // 发起 SSO：SSO 不做人机验证（后端已移除 OIDC Turnstile 校验），直接跳转
+  const startSSO = () => {
+    window.location.href = '/api/portal/oidc/login';
   };
 
   const doSend = async () => {
@@ -150,10 +149,6 @@ export default function PortalLogin({ onLoggedIn }) {
     setTsOpen(false);
     const action = pending;
     setPending(null);
-    if (action === 'sso') {
-      startSSO(turnstile.token);
-      return;
-    }
     if (action === 'pwd') {
       doPasswordLogin(turnstile.token);
       return;
@@ -365,14 +360,7 @@ export default function PortalLogin({ onLoggedIn }) {
                 size="large"
                 block
                 icon={<SafetyOutlined />}
-                onClick={() => {
-                  if (SITE_KEY && !turnstile.getToken()) {
-                    setPending('sso');
-                    setTsOpen(true);
-                    return;
-                  }
-                  startSSO(turnstile.getToken());
-                }}
+                onClick={startSSO}
               >
                 {sso.button_text}
               </Button>
@@ -408,11 +396,7 @@ export default function PortalLogin({ onLoggedIn }) {
           </div>
         ) : null}
         <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', marginTop: 10 }}>
-          {pending === 'sso'
-            ? '完成验证后将跳转到单点登录'
-            : pending === 'pwd'
-              ? '完成验证后将自动登录'
-              : '完成验证后将自动发送验证码'}
+          {pending === 'pwd' ? '完成验证后将自动登录' : '完成验证后将自动发送验证码'}
         </div>
       </Modal>
     </div>

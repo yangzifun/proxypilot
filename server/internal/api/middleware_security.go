@@ -13,18 +13,20 @@ import "net/http"
 //   - CSP 内容是常量，对所有请求完全相同（无 nonce/无 Host 等每请求变化的值）；
 //   - HTML 里没有任何可执行内联脚本：动态数据走 <script type="application/json"> 数据块，
 //     可执行脚本全部是同源外部文件（见 page_scripts.go）；
+//
 // 这样无论缓存/代理如何拆分响应，CSP 与 HTML 都不会再互相矛盾。
 //
 // 指令说明：
-//   - script-src 只允许同源脚本与明确列出的 Cloudflare 脚本源，无 'unsafe-inline'；
+//   - script-src 允许同源脚本、明确列出的 Cloudflare/GTM 源，并保留 unsafe-inline：\n//     Cloudflare 挑战平台会在 HTML 中注入带随机 ray 的内联脚本（无法用 hash/nonce 固定），\n//     不加 unsafe-inline 会持续产生 CSP 报错；这是与 Cloudflare 挑战页共存的必要放宽。
 //   - connect-src 允许同源 WebSocket（管理端终端）。这里用 ws:/wss: 方案级白名单而不是
 //     具体 Host：Host 是每请求变化的值，写进 CSP 会重新引入「头与缓存版本不一致」的问题；
 //   - style-src 保留 'unsafe-inline'（内联样式不构成脚本执行面）；
 //   - report-uri 保留，强制模式下违规仍上报到 /api/csp-report 便于线上观察。
 const cspPolicy = "default-src 'self'; " +
-	"script-src 'self' https://static.cloudflareinsights.com https://challenges.cloudflare.com; " +
-	"style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://s3.yangzifun.org; " +
-	"font-src 'self' data:; connect-src 'self' ws: wss: https://cloudflareinsights.com https://challenges.cloudflare.com; " +
+	"script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com https://challenges.cloudflare.com https://www.googletagmanager.com https://www.google-analytics.com " +
+	"'sha256-wwrrtuUadF6CQecsCTLabpUoz2J5SZF3uDnUHL8+Y+8=' 'sha256-bGSVHoMEJKsgXk/66rgtBJc6YaOnmGNN54yqJW2tBjA=' 'sha256-dZPFXHEna3ofktEdUMdYUPV93X93VVfSs6peU4WqI1k='; " +
+	"style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://s3.yangzifun.org https://www.googletagmanager.com https://www.google-analytics.com; " +
+	"font-src 'self' data:; connect-src 'self' ws: wss: https://cloudflareinsights.com https://challenges.cloudflare.com https://www.googletagmanager.com https://www.google-analytics.com https://region1.google-analytics.com; " +
 	"frame-src https://challenges.cloudflare.com; frame-ancestors 'self'; base-uri 'self'; " +
 	"form-action 'self'; object-src 'none'; report-uri /api/csp-report"
 

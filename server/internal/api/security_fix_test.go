@@ -378,8 +378,10 @@ func assertStrictCSPHeader(t *testing.T, hdr http.Header) string {
 	if !strings.Contains(scriptSrc, "'self'") {
 		t.Fatalf("script-src 未包含 'self'：%s", scriptSrc)
 	}
-	if strings.Contains(scriptSrc, "'unsafe-inline'") || strings.Contains(scriptSrc, "'unsafe-eval'") {
-		t.Fatalf("script-src 不应包含 unsafe-inline/unsafe-eval：%s", scriptSrc)
+	// Cloudflare 挑战平台会注入带随机 ray 的内联脚本，无法用 hash/nonce 固定；
+	// unsafe-inline 由 cspPolicy 统一说明，这里只禁止 unsafe-eval。
+	if strings.Contains(scriptSrc, "'unsafe-eval'") {
+		t.Fatalf("script-src 不应包含 unsafe-eval：%s", scriptSrc)
 	}
 	if strings.Contains(csp, "nonce-") {
 		t.Fatalf("CSP 不应再使用每请求 nonce（缓存/代理下会与 HTML 不一致）：%s", csp)
