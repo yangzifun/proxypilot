@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { App as AntdApp, Button, Form, Input, Modal, Select, Space, Table, Tag } from 'antd';
+import { App as AntdApp, Button, Form, Input, Modal, Select, Space, Table, Tag, Tooltip } from 'antd';
 import { CloudUploadOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import { api, apiGet, apiPost } from '../api';
 import { PageCard } from '../components';
-import CdnDomainsField, { collectCdnEntries, normalizeCdnEntries } from '../components/CdnDomainsField';
+import CdnDomainsField, { collectCdnEntries, normalizeCdnEntries, cdnSummary } from '../components/CdnDomainsField';
 import { fmtTime } from '../format';
 import VpnNodesPanel from './VpnNodesPanel';
 
@@ -157,10 +157,25 @@ export default function NodeBindings() {
         results.push(`${label} 失败：${e.message || '未知错误'}`);
       }
     }
-    message.info(results.join('；'));
+    const failed = results.filter((x) => x.includes('失败'));
+    // CDN 是否有变化：编辑时对比原回填值，新建时只要填了 CDN 就算有变化
+    const cdnChanged = editRow
+      ? JSON.stringify(normalizeCdnEntries(editRow)) !== JSON.stringify(cdnEntries)
+      : cdnEntries.length > 0;
+    if (failed.length) {
+      // 部分失败：保留弹窗便于修正；同时刷新列表（成功的服务已保存）
+      message.warning(results.join('；'));
+      await load();
+      return;
+    }
+    let tip = results.join('；');
+    if (cdnChanged) tip += '；CDN 已保存，重新下发后生效';
+    message.success(tip);
+    // 先关闭/清空，再等待列表刷新完成，确保再次编辑拿到最新行（含 CDN）
     setOpen(false);
+    setEditRow(null);
     form.resetFields();
-    load();
+    await load();
   };
 
   const columns = [
@@ -193,6 +208,27 @@ export default function NodeBindings() {
     },
     { title: '域名', dataIndex: 'domain', width: 170, ellipsis: true, render: (v) => v || <span className="pp-muted">—</span> },
     {
+      title: 'CDN',
+      width: 180,
+      render: (_, r) => {
+        const cdn = cdnSummary(r);
+        if (!cdn) return <span className="pp-muted">—</span>;
+        return (
+          <Tooltip title={<span style={{ whiteSpace: 'pre-line' }}>{cdn.tooltip}</span>}>
+            <span
+              style={{
+                fontSize: 12,
+                cursor: 'help',
+                color: cdn.enabledCount === 0 ? '#f59e0b' : undefined,
+              }}
+            >
+              {cdn.text}
+            </span>
+          </Tooltip>
+        );
+      },
+    },
+    {
       title: '授权 UUID',
       width: 160,
       render: (_, r) => (
@@ -224,6 +260,8 @@ export default function NodeBindings() {
             type="link"
             onClick={() => {
               const row = r;
+              // 先清空上一次编辑残留（尤其 CDN 列表），再回填当前行
+              form.resetFields();
               setEditRow(row);
               form.setFieldsValue({
                 server_id: row.server_id,
@@ -262,7 +300,7 @@ export default function NodeBindings() {
         </Space>
       }
     >
-      <Table rowKey="server_id" size="middle" loading={loading} dataSource={rows} columns={columns} scroll={{ x: 1550 }} pagination={{ pageSize: 10, hideOnSinglePage: true }} />
+      <Table rowKey="server_id" size="middle" loading={loading} dataSource={rows} columns={columns} scroll={{ x: 1720 }} pagination={{ pageSize: 10, hideOnSinglePage: true }} />
 
       <Modal
         title="UUID 一致性检查"
@@ -297,7 +335,18 @@ export default function NodeBindings() {
         </div>
       </Modal>
 
-      <Modal title={editRow ? '编辑节点服务' : '绑定节点服务'} open={open} onCancel={() => setOpen(false)} onOk={submit} width={560} destroyOnClose>
+      <Modal
+        title={editRow ? '编辑节点服务' : '绑定节点服务'}
+        open={open}
+        onCancel={() => {
+          setOpen(false);
+          setEditRow(null);
+          form.resetFields();
+        }}
+        onOk={submit}
+        width={560}
+        destroyOnClose
+      >
         <Form form={form} layout="vertical">
           <Form.Item name="server_id" label="服务器" rules={[{ required: true, message: '请选择服务器' }]}>
             <Select showSearch optionFilterProp="label" options={options} placeholder="选择服务器" />
