@@ -169,11 +169,16 @@ export default function NodeBindings() {
     const idByKind = editRow
       ? { 'singbox': editRow.sb_id, 'mihomo': editRow.mh_id, MTProto: editRow.mp_id }
       : {};
+    let sbNodeId = editRow ? editRow.sb_id : 0;
     for (const [label, url, body] of tasks) {
       const existingId = idByKind[label];
       try {
-        if (existingId) await api(`${url.replace('/api/', '')}/${existingId}`, { method: 'PUT', body });
-        else await apiPost(url, body);
+        let res;
+        if (existingId) res = await api(`${url.replace('/api/', '')}/${existingId}`, { method: 'PUT', body });
+        else res = await apiPost(url, body);
+        if (label === 'singbox' && !sbNodeId) {
+          sbNodeId = Number(res?.data?.id || res?.id || res?.data?.node?.id || 0) || 0;
+        }
         results.push(`${label} ${existingId ? '更新' : '绑定'}成功`);
       } catch (e) {
         results.push(`${label} 失败：${e.message || '未知错误'}`);
@@ -191,7 +196,15 @@ export default function NodeBindings() {
       return;
     }
     let tip = results.join('；');
-    if (cdnChanged) tip += '；CDN 已保存，重新下发后生效';
+    if (cdnChanged) {
+      // CDN 变更后立即刷新订阅配置（不依赖手动“下发”）；只处理本节点，失败不回滚节点保存。
+      try {
+        await apiPost('/api/singbox/reconcile', sbNodeId ? { force: true, node_id: sbNodeId } : { force: false });
+        tip += '；CDN 已保存并刷新订阅配置';
+      } catch (e) {
+        tip += '；CDN 已保存，但订阅配置刷新失败，请稍后重新下发';
+      }
+    }
     message.success(tip);
     // 先关闭/清空，再等待列表刷新完成，确保再次编辑拿到最新行（含 CDN）
     setOpen(false);

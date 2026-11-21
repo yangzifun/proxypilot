@@ -3,9 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-	"net/url"
 	"strings"
-	"time"
 )
 
 func singboxProtocolOf(linkProtocol string) string {
@@ -84,70 +82,13 @@ func (h *handlers) singboxReconcile(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		existing := map[string]map[string]any{}
-		if rows2, err := queryRowsAsMaps(r.Context(), h.db,
-			`SELECT id, uuid, config_data FROM configs WHERE singbox_node_id = ?`, nodeID); err == nil {
-			for _, e := range rows2 {
-				existing[mapStr(e, "uuid", "")+"\x00"+mapStr(e, "config_data", "")] = e
-			}
+		// 统一走 syncSingboxConfigsForUsers：内部用 UUID 映射做 wanted 集合，
+		// 避免旧实现用“用户名+链接”去和“UUID+链接”比较导致误删全部配置。
+		added, removed, err := h.syncSingboxConfigsForUsers(r.Context(), nodeID, nodeName, tpl, node, users)
+		if err != nil {
+			out = append(out, map[string]any{"id": nodeID, "name": nodeName, "ok": false, "error": err.Error()})
+			continue
 		}
-		wanted := map[string]bool{}
-		for _, l := range desired {
-			wanted[mapStr(l, "user", "")+"\x00"+mapStr(l, "link", "")] = true
-		}
-
-		removed := int64(0)
-		for key, e := range existing {
-			if wanted[key] {
-				continue
-			}
-			if _, err := h.db.ExecContext(r.Context(), `DELETE FROM configs WHERE id = ?`, mapInt(e, "id", 0)); err == nil {
-				removed++
-			}
-		}
-
-		added := int64(0)
-		now := time.Now().UnixMilli()
-		for _, l := range desired {
-			link := mapStr(l, "link", "")
-			uuid := mapStr(l, "user", "")
-			// l.user 是用户名，不是 UUID；从 users 里按名字反查
-			uuid = ""
-			for _, u := range users {
-				if u.Name == mapStr(l, "user", "") {
-					uuid = u.UUID
-					break
-				}
-			}
-			if uuid == "" {
-				continue
-			}
-			key := uuid + "\x00" + link
-			if existing[key] != nil {
-				continue
-			}
-			var dup int64
-			_ = h.db.QueryRowContext(r.Context(),
-				`SELECT COUNT(*) FROM configs WHERE uuid = ? AND config_data = ?`, uuid, link).Scan(&dup)
-			if dup > 0 {
-				continue
-			}
-			remark := nodeName + "-" + mapStr(l, "protocol", "")
-			if idx := strings.Index(link, "#"); idx >= 0 {
-				if decoded, err := url.QueryUnescape(link[idx+1:]); err == nil && decoded != "" {
-					remark = decoded
-				}
-			}
-			if _, err := h.db.ExecContext(r.Context(), `INSERT INTO configs
-			  (uuid, config_data, protocol, remark, domain_hosting, singbox_node_id, created_at, updated_at)
-			  VALUES (?, ?, ?, ?, 'Cloudflare', ?, ?, ?)`,
-				uuid, link, singboxProtocolOf(mapStr(l, "protocol", "")), truncateRunes(remark, 500), nodeID, now, now); err == nil {
-				added++
-			}
-		}
-
-		_, _ = h.db.ExecContext(r.Context(),
-			`UPDATE singbox_nodes SET last_link_hash = ?, updated_at = ? WHERE id = ?`, digest, now, nodeID)
 		out = append(out, map[string]any{
 			"id": nodeID, "name": nodeName, "ok": true, "users": len(users),
 			"added": added, "removed": removed, "digest": digest,

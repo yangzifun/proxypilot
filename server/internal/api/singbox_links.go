@@ -463,8 +463,9 @@ func cdnLinkTargets(tpl *singboxTemplate, entry singboxCDNEntry, legacy bool) []
 	return toTargets(list)
 }
 
-// singboxCDNLinkTag 生成 CDN 链接 tag：含 CDN 名称；同名多域名/优选多地址追加序号。
-// 旧单域名保持原 tag（-cdn / -cdn-1），确保旧订阅兼容。
+// singboxCDNLinkTag 生成 CDN 链接 tag：新多 CDN 条目统一为「节点-CDN名称-目标序号」，
+// 其中同名多条目先按 occurrence 区分（第二条第 1 个目标为 -Cloudflare-2-1），再追加
+// 该条目的优选地址序号（单目标也会追加 -1）。旧单域名保持 -cdn / -cdn-1 兼容。
 func singboxCDNLinkTag(baseTag string, entry singboxCDNEntry, occurrence, targetIdx, targetCount int, legacy bool) string {
 	var tag string
 	if legacy {
@@ -478,9 +479,8 @@ func singboxCDNLinkTag(baseTag string, entry singboxCDNEntry, occurrence, target
 	if occurrence > 0 {
 		tag += "-" + strconv.Itoa(occurrence+1)
 	}
-	if targetCount > 1 {
-		tag += "-" + strconv.Itoa(targetIdx+1)
-	}
+	// 非 legacy 始终追加目标序号：单目标 -1，多优选 -1/-2 ……
+	tag += "-" + strconv.Itoa(targetIdx+1)
 	return tag
 }
 

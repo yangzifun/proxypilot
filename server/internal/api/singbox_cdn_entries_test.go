@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -603,4 +604,104 @@ func TestSingboxClientLinksOnlyEnabledInOrder(t *testing.T) {
 			t.Fatalf("停用条目不应生成链接：%s", mapStr(l, "link", ""))
 		}
 	}
+}
+
+// task-66：新多 CDN tag 统一为 节点-CDN名称-目标序号；legacy 保持旧格式。
+func TestSingboxCDNLinkTagAlwaysTargetSuffix(t *testing.T) {
+	entry := singboxCDNEntry{Name: "Cloudflare"}
+	cases := []struct {
+		name                               string
+		base                               string
+		occurrence, targetIdx, targetCount int
+		legacy                             bool
+		want                               string
+	}{
+		{"单目标", "彰化", 0, 0, 1, false, "彰化-Cloudflare-1"},
+		{"多优选第1个", "彰化", 0, 0, 2, false, "彰化-Cloudflare-1"},
+		{"多优选第2个", "彰化", 0, 1, 2, false, "彰化-Cloudflare-2"},
+		{"同名第二条单目标", "彰化", 1, 0, 1, false, "彰化-Cloudflare-2-1"},
+		{"同名第二条多优选第2个", "彰化", 1, 1, 2, false, "彰化-Cloudflare-2-2"},
+		{"legacy单目标", "彰化-vlws", 0, 0, 1, true, "彰化-vlws-cdn"},
+		{"legacy多目标第2个", "彰化-vlws", 0, 1, 2, true, "彰化-vlws-cdn-2"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := singboxCDNLinkTag(tc.base, entry, tc.occurrence, tc.targetIdx, tc.targetCount, tc.legacy)
+			if got != tc.want {
+				t.Fatalf("tag = %q，期望 %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func cdnLinkTags(links []map[string]any) []string {
+	out := []string{}
+	for _, l := range links {
+		link := mapStr(l, "link", "")
+		idx := strings.LastIndex(link, "#")
+		if idx < 0 {
+			continue
+		}
+		tag, _ := url.QueryUnescape(link[idx+1:])
+		out = append(out, tag)
+	}
+	return out
+}
+
+// 订阅链接输出：单 CDN、多 CDN、同名多条目、多优选地址的 tag 均须符合命名规则。
+func TestSingboxClientLinksCDNTagNaming(t *testing.T) {
+	setCDNTestCache(t, nil, false)
+	tpl := &singboxTemplate{ID: 1, Name: "t", PortBase: 13700, EnableVLWS: 1}
+	user := []sbUser{{Name: "u1", UUID: "11111111-1111-4111-8111-111111111111"}}
+
+	t.Run("单CDN单目标", func(t *testing.T) {
+		node := singboxNode{Name: "彰化", Domain: "tw.example.com", CDNEntries: []singboxCDNEntry{
+			{Name: "Cloudflare", Domain: "cf.example.com"},
+		}}
+		got := cdnLinkTags(cdnLinksOf(singboxClientLinks(tpl, node, user)))
+		want := []string{"彰化-Cloudflare-1"}
+		if strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Fatalf("tags = %v，期望 %v", got, want)
+		}
+	})
+
+	t.Run("多CDN各自目标1", func(t *testing.T) {
+		node := singboxNode{Name: "hk", Domain: "hk.example.com", CDNEntries: []singboxCDNEntry{
+			{Name: "Cloudflare", Domain: "cf.example.com"},
+			{Name: "ESA", Domain: "esa.example.com"},
+			{Name: "EO", Domain: "eo.example.com"},
+		}}
+		got := cdnLinkTags(cdnLinksOf(singboxClientLinks(tpl, node, user)))
+		want := []string{"hk-Cloudflare-1", "hk-ESA-1", "hk-EO-1"}
+		if strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Fatalf("tags = %v，期望 %v", got, want)
+		}
+	})
+
+	t.Run("同名多条目唯一", func(t *testing.T) {
+		node := singboxNode{Name: "hk", Domain: "hk.example.com", CDNEntries: []singboxCDNEntry{
+			{Name: "Cloudflare", Domain: "a.example.com"},
+			{Name: "Cloudflare", Domain: "b.example.com"},
+		}}
+		got := cdnLinkTags(cdnLinksOf(singboxClientLinks(tpl, node, user)))
+		want := []string{"hk-Cloudflare-1", "hk-Cloudflare-2-1"}
+		if strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Fatalf("tags = %v，期望 %v", got, want)
+		}
+	})
+
+	t.Run("多优选地址追加1和2", func(t *testing.T) {
+		setCDNTestCache(t, []cdnPrefer{
+			{Address: "162.159.198.1", Port: 443, Group: "cloudflare", Remark: "cf1"},
+			{Address: "162.159.198.2", Port: 443, Group: "cloudflare", Remark: "cf2"},
+		}, false)
+		node := singboxNode{Name: "hk", Domain: "hk.example.com", CDNEntries: []singboxCDNEntry{
+			{Name: "Cloudflare", Domain: "cf.example.com", PreferGroup: "cloudflare"},
+		}}
+		got := cdnLinkTags(cdnLinksOf(singboxClientLinks(tpl, node, user)))
+		want := []string{"hk-Cloudflare-1", "hk-Cloudflare-2"}
+		if strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Fatalf("tags = %v，期望 %v", got, want)
+		}
+	})
 }
