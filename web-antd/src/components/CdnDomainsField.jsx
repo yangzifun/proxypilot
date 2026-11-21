@@ -1,5 +1,5 @@
 import React from 'react';
-import { AutoComplete, Button, Form, Switch } from 'antd';
+import { AutoComplete, Button, Form, Select, Switch } from 'antd';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 
 /**
@@ -22,13 +22,15 @@ import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 export const CDN_MAX = 8;
 export const CDN_NAME_MAX = 24;
 
-/** 名称下拉预设（可手填其他名称；旧数据如 CF 按原样显示/保存） */
+/** 名称下拉预设（严格下拉不可手填；旧数据如 CF 通过临时选项保留，用户可改选新预设） */
 export const CDN_NAME_PRESETS = [
   { value: 'Cloudflare', label: 'Cloudflare' },
   { value: 'ESA', label: 'ESA' },
   { value: 'EO', label: 'EO（EdgeOne）' },
   { value: 'CloudFront', label: 'CloudFront' },
   { value: 'Fastly', label: 'Fastly' },
+  // 旧名称临时选项：避免旧数据（CF）编辑时值丢失，后续可统一改为 Cloudflare
+  { value: 'CF', label: 'CF（旧名称）' },
 ];
 
 // 只允许域名（不含协议/路径/端口/IP）；TLD 必须为字母，避免 1.2.3.4 被当成域名。
@@ -189,7 +191,7 @@ export function collectCdnDomains(rows) {
 
 /**
  * 表单字段：多 CDN 动态列表（名称 + 启用开关 + 域名 + 删除）。
- * 名称/域名均为 AutoComplete（可下拉选择，也可手填）。
+ * 名称严格下拉（Select，不可手填；旧值自动作为临时选项保留）；域名 AutoComplete（可下拉选择或手填）。
  * 用法：在 Form 内 <CdnDomainsField name="cdn_entries" domainOptions={...} />
  */
 export default function CdnDomainsField({
@@ -258,6 +260,11 @@ export default function CdnDomainsField({
             {fields.map((field, index) => {
               const row = list[index] || {};
               const rowEnabled = row.enabled !== false;
+              // 旧值不在预设中（如历史手填名称）→ 作为临时选项加入，避免编辑时值丢失
+              const rowName = String(row.name || '').trim();
+              const nameOptionsForRow = rowName && !nameOptionList.some((o) => o && o.value === rowName)
+                ? [...nameOptionList, { value: rowName, label: `${rowName}（旧名称）` }]
+                : nameOptionList;
               return (
                 <div
                   key={field.key}
@@ -275,13 +282,12 @@ export default function CdnDomainsField({
                     ]}
                     style={{ width: 110, marginBottom: 0 }}
                   >
-                    <AutoComplete
-                      options={nameOptionList}
-                      placeholder="Cloudflare / ESA / EO（可手填）"
+                    <Select
+                      options={nameOptionsForRow}
+                      placeholder="Cloudflare / ESA / EO"
                       disabled={disabled}
-                      filterOption={(input, option) =>
-                        String((option && option.value) || '').toLowerCase().includes(String(input || '').toLowerCase())
-                      }
+                      showSearch
+                      optionFilterProp="label"
                     />
                   </Form.Item>
                   <Form.Item
@@ -356,7 +362,7 @@ export default function CdnDomainsField({
         )}
       </Form.List>
       <div style={{ fontSize: 11.5, color: '#94a3b8', lineHeight: 1.7, marginTop: 4 }}>
-        名称从下拉选择（Cloudflare/ESA/EO，可手填）用于后台识别和节点命名；域名可从已配置域名中选择或手填，需在对应 CDN/Tunnel 侧配置回源到本节点；最多 8 条；
+        名称从下拉选择（Cloudflare/ESA/EO，不可手填）用于后台识别和节点命名；域名可从已配置域名中选择或手填，需在对应 CDN/Tunnel 侧配置回源到本节点；最多 8 条；
         停用的 CDN 不生成订阅链接，可同时启用多个。
       </div>
     </div>
