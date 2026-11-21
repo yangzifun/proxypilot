@@ -50,7 +50,8 @@ func TestSingboxUserStatsCapableFor(t *testing.T) {
 	}{
 		{"自建版本后缀", "1.14.4-proxypilot", "", true},
 		{"二进制标签", "unknown-with_v2ray_api", "", true},
-		{"官方版本", "1.14.4", "https://cdn/singbox", false},
+		{"显式版本+组件基址", "1.14.4", "https://cdn/singbox", true},
+		{"官方版本无基址", "1.14.4", "", false},
 		{"未知版本+组件基址", "unknown", "https://cdn/singbox", true},
 		{"空版本+组件基址", "", "https://cdn/singbox", true},
 		{"未知版本无基址", "unknown", "", false},

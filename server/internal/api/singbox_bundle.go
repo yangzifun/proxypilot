@@ -141,8 +141,11 @@ func singboxUserStatsCapableFor(ver, componentBase string) bool {
 	if strings.Contains(lower, "with_v2ray_api") {
 		return true
 	}
-	// 仅当版本缺失（unknown/空）且配置了面板组件基址时才视为自建组件。
-	if (lower == "" || lower == "unknown") && strings.TrimSpace(componentBase) != "" {
+	// 显式配置了面板组件基址（面板只允许 S3 自建构建）时，即使 Agent 已能
+	// 上报 1.14.4/1.15.x 这类正常版本号，也视为统计版：S3 组件带 with_v2ray_api。
+	// 不能只认 unknown：版本标记修复后节点会上报 1.14.4，若仍按官方版本判断
+	// 会导致 v2ray_api 再次被省略、用户流量停更。
+	if strings.TrimSpace(componentBase) != "" {
 		return true
 	}
 	return false
