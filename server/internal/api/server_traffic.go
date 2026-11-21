@@ -273,7 +273,10 @@ func (h *handlers) serverTrafficUnsuspend(w http.ResponseWriter, r *http.Request
 
 // cronTrafficReset 每分钟检查是否到达重置时间。
 func (h *handlers) cronTrafficReset(ctx context.Context, now int64) {
-	rows, err := h.db.QueryContext(ctx, "SELECT server_id, reset_day, reset_hour FROM server_traffic_limits")
+	// 所有服务器都按周期检查：没有配置限额的服务器也使用默认每月 1 日 00:00 重置，
+	// 不能只遍历 server_traffic_limits（否则“默认不设限额但每月重置”不会生效）。
+	rows, err := h.db.QueryContext(ctx, `SELECT s.id, COALESCE(l.reset_day,1), COALESCE(l.reset_hour,0)
+		FROM servers s LEFT JOIN server_traffic_limits l ON l.server_id = s.id`)
 	if err != nil {
 		return
 	}

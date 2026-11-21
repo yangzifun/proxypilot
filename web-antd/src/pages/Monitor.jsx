@@ -656,6 +656,7 @@ function osBadge(osName) {
 
 export function ServerCard({ s, node, onPick, onUnlock, leading }) {
   const net = s.net || {};
+  const traffic = s.traffic || {};
   const io = s.disk_io || {};
   const conn = s.conn || {};
   const proc = s.proc || {};
@@ -742,9 +743,11 @@ export function ServerCard({ s, node, onPick, onUnlock, leading }) {
           </span>
         </div>
         <div>
-          <span>累计网络 ↓ / ↑</span>
+          <span title={traffic.reset_day ? `本周期累计；每月 ${traffic.reset_day} 日 ${String(traffic.reset_hour || 0).padStart(2, '0')}:00 重置` : '本周期累计；默认每月 1 日 00:00 重置'}>
+            本周期累计网络 ↓ / ↑
+          </span>
           <span>
-            {fmtBytes(net.rxBytes ?? net.rx_bytes)} / {fmtBytes(net.txBytes ?? net.tx_bytes)}
+            {fmtBytes(traffic.rx_bytes ?? net.rxBytes ?? net.rx_bytes)} / {fmtBytes(traffic.tx_bytes ?? net.txBytes ?? net.tx_bytes)}
           </span>
         </div>
         <div>

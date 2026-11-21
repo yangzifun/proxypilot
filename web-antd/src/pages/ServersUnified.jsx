@@ -867,13 +867,21 @@ export default function ServersUnified() {
       render: (_, row) => <span className="pp-mono pp-nowrap" style={{ fontSize: 12 }}>{netText(row)}</span>,
     },
     {
-      title: '累计网络 ↓ / ↑',
+      title: '本周期累计网络 ↓ / ↑',
       width: 170,
       render: (_, row) => {
         const net = row.net || {};
-        const rx = net.rxBytes ?? net.rx_bytes;
-        const tx = net.txBytes ?? net.tx_bytes;
-        return <span className="pp-mono pp-nowrap" style={{ fontSize: 12 }}>↓ {fmtBytes(rx)} ↑ {fmtBytes(tx)}</span>;
+        const usage = trafficMap[row.id] || {};
+        const rx = usage.rx_bytes ?? net.rxBytes ?? net.rx_bytes;
+        const tx = usage.tx_bytes ?? net.txBytes ?? net.tx_bytes;
+        const tip = usage.reset_day
+          ? `本周期累计；每月 ${usage.reset_day} 日 ${String(usage.reset_hour || 0).padStart(2, '0')}:00 重置`
+          : '本周期累计；默认每月 1 日 00:00 重置';
+        return (
+          <span className="pp-mono pp-nowrap" style={{ fontSize: 12 }} title={tip}>
+            ↓ {fmtBytes(rx)} ↑ {fmtBytes(tx)}
+          </span>
+        );
       },
     },
     {

@@ -24,6 +24,21 @@ func (h *handlers) serversMonitor(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// 服务器「累计网络」使用持久化的本周期用量，而不是 /proc/net/dev 的开机计数：
+	// 月度重置、服务/服务器重启不丢、reset_day/reset_hour 可配置。
+	trafficByServer := map[int64]map[string]any{}
+	if trs, terr := queryRowsAsMaps(r.Context(), h.db, `
+		SELECT u.server_id, COALESCE(u.rx_bytes,0) AS rx_bytes, COALESCE(u.tx_bytes,0) AS tx_bytes,
+		       COALESCE(u.period_start,0) AS period_start,
+		       COALESCE(l.reset_day,1) AS reset_day, COALESCE(l.reset_hour,0) AS reset_hour
+		  FROM server_traffic_usage u
+		  LEFT JOIN server_traffic_limits l ON l.server_id = u.server_id
+		 WHERE u.period_start = (SELECT MAX(x.period_start) FROM server_traffic_usage x WHERE x.server_id = u.server_id)`); terr == nil {
+		for _, tr := range trs {
+			trafficByServer[mapInt(tr, "server_id", 0)] = tr
+		}
+	}
+
 	servers := make([]map[string]any, 0, len(rows))
 	seen := map[string]bool{}
 	var totalRxRate, totalTxRate int64
@@ -79,6 +94,7 @@ func (h *handlers) serversMonitor(w http.ResponseWriter, r *http.Request) {
 			"mem_total_mb": metrics["memTotalMb"], "disk_percent": metrics["diskPercent"],
 			"net": metrics["net"], "disk_io": metrics["diskIo"], "conn": metrics["conn"],
 			"proc": metrics["proc"], "services": services, "ssh": metrics["ssh"],
+			"traffic": trafficByServer[mapInt(row, "id", 0)],
 			"metrics": metrics,
 		})
 	}
