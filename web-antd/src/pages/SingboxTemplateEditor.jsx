@@ -612,7 +612,7 @@ export default function SingboxTemplateEditor({ state, onClose, onSaved }) {
 
         <div style={{ margin: '18px 0 8px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 13, color: '#475569' }}>
-            服务端引擎<span className="pp-muted">（V15.6 起只用 sing-box；Xray 已下线）</span>
+            服务端引擎
           </span>
           <Space size={18} style={{ marginLeft: 'auto' }}>
             <Checkbox checked={engSb} onChange={(e) => setEngSb(e.target.checked)}>
