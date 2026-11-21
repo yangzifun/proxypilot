@@ -233,7 +233,7 @@ func inputToNode(in map[string]any) singboxRenderNode {
 	}
 	cdnDomain := jsonStr(in["cdn_domain"])
 	if len(entries) > 0 {
-		// entries 存在（即使全部停用）时以 entries 的主 CDN 为准。
+		// entries 存在（即使全部停用）时以第一个启用条目为准。
 		cdnDomain = cdnPrimaryDomain(entries)
 	}
 	return singboxRenderNode{

@@ -19,7 +19,7 @@ import (
 //   - 旧数据只有 node.cdn_domain（单域名），effectiveCDNEntries 会把它转成
 //     一个 name="" 的 legacy 条目；
 //   - 新数据存 singbox_nodes.cdn_entries（JSON 数组），同时继续维护
-//     cdn_domain 列为主 CDN 域名（兼容旧前端/旧订阅逻辑）。
+//     cdn_domain 列为第一个启用条目的域名（兼容旧前端/旧订阅逻辑）。
 type singboxCDNEntry struct {
 	Name    string `json:"name"`
 	Domain  string `json:"domain"`
@@ -97,73 +97,22 @@ func normalizeCDNEntryDomain(raw string) string {
 	return d
 }
 
-// orderCDNEntries 把启用的条目排在前面：主 CDN → 其它启用 → 停用；
-// 同组内保持原顺序，便于前端显示与链接生成。
-func orderCDNEntries(entries []singboxCDNEntry) []singboxCDNEntry {
-	if len(entries) <= 1 {
-		return entries
-	}
-	out := make([]singboxCDNEntry, 0, len(entries))
-	var main *singboxCDNEntry
-	restEnabled := make([]singboxCDNEntry, 0, len(entries))
-	disabled := make([]singboxCDNEntry, 0, len(entries))
-	for i := range entries {
-		e := entries[i]
-		if !cdnEntryEnabled(e) {
-			disabled = append(disabled, e)
-			continue
-		}
-		if e.Primary && main == nil {
-			cp := e
-			main = &cp
-			continue
-		}
-		restEnabled = append(restEnabled, e)
-	}
-	if main != nil {
-		out = append(out, *main)
-	}
-	out = append(out, restEnabled...)
-	out = append(out, disabled...)
-	return out
-}
-
-// finalizeCDNEntries 归一化 primary：
-//   - 停用条目的 primary 一律清空；
-//   - 启用条目中 primary 最多一个；没有则第一个启用条目自动为主；
-//   - 主 CDN 排最前；全部停用时保留 entries（供前端展示），但不产生主 CDN。
+// finalizeCDNEntries 仅补 enabled 缺省值。primary 仅作为旧 JSON 兼容字段保留，
+// 不参与排序、唯一性校验或 fallback；条目顺序保持原顺序。
 func finalizeCDNEntries(entries []singboxCDNEntry) []singboxCDNEntry {
 	if len(entries) == 0 {
 		return nil
 	}
-	primary := -1
 	for i := range entries {
-		if !cdnEntryEnabled(entries[i]) {
-			entries[i].Primary = false
-			continue
-		}
-		if entries[i].Primary {
-			if primary < 0 {
-				primary = i
-			} else {
-				entries[i].Primary = false
-			}
+		if entries[i].Enabled == nil {
+			entries[i].Enabled = cdnBoolPtr(true) // 旧数据/旧请求缺省启用
 		}
 	}
-	if primary < 0 {
-		for i := range entries {
-			if cdnEntryEnabled(entries[i]) {
-				entries[i].Primary = true
-				primary = i
-				break
-			}
-		}
-	}
-	return orderCDNEntries(entries)
+	return entries
 }
 
 // normalizeStoredCDNEntries 对数据库中已存/旧数据做宽松解析：坏条目丢弃，
-// 域名去重、小写；enabled 缺省 true；primary 只在启用条目中唯一且排最前。
+// 域名去重、小写；enabled 缺省 true；保持原条目顺序，忽略 primary 语义。
 // 用于响应与链接生成，不返回错误。
 func normalizeStoredCDNEntries(entries []singboxCDNEntry) []singboxCDNEntry {
 	out := make([]singboxCDNEntry, 0, len(entries))
@@ -186,6 +135,7 @@ func normalizeStoredCDNEntries(entries []singboxCDNEntry) []singboxCDNEntry {
 		if enabled == nil {
 			enabled = cdnBoolPtr(true) // 旧数据/旧请求缺省启用
 		}
+		// Primary 原样保留（旧 JSON 兼容），但不再影响任何逻辑。
 		out = append(out, singboxCDNEntry{
 			Name: name, Domain: domain, Primary: e.Primary, Enabled: enabled, PreferGroup: group,
 		})
@@ -196,7 +146,7 @@ func normalizeStoredCDNEntries(entries []singboxCDNEntry) []singboxCDNEntry {
 	return finalizeCDNEntries(out)
 }
 
-// enabledCDNEntries 只保留启用的条目（链接生成/主 CDN 判断使用）。
+// enabledCDNEntries 只保留启用的条目（链接生成/兼容 cdn_domain 判断使用）。
 func enabledCDNEntries(entries []singboxCDNEntry) []singboxCDNEntry {
 	out := make([]singboxCDNEntry, 0, len(entries))
 	for _, e := range entries {
@@ -271,11 +221,14 @@ func cdnEntriesJSON(entries []singboxCDNEntry) string {
 	return string(b)
 }
 
-// cdnDomainsOf 是 cdn_entries 的兼容投影：包含全部条目（含停用），
-// 便于旧前端回填/展示；新前端应以 cdn_entries.enabled 为准。
+// cdnDomainsOf 是 cdn_entries 的兼容投影：只包含启用条目的域名，
+// 与 0059 前 cdn_domains 被用于生成链接的语义保持一致（停用 CDN 不外泄给旧订阅）。
 func cdnDomainsOf(entries []singboxCDNEntry) []string {
 	out := make([]string, 0, len(entries))
 	for _, e := range entries {
+		if !cdnEntryEnabled(e) {
+			continue
+		}
 		out = append(out, e.Domain)
 	}
 	return out
@@ -298,12 +251,9 @@ func cdnJSONFields(entries []singboxCDNEntry) map[string]any {
 	}
 }
 
+// cdnPrimaryDomain 仅为兼容旧 cdn_domain 列：取第一个启用条目的域名。
+// 注意：CDN 已不分主/备，这里不再看 primary 字段（primary 仅作旧 JSON 解析保留）。
 func cdnPrimaryDomain(entries []singboxCDNEntry) string {
-	for _, e := range entries {
-		if cdnEntryEnabled(e) && e.Primary {
-			return e.Domain
-		}
-	}
 	for _, e := range entries {
 		if cdnEntryEnabled(e) {
 			return e.Domain
@@ -394,7 +344,6 @@ func normalizeCDNInput(body map[string]any) ([]singboxCDNEntry, string) {
 	}
 
 	seen := map[string]bool{}
-	primaryCount := 0
 	for i := range entries {
 		idx := i + 1
 		name := strings.TrimSpace(entries[i].Name)
@@ -442,17 +391,8 @@ func normalizeCDNInput(body map[string]any) ([]singboxCDNEntry, string) {
 		if enabled == nil {
 			enabled = cdnBoolPtr(true) // 缺省启用（兼容旧请求/旧前端）
 		}
-		primary := entries[i].Primary
-		if !*enabled {
-			// primary 只在启用条目中生效：停用条目即使传了 primary 也清空。
-			primary = false
-		} else if primary {
-			primaryCount++
-		}
-		entries[i] = singboxCDNEntry{Name: name, Domain: domain, Primary: primary, Enabled: enabled, PreferGroup: group}
-	}
-	if primaryCount > 1 {
-		return nil, "只能设置一个主 CDN"
+		// primary 仅为旧 JSON 兼容：新请求不再写入主备语义，统一置 false。
+		entries[i] = singboxCDNEntry{Name: name, Domain: domain, Primary: false, Enabled: enabled, PreferGroup: group}
 	}
 	return finalizeCDNEntries(entries), ""
 }
@@ -629,7 +569,7 @@ func singboxClientLinks(tpl *singboxTemplate, node singboxNode, users []sbUser) 
 				enc(wsPath) + "&host=" + enc(domain) + "#" + enc(tag("vlws"))
 			add("vless-ws", ports["vlws"], u.Name, link, "直连源站 "+strconv.Itoa(ports["vlws"])+"；依赖 80/443 签证书")
 
-			// 多 CDN 条目：每条目一条（或按优选分组多条）链接，主 CDN 排最前。
+			// 多 CDN 条目：每条目一条（或按优选分组多条）链接，按条目原顺序生成。
 			for i, entry := range entries {
 				targets := cdnLinkTargets(tpl, entry, legacyCDN)
 				cdnBaseTag := node.Name + suffix
@@ -658,7 +598,7 @@ func singboxClientLinks(tpl *singboxTemplate, node singboxNode, users []sbUser) 
 						"link": "vless://" + u.UUID + "@" + tgt.Host + "/?security=tls&encryption=none&sni=" +
 							enc(entry.Domain) + "&fp=chrome&type=ws&path=" + enc(wsPath) + "&host=" + enc(entry.Domain) +
 							"#" + enc(tagText),
-						"cdn": true, "cdn_name": entry.Name, "cdn_primary": entry.Primary, "note": note,
+						"cdn": true, "cdn_name": entry.Name, "note": note,
 					}
 					if entry.PreferGroup != "" {
 						item["prefer_group"] = entry.PreferGroup

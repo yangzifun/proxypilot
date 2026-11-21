@@ -30,7 +30,7 @@ func (h *handlers) loadSingboxNodeFull(ctx context.Context, id int64) (*singboxT
 		tpl.UsersJSON = mapStr(tplRows[0], "users_json", "[]")
 	}
 	cdnEntries := parseStoredCDNEntries(mapStr(nodeRow, "cdn_entries", ""), mapStr(nodeRow, "cdn_domain", ""))
-	// entries 存在时（即使全部停用）以 entries 的主 CDN 为准，不能回退旧 cdn_domain，
+	// entries 存在时（即使全部停用）以第一个启用条目为准，不能回退旧 cdn_domain，
 	// 否则全部停用的节点仍会保留 CDN 入站。
 	cdnDomain := mapStr(nodeRow, "cdn_domain", "")
 	if len(cdnEntries) > 0 {

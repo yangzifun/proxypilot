@@ -645,16 +645,16 @@ function NodeEditor({ state, servers, templates, onClose, onSaved }) {
         return;
       }
       const enabledCdnEntries = cdnEntries.filter((x) => x.enabled !== false);
-      const primaryCdnDomain = (enabledCdnEntries.find((x) => x.primary) || enabledCdnEntries[0] || {}).domain || '';
+      const firstEnabledCdnDomain = (enabledCdnEntries[0] || {}).domain || '';
       const body = {
         name: v.name,
         server_id: v.server_id,
         template_id: v.template_id || 0,
         domain: v.domain || '',
-        // 多 CDN：cdn_entries 为主（含 enabled），旧字段只写启用中的域名兼容
+        // 多 CDN：cdn_entries 为主（含 enabled，不写 primary），旧字段只写启用域名
         cdn_entries: cdnEntries,
         cdn_domains: enabledCdnEntries.map((x) => x.domain),
-        cdn_domain: primaryCdnDomain,
+        cdn_domain: firstEnabledCdnDomain,
         port_base: v.port_base || 0,
         warp_base: v.warp_base || 0,
         warp_enabled: Number(v.warp_enabled),

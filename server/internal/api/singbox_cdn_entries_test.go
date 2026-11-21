@@ -33,13 +33,13 @@ func TestNormalizeCDNInputLegacyDomain(t *testing.T) {
 	if len(entries) != 1 {
 		t.Fatalf("旧单域名应转 1 条条目，实际 %d：%v", len(entries), entries)
 	}
-	if entries[0].Domain != "cdn.example.com" || !entries[0].Primary || entries[0].Name != "" {
+	if entries[0].Domain != "cdn.example.com" || entries[0].Name != "" || !cdnEntryEnabled(entries[0]) {
 		t.Fatalf("旧单域名归一化错误：%+v", entries[0])
 	}
 	if got := mapStr(out, "cdn_domain", ""); got != "cdn.example.com" {
 		t.Fatalf("cdn_domain 应为主域名，实际 %q", got)
 	}
-	if got := strings.TrimSpace(mapStr(out, "cdn_entries", "")); got != `[{"name":"","domain":"cdn.example.com","primary":true,"enabled":true,"prefer_group":""}]` {
+	if got := strings.TrimSpace(mapStr(out, "cdn_entries", "")); got != `[{"name":"","domain":"cdn.example.com","primary":false,"enabled":true,"prefer_group":""}]` {
 		t.Fatalf("cdn_entries 序列化错误：%s", got)
 	}
 }
@@ -50,7 +50,8 @@ func TestNormalizeCDNInputLegacyDomains(t *testing.T) {
 	if len(entries) != 2 {
 		t.Fatalf("cdn_domains 应转 2 条条目，实际 %d", len(entries))
 	}
-	if entries[0].Domain != "a.example.com" || !entries[0].Primary || entries[1].Domain != "b.example.com" || entries[1].Primary {
+	if entries[0].Domain != "a.example.com" || entries[1].Domain != "b.example.com" ||
+		!cdnEntryEnabled(entries[0]) || !cdnEntryEnabled(entries[1]) {
 		t.Fatalf("cdn_domains 归一化错误：%v", entries)
 	}
 	if !strings.Contains(mapStr(out, "cdn_entries", ""), "a.example.com") {
@@ -68,17 +69,15 @@ func TestNormalizeCDNInputEntries(t *testing.T) {
 	if len(entries) != 3 {
 		t.Fatalf("应 3 条条目，实际 %d", len(entries))
 	}
-	if !entries[0].Primary || entries[0].Domain != "esa.example.com" || entries[0].Name != "ESA" {
-		t.Fatalf("主 CDN 应排最前：%v", entries)
+	// primary 已忽略：保持原顺序，不因 primary=true 把 ESA 提前。
+	if entries[0].Domain != "cf.example.com" || entries[1].Domain != "esa.example.com" || entries[2].Domain != "eo.example.com" {
+		t.Fatalf("条目顺序应保持原始顺序：%v", entries)
 	}
-	if entries[1].Domain != "cf.example.com" || entries[1].PreferGroup != "cloudflare" {
-		t.Fatalf("CF 条目丢失 prefer_group：%+v", entries[1])
+	if entries[0].PreferGroup != "cloudflare" || entries[2].PreferGroup != "" {
+		t.Fatalf("prefer_group 归一化错误：%v", entries)
 	}
-	if entries[2].Domain != "eo.example.com" || entries[2].PreferGroup != "" {
-		t.Fatalf("EO prefer_group 空值应保留为空：%+v", entries[2])
-	}
-	if got := mapStr(out, "cdn_domain", ""); got != "esa.example.com" {
-		t.Fatalf("cdn_domain = %q，期望主域名", got)
+	if got := mapStr(out, "cdn_domain", ""); got != "cf.example.com" {
+		t.Fatalf("cdn_domain 应取第一个启用条目，实际 %q", got)
 	}
 }
 
@@ -99,10 +98,6 @@ func TestNormalizeCDNInputValidation(t *testing.T) {
 			map[string]any{"name": "CF", "domain": "a.example.com"},
 			map[string]any{"name": "ESA", "domain": "A.EXAMPLE.COM"},
 		}}, "第 2 条 CDN 域名重复"},
-		{"多个主 CDN", map[string]any{"cdn_entries": []any{
-			map[string]any{"name": "CF", "domain": "a.example.com", "primary": true},
-			map[string]any{"name": "ESA", "domain": "b.example.com", "primary": true},
-		}}, "只能设置一个主 CDN"},
 		{"超过 8 条", map[string]any{"cdn_entries": func() []any {
 			out := make([]any, 0, 9)
 			for i := 0; i < 9; i++ {
@@ -138,15 +133,15 @@ func TestSingboxNodeToJSONMultiCDN(t *testing.T) {
 	}
 	out := singboxNodeToJSON(row)
 	entries, _ := out["cdn_entries"].([]singboxCDNEntry)
-	if len(entries) != 2 || !entries[0].Primary || entries[0].Domain != "esa.example.com" {
-		t.Fatalf("响应 cdn_entries 主 CDN 应排最前：%#v", out["cdn_entries"])
+	if len(entries) != 2 || entries[0].Domain != "cf.example.com" || entries[1].Domain != "esa.example.com" {
+		t.Fatalf("响应 cdn_entries 应保持原顺序：%#v", out["cdn_entries"])
 	}
 	domains, _ := out["cdn_domains"].([]string)
-	if len(domains) != 2 || domains[0] != "esa.example.com" || domains[1] != "cf.example.com" {
+	if len(domains) != 2 || domains[0] != "cf.example.com" || domains[1] != "esa.example.com" {
 		t.Fatalf("响应 cdn_domains 错误：%#v", out["cdn_domains"])
 	}
-	if got, _ := out["cdn_domain"].(string); got != "esa.example.com" {
-		t.Fatalf("响应 cdn_domain 应为主域名，实际 %q", got)
+	if got, _ := out["cdn_domain"].(string); got != "cf.example.com" {
+		t.Fatalf("响应 cdn_domain 应取第一个启用条目，实际 %q", got)
 	}
 	// JSON 可正常序列化（前端拿到数组，而不是字符串）。
 	raw, err := json.Marshal(out)
@@ -216,7 +211,7 @@ func TestSingboxClientLinksMultiCDN(t *testing.T) {
 	if len(cdnLinks) != 3 {
 		t.Fatalf("期望 3 条 CDN 链接（CF 直连、ESA 1 优选、EO 直连），实际 %d：%#v", len(cdnLinks), cdnLinks)
 	}
-	// 主 CDN 排最前，且未设置 prefer_group 时必须是 domain:443（不能套 cloudflare 优选）。
+	// 按条目原顺序生成；未设置 prefer_group 时必须是 domain:443（不能套 cloudflare 优选）。
 	cfLink := mapStr(cdnLinks[0], "link", "")
 	if !strings.Contains(cfLink, "@cf.example.com:443") || !strings.Contains(cfLink, "sni=cf.example.com") || !strings.Contains(cfLink, "host=cf.example.com") {
 		t.Fatalf("主 CDN CF 链接错误：%s", cfLink)
@@ -342,11 +337,11 @@ func TestInputToNodeCarriesCDNEntries(t *testing.T) {
 		map[string]any{"name": "ESA", "domain": "esa.example.com"},
 	}})
 	node := inputToNode(out)
-	if len(node.CDNEntries) != 2 || node.CDNEntries[0].Name != "CF" || !node.CDNEntries[0].Primary {
+	if len(node.CDNEntries) != 2 || node.CDNEntries[0].Name != "CF" || node.CDNEntries[1].Name != "ESA" {
 		t.Fatalf("inputToNode 未携带 cdn_entries：%#v", node.CDNEntries)
 	}
 	if node.CDNDomain != "cf.example.com" {
-		t.Fatalf("inputToNode CDNDomain 应为主域名，实际 %q", node.CDNDomain)
+		t.Fatalf("inputToNode CDNDomain 应取第一个启用条目，实际 %q", node.CDNDomain)
 	}
 	linkNode := singboxNodeFromRender(node)
 	if len(linkNode.CDNEntries) != 2 {
@@ -373,29 +368,18 @@ func TestNormalizeCDNInputEnabled(t *testing.T) {
 	if len(entries) != 3 {
 		t.Fatalf("应 3 条条目，实际 %d", len(entries))
 	}
-	// 停用的 CF 不应成为主；第一个启用条目 ESA 自动为主并排最前。
-	if entries[0].Domain != "esa.example.com" || !entries[0].Primary {
-		t.Fatalf("停用主 CDN 时应 fallback 第一个启用条目：%v", entries)
+	// primary 已忽略：条目保持原顺序（CF 仍在前，虽然被停用）；cdn_domain 取第一个启用条目。
+	if entries[0].Domain != "cf.example.com" || entries[1].Domain != "esa.example.com" || entries[2].Domain != "eo.example.com" {
+		t.Fatalf("条目顺序应保持原始顺序：%v", entries)
 	}
-	var cf, esa, eo bool
-	for _, e := range entries {
-		switch e.Name {
-		case "CF":
-			cf = true
-			if cdnEntryEnabled(e) || e.Primary {
-				t.Fatalf("CF 应停用且非主：%+v", e)
-			}
-		case "ESA":
-			esa = cdnEntryEnabled(e)
-		case "EO":
-			eo = cdnEntryEnabled(e)
-		}
+	if cdnEntryEnabled(entries[0]) {
+		t.Fatalf("CF 应停用：%+v", entries[0])
 	}
-	if !cf || !esa || !eo {
-		t.Fatalf("enabled 归一化错误：%v", entries)
+	if !cdnEntryEnabled(entries[1]) || !cdnEntryEnabled(entries[2]) {
+		t.Fatalf("ESA/EO 应启用：%v", entries)
 	}
 	if got := mapStr(out, "cdn_domain", ""); got != "esa.example.com" {
-		t.Fatalf("cdn_domain 应为主 CDN/首个启用条目，实际 %q", got)
+		t.Fatalf("cdn_domain 应取第一个启用条目，实际 %q", got)
 	}
 }
 
@@ -478,8 +462,8 @@ func TestSingboxNodeToJSONEnabledFields(t *testing.T) {
 		t.Fatalf("响应应保留 enabled=false：%#v", entries)
 	}
 	domains, _ := out["cdn_domains"].([]string)
-	if len(domains) != 2 || domains[0] != "cf.example.com" || domains[1] != "esa.example.com" {
-		t.Fatalf("cdn_domains 应保留全部条目（兼容投影）：%#v", out["cdn_domains"])
+	if len(domains) != 1 || domains[0] != "cf.example.com" {
+		t.Fatalf("cdn_domains 应只含启用条目：%#v", out["cdn_domains"])
 	}
 	if got, _ := out["cdn_domain"].(string); got != "cf.example.com" {
 		t.Fatalf("cdn_domain 应为主 CDN，实际 %q", got)
@@ -533,8 +517,8 @@ func TestNodeBindingsIncludesCDNEntries(t *testing.T) {
 		t.Fatalf("sb_cdn 兼容字段应为主域名，实际 %q", got)
 	}
 	domains, _ := row["sb_cdn_domains"].([]any)
-	if len(domains) != 2 || domains[0] != "cf.example.com" || domains[1] != "esa.example.com" {
-		t.Fatalf("sb_cdn_domains 应保留全部条目：%#v", row["sb_cdn_domains"])
+	if len(domains) != 1 || domains[0] != "cf.example.com" {
+		t.Fatalf("sb_cdn_domains 应只含启用条目：%#v", row["sb_cdn_domains"])
 	}
 }
 
@@ -545,25 +529,26 @@ func cdnEntryEnabledJSON(v map[string]any) bool {
 	return true // 缺省启用
 }
 
-func TestSingboxClientLinksPrimaryDisabledFallback(t *testing.T) {
+func TestSingboxClientLinksPrimaryIgnored(t *testing.T) {
 	tpl := &singboxTemplate{ID: 1, Name: "t", PortBase: 13700, EnableVLWS: 1}
 	disabled, enabled := false, true
 	node := singboxNode{
 		Name: "hk", Domain: "hk.example.com",
+		// primary 仅为旧字段兼容，不再影响启用/顺序/fallback。
 		CDNEntries: []singboxCDNEntry{
 			{Name: "CF", Domain: "cf.example.com", Primary: true, Enabled: &disabled},
-			{Name: "ESA", Domain: "esa.example.com", Enabled: &enabled},
+			{Name: "ESA", Domain: "esa.example.com", Primary: true, Enabled: &enabled},
 			{Name: "EO", Domain: "eo.example.com", Enabled: &enabled},
 		},
 	}
 	links := singboxClientLinks(tpl, node, []sbUser{{Name: "u1", UUID: "11111111-1111-4111-8111-111111111111"}})
 	cdnLinks := cdnLinksOf(links)
 	if len(cdnLinks) != 2 {
-		t.Fatalf("主 CDN 停用后应 fallback 到启用条目（ESA/EO 共 2 条），实际 %d", len(cdnLinks))
+		t.Fatalf("primary 不应参与 fallback，仅按 enabled 过滤（应 2 条），实际 %d", len(cdnLinks))
 	}
-	first := cdnLinks[0]
-	if !strings.Contains(mapStr(first, "link", ""), "@esa.example.com:443") || !mapBool(first, "cdn_primary") {
-		t.Fatalf("主 CDN 停用时应由第一个启用条目 ESA 顶上：%#v", first)
+	if !strings.Contains(mapStr(cdnLinks[0], "link", ""), "@esa.example.com:443") ||
+		!strings.Contains(mapStr(cdnLinks[1], "link", ""), "@eo.example.com:443") {
+		t.Fatalf("启用条目应按原顺序生成链接：%#v", cdnLinks)
 	}
 	for _, l := range cdnLinks {
 		if strings.Contains(mapStr(l, "link", ""), "cf.example.com") {
@@ -572,7 +557,50 @@ func TestSingboxClientLinksPrimaryDisabledFallback(t *testing.T) {
 	}
 }
 
-func mapBool(m map[string]any, key string) bool {
-	b, _ := m[key].(bool)
-	return b
+// task-48：不再区分主/备，只按 enabled 过滤；多个 primary 也接受但被忽略。
+func TestNormalizeCDNInputMultiplePrimaryAccepted(t *testing.T) {
+	out := mustNormalizeNodeInput(t, map[string]any{"cdn_entries": []any{
+		map[string]any{"name": "CF", "domain": "cf.example.com", "primary": true},
+		map[string]any{"name": "ESA", "domain": "esa.example.com", "primary": true},
+		map[string]any{"name": "EO", "domain": "eo.example.com", "primary": true},
+	}})
+	entries := entriesOfInput(t, out)
+	if len(entries) != 3 {
+		t.Fatalf("多个 primary 不应被拒绝，实际 %d 条：%v", len(entries), entries)
+	}
+	// 顺序保持原顺序；primary 原样保留但不影响 cdn_domain（取第一个启用条目）。
+	if entries[0].Domain != "cf.example.com" || entries[1].Domain != "esa.example.com" || entries[2].Domain != "eo.example.com" {
+		t.Fatalf("primary 不应改变条目顺序：%v", entries)
+	}
+	if got := mapStr(out, "cdn_domain", ""); got != "cf.example.com" {
+		t.Fatalf("cdn_domain 应取第一个启用条目，实际 %q", got)
+	}
+}
+
+func TestSingboxClientLinksOnlyEnabledInOrder(t *testing.T) {
+	tpl := &singboxTemplate{ID: 1, Name: "t", PortBase: 13700, EnableVLWS: 1}
+	disabled, enabled := false, true
+	// 两条启用（无 primary 字段）+ 一条停用，顺序固定。
+	node := singboxNode{
+		Name: "hk", Domain: "hk.example.com",
+		CDNEntries: []singboxCDNEntry{
+			{Name: "CF", Domain: "cf.example.com", Enabled: &enabled},
+			{Name: "ESA", Domain: "esa.example.com", Enabled: &disabled},
+			{Name: "EO", Domain: "eo.example.com", Enabled: &enabled},
+		},
+	}
+	links := singboxClientLinks(tpl, node, []sbUser{{Name: "u1", UUID: "11111111-1111-4111-8111-111111111111"}})
+	cdnLinks := cdnLinksOf(links)
+	if len(cdnLinks) != 2 {
+		t.Fatalf("2 启用 + 1 停用应生成 2 条链接，实际 %d", len(cdnLinks))
+	}
+	if !strings.Contains(mapStr(cdnLinks[0], "link", ""), "@cf.example.com:443") ||
+		!strings.Contains(mapStr(cdnLinks[1], "link", ""), "@eo.example.com:443") {
+		t.Fatalf("应只按启用条目的原顺序生成：%#v", cdnLinks)
+	}
+	for _, l := range cdnLinks {
+		if strings.Contains(mapStr(l, "link", ""), "esa.example.com") {
+			t.Fatalf("停用条目不应生成链接：%s", mapStr(l, "link", ""))
+		}
+	}
 }
