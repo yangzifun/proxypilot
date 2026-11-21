@@ -51,8 +51,8 @@ type agentServer struct {
 	LastMeshIP6     string
 	IPCountry       string
 	IPRegion        string
-	LastMetrics    string
-	AgentKeyUsedAt int64
+	LastMetrics     string
+	AgentKeyUsedAt  int64
 	// GraceAuth 只存在于本次请求的内存态：true 表示本次是按来源 IP 放行的（见 agent_grace.go）。
 	GraceAuth bool
 }
@@ -181,23 +181,20 @@ func (h *handlers) agentBinaryBaseURL() string {
 	return ""
 }
 
-// componentBaseURL 组件（自建 sing-box）分发基址：桶里单独一个目录。
-// 优先级：后台设置（系统设置 → 高级设置）> PP_COMPONENT_BASE_URL > Agent 基址同级 singbox/。
+// componentBaseURL 组件（自建 sing-box）分发基址：只允许 S3 固定目录。
+// 优先级：后台设置（系统设置 → 高级设置）> PP_COMPONENT_BASE_URL > 默认 S3。
+// 任何非 https://s3.proxypilot.yangzifun.org/singbox 的来源都返回空串（fail-closed），
+// 防止后台误配/被篡改后把第三方二进制下发到全部节点。
 func (h *handlers) componentBaseURL() string {
-	if s := strings.TrimRight(strings.TrimSpace(h.setting(context.Background(), settingComponentBase, "")), "/"); s != "" {
-		return s
+	raw := strings.TrimSpace(h.setting(context.Background(), settingComponentBase, ""))
+	if raw == "" {
+		raw = strings.TrimSpace(os.Getenv("PP_COMPONENT_BASE_URL"))
 	}
-	if s := strings.TrimRight(strings.TrimSpace(os.Getenv("PP_COMPONENT_BASE_URL")), "/"); s != "" {
-		return s
-	}
-	base := h.agentBinaryBaseURL()
-	if base == "" {
+	base, err := normalizeSingboxComponentBase(raw)
+	if err != nil {
 		return ""
 	}
-	if strings.HasSuffix(base, "/agent") {
-		return strings.TrimSuffix(base, "/agent") + "/singbox"
-	}
-	return base + "/singbox"
+	return base
 }
 
 // componentManifest 是组件基址下的 manifest.json（版本真相来源）。

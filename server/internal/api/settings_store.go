@@ -13,50 +13,50 @@ import (
 
 // 可在后台“系统设置”里覆盖的键（未设置时回落环境变量）。
 const (
-	settingPublicBaseURL   = "site_public_base_url"
-	settingAgentAccessURL  = "agent_access_url"
-	settingAgentInternalURL = "agent_internal_url"
-	settingAgentAccessURLs = "agent_access_urls"
-	settingAgentMeshEnabled = "agent_mesh_enabled"
-	settingAgentMeshCenter = "agent_mesh_center"
-	settingAgentMeshSync = "agent_mesh_sync"
+	settingPublicBaseURL      = "site_public_base_url"
+	settingAgentAccessURL     = "agent_access_url"
+	settingAgentInternalURL   = "agent_internal_url"
+	settingAgentAccessURLs    = "agent_access_urls"
+	settingAgentMeshEnabled   = "agent_mesh_enabled"
+	settingAgentMeshCenter    = "agent_mesh_center"
+	settingAgentMeshSync      = "agent_mesh_sync"
 	settingAgentMeshTLSVerify = "agent_mesh_tls_verify"
-	settingAgentBinaryBase = "agent_binary_base_url"
-	settingComponentBase   = "component_base_url"
+	settingAgentBinaryBase    = "agent_binary_base_url"
+	settingComponentBase      = "component_base_url"
 	// sing-box 组件的版本与各架构 sha256：安装时下发给节点做校验
 	settingComponentVersion = "component_version"
 	settingComponentSHA     = "component_sha"
-	settingPasswordEnabled = "auth_password_enabled"
-	settingEmailCode       = "auth_email_code_enabled"
-	settingOIDCEnabled     = "auth_oidc_enabled"
-	settingTurnstileSite   = "turnstile_site_key"
-	settingTurnstileSecret = "turnstile_secret"
-	settingSMTPAddr        = "smtp_addr"
-	settingSMTPUser        = "smtp_user"
-	settingSMTPPass        = "smtp_pass"
-	settingMailFrom        = "mail_from"
-	settingMailProvider    = "mail_provider"
-	settingCFToken         = "cloudflare_api_token"
-	settingCFAccount       = "cloudflare_account_id"
+	settingPasswordEnabled  = "auth_password_enabled"
+	settingEmailCode        = "auth_email_code_enabled"
+	settingOIDCEnabled      = "auth_oidc_enabled"
+	settingTurnstileSite    = "turnstile_site_key"
+	settingTurnstileSecret  = "turnstile_secret"
+	settingSMTPAddr         = "smtp_addr"
+	settingSMTPUser         = "smtp_user"
+	settingSMTPPass         = "smtp_pass"
+	settingMailFrom         = "mail_from"
+	settingMailProvider     = "mail_provider"
+	settingCFToken          = "cloudflare_api_token"
+	settingCFAccount        = "cloudflare_account_id"
 	// 自建直投（builtin）
 	settingMailDomain     = "mail_domain"
 	settingMailDKIMSelect = "mail_dkim_selector"
 	settingMailDKIMKey    = "mail_dkim_private"
 	settingMailEgressIP   = "mail_egress_ip"
 	settingMailDKIMBits   = "mail_dkim_bits"
-	settingR2Account       = "r2_account_id"
-	settingR2Bucket        = "r2_bucket"
-	settingR2AccessKey     = "r2_access_key_id"
-	settingR2SecretKey     = "r2_secret_access_key"
-	settingR2Endpoint      = "r2_endpoint"
-	settingCDNBaseURL      = "cdn_base_url"
-	settingOIDCIssuer      = "oidc_issuer"
-	settingOIDCClientID    = "oidc_client_id"
-	settingOIDCSecret      = "oidc_client_secret"
-	settingOIDCScopes      = "oidc_scopes"
-	settingOIDCProvider    = "oidc_provider_name"
-	settingOIDCButton      = "oidc_button_text"
-	settingOIDCRedirect    = "oidc_redirect_uri"
+	settingR2Account      = "r2_account_id"
+	settingR2Bucket       = "r2_bucket"
+	settingR2AccessKey    = "r2_access_key_id"
+	settingR2SecretKey    = "r2_secret_access_key"
+	settingR2Endpoint     = "r2_endpoint"
+	settingCDNBaseURL     = "cdn_base_url"
+	settingOIDCIssuer     = "oidc_issuer"
+	settingOIDCClientID   = "oidc_client_id"
+	settingOIDCSecret     = "oidc_client_secret"
+	settingOIDCScopes     = "oidc_scopes"
+	settingOIDCProvider   = "oidc_provider_name"
+	settingOIDCButton     = "oidc_button_text"
+	settingOIDCRedirect   = "oidc_redirect_uri"
 )
 
 type settingDef struct {
@@ -347,9 +347,9 @@ func (h *handlers) emailCodeLoginEnabled(ctx context.Context) bool {
 }
 
 type mailConfig struct {
-	Provider                     string
-	Addr, User, Pass, From       string
-	CFToken, CFAccountID string
+	Provider               string
+	Addr, User, Pass, From string
+	CFToken, CFAccountID   string
 	// 自建直投
 	Domain      string
 	Selector    string
@@ -398,6 +398,7 @@ func (h *handlers) effectiveMail(ctx context.Context) mailConfig {
 }
 
 func (m mailConfig) SMTPReady() bool { return m.Addr != "" && (m.From != "") }
+
 // ResolvedProvider 决定实际发信通道；auto 优先 Cloudflare，其次 SMTP。
 func (m mailConfig) ResolvedProvider() string {
 	if m.Provider == "builtin" && m.BuiltinReady() {
@@ -454,18 +455,13 @@ func (h *handlers) settingDefault(key string) string {
 	case settingAgentBinaryBase:
 		return strings.TrimSpace(h.cfg.AgentBinaryBaseURL)
 	case settingComponentBase:
-		if v := strings.TrimRight(strings.TrimSpace(os.Getenv("PP_COMPONENT_BASE_URL")), "/"); v != "" {
-			return v
+		// sing-box 只允许 S3 自建组件源；不再从 Agent 基址推导 singbox/，
+		// 避免 agent_binary_base_url 被改成第三方时顺带改变 sing-box 来源。
+		raw := strings.TrimSpace(os.Getenv("PP_COMPONENT_BASE_URL"))
+		if base, err := normalizeSingboxComponentBase(raw); err == nil {
+			return base
 		}
-		base := strings.TrimSpace(h.cfg.AgentBinaryBaseURL)
-		if base == "" {
-			return ""
-		}
-		base = strings.TrimRight(base, "/")
-		if strings.HasSuffix(base, "/agent") {
-			return strings.TrimSuffix(base, "/agent") + "/singbox"
-		}
-		return base + "/singbox"
+		return singboxComponentBase
 	case settingSMTPAddr:
 		return strings.TrimSpace(h.cfg.SMTPAddr)
 	case settingSMTPUser:

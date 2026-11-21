@@ -492,7 +492,10 @@ export default function SingboxTemplateEditor({ state, onClose, onSaved }) {
 
   useEffect(() => {
     let alive = true;
-    api('singbox/releases?engine=singbox').then((r) => { if (alive) setSbVers((r && r.data) || []); }).catch(() => {});
+    // 版本列表来自存储桶 versions.json（S3 组件源），不再依赖 GitHub releases。
+    api('singbox/component-versions').then((r) => {
+      if (alive) setSbVers((r && r.data) || []);
+    }).catch(() => { if (alive) setSbVers([]); });
     return () => { alive = false; };
   }, []);
 
@@ -566,9 +569,9 @@ export default function SingboxTemplateEditor({ state, onClose, onSaved }) {
   };
 
   const versionOptions = (list) => (Array.isArray(list) ? list : []).map((r) => {
-    const tag = String(r.tag || '');
-    const v = tag.replace(/^v/i, '');
-    return { value: v, label: v + (r.prerelease ? ' · 预览版' : ' · 正式版') };
+    const v = String(r.version || r.tag || '').replace(/^v/i, '');
+    const pre = Boolean(r.prerelease) || /alpha|beta|rc/i.test(v);
+    return { value: v, label: v + (pre ? ' · 预览版' : ' · 正式版') + ' · S3' };
   });
 
   const sectionTitle = (text, extra) => (
@@ -667,7 +670,7 @@ export default function SingboxTemplateEditor({ state, onClose, onSaved }) {
         <Row gutter={12} style={{ marginTop: 10 }}>
           <Col span={12}>
             <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>
-              sing-box 版本（留空 = 使用「组件分发基址」里的版本，自动跟随存储桶；也可手填正式版 / 预览版 tag）
+              sing-box 版本（留空 = 使用「组件分发基址」里的版本，自动跟随存储桶；下拉选项来自 S3 存储桶版本索引）
             </div>
             <AutoComplete
               value={sbVer}

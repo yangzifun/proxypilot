@@ -213,6 +213,7 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("POST /api/singbox/nodes/{id}/deploy", h.authed(authOpts{}, h.singboxNodeDeploy))
 	mux.HandleFunc("POST /api/singbox/nodes/{id}/warp", h.authed(authOpts{}, h.singboxNodeWarp))
 	mux.HandleFunc("GET /api/singbox/releases", h.authed(authOpts{}, h.singboxReleases))
+	mux.HandleFunc("GET /api/singbox/component-versions", h.authed(authOpts{}, h.singboxComponentVersions))
 	// ---- mihomo 模板管理 / 节点绑定 ----
 	mux.HandleFunc("GET /api/mihomo/templates", h.authed(authOpts{}, h.mihomoTemplatesList))
 	mux.HandleFunc("GET /api/mihomo/templates/{id}", h.authed(authOpts{}, h.mihomoTemplateGet))

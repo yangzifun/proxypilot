@@ -185,6 +185,28 @@ var (
 	versionCache   = map[string]string{}
 )
 
+// SingboxVersionMarker 是 Agent 安装/切换 sing-box 成功后写入的目标版本标记。
+// 自建 sing-box 二进制的 `version` 命令可能输出 unknown（构建未注入版本），
+// metrics/installedVersion 解析不到语义化版本时回退读取该文件；测试可覆盖此路径。
+var SingboxVersionMarker = "/etc/sing-box/.proxypilot-version"
+
+// ReadSingboxVersionMarker 读取并校验 sing-box 版本标记；不存在/内容非法返回空串。
+func ReadSingboxVersionMarker() string {
+	raw, err := os.ReadFile(SingboxVersionMarker)
+	if err != nil {
+		return ""
+	}
+	return ParseVersionOutput(string(raw))
+}
+
+// ResetVersionCache 清空组件版本缓存；Agent 安装/切换组件后调用，让下一轮 metrics 立即读到新版本。
+func ResetVersionCache() {
+	versionCacheMu.Lock()
+	defer versionCacheMu.Unlock()
+	versionCache = map[string]string{}
+	versionCacheAt = time.Time{}
+}
+
 // componentVersions 读取本机已安装组件的版本；5 分钟内复用缓存，避免每轮 poll 都 fork 进程。
 func componentVersions(r Runner) map[string]string {
 	versionCacheMu.Lock()
@@ -207,6 +229,11 @@ func componentVersions(r Runner) map[string]string {
 		text, _ := r(item.bin, item.arg)
 		if v := ParseVersionOutput(text); v != "" {
 			out[item.key] = v
+		} else if item.bin == "sing-box" {
+			// 自建 sing-box 可能输出 unknown；回退 Agent 安装时写入的版本标记。
+			if v := ReadSingboxVersionMarker(); v != "" {
+				out[item.key] = v
+			}
 		}
 	}
 	versionCache = out

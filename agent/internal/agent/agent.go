@@ -48,7 +48,7 @@ import (
 // 1.3：同步 vendored tunnel 到当前工作区（单连接双通道 / H3-Datagram 能力协商 /
 // X-VPN-Lane 多路通道 / 已停用 DATAGRAM 回退），修复节点把 UDP（含 DNS）下行塞进
 // 客户端未协商的 QUIC DATAGRAM 黑洞通道、导致 UDP/DNS 全部超时的私有协议问题（task-25）
-const Version = "1.4.1"
+const Version = "1.4.2"
 
 // maxActionsPerRound 单轮执行任务数上限（服务端 AGENT_ACTIONS_PER_POLL = 5，这里留足余量）。
 const maxActionsPerRound = 20

@@ -7,14 +7,24 @@ import (
 	"strings"
 )
 
-// componentBinaryURL 返回组件下载地址；缺 sha256 时返回空串（fail-closed，不安装未校验组件）。
+// componentBinaryURL 返回组件下载地址；基址不是允许的 S3 sing-box 目录、
+// 或缺少 sha256 时返回空串（fail-closed，不安装未校验/第三方来源组件）。
 func componentBinaryURL(base, sha, arch string) string {
 	base = strings.TrimRight(strings.TrimSpace(base), "/")
 	sha = strings.TrimSpace(sha)
 	if base == "" || sha == "" {
 		return ""
 	}
-	return base + "/sing-box-linux-" + arch
+	// base 必须归一化为 S3 组件目录，拒绝 GitHub/第三方/任意 URL。
+	normalized, err := normalizeSingboxComponentBase(base)
+	if err != nil {
+		return ""
+	}
+	url := normalized + "/sing-box-linux-" + arch
+	if !isAllowedSingboxComponentURL(url) {
+		return ""
+	}
+	return url
 }
 
 func singboxRuntimeConfig() (string, error) {
@@ -81,6 +91,9 @@ func (h *handlers) agentBootstrap(w http.ResponseWriter, r *http.Request) {
 	// install.sh 与 Agent 都不会安装未校验的 sing-box。
 	if base != "" && sha == "" {
 		resp["warning"] = "component_sha_<arch> 未配置，已拒绝下发 sing-box 下载地址（无法校验完整性）"
+	}
+	if binaryURL == "" {
+		resp["warning"] = "sing-box 组件下载地址未通过来源/完整性校验（只允许 S3 singbox 目录 + sha256），已拒绝下发"
 	}
 	writeJSON(w, http.StatusOK, resp)
 }

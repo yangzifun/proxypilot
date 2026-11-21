@@ -3,6 +3,7 @@ package metrics
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -300,5 +301,30 @@ func TestSSHStateOf(t *testing.T) {
 	none := func(string, ...string) (string, error) { return "not-found", nil }
 	if s := SSHStateOf(none); s.Enabled != "not-installed" {
 		t.Fatalf("未安装时应为 not-installed：%+v", s)
+	}
+}
+
+// 自建 sing-box 的 version 输出 unknown 时，metrics 应回退 Agent 安装标记，
+// 保证面板 ServerDrawer 的 versions["sing-box"] 有值。
+func TestComponentVersionsFallsBackToSingboxMarker(t *testing.T) {
+	oldMarker := SingboxVersionMarker
+	marker := filepath.Join(t.TempDir(), ".proxypilot-version")
+	SingboxVersionMarker = marker
+	defer func() { SingboxVersionMarker = oldMarker }()
+	ResetVersionCache()
+	defer ResetVersionCache()
+
+	if err := os.WriteFile(marker, []byte("1.14.4\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run := func(name string, args ...string) (string, error) {
+		if name == "sing-box" {
+			return "sing-box version unknown\nTags: with_v2ray_api\n", nil
+		}
+		return "", os.ErrNotExist
+	}
+	got := componentVersions(run)
+	if got["sing-box"] != "1.14.4" || len(got) != 1 {
+		t.Fatalf("versions=%v", got)
 	}
 }

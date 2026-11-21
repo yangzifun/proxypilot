@@ -284,6 +284,21 @@ if [ "$WITH_SINGBOX" = 1 ]; then
         fi
         SB_URL=$(json_str "$BOOT" binary_url)
         SB_SHA=$(json_str "$BOOT" binary_sha256)
+        # 安全策略：sing-box 只允许从面板 S3 组件目录安装，且必须有 sha256。
+        # 不接受 GitHub / 第三方 URL，也不在 URL 缺失时回落到 GitHub。
+        if [ -n "$SB_URL" ]; then
+            case "$SB_URL" in
+                https://s3.proxypilot.yangzifun.org/singbox/*) ;;
+                *)
+                    log "sing-box 来源不是允许的 S3 组件目录，已拒绝：$SB_URL"
+                    SB_URL=''
+                    ;;
+            esac
+        fi
+        if [ -n "$SB_URL" ] && [ -z "$SB_SHA" ]; then
+            log '未提供 sing-box sha256，已拒绝安装（无法校验完整性）'
+            SB_URL=''
+        fi
         if [ -n "$SB_URL" ]; then
             SBTMP=$(mktemp 2>/dev/null || echo "/tmp/sing-box.$$")
             if curl -fsSL -m 300 -o "$SBTMP" "$SB_URL" && [ -s "$SBTMP" ]; then
@@ -309,23 +324,9 @@ if [ "$WITH_SINGBOX" = 1 ]; then
                 log "sing-box 下载失败（$SB_URL）：可稍后在后台推送时重试"
             fi
         else
-            log '未配置 sing-box 下载地址（AGENT_BINARY_BASE_URL），跳过二进制安装'
+            log '未获得允许的 S3 sing-box 下载地址，跳过二进制安装（不会回落到 GitHub）'
         fi
-if [ ! -x /usr/local/bin/sing-box ]; then
-    SBARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
-    SBVER=1.14.4
-    SBTAR=$(mktemp -d 2>/dev/null || echo "/tmp/singbox.$$")
-    log "sing-box 从 GitHub 下载（linux-$SBARCH v$SBVER）..."
-    if curl -fsSL -m 300 -o "$SBTAR/sb.tgz" "https://github.com/SagerNet/sing-box/releases/download/v$SBVER/sing-box-$SBVER-linux-$SBARCH.tar.gz" \
-        && tar -xzf "$SBTAR/sb.tgz" -C "$SBTAR" 2>/dev/null \
-        && install -m 755 "$SBTAR/sing-box-$SBVER-linux-$SBARCH/sing-box" /usr/local/bin/sing-box 2>/dev/null; then
-        log 'sing-box 已从 GitHub 安装'
-    else
-        log 'sing-box GitHub 下载也失败（网络受限），稍后可在后台重试'
-    fi
-    rm -rf "$SBTAR"
-fi
-        SB_UNIT="/etc/systemd/system/$SB_SERVICE.service"
+SB_UNIT="/etc/systemd/system/$SB_SERVICE.service"
         if [ -x /usr/local/bin/sing-box ] && [ ! -f "$SB_UNIT" ]; then
             {
                 echo '[Unit]'

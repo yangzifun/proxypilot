@@ -93,7 +93,7 @@ func singboxRenderBundle(tpl *singboxTemplate, node singboxRenderNode, srv serve
 		// 只有节点回报的版本是自建构建（-proxypilot）时才写 v2ray_api：
 		// 官方 sing-box 没有 with_v2ray_api 标签，提前写会让 sing-box check 失败。
 		// 上线顺序：先切版本（第一次下发），节点回报新版本后再下发一次（第二次带 v2ray_api）。
-		userStats := singboxUserStatsCapable(serverComponentVersion(srv, "sing-box"))
+		userStats := singboxUserStatsCapableFor(serverComponentVersion(srv, "sing-box"), srv.ComponentBase)
 		cdnDomain := node.CDNDomain
 		if strings.TrimSpace(cdnDomain) == "" {
 			cdnDomain = cdnPrimaryDomain(node.CDNEntries)
@@ -127,6 +127,25 @@ func singboxRenderBundle(tpl *singboxTemplate, node singboxRenderNode, srv serve
 		outUsers = append(outUsers, map[string]string{"name": u.Name, "uuid": u.UUID})
 	}
 	return files, ports, outUsers, ""
+}
+
+// singboxUserStatsCapableFor 在版本号之外增加组件分发基址兜底：
+// ProxyPilot 自建 sing-box 可能因构建时未注入版本而输出 "sing-box version unknown"，
+// 此时 Agent 上报不了版本，但 component_base_url 指向面板自建组件（带 with_v2ray_api），
+// 若不启用用户统计会让所有用户流量/在线状态停更。官方 release 一般有明确版本号，不受影响。
+func singboxUserStatsCapableFor(ver, componentBase string) bool {
+	if singboxUserStatsCapable(ver) {
+		return true
+	}
+	lower := strings.ToLower(strings.TrimSpace(ver))
+	if strings.Contains(lower, "with_v2ray_api") {
+		return true
+	}
+	// 仅当版本缺失（unknown/空）且配置了面板组件基址时才视为自建组件。
+	if (lower == "" || lower == "unknown") && strings.TrimSpace(componentBase) != "" {
+		return true
+	}
+	return false
 }
 
 // singboxUserStatsCapable 判断该 sing-box 是否为带 v2ray_api 的自建构建。

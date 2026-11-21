@@ -693,10 +693,12 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
                     <span style={{ fontWeight: 500 }}>{svc.label || svc.name}</span>
                     {svc.version ? (
                       <span className="pp-mono pp-muted" style={{ fontSize: 12 }}>
-                        {hasLatestTarget ? '已装 v' : 'v'}
+                        {svc.name === 'sing-box' || hasLatestTarget ? '已装 v' : 'v'}
                         {svc.version}
                       </span>
-                    ) : null}
+                    ) : (
+                      <span className="pp-mono pp-muted" style={{ fontSize: 12 }}>—</span>
+                    )}
                     {showLatest && svc.latest ? (
                       <Tooltip
                         title={

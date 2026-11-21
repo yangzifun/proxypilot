@@ -6,37 +6,38 @@ import (
 	"encoding/json"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 )
 
 // serverRow 对齐 Worker 的 serverRowToJson 输出（JSON 字段名保持原样）。
 type serverRow struct {
-	ID                int64           `json:"id"`
-	Name              string          `json:"name"`
-	Port              int64           `json:"port"`
-	LinkMode          string          `json:"link_mode"`
-	HasAgentToken     bool            `json:"has_agent_token"`
-	AgentTokenHint    string          `json:"agent_token_hint"`
-	AgentKeyViewable  bool            `json:"agent_key_viewable"`
-	AgentVersion      string          `json:"agent_version"`
-	AgentLastSeen     int64           `json:"agent_last_seen"`
-	AgentPlatform     string          `json:"agent_platform"`
-	AgentKeyCreatedAt int64           `json:"agent_key_created_at"`
-	AgentKeyUsedAt    int64           `json:"agent_key_used_at"`
-	AgentNextPollSec  int64           `json:"agent_next_poll_sec"`
-	AgentPollCount    int64           `json:"agent_poll_count"`
-	MetricsEvery      int64           `json:"metrics_every"`
-	AllowExec         bool            `json:"allow_exec"`
-	LastIP            string          `json:"last_ip"`
-	LastIP4           string          `json:"last_ip4"`
-	LastIP6           string          `json:"last_ip6"`
-	LastIPPrivate     string          `json:"last_ip_private"`
-	LastMeshIP4       string          `json:"last_mesh_ip4"`
-	LastMeshIP6       string          `json:"last_mesh_ip6"`
+	ID                int64  `json:"id"`
+	Name              string `json:"name"`
+	Port              int64  `json:"port"`
+	LinkMode          string `json:"link_mode"`
+	HasAgentToken     bool   `json:"has_agent_token"`
+	AgentTokenHint    string `json:"agent_token_hint"`
+	AgentKeyViewable  bool   `json:"agent_key_viewable"`
+	AgentVersion      string `json:"agent_version"`
+	AgentLastSeen     int64  `json:"agent_last_seen"`
+	AgentPlatform     string `json:"agent_platform"`
+	AgentKeyCreatedAt int64  `json:"agent_key_created_at"`
+	AgentKeyUsedAt    int64  `json:"agent_key_used_at"`
+	AgentNextPollSec  int64  `json:"agent_next_poll_sec"`
+	AgentPollCount    int64  `json:"agent_poll_count"`
+	MetricsEvery      int64  `json:"metrics_every"`
+	AllowExec         bool   `json:"allow_exec"`
+	LastIP            string `json:"last_ip"`
+	LastIP4           string `json:"last_ip4"`
+	LastIP6           string `json:"last_ip6"`
+	LastIPPrivate     string `json:"last_ip_private"`
+	LastMeshIP4       string `json:"last_mesh_ip4"`
+	LastMeshIP6       string `json:"last_mesh_ip6"`
 	// 自建组网（10.99.0.0/16，vpn_mesh_nodes）
-	MeshIP4   string `json:"mesh_ip4"`
-	MeshState string `json:"mesh_state"`
-	MeshRTTMs int64  `json:"mesh_rtt_ms"`
+	MeshIP4           string          `json:"mesh_ip4"`
+	MeshState         string          `json:"mesh_state"`
+	MeshRTTMs         int64           `json:"mesh_rtt_ms"`
 	SSHGuard          int64           `json:"ssh_guard"`
 	Host              string          `json:"host"`
 	IPCountry         string          `json:"ip_country"`
@@ -58,8 +59,10 @@ type serverRow struct {
 	CreatedAt         int64           `json:"created_at"`
 	UpdatedAt         int64           `json:"updated_at"`
 	LastMetrics       json.RawMessage `json:"last_metrics"`
-	AgentLatest       string          `json:"agent_latest"`
-	AgentUpdate       bool            `json:"agent_update"`
+	// ComponentBase 面板组件分发基址；仅内部渲染判定用，不返回前端。
+	ComponentBase string `json:"-"`
+	AgentLatest   string `json:"agent_latest"`
+	AgentUpdate   bool   `json:"agent_update"`
 }
 
 const serversSelectColumns = `SELECT id, COALESCE(name,''), COALESCE(port,22),
@@ -140,7 +143,28 @@ func (h *handlers) fetchServerRow(ctx context.Context, id int64) (serverRow, err
 	if !rows.Next() {
 		return serverRow{}, sql.ErrNoRows
 	}
-	return scanServerRow(rows)
+	s, err := scanServerRow(rows)
+	if err == nil {
+		s.ComponentBase = h.explicitComponentBaseURL()
+	}
+	return s, err
+}
+
+// explicitComponentBaseURL 只返回「显式配置」的组件基址（后台设置或环境变量），
+// 不把默认 S3 兜底当作“自建组件已配置”，用于判断是否可安全启用 v2ray_api 用户统计。
+func (h *handlers) explicitComponentBaseURL() string {
+	raw := strings.TrimSpace(h.setting(context.Background(), settingComponentBase, ""))
+	if raw == "" {
+		raw = strings.TrimSpace(os.Getenv("PP_COMPONENT_BASE_URL"))
+	}
+	if raw == "" {
+		return ""
+	}
+	base, err := normalizeSingboxComponentBase(raw)
+	if err != nil {
+		return ""
+	}
+	return base
 }
 
 // attachMeshInfo 把自建组网（vpn_mesh_nodes）的地址与状态合并进服务器列表。

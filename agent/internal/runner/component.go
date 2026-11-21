@@ -19,8 +19,7 @@ import (
 
 // 组件下载地址（测试可覆盖）
 var (
-	singboxReleaseBase = "https://github.com/SagerNet/sing-box/releases/download"
-	singboxVersion     = "1.14.4"
+	singboxVersion = "1.14.4"
 	// V15.6：Xray 下线，Agent 不再安装/切换 xray。
 	// V13.3：MTProto（Telegram）代理；mtg-multi 是 mtg 的多 secret 分支
 	mtgReleaseBase  = "https://github.com/dolonet/mtg-multi/releases/download"
@@ -194,8 +193,8 @@ func (r *Runner) installSingbox(ctx context.Context) (int, string) {
 	return r.installSingboxVersion(ctx, singboxVersion)
 }
 
-// installSingboxVersion 安装指定版本：优先从 Agent 分发基址（自建构建）下载，
-// 404 时回落 GitHub release（官方构建）。
+// installSingboxVersion 安装指定版本：只允许从面板 S3 组件目录下载自建构建，
+// 不再回落 GitHub / 第三方地址。
 func (r *Runner) installSingboxVersion(ctx context.Context, version string) (int, string) {
 	version = strings.TrimPrefix(strings.TrimSpace(version), "v")
 	if version == "" {
@@ -207,6 +206,9 @@ func (r *Runner) installSingboxVersion(ctx context.Context, version string) (int
 		r.log("自动安装 sing-box：%s", url)
 		code, out, notFound := r.fetchSingboxTarball(ctx, url)
 		if code == 0 {
+			if err := writeSingboxVersionMarker(version); err != nil {
+				r.log("写入 sing-box 版本标记失败：%v", err)
+			}
 			return 0, out
 		}
 		lastOut = out
@@ -215,24 +217,37 @@ func (r *Runner) installSingboxVersion(ctx context.Context, version string) (int
 		}
 	}
 	if lastOut == "" {
-		lastOut = "没有可用的 sing-box 下载地址"
+		lastOut = "没有可用的 sing-box 下载地址（仅允许 S3 组件目录，不会回落 GitHub）"
 	}
 	return 1, lastOut
 }
 
-// singboxDownloadURLs 候选地址：先组件分发基址（<base>/sing-box-<ver>-linux-<arch>.tar.gz），
-// 再回落 GitHub release。老服务端只给 agent 基址（…/agent）时，也兼容其下的 sing-box/ 子目录。
-func (r *Runner) singboxDownloadURLs(version, arch string) []string {
-	urls := []string{}
-	if base := strings.TrimRight(strings.TrimSpace(r.ComponentBase), "/"); base != "" {
-		name := fmt.Sprintf("sing-box-%s-linux-%s.tar.gz", version, arch)
-		urls = append(urls, base+"/"+name)
-		if !strings.HasSuffix(base, "/singbox") {
-			urls = append(urls, base+"/sing-box/"+name)
-		}
+// singboxComponentBase 是唯一允许的 sing-box 组件来源（与面板 component_base_url 一致）。
+const singboxComponentBase = "https://s3.proxypilot.yangzifun.org/singbox"
+
+// isAllowedSingboxDownloadURL 校验下载 URL 必须位于 S3 组件目录内。
+func isAllowedSingboxDownloadURL(raw string) bool {
+	raw = strings.TrimSpace(raw)
+	if !strings.HasPrefix(raw, singboxComponentBase+"/") {
+		return false
 	}
-	urls = append(urls, fmt.Sprintf("%s/v%s/sing-box-%s-linux-%s.tar.gz", singboxReleaseBase, version, version, arch))
-	return urls
+	rest := strings.TrimPrefix(raw, singboxComponentBase+"/")
+	return rest != "" && !strings.Contains(rest, "..")
+}
+
+// singboxDownloadURLs 仅返回 S3 组件目录下的候选地址；ComponentBase 不合法时返回空，
+// 由调用方 fail-closed 处理。
+func (r *Runner) singboxDownloadURLs(version, arch string) []string {
+	base := strings.TrimRight(strings.TrimSpace(r.ComponentBase), "/")
+	if !strings.EqualFold(base, singboxComponentBase) {
+		return nil
+	}
+	name := fmt.Sprintf("sing-box-%s-linux-%s.tar.gz", version, arch)
+	url := base + "/" + name
+	if !isAllowedSingboxDownloadURL(url) {
+		return nil
+	}
+	return []string{url}
 }
 
 // fetchSingboxTarball 下载并解压安装；notFound 表示 404（调用方可换下一个地址）。
@@ -320,6 +335,28 @@ func (r *Runner) installMtg(ctx context.Context) (int, string) {
 	return 1, "mtg-multi 压缩包里没有找到二进制"
 }
 
+// writeSingboxVersionMarker 记录本次成功安装/切换到的目标版本。
+// 自建二进制 `sing-box version` 可能是 unknown，Agent 后续用该标记作为可核验回退。
+func writeSingboxVersionMarker(version string) error {
+	version = strings.TrimPrefix(strings.TrimSpace(version), "v")
+	if version == "" {
+		return fmt.Errorf("版本为空")
+	}
+	if err := os.MkdirAll(filepath.Dir(metrics.SingboxVersionMarker), 0o755); err != nil {
+		return err
+	}
+	tmp := metrics.SingboxVersionMarker + ".tmp"
+	if err := os.WriteFile(tmp, []byte(version+"\n"), 0o644); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, metrics.SingboxVersionMarker); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	metrics.ResetVersionCache()
+	return nil
+}
+
 // installedVersion 读已安装组件的版本号（解析不到或没装返回空串）。
 func installedVersion(bin string) string {
 	if _, err := exec.LookPath(bin); err != nil {
@@ -327,11 +364,25 @@ func installedVersion(bin string) string {
 	}
 	out, err := exec.Command(bin, "version").CombinedOutput()
 	if err != nil && len(out) == 0 {
-		return ""
+		out = nil
 	}
-	return metrics.ParseVersionOutput(string(out))
+	return versionWithMarkerFallback(bin, string(out))
 }
 
+// versionWithMarkerFallback 从 `bin version` 输出解析版本；sing-box 未知/空时回退安装标记。
+// 单独拆出便于在无真实二进制的环境单测（尤其 Windows）。
+func versionWithMarkerFallback(bin, output string) string {
+	if v := metrics.ParseVersionOutput(output); v != "" {
+		return v
+	}
+	// 自建 sing-box 可能输出 version unknown：回退安装/切换时写入的版本标记。
+	if bin == "sing-box" {
+		if v := metrics.ReadSingboxVersionMarker(); v != "" {
+			return v
+		}
+	}
+	return ""
+}
 func sameVersion(a, b string) bool {
 	norm := func(v string) string { return strings.TrimPrefix(strings.ToLower(strings.TrimSpace(v)), "v") }
 	return norm(a) != "" && norm(a) == norm(b)

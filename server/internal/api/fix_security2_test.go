@@ -121,10 +121,10 @@ func TestValidateDistributionURL(t *testing.T) {
 // ---------- 中-02 分发完整性 ----------
 
 func TestComponentBinaryURLRequiresSHA(t *testing.T) {
-	if got := componentBinaryURL("https://s3.example.com/singbox", "", "amd64"); got != "" {
+	if got := componentBinaryURL("https://s3.proxypilot.yangzifun.org/singbox", "", "amd64"); got != "" {
 		t.Fatalf("缺 sha256 时不应下发下载地址，got %q", got)
 	}
-	if got := componentBinaryURL("https://s3.example.com/singbox/", "abc", "amd64"); got != "https://s3.example.com/singbox/sing-box-linux-amd64" {
+	if got := componentBinaryURL("https://s3.proxypilot.yangzifun.org/singbox/", "abc", "amd64"); got != "https://s3.proxypilot.yangzifun.org/singbox/sing-box-linux-amd64" {
 		t.Fatalf("组件地址 = %q", got)
 	}
 }

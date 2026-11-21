@@ -1,6 +1,10 @@
 package api
 
-import "testing"
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+)
 
 func TestSingboxRenderBundleValidation(t *testing.T) {
 	base := &singboxTemplate{
@@ -36,5 +40,63 @@ func TestSingboxRenderBundleValidation(t *testing.T) {
 	}
 	if len(users) != 1 || users[0]["uuid"] != "11111111-2222-3333-4444-555555555555" {
 		t.Fatalf("users = %#v", users)
+	}
+}
+
+func TestSingboxUserStatsCapableFor(t *testing.T) {
+	cases := []struct {
+		name, ver, base string
+		want            bool
+	}{
+		{"自建版本后缀", "1.14.4-proxypilot", "", true},
+		{"二进制标签", "unknown-with_v2ray_api", "", true},
+		{"官方版本", "1.14.4", "https://cdn/singbox", false},
+		{"未知版本+组件基址", "unknown", "https://cdn/singbox", true},
+		{"空版本+组件基址", "", "https://cdn/singbox", true},
+		{"未知版本无基址", "unknown", "", false},
+		{"空版本无基址", "", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := singboxUserStatsCapableFor(tc.ver, tc.base); got != tc.want {
+				t.Fatalf("singboxUserStatsCapableFor(%q,%q)=%v，期望 %v", tc.ver, tc.base, got, tc.want)
+			}
+		})
+	}
+}
+
+// 自建 sing-box 的 version 输出可能是 unknown，但 component_base_url 指向面板组件；
+// 此时必须仍写入 experimental.v2ray_api，否则 v2ray user stats 采集不到，用户流量页会全部离线。
+func TestSingboxRenderBundleUserStatsUsesCustomComponentBase(t *testing.T) {
+	tpl := &singboxTemplate{
+		Name: "t", PortBase: 13700, WarpBase: 13800, EnableVLWS: 1,
+		UsersJSON: `[{"name":"u1","uuid":"11111111-2222-3333-4444-555555555555","ss_password":"p1"}]`,
+	}
+	node := singboxRenderNode{Name: "n1", Domain: "example.com", StatsSecret: "stats-secret"}
+	files, _, _, msg := singboxRenderBundle(tpl, node, serverRow{ComponentBase: "https://cdn/singbox"}, nil)
+	if msg != "" || len(files) != 1 {
+		t.Fatalf("files=%d msg=%s", len(files), msg)
+	}
+	content, _ := files[0]["content"].(string)
+	var cfg map[string]any
+	if err := json.Unmarshal([]byte(content), &cfg); err != nil {
+		t.Fatalf("sb.json 非法: %v", err)
+	}
+	exp, _ := cfg["experimental"].(map[string]any)
+	if _, ok := exp["v2ray_api"]; !ok {
+		t.Fatalf("自建组件应包含 experimental.v2ray_api：%s", content)
+	}
+	if !strings.Contains(content, `"v2ray_api"`) {
+		t.Fatalf("配置缺少 v2ray_api：%s", content)
+	}
+
+	// 无组件基址（官方/未知环境）保持原安全行为，不写 v2ray_api。
+	files, _, _, msg = singboxRenderBundle(tpl, node, serverRow{}, nil)
+	if msg != "" || len(files) != 1 {
+		t.Fatalf("files=%d msg=%s", len(files), msg)
+	}
+	content, _ = files[0]["content"].(string)
+	if strings.Contains(content, `"v2ray_api"`) {
+		t.Fatalf("无组件基址时不应写 v2ray_api：%s", content)
 	}
 }
