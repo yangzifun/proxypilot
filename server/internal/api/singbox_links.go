@@ -405,17 +405,19 @@ func singboxNodeFromRender(node singboxRenderNode) singboxNode {
 // cdnLinkTarget 是一条客户端链接的实际连接地址。
 type cdnLinkTarget struct {
 	Host      string // 已含 :443
+	Direct    bool   // true=CDN 默认域名直连；false=优选地址
 	Preferred bool
 	Remark    string
 }
 
 // cdnLinkTargets 计算某 CDN 条目应生成的连接地址：
 //   - 旧单域名（legacy）保持原模板 cdn_prefer 行为（含 mode/limit/random）；
-//   - 新条目 prefer_group 非空 → 只展开该分组；为空 → 直接用 domain:443，
-//     绝不套用其它分组（避免 CF 条目使用 ESA 优选 IP）。
+//   - 新条目 Cloudflare 未显式 prefer_group 时自动使用 cloudflare 优选组；
+//   - 有优选地址时同时保留默认域名直连（节点-CDN名称）并展开优选（节点-CDN名称-1…）；
+//   - 为空 → 直接用 domain:443，绝不套用其它分组（避免 CF 条目使用 ESA 优选 IP）。
 func cdnLinkTargets(tpl *singboxTemplate, entry singboxCDNEntry, legacy bool) []cdnLinkTarget {
 	direct := func(domain string) []cdnLinkTarget {
-		return []cdnLinkTarget{{Host: net.JoinHostPort(domain, "443")}}
+		return []cdnLinkTarget{{Host: net.JoinHostPort(domain, "443"), Direct: true}}
 	}
 	toTargets := func(list []cdnPrefer) []cdnLinkTarget {
 		out := make([]cdnLinkTarget, 0, len(list))
@@ -425,15 +427,25 @@ func cdnLinkTargets(tpl *singboxTemplate, entry singboxCDNEntry, legacy bool) []
 		return out
 	}
 
-	if !legacy && entry.PreferGroup == "" {
-		return direct(entry.Domain)
-	}
 	if !legacy {
-		list := cdnPreferredForGroup(entry.PreferGroup)
+		group := strings.TrimSpace(entry.PreferGroup)
+		// Cloudflare 条目默认使用 cloudflare 优选组；用户无需再单独填写 prefer_group。
+		// 其它 CDN 名称暂不自动套用，避免 ESA/EO 误用 Cloudflare 优选地址。
+		if group == "" && (strings.EqualFold(strings.TrimSpace(entry.Name), "Cloudflare") ||
+			strings.EqualFold(strings.TrimSpace(entry.Name), "CF")) {
+			group = cdnPreferredDefaultGroup
+		}
+		if group == "" {
+			return direct(entry.Domain)
+		}
+		list := cdnPreferredForGroup(group)
 		if len(list) == 0 {
 			return direct(entry.Domain)
 		}
-		return toTargets(list)
+		// 默认节点 + 优选版本：先保留 CDN 域名直连，再追加 -1…-N。
+		out := direct(entry.Domain)
+		out = append(out, toTargets(list)...)
+		return out
 	}
 
 	// legacy：完全复刻旧单 CDN 行为（模板 cdn_prefer 配置 + 全局开关）。
@@ -466,7 +478,7 @@ func cdnLinkTargets(tpl *singboxTemplate, entry singboxCDNEntry, legacy bool) []
 // singboxCDNLinkTag 生成 CDN 链接 tag：新多 CDN 条目统一为「节点-CDN名称-目标序号」，
 // 其中同名多条目先按 occurrence 区分（第二条第 1 个目标为 -Cloudflare-2-1），再追加
 // 该条目的优选地址序号（单目标也会追加 -1）。旧单域名保持 -cdn / -cdn-1 兼容。
-func singboxCDNLinkTag(baseTag string, entry singboxCDNEntry, occurrence, targetIdx, targetCount int, legacy bool) string {
+func singboxCDNLinkTag(baseTag string, entry singboxCDNEntry, occurrence, targetIdx, targetCount int, direct, legacy bool) string {
 	var tag string
 	if legacy {
 		tag = baseTag + "-cdn"
@@ -479,7 +491,10 @@ func singboxCDNLinkTag(baseTag string, entry singboxCDNEntry, occurrence, target
 	if occurrence > 0 {
 		tag += "-" + strconv.Itoa(occurrence+1)
 	}
-	// 非 legacy 始终追加目标序号：单目标 -1，多优选 -1/-2 ……
+	// 默认节点名：节点-CDN名称；优选版本：节点-CDN名称-1、-2……
+	if direct {
+		return tag
+	}
 	tag += "-" + strconv.Itoa(targetIdx+1)
 	return tag
 }
@@ -576,8 +591,16 @@ func singboxClientLinks(tpl *singboxTemplate, node singboxNode, users []sbUser) 
 				if legacyCDN {
 					cdnBaseTag = tag("vlws")
 				}
+				prefIdx := 0
 				for ti, tgt := range targets {
-					tagText := singboxCDNLinkTag(cdnBaseTag, entry, entryOccurrence[i], ti, len(targets), legacyCDN)
+					idx := ti
+					if !legacyCDN && !tgt.Direct {
+						idx = prefIdx
+						prefIdx++
+					} else if !legacyCDN {
+						idx = 0
+					}
+					tagText := singboxCDNLinkTag(cdnBaseTag, entry, entryOccurrence[i], idx, len(targets), tgt.Direct, legacyCDN)
 					// 兜底去重（例如同名同域名但实际不同条目已被域名唯一校验拦住；
 					// 这里主要防止优选地址重复产生相同 tag）。
 					if n := cdnTagSeen[tagText]; n > 0 {

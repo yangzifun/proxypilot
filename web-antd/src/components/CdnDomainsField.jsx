@@ -29,8 +29,6 @@ export const CDN_NAME_PRESETS = [
   { value: 'ESA', label: 'ESA' },
   { value: 'CloudFront', label: 'CloudFront' },
   { value: 'Fastly', label: 'Fastly' },
-  // 旧名称临时选项：避免旧数据（CF）编辑时值丢失，后续可统一改为 Cloudflare
-  { value: 'CF', label: 'CF（旧名称）' },
 ];
 
 // 只允许域名（不含协议/路径/端口/IP）；TLD 必须为字母，避免 1.2.3.4 被当成域名。

@@ -209,10 +209,10 @@ func TestSingboxClientLinksMultiCDN(t *testing.T) {
 	}
 	links := singboxClientLinks(tpl, node, []sbUser{{Name: "u1", UUID: "11111111-1111-4111-8111-111111111111"}})
 	cdnLinks := cdnLinksOf(links)
-	if len(cdnLinks) != 3 {
-		t.Fatalf("期望 3 条 CDN 链接（CF 直连、ESA 1 优选、EO 直连），实际 %d：%#v", len(cdnLinks), cdnLinks)
+	if len(cdnLinks) != 6 {
+		t.Fatalf("期望 6 条 CDN 链接（CF 默认+2优选、ESA 默认+1优选、EO 默认），实际 %d：%#v", len(cdnLinks), cdnLinks)
 	}
-	// 按条目原顺序生成；未设置 prefer_group 时必须是 domain:443（不能套 cloudflare 优选）。
+	// Cloudflare：默认节点维持 domain:443，并自动展开 cloudflare 优选的 -1/-2。
 	cfLink := mapStr(cdnLinks[0], "link", "")
 	if !strings.Contains(cfLink, "@cf.example.com:443") || !strings.Contains(cfLink, "sni=cf.example.com") || !strings.Contains(cfLink, "host=cf.example.com") {
 		t.Fatalf("主 CDN CF 链接错误：%s", cfLink)
@@ -220,16 +220,25 @@ func TestSingboxClientLinksMultiCDN(t *testing.T) {
 	if !strings.Contains(cfLink, "CF") {
 		t.Fatalf("CF 链接 tag 应包含名称：%s", cfLink)
 	}
-	// ESA 只展开自己分组，不能用 cloudflare 的优选地址。
-	esaLink := mapStr(cdnLinks[1], "link", "")
-	if !strings.Contains(esaLink, "@esa.edge.example.net:443") || !strings.Contains(esaLink, "sni=esa.example.com") {
-		t.Fatalf("ESA 链接应展开 esa 分组并保持 SNI：%s", esaLink)
+	cfPref1 := mapStr(cdnLinks[1], "link", "")
+	cfPref2 := mapStr(cdnLinks[2], "link", "")
+	if !strings.Contains(cfPref1, "162.159.198.1:443") || !strings.Contains(cfPref2, "162.159.198.2:443") {
+		t.Fatalf("CF 优选地址未正确展开：%s / %s", cfPref1, cfPref2)
 	}
-	if strings.Contains(esaLink, "162.159.198.") || !strings.Contains(esaLink, "ESA") {
-		t.Fatalf("ESA 链接串用了其它分组/缺少名称：%s", esaLink)
+	// ESA 只展开自己分组，不能用 cloudflare 的优选地址；默认域名也会保留。
+	esaLink := mapStr(cdnLinks[3], "link", "")
+	if !strings.Contains(esaLink, "@esa.example.com:443") || !strings.Contains(esaLink, "sni=esa.example.com") {
+		t.Fatalf("ESA 默认链接错误：%s", esaLink)
+	}
+	esaPref := mapStr(cdnLinks[4], "link", "")
+	if !strings.Contains(esaPref, "@esa.edge.example.net:443") || !strings.Contains(esaPref, "sni=esa.example.com") {
+		t.Fatalf("ESA 链接应展开 esa 分组并保持 SNI：%s", esaPref)
+	}
+	if strings.Contains(esaPref, "162.159.198.") || !strings.Contains(esaPref, "ESA") {
+		t.Fatalf("ESA 链接串用了其它分组/缺少名称：%s", esaPref)
 	}
 	// EO 没有 prefer_group，直接 domain:443。
-	eoLink := mapStr(cdnLinks[2], "link", "")
+	eoLink := mapStr(cdnLinks[5], "link", "")
 	if !strings.Contains(eoLink, "@eo.example.com:443") || strings.Contains(eoLink, "162.159.") {
 		t.Fatalf("EO 未设置分组时应直连域名：%s", eoLink)
 	}
@@ -606,27 +615,27 @@ func TestSingboxClientLinksOnlyEnabledInOrder(t *testing.T) {
 	}
 }
 
-// task-66：新多 CDN tag 统一为 节点-CDN名称-目标序号；legacy 保持旧格式。
-func TestSingboxCDNLinkTagAlwaysTargetSuffix(t *testing.T) {
+// 新多 CDN tag：默认节点 节点-CDN名称，优选版本 节点-CDN名称-1…；legacy 保持旧格式。
+func TestSingboxCDNLinkTagDefaultAndPreferred(t *testing.T) {
 	entry := singboxCDNEntry{Name: "Cloudflare"}
 	cases := []struct {
 		name                               string
 		base                               string
 		occurrence, targetIdx, targetCount int
-		legacy                             bool
+		direct, legacy                     bool
 		want                               string
 	}{
-		{"单目标", "彰化", 0, 0, 1, false, "彰化-Cloudflare-1"},
-		{"多优选第1个", "彰化", 0, 0, 2, false, "彰化-Cloudflare-1"},
-		{"多优选第2个", "彰化", 0, 1, 2, false, "彰化-Cloudflare-2"},
-		{"同名第二条单目标", "彰化", 1, 0, 1, false, "彰化-Cloudflare-2-1"},
-		{"同名第二条多优选第2个", "彰化", 1, 1, 2, false, "彰化-Cloudflare-2-2"},
-		{"legacy单目标", "彰化-vlws", 0, 0, 1, true, "彰化-vlws-cdn"},
-		{"legacy多目标第2个", "彰化-vlws", 0, 1, 2, true, "彰化-vlws-cdn-2"},
+		{"默认节点", "彰化", 0, 0, 1, true, false, "彰化-Cloudflare"},
+		{"优选第1个", "彰化", 0, 0, 2, false, false, "彰化-Cloudflare-1"},
+		{"优选第2个", "彰化", 0, 1, 2, false, false, "彰化-Cloudflare-2"},
+		{"同名第二条默认节点", "彰化", 1, 0, 1, true, false, "彰化-Cloudflare-2"},
+		{"同名第二条优选第1个", "彰化", 1, 0, 1, false, false, "彰化-Cloudflare-2-1"},
+		{"legacy单目标", "彰化-vlws", 0, 0, 1, false, true, "彰化-vlws-cdn"},
+		{"legacy多目标第2个", "彰化-vlws", 0, 1, 2, false, true, "彰化-vlws-cdn-2"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := singboxCDNLinkTag(tc.base, entry, tc.occurrence, tc.targetIdx, tc.targetCount, tc.legacy)
+			got := singboxCDNLinkTag(tc.base, entry, tc.occurrence, tc.targetIdx, tc.targetCount, tc.direct, tc.legacy)
 			if got != tc.want {
 				t.Fatalf("tag = %q，期望 %q", got, tc.want)
 			}
@@ -659,20 +668,20 @@ func TestSingboxClientLinksCDNTagNaming(t *testing.T) {
 			{Name: "Cloudflare", Domain: "cf.example.com"},
 		}}
 		got := cdnLinkTags(cdnLinksOf(singboxClientLinks(tpl, node, user)))
-		want := []string{"彰化-Cloudflare-1"}
+		want := []string{"彰化-Cloudflare"}
 		if strings.Join(got, ",") != strings.Join(want, ",") {
 			t.Fatalf("tags = %v，期望 %v", got, want)
 		}
 	})
 
-	t.Run("多CDN各自目标1", func(t *testing.T) {
+	t.Run("多CDN各自默认节点", func(t *testing.T) {
 		node := singboxNode{Name: "hk", Domain: "hk.example.com", CDNEntries: []singboxCDNEntry{
 			{Name: "Cloudflare", Domain: "cf.example.com"},
 			{Name: "ESA", Domain: "esa.example.com"},
 			{Name: "EO", Domain: "eo.example.com"},
 		}}
 		got := cdnLinkTags(cdnLinksOf(singboxClientLinks(tpl, node, user)))
-		want := []string{"hk-Cloudflare-1", "hk-ESA-1", "hk-EO-1"}
+		want := []string{"hk-Cloudflare", "hk-ESA", "hk-EO"}
 		if strings.Join(got, ",") != strings.Join(want, ",") {
 			t.Fatalf("tags = %v，期望 %v", got, want)
 		}
@@ -684,22 +693,22 @@ func TestSingboxClientLinksCDNTagNaming(t *testing.T) {
 			{Name: "Cloudflare", Domain: "b.example.com"},
 		}}
 		got := cdnLinkTags(cdnLinksOf(singboxClientLinks(tpl, node, user)))
-		want := []string{"hk-Cloudflare-1", "hk-Cloudflare-2-1"}
+		want := []string{"hk-Cloudflare", "hk-Cloudflare-2"}
 		if strings.Join(got, ",") != strings.Join(want, ",") {
 			t.Fatalf("tags = %v，期望 %v", got, want)
 		}
 	})
 
-	t.Run("多优选地址追加1和2", func(t *testing.T) {
+	t.Run("默认节点加多优选1和2", func(t *testing.T) {
 		setCDNTestCache(t, []cdnPrefer{
 			{Address: "162.159.198.1", Port: 443, Group: "cloudflare", Remark: "cf1"},
 			{Address: "162.159.198.2", Port: 443, Group: "cloudflare", Remark: "cf2"},
 		}, false)
 		node := singboxNode{Name: "hk", Domain: "hk.example.com", CDNEntries: []singboxCDNEntry{
-			{Name: "Cloudflare", Domain: "cf.example.com", PreferGroup: "cloudflare"},
+			{Name: "Cloudflare", Domain: "cf.example.com"},
 		}}
 		got := cdnLinkTags(cdnLinksOf(singboxClientLinks(tpl, node, user)))
-		want := []string{"hk-Cloudflare-1", "hk-Cloudflare-2"}
+		want := []string{"hk-Cloudflare", "hk-Cloudflare-1", "hk-Cloudflare-2"}
 		if strings.Join(got, ",") != strings.Join(want, ",") {
 			t.Fatalf("tags = %v，期望 %v", got, want)
 		}
