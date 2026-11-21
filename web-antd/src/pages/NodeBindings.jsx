@@ -3,9 +3,24 @@ import { App as AntdApp, Button, Form, Input, Modal, Select, Space, Table, Tag, 
 import { CloudUploadOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import { api, apiGet, apiPost } from '../api';
 import { PageCard } from '../components';
-import CdnDomainsField, { collectCdnEntries, normalizeCdnEntries, cdnSummary } from '../components/CdnDomainsField';
+import CdnDomainsField, { collectCdnEntries, collectCdnDomains, normalizeCdnEntries, cdnSummary } from '../components/CdnDomainsField';
 import { fmtTime } from '../format';
 import VpnNodesPanel from './VpnNodesPanel';
+
+/* 节点统一域名校验：允许域名或 IPv4，拒绝协议/路径/端口/空格 */
+const NODE_DOMAIN_RE = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i;
+const NODE_IPV4_RE = /^(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)$/;
+export function validateNodeDomain(value) {
+  const raw = String(value == null ? '' : value).trim();
+  if (!raw) return '请填写域名（可填域名或 IPv4）';
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(raw)) return '只填写域名或 IP，不要带协议';
+  if (raw.includes('/')) return '只填写域名或 IP，不要带路径';
+  if (raw.includes(':') || /\s/.test(raw)) return '只填写域名或 IP，不要带端口或空格';
+  const v = raw.toLowerCase();
+  if (NODE_IPV4_RE.test(v)) return '';
+  if (!NODE_DOMAIN_RE.test(v)) return '域名格式不正确（例如 hk.example.com 或 203.0.113.10）';
+  return '';
+}
 
 export default function NodeBindings() {
   const { message } = AntdApp.useApp();
@@ -51,6 +66,13 @@ export default function NodeBindings() {
   }, []);
 
   const options = rows.map((r) => ({ value: r.server_id, label: `${r.server_name}${r.host ? ` · ${r.host}` : ''}` }));
+
+  // 已配置 CDN 域名汇总（rows + 当前编辑行），供编辑表单的域名下拉选择
+  const cdnDomainOptions = useMemo(() => {
+    const set = new Set(collectCdnDomains(rows));
+    if (editRow) normalizeCdnEntries(editRow).forEach((e) => { if (e.domain) set.add(e.domain); });
+    return Array.from(set).sort();
+  }, [rows, editRow]);
 
   const applyNode = async (row) => {
     try {
@@ -109,7 +131,9 @@ export default function NodeBindings() {
     }
   };
   const submit = async () => {
-    const v = await form.validateFields();
+    // 校验失败时 antd 已展示字段错误，这里静默返回（避免未处理的 Promise rejection）
+    const v = await form.validateFields().catch(() => null);
+    if (!v) return;
     let cdnEntries = [];
     try {
       cdnEntries = collectCdnEntries(v.cdn_entries || []);
@@ -123,9 +147,11 @@ export default function NodeBindings() {
     const enabledCdnEntries = cdnEntries.filter((x) => x.enabled !== false);
     const firstEnabledCdnDomain = (enabledCdnEntries[0] || {}).domain || '';
     const tasks = [];
+    // 所有协议统一使用全局域名（sing-box/mihomo 写 domain；MTProto 写 host，伪装域名/端口由模板决定）
+    const globalDomain = String(v.domain || '').trim();
     if (v.sb_tpl) tasks.push(['singbox', '/api/singbox/nodes', {
       name: (v.sb_name || v.name || '').trim(), server_id: v.server_id, template_id: v.sb_tpl,
-      domain: v.sb_domain || v.domain || '',
+      domain: globalDomain,
       // 多 CDN：cdn_entries 为主（含 enabled，不写 primary），旧字段只写启用域名
       cdn_entries: cdnEntries,
       cdn_domains: enabledCdnEntries.map((x) => x.domain),
@@ -133,11 +159,12 @@ export default function NodeBindings() {
     }]);
     if (v.mh_tpl) tasks.push(['mihomo', '/api/mihomo/nodes', {
       name: (v.mh_name || v.name || '').trim(), server_id: v.server_id, template_id: v.mh_tpl,
-      domain: v.mh_domain || v.domain || '',
+      domain: globalDomain,
     }]);
     if (v.mp_tpl) tasks.push(['MTProto', '/api/mtproto/nodes', {
       name: (v.mp_name || v.name || '').trim(), server_id: v.server_id, template_id: v.mp_tpl,
-      domain: v.mp_domain || v.domain || '', port: v.mp_port || 0,
+      // MTProto 不再发 domain/port：伪装域名与端口统一由模板决定
+      host: globalDomain,
     }]);
     if (!tasks.length) {
       message.warning('请至少选择一个服务的模板');
@@ -267,10 +294,7 @@ export default function NodeBindings() {
                 server_id: row.server_id,
                 name: row.node_name,
                 domain: row.domain || '',
-                sb_domain: row.domain || '',
                 cdn_entries: normalizeCdnEntries(row),
-                mh_domain: row.domain || '',
-                mp_domain: row.domain || '',
                 sb_tpl: row.sb_tpl || undefined,
                 mh_tpl: row.mh_tpl || undefined,
                 mp_tpl: row.mp_tpl || undefined,
@@ -355,8 +379,21 @@ export default function NodeBindings() {
           <Form.Item name="name" label="节点名称前缀" rules={[{ required: true, message: '请填写名称' }]}>
             <Input placeholder="例如 hk-01" />
           </Form.Item>
-          <Form.Item name="domain" label="域名（可选）">
-            <Input placeholder="hk.example.com" />
+          <Form.Item
+            name="domain"
+            label="域名（必填，可填域名或 IP）"
+            rules={[
+              { required: true, whitespace: true, message: '请填写域名（可填域名或 IPv4）' },
+              {
+                validator: (_, val) => {
+                  const err = validateNodeDomain(val);
+                  return err ? Promise.reject(new Error(err)) : Promise.resolve();
+                },
+              },
+            ]}
+            extra="所有协议（sing-box / mihomo / MTProto）统一使用该域名；可填域名或 IPv4，不要带协议/路径/端口"
+          >
+            <Input placeholder="hk.example.com 或 203.0.113.10" />
           </Form.Item>
           <Form.Item name="sb_tpl" label="sing-box 模板">
             <Select allowClear options={tpl.sb} placeholder="不绑定 sing-box" />
@@ -369,11 +406,8 @@ export default function NodeBindings() {
                     <Form.Item name="sb_name" label="sing-box 节点名" style={{ width: 200 }}>
                       <Input placeholder="留空自动生成" />
                     </Form.Item>
-                    <Form.Item name="sb_domain" label="域名" style={{ width: 240 }}>
-                      <Input placeholder="hk.example.com" />
-                    </Form.Item>
                   </div>
-                  <CdnDomainsField name="cdn_entries" label="CDN 域名" />
+                  <CdnDomainsField name="cdn_entries" label="CDN 域名" domainOptions={cdnDomainOptions} />
                 </>
               ) : null
             }
@@ -388,40 +422,20 @@ export default function NodeBindings() {
                   <Form.Item name="mh_name" label="mihomo 节点名" style={{ width: 200 }}>
                     <Input placeholder="留空自动生成" />
                   </Form.Item>
-                  <Form.Item name="mh_domain" label="域名" style={{ width: 240 }}>
-                    <Input placeholder="hk.example.com" />
-                  </Form.Item>
                 </div>
               ) : null
             }
           </Form.Item>
-          <Form.Item name="mp_tpl" label="MTProto 模板">
+          <Form.Item
+            name="mp_tpl"
+            label="MTProto 模板"
+            extra="伪装域名与端口由 MTProto 模板统一设定，节点不再单独填写"
+          >
             <Select allowClear options={tpl.mp} placeholder="不绑定 MTProto" />
           </Form.Item>
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <Form.Item name="mp_name" label="MTProto 节点名" style={{ width: 200 }}>
-              <Input placeholder="留空自动生成" />
-            </Form.Item>
-            <Form.Item
-              name="mp_domain"
-              label="MTProto 伪装域名"
-              style={{ width: 260 }}
-              dependencies={['mp_tpl']}
-              rules={[
-                ({ getFieldValue }) => ({
-                  validator(_, value) {
-                    if (!getFieldValue('mp_tpl') || String(value || '').trim()) return Promise.resolve();
-                    return Promise.reject(new Error('请填写 MTProto 伪装域名'));
-                  },
-                }),
-              ]}
-            >
-              <Input placeholder="www.microsoft.com" />
-            </Form.Item>
-            <Form.Item name="mp_port" label="端口" style={{ width: 140 }}>
-              <Input placeholder="0 = 跟随模板" />
-            </Form.Item>
-          </div>
+          <Form.Item name="mp_name" label="MTProto 节点名" style={{ width: 240 }}>
+            <Input placeholder="留空自动生成" />
+          </Form.Item>
         </Form>
       </Modal>
       </PageCard>

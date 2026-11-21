@@ -41,10 +41,25 @@ import { api, apiPost } from '../api';
 import TemplateEditor from './SingboxTemplateEditor';
 import { useAsync, readForm } from '../hooks';
 import { CopyText, EmptyBlock, ErrorBlock, IconAction, JsonView, PageCard, StatCard } from '../components';
-import CdnDomainsField, { collectCdnEntries, normalizeCdnEntries, cdnSummary } from '../components/CdnDomainsField';
+import CdnDomainsField, { collectCdnEntries, collectCdnDomains, normalizeCdnEntries, cdnSummary } from '../components/CdnDomainsField';
 import { watchBatch } from '../components/JobCenter';
 import { fmtAgo, fmtNum, fmtTime, shortUuid } from '../format';
 import { chartPalette } from '../theme';
+
+/* 节点统一域名校验：允许域名或 IPv4，拒绝协议/路径/端口/空格 */
+const NODE_DOMAIN_RE = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i;
+const NODE_IPV4_RE = /^(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)$/;
+export function validateNodeDomain(value) {
+  const raw = String(value == null ? '' : value).trim();
+  if (!raw) return '请填写域名（可填域名或 IPv4）';
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(raw)) return '只填写域名或 IP，不要带协议';
+  if (raw.includes('/')) return '只填写域名或 IP，不要带路径';
+  if (raw.includes(':') || /\s/.test(raw)) return '只填写域名或 IP，不要带端口或空格';
+  const v = raw.toLowerCase();
+  if (NODE_IPV4_RE.test(v)) return '';
+  if (!NODE_DOMAIN_RE.test(v)) return '域名格式不正确（例如 hk.example.com 或 203.0.113.10）';
+  return '';
+}
 
 const PROTO_LABEL = {
   ss: 'SS2022',
@@ -121,6 +136,8 @@ export default function Nodes({ initialTab, templatesOnly }) {
   const nodeRows = (nodes.data && nodes.data.data) || [];
   const uuidRows = (uuids.data && uuids.data.data) || [];
   const serverRows = (servers.data && servers.data.data) || [];
+  // 已配置 CDN 域名汇总（所有节点），供编辑表单的域名下拉选择
+  const cdnDomainOptions = useMemo(() => collectCdnDomains(nodeRows), [nodeRows]);
   const [tplModal, setTplModal] = useState(null); // { mode, row }
   const [nodeModal, setNodeModal] = useState(null); // { mode, row }
   const [view, setView] = useState(null); // { title, value }
@@ -541,6 +558,7 @@ export default function Nodes({ initialTab, templatesOnly }) {
         state={nodeModal}
         servers={serverRows}
         templates={tplRows}
+        domainOptions={cdnDomainOptions}
         onClose={() => setNodeModal(null)}
         onSaved={() => {
           setNodeModal(null);
@@ -591,7 +609,7 @@ const TPL_DEFAULTS = {
 /* =================================================================
  *  节点绑定编辑器
  * ================================================================= */
-function NodeEditor({ state, servers, templates, onClose, onSaved }) {
+function NodeEditor({ state, servers, templates, domainOptions, onClose, onSaved }) {
   const { message } = AntdApp.useApp();
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
@@ -650,7 +668,7 @@ function NodeEditor({ state, servers, templates, onClose, onSaved }) {
         name: v.name,
         server_id: v.server_id,
         template_id: v.template_id || 0,
-        domain: v.domain || '',
+        domain: String(v.domain || '').trim(),
         // 多 CDN：cdn_entries 为主（含 enabled，不写 primary），旧字段只写启用域名
         cdn_entries: cdnEntries,
         cdn_domains: enabledCdnEntries.map((x) => x.domain),
@@ -727,12 +745,25 @@ function NodeEditor({ state, servers, templates, onClose, onSaved }) {
         </Row>
         <Row gutter={12}>
           <Col span={12}>
-            <Form.Item name="domain" label="域名" extra="用于节点链接与证书；可留空">
-              <Input placeholder="hk.example.com" />
+            <Form.Item
+              name="domain"
+              label="域名（必填，可填域名或 IP）"
+              rules={[
+                { required: true, whitespace: true, message: '请填写域名（可填域名或 IPv4）' },
+                {
+                  validator: (_, val) => {
+                    const err = validateNodeDomain(val);
+                    return err ? Promise.reject(new Error(err)) : Promise.resolve();
+                  },
+                },
+              ]}
+              extra="用于节点链接与证书；可填域名或 IPv4，不要带协议/路径/端口"
+            >
+              <Input placeholder="hk.example.com 或 203.0.113.10" />
             </Form.Item>
           </Col>
         </Row>
-        <CdnDomainsField name="cdn_entries" label="CDN 域名" />
+        <CdnDomainsField name="cdn_entries" label="CDN 域名" domainOptions={domainOptions} />
 
         <Collapse
           ghost

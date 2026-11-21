@@ -211,10 +211,8 @@ func mtprotoEffective(tpl *mtprotoTemplate, node *mtprotoNode) mtprotoEffectiveC
 		}
 		return dflt
 	}
-	port := node.Port
-	if port == 0 {
-		port = tpl.Port
-	}
+	// task-57：端口只取模板；节点级 port 覆盖忽略。模板 0 时用默认 13709。
+	port := tpl.Port
 	if port == 0 {
 		port = mtprotoDefaultPort
 	}
@@ -262,7 +260,8 @@ func mtprotoEffective(tpl *mtprotoTemplate, node *mtprotoNode) mtprotoEffectiveC
 	}
 	return mtprotoEffectiveConfig{
 		ID: node.ID, Name: firstNonEmpty(node.Name, "node"),
-		Domain: mtprotoDomainOf(pick(node.Domain, tpl.Domain, "")),
+		// task-57：伪装域名只取模板；节点级 domain 覆盖忽略（Host 仍可由全局域名/IP提供）。
+		Domain: mtprotoDomainOf(tpl.Domain),
 		Host:   mtprotoHostOf(node.Host),
 		Port:   port, APIPort: apiPort, SecretMode: mode, Concurrency: concurrency,
 		PreferIP: prefer, PublicIPv4: publicIPv4, Blocklist: blocklist, ThrottleMax: throttle,

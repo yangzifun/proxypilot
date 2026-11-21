@@ -57,7 +57,7 @@
     "name": "jp-01",
     "domain": "storage.googleapis.com",
     "host": "",
-    "port": 14000,
+    "port": 13709,
     "api_port": 13719,
     "secret_mode": "multi",
     "concurrency": 8192,
@@ -75,18 +75,18 @@
   "config": {
     "ok": true,
     "error": "",
-    "content": "# /etc/mtg/config.toml — 由 ProxyPilot 渲染（V13.4），请勿手改\n# node: jp-01 · mode: multi · clients: 2\n\nbind-to = \"[::]:14000\"\napi-bind-to = \"127.0.0.1:13719\"\nprefer-ip = \"prefer-ipv4\"\nconcurrency = 8192\n\n[domain-fronting]\nport = 443\n\n[defense.blocklist]\nenabled = false\n\n# [secrets] 必须是文件的最后一个 section（TOML 语义：section 之后的键都归属该表）\n[secrets]\nc1 = \"eeabababababababababababababababab7777772e62696e672e636f6d\"\nc2 = \"eeabababababababababababababababab7777772e6d6963726f736f66742e636f6d\"\n",
+    "content": "# /etc/mtg/config.toml — 由 ProxyPilot 渲染（V13.4），请勿手改\n# node: jp-01 · mode: multi · clients: 2\n\nbind-to = \"[::]:13709\"\napi-bind-to = \"127.0.0.1:13719\"\nprefer-ip = \"prefer-ipv4\"\nconcurrency = 8192\n\n[domain-fronting]\nport = 443\n\n[defense.blocklist]\nenabled = false\n\n# [secrets] 必须是文件的最后一个 section（TOML 语义：section 之后的键都归属该表）\n[secrets]\nc1 = \"eeabababababababababababababababab7777772e62696e672e636f6d\"\nc2 = \"eeabababababababababababababababab7777772e6d6963726f736f66742e636f6d\"\n",
     "ports": {
-      "mtproto": 14000,
+      "mtproto": 13709,
       "api": 13719
     },
     "mode": "multi"
   },
   "link": {
     "host": "storage.googleapis.com",
-    "port": 14000,
+    "port": 13709,
     "secret": "eeabababababababababababababababab7777772e62696e672e636f6d",
-    "tg": "tg://proxy?server=storage.googleapis.com&port=14000&secret=eeabababababababababababababababab7777772e62696e672e636f6d",
-    "tme": "https://t.me/proxy?server=storage.googleapis.com&port=14000&secret=eeabababababababababababababababab7777772e62696e672e636f6d"
+    "tg": "tg://proxy?server=storage.googleapis.com&port=13709&secret=eeabababababababababababababababab7777772e62696e672e636f6d",
+    "tme": "https://t.me/proxy?server=storage.googleapis.com&port=13709&secret=eeabababababababababababababababab7777772e62696e672e636f6d"
   }
 }

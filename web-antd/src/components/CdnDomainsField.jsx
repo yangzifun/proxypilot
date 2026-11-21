@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Form, Input, Switch } from 'antd';
+import { AutoComplete, Button, Form, Switch } from 'antd';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 
 /**
@@ -21,6 +21,15 @@ import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 
 export const CDN_MAX = 8;
 export const CDN_NAME_MAX = 24;
+
+/** 名称下拉预设（可手填其他名称；旧数据如 CF 按原样显示/保存） */
+export const CDN_NAME_PRESETS = [
+  { value: 'Cloudflare', label: 'Cloudflare' },
+  { value: 'ESA', label: 'ESA' },
+  { value: 'EO', label: 'EO（EdgeOne）' },
+  { value: 'CloudFront', label: 'CloudFront' },
+  { value: 'Fastly', label: 'Fastly' },
+];
 
 // 只允许域名（不含协议/路径/端口/IP）；TLD 必须为字母，避免 1.2.3.4 被当成域名。
 const DOMAIN_RE = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
@@ -167,14 +176,39 @@ export function cdnSummary(src) {
   };
 }
 
+/** 从节点行数组汇总已配置的 CDN 域名（去重、排序），供域名下拉选项使用。 */
+export function collectCdnDomains(rows) {
+  const set = new Set();
+  (Array.isArray(rows) ? rows : []).forEach((r) => {
+    normalizeCdnEntries(r).forEach((e) => {
+      if (e.domain) set.add(e.domain);
+    });
+  });
+  return Array.from(set).sort();
+}
+
 /**
  * 表单字段：多 CDN 动态列表（名称 + 启用开关 + 域名 + 删除）。
- * 用法：在 Form 内 <CdnDomainsField name="cdn_entries" />
+ * 名称/域名均为 AutoComplete（可下拉选择，也可手填）。
+ * 用法：在 Form 内 <CdnDomainsField name="cdn_entries" domainOptions={...} />
  */
-export default function CdnDomainsField({ name = 'cdn_entries', label = 'CDN 域名', disabled = false }) {
+export default function CdnDomainsField({
+  name = 'cdn_entries',
+  label = 'CDN 域名',
+  disabled = false,
+  nameOptions,
+  domainOptions,
+}) {
   const form = Form.useFormInstance();
   const list = Form.useWatch(name, form) || [];
   const enabledCount = list.filter((x) => x && x.enabled !== false).length;
+  // 名称预设（可手填）；域名选项来自调用方汇总的已配置域名（可手填）
+  const nameOptionList = (Array.isArray(nameOptions) && nameOptions.length ? nameOptions : CDN_NAME_PRESETS).map((o) =>
+    typeof o === 'string' ? { value: o, label: o } : o
+  );
+  const domainOptionList = (Array.isArray(domainOptions) ? domainOptions : [])
+    .filter(Boolean)
+    .map((d) => ({ value: String(d), label: String(d) }));
 
   const applyList = (next) => {
     form.setFieldValue(name, next);
@@ -215,7 +249,7 @@ export default function CdnDomainsField({ name = 'cdn_entries', label = 'CDN 域
           <>
             {fields.length ? (
               <div style={{ display: 'flex', gap: 8, fontSize: 11.5, color: '#94a3b8', padding: '0 2px 4px' }}>
-                <span style={{ width: 110 }}>名称（如 CF/ESA/EO）</span>
+                <span style={{ width: 110 }}>名称（Cloudflare/ESA/EO）</span>
                 <span style={{ width: 64, textAlign: 'center' }}>启用</span>
                 <span style={{ flex: 1 }}>域名</span>
                 <span style={{ width: 28 }} />
@@ -241,7 +275,14 @@ export default function CdnDomainsField({ name = 'cdn_entries', label = 'CDN 域
                     ]}
                     style={{ width: 110, marginBottom: 0 }}
                   >
-                    <Input placeholder="CF / ESA / EO" maxLength={CDN_NAME_MAX} disabled={disabled} />
+                    <AutoComplete
+                      options={nameOptionList}
+                      placeholder="Cloudflare / ESA / EO（可手填）"
+                      disabled={disabled}
+                      filterOption={(input, option) =>
+                        String((option && option.value) || '').toLowerCase().includes(String(input || '').toLowerCase())
+                      }
+                    />
                   </Form.Item>
                   <Form.Item
                     name={[field.name, 'enabled']}
@@ -273,7 +314,14 @@ export default function CdnDomainsField({ name = 'cdn_entries', label = 'CDN 域
                     ]}
                     style={{ flex: 1, marginBottom: 0 }}
                   >
-                    <Input placeholder="cdn.example.com" disabled={disabled} />
+                    <AutoComplete
+                      options={domainOptionList}
+                      placeholder="cdn.example.com（可下拉或手填）"
+                      disabled={disabled}
+                      filterOption={(input, option) =>
+                        String((option && option.value) || '').toLowerCase().includes(String(input || '').toLowerCase())
+                      }
+                    />
                   </Form.Item>
                   <div style={{ width: 28, paddingTop: 2 }}>
                     <Button
@@ -308,7 +356,7 @@ export default function CdnDomainsField({ name = 'cdn_entries', label = 'CDN 域
         )}
       </Form.List>
       <div style={{ fontSize: 11.5, color: '#94a3b8', lineHeight: 1.7, marginTop: 4 }}>
-        名称仅用于后台识别和节点命名（如 CF/ESA/EO）；域名需在对应 CDN/Tunnel 侧配置回源到本节点；最多 8 条；
+        名称从下拉选择（Cloudflare/ESA/EO，可手填）用于后台识别和节点命名；域名可从已配置域名中选择或手填，需在对应 CDN/Tunnel 侧配置回源到本节点；最多 8 条；
         停用的 CDN 不生成订阅链接，可同时启用多个。
       </div>
     </div>

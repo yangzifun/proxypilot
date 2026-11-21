@@ -1,4 +1,4 @@
-﻿package api
+package api
 
 import (
 	"context"
@@ -375,15 +375,8 @@ func (h *handlers) mtprotoNodeCreate(w http.ResponseWriter, r *http.Request) {
 		input["domain"] = tpl.Domain
 	}
 	if s, _ := input["bootstrap_secret"].(string); s == "" {
-		// 用节点实际的伪装域名生成占位 secret；只有节点没填时才回落到模板域名
-		domain := ""
-		if d, _ := input["domain"].(string); d != "" {
-			domain = d
-		}
-		if domain == "" {
-			domain = tpl.Domain
-		}
-		secret := mtprotoGenerateSecret(domain)
+		// task-57：伪装域名统一由模板决定，bootstrap secret 也必须使用模板域名（忽略节点 domain）。
+		secret := mtprotoGenerateSecret(tpl.Domain)
 		if secret == "" {
 			writeError(w, http.StatusBadRequest, "无法生成 bootstrap_secret：请先填写有效伪装域名（如 www.bing.com）")
 			return

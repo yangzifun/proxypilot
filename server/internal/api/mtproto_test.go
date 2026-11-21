@@ -186,3 +186,46 @@ func TestMtprotoClientLinkUsesDomain(t *testing.T) {
 		t.Fatalf("tg/tme 链接未使用域名：%v / %v", link["tg"], link["tme"])
 	}
 }
+
+// task-57：伪装域名/端口统一由模板决定，节点级 domain/port 覆盖忽略；
+// 节点 host 仍是连接地址（全局域名/IP）；模板端口 0 时默认 13709。
+func TestMtprotoEffectiveTemplateUnified(t *testing.T) {
+	tpl := &mtprotoTemplate{Domain: "tpl.example.com", Port: 13709, APIPort: 13719}
+	node := &mtprotoNode{Domain: "node.example.org", Port: 14000, Host: "global.example.net"}
+	eff := mtprotoEffective(tpl, node)
+	if eff.Domain != "tpl.example.com" {
+		t.Fatalf("Domain 应只取模板，实际 %q", eff.Domain)
+	}
+	if eff.Port != 13709 {
+		t.Fatalf("Port 应只取模板，实际 %d", eff.Port)
+	}
+	if eff.Host != "global.example.net" {
+		t.Fatalf("节点 Host 应保留为连接地址，实际 %q", eff.Host)
+	}
+
+	// 模板端口 0 → 默认 13709（API 端口仍按模板 0 → 13719）
+	tpl.Port = 0
+	tpl.APIPort = 0
+	eff = mtprotoEffective(tpl, node)
+	if eff.Port != mtprotoDefaultPort || eff.APIPort != mtprotoDefaultAPIPort {
+		t.Fatalf("模板 0 端口默认值错误：port=%d api=%d", eff.Port, eff.APIPort)
+	}
+	// 模板没有伪装域名时，即使节点填了 domain 也不应回退到节点 domain。
+	tpl.Domain = ""
+	eff = mtprotoEffective(tpl, node)
+	if eff.Domain != "" {
+		t.Fatalf("节点 domain 不应再作为伪装域名（实际 %q）", eff.Domain)
+	}
+
+	// 链接仍用模板端口，host 用节点全局域名。
+	tpl.Domain = "tpl.example.com"
+	eff = mtprotoEffective(tpl, node)
+	srv := mtprotoServer{LastIP4: "203.0.113.7", LastIP: "203.0.113.7"}
+	link := mtprotoClientLink(&eff, srv, &mtprotoClient{ID: 1, Secret: mtprotoGenerateSecret("tpl.example.com")})
+	if mapInt(link, "port", 0) != 13709 {
+		t.Fatalf("链接端口 = %d，期望模板/默认 13709", mapInt(link, "port", 0))
+	}
+	if got := mapStr(link, "host", ""); got != "global.example.net" {
+		t.Fatalf("链接 host = %q，期望节点全局域名", got)
+	}
+}

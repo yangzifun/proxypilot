@@ -1,7 +1,7 @@
 /* =================================================================
  *  MTProto（Telegram 专用代理）节点管理
- *  · 协议模板：监听端口 13709 / 运行参数；伪装域名在节点绑定/编辑时单独填写
- *  · 节点绑定：服务器 + 模板 + 可选覆盖（域名 / 端口）
+ *  · 协议模板：监听端口 13709 / 伪装域名（FakeTLS SNI）/ 运行参数
+ *  · 节点绑定：服务器 + 模板（伪装域名与端口统一继承模板，节点不再单独填写）
  *  · 授权：按 UUID 生成独立 secret；撤销 / 轮换只影响该用户
  *  · 与订阅完全隔离：链接只在后台和用户中心出现，不进 /sub
  * ================================================================= */
@@ -49,6 +49,18 @@ import { CopyText, EmptyBlock, ErrorBlock, IconAction, PageCard, StatCard } from
 import { watchBatch } from '../components/JobCenter';
 import { fmtAgo, shortUuid, fmtNum } from '../format';
 import { chartPalette } from '../theme';
+
+/* 模板伪装域名（FakeTLS SNI）：只允许域名，不接受协议/路径/端口/IP */
+const MT_FAKE_DOMAIN_RE = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i;
+export function validateFakeDomain(value) {
+  const raw = String(value == null ? '' : value).trim();
+  if (!raw) return '请填写伪装域名';
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(raw)) return '只填写域名，不要带协议';
+  if (raw.includes('/')) return '只填写域名，不要带路径';
+  if (raw.includes(':') || /\s/.test(raw)) return '只填写域名，不要带端口或空格';
+  if (!MT_FAKE_DOMAIN_RE.test(raw)) return '域名格式不正确（例如 storage.googleapis.com）';
+  return '';
+}
 
 const MODE_LABEL = { multi: '每用户独立', single: '整节点共享' };
 const PREFER_OPTIONS = [
@@ -335,6 +347,12 @@ export default function MtprotoPanel({ templatesOnly }) {
         </span>
       ),
     },
+    {
+      title: '伪装域名',
+      dataIndex: 'domain',
+      width: 210,
+      render: (v) => (v ? <span className="pp-mono">{v}</span> : <span className="pp-muted">未设置</span>),
+    },
     { title: '模式', dataIndex: 'secret_mode', width: 110, render: (v) => <Tag color={v === 'single' ? 'orange' : 'purple'}>{MODE_LABEL[v] || v}</Tag> },
     { title: '绑定节点', dataIndex: 'node_count', width: 92, render: (v) => <Tag color={Number(v) ? 'geekblue' : 'default'}>{Number(v)} 个</Tag> },
     { title: '更新时间', dataIndex: 'updated_at', width: 108, render: (v) => <span className="pp-muted">{fmtAgo(v)}</span> },
@@ -508,7 +526,7 @@ export default function MtprotoPanel({ templatesOnly }) {
         type="info"
         showIcon
         style={{ marginBottom: 12 }}
-        message="节点默认继承模板的端口与模式；伪装域名请在节点上单独填写。授权链接不会写进订阅。"
+        message="节点默认继承模板的伪装域名、端口与模式；节点上不再单独填写伪装域名/端口。授权链接不会写进订阅。"
       />
       <Table
         className="pp-table"
@@ -530,7 +548,7 @@ export default function MtprotoPanel({ templatesOnly }) {
         type="info"
         showIcon
         style={{ marginBottom: 12 }}
-        message="改模板会立即按新参数重渲染全部绑定节点（并排队下发）；节点上的显式覆盖优先于模板。"
+        message="改模板会立即按新参数重渲染全部绑定节点（并排队下发）；伪装域名与端口统一由模板决定，节点继承。"
       />
       <Table
         className="pp-table"
@@ -650,7 +668,7 @@ export default function MtprotoPanel({ templatesOnly }) {
               message={drawerNode.secret_mode === 'single' ? '整节点共享模式：所有用户拿到同一条链接，轮换 / 撤销会影响全部用户。' : '每个用户一条独立 secret：撤销或轮换只影响该用户，其他人不掉线。'}
               description={
                 <span className="pp-muted">
-                  端口 {drawerNode.port}（{drawerNode.overrides && drawerNode.overrides.port ? '继承模板' : '节点覆盖'}）· 伪装域名 {drawerNode.domain || '未设置'}。链接即凭证，不进订阅。
+                  端口 {drawerNode.port} · 伪装域名 {drawerNode.domain || '未设置'}（均由模板统一设定，节点继承）。链接即凭证，不进订阅。
                 </span>
               }
             />
@@ -754,8 +772,6 @@ function NodeForm({ form, mode, row, servers, templates }) {
         server_id: row.server_id,
         template_id: row.template_id || undefined,
         host: row.host || '',
-        domain: row.overrides && row.overrides.domain ? '' : row.domain,
-        port: row.overrides && row.overrides.port ? undefined : row.port,
         api_port: row.overrides && row.overrides.api_port ? undefined : row.api_port,
         remark: row.remark || '',
         enabled: !!row.enabled,
@@ -778,7 +794,7 @@ function NodeForm({ form, mode, row, servers, templates }) {
           </Form.Item>
         </Col>
       </Row>
-      <Form.Item name="template_id" label="协议模板" rules={[{ required: true, message: '选择协议模板' }]} extra="监听端口（默认 13709）、伪装域名、模式等默认从模板继承">
+      <Form.Item name="template_id" label="协议模板" rules={[{ required: true, message: '选择协议模板' }]} extra="伪装域名与端口由模板统一设定，节点继承（监听端口默认 13709）">
         <Select
           placeholder="选择协议模板"
           options={templates.map((t) => ({ value: t.id, label: t.name + ' · ' + t.port }))}
@@ -794,25 +810,8 @@ function NodeForm({ form, mode, row, servers, templates }) {
             <Input placeholder="tg.example.com 或 203.0.113.10" />
           </Form.Item>
         </Col>
-      </Row>
-      <Row gutter={12}>
-        <Col span={10}>
-          <Form.Item
-            name="domain"
-            label="伪装域名（FakeTLS 的 SNI）"
-            rules={[{ required: true, message: '请填写伪装域名' }]}
-            extra="每个节点单独填写；建议与服务器 IP 归属地相符，只能填域名，不能填 IP"
-          >
-            <Input placeholder="storage.googleapis.com" />
-          </Form.Item>
-        </Col>
-        <Col span={7}>
-          <Form.Item name="port" label="端口（可选，留空继承）">
-            <InputNumber min={1} max={65535} style={{ width: '100%' }} placeholder="继承模板" />
-          </Form.Item>
-        </Col>
-        <Col span={7}>
-          <Form.Item name="api_port" label="统计端口（可选）">
+        <Col span={8}>
+          <Form.Item name="api_port" label="统计端口（可选）" extra="留空继承模板（默认 13719）">
             <InputNumber min={1} max={65535} style={{ width: '100%' }} placeholder="继承模板 / 默认 13719" />
           </Form.Item>
         </Col>
@@ -872,6 +871,31 @@ function TemplateForm({ form, mode, row }) {
           <Form.Item name="api_port" label="统计端口（可选）" extra="留空 = 13719">
             <InputNumber min={1} max={65535} style={{ width: '100%' }} />
           </Form.Item>
+        </Col>
+      </Row>
+      <Row gutter={12}>
+        <Col span={12}>
+          <Form.Item
+            name="domain"
+            label="伪装域名（FakeTLS 的 SNI）"
+            rules={[
+              { required: true, whitespace: true, message: '请填写伪装域名' },
+              {
+                validator: (_, v) => {
+                  const err = validateFakeDomain(v);
+                  return err ? Promise.reject(new Error(err)) : Promise.resolve();
+                },
+              },
+            ]}
+            extra="节点统一继承该伪装域名与端口；建议与服务器 IP 归属地相符，只能填域名"
+          >
+            <Input placeholder="storage.googleapis.com" />
+          </Form.Item>
+        </Col>
+        <Col span={12}>
+          <div className="pp-muted" style={{ fontSize: 12, paddingTop: 34, lineHeight: 1.7 }}>
+            伪装域名与端口由模板统一设定，节点上不再单独填写或覆盖。
+          </div>
         </Col>
       </Row>
       <Row gutter={12}>
