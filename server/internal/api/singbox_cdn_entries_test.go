@@ -217,8 +217,8 @@ func TestSingboxClientLinksMultiCDN(t *testing.T) {
 	if !strings.Contains(cfLink, "@cf.example.com:443") || !strings.Contains(cfLink, "sni=cf.example.com") || !strings.Contains(cfLink, "host=cf.example.com") {
 		t.Fatalf("主 CDN CF 链接错误：%s", cfLink)
 	}
-	if !strings.Contains(cfLink, "CF") {
-		t.Fatalf("CF 链接 tag 应包含名称：%s", cfLink)
+	if !strings.Contains(cfLink, "Cloudflare") {
+		t.Fatalf("CF 链接 tag 应归一化为 Cloudflare：%s", cfLink)
 	}
 	cfPref1 := mapStr(cdnLinks[1], "link", "")
 	cfPref2 := mapStr(cdnLinks[2], "link", "")
@@ -280,8 +280,8 @@ func TestSingboxClientLinksSameNameUniqueTags(t *testing.T) {
 			t.Fatalf("链接缺少 tag：%s", link)
 		}
 		tag := link[idx+1:]
-		if !strings.Contains(tag, "CF") {
-			t.Fatalf("tag 应包含名称 CF：%s", tag)
+		if !strings.Contains(tag, "Cloudflare") {
+			t.Fatalf("tag 应把旧名称 CF 归一化为 Cloudflare：%s", tag)
 		}
 		if tags[tag] {
 			t.Fatalf("同名多域名 tag 必须唯一：%s", tag)
@@ -347,7 +347,7 @@ func TestInputToNodeCarriesCDNEntries(t *testing.T) {
 		map[string]any{"name": "ESA", "domain": "esa.example.com"},
 	}})
 	node := inputToNode(out)
-	if len(node.CDNEntries) != 2 || node.CDNEntries[0].Name != "CF" || node.CDNEntries[1].Name != "ESA" {
+	if len(node.CDNEntries) != 2 || node.CDNEntries[0].Name != "Cloudflare" || node.CDNEntries[1].Name != "ESA" {
 		t.Fatalf("inputToNode 未携带 cdn_entries：%#v", node.CDNEntries)
 	}
 	if node.CDNDomain != "cf.example.com" {
@@ -516,7 +516,7 @@ func TestNodeBindingsIncludesCDNEntries(t *testing.T) {
 		t.Fatalf("sb_cdn_entries 应为 2 条可解析数组，实际 %#v", row["sb_cdn_entries"])
 	}
 	first, _ := entries[0].(map[string]any)
-	if mapStr(first, "name", "") != "CF" || mapStr(first, "domain", "") != "cf.example.com" || !cdnEntryEnabledJSON(first) {
+	if mapStr(first, "name", "") != "Cloudflare" || mapStr(first, "domain", "") != "cf.example.com" || !cdnEntryEnabledJSON(first) {
 		t.Fatalf("第一条 CDN 名称/启用状态丢失：%#v", first)
 	}
 	second, _ := entries[1].(map[string]any)

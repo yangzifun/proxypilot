@@ -38,6 +38,12 @@ const IPV4_RE = /^(?:\d{1,3}\.){3}\d{1,3}$/;
 const CONTROL_RE = /[\u0000-\u001f\u007f]/;
 
 /** 归一化域名输入：去首尾空格、转小写；回填旧数据时容忍误带协议/路径。 */
+/** 旧名称/别名归一化：CF → Cloudflare，避免旧名称继续出现在下拉和 tag 中。 */
+export function normalizeCdnName(raw) {
+  const s = String(raw == null ? '' : raw).trim();
+  return s.toUpperCase() === 'CF' ? 'Cloudflare' : s;
+}
+
 export function normalizeCdnDomain(raw) {
   let s = String(raw == null ? '' : raw).trim().toLowerCase();
   s = s.replace(/^https?:\/\//, '');
@@ -101,7 +107,7 @@ export function normalizeCdnEntries(src) {
     if (!domain || seen.has(domain)) continue;
     seen.add(domain);
     out.push({
-      name: String(obj.name == null ? '' : obj.name).trim(),
+      name: normalizeCdnName(obj.name),
       domain,
       enabled: normalizeEnabled(obj.enabled),
       prefer_group: String(obj.prefer_group == null ? '' : obj.prefer_group).trim(),
@@ -127,7 +133,7 @@ export function collectCdnEntries(list) {
     if (!domain) continue;
     if (seen.has(domain)) throw new Error(`CDN 域名重复：${domain}`);
     seen.add(domain);
-    const rawName = String(item.name == null ? '' : item.name).trim();
+    const rawName = normalizeCdnName(item.name);
     if (rawName.length > CDN_NAME_MAX) throw new Error(`CDN 名称过长（最多 ${CDN_NAME_MAX} 字符）：${rawName}`);
     const name = rawName || `CDN${out.length + 1}`;
     out.push({

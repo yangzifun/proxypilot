@@ -123,7 +123,7 @@ func normalizeStoredCDNEntries(entries []singboxCDNEntry) []singboxCDNEntry {
 			continue
 		}
 		seen[domain] = true
-		name := strings.TrimSpace(e.Name)
+		name := normalizeCDNEntryName(e.Name)
 		if utf8.RuneCountInString(name) > singboxMaxCDNNameLen {
 			name = string([]rune(name)[:singboxMaxCDNNameLen])
 		}
@@ -262,8 +262,17 @@ func cdnPrimaryDomain(entries []singboxCDNEntry) string {
 	return ""
 }
 
+// normalizeCDNEntryName 统一旧名称：CF → Cloudflare；其它名称保持原样。
+func normalizeCDNEntryName(raw string) string {
+	name := strings.TrimSpace(raw)
+	if strings.EqualFold(name, "CF") {
+		return "Cloudflare"
+	}
+	return name
+}
+
 func cdnEntryLabel(e singboxCDNEntry) string {
-	name := strings.TrimSpace(e.Name)
+	name := normalizeCDNEntryName(e.Name)
 	if name == "" {
 		return "CDN"
 	}
@@ -346,7 +355,7 @@ func normalizeCDNInput(body map[string]any) ([]singboxCDNEntry, string) {
 	seen := map[string]bool{}
 	for i := range entries {
 		idx := i + 1
-		name := strings.TrimSpace(entries[i].Name)
+		name := normalizeCDNEntryName(entries[i].Name)
 		if requireName {
 			if name == "" {
 				return nil, "第 " + strconv.Itoa(idx) + " 条 CDN 名称不能为空"
