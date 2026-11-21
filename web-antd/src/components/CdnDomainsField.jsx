@@ -1,5 +1,5 @@
 import React from 'react';
-import { AutoComplete, Button, Form, Select, Switch } from 'antd';
+import { Button, Form, Input, Select, Switch } from 'antd';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 
 /**
@@ -25,8 +25,8 @@ export const CDN_NAME_MAX = 24;
 /** 名称下拉预设（严格下拉不可手填；旧数据如 CF 通过临时选项保留，用户可改选新预设） */
 export const CDN_NAME_PRESETS = [
   { value: 'Cloudflare', label: 'Cloudflare' },
-  { value: 'ESA', label: 'ESA' },
   { value: 'EO', label: 'EO（EdgeOne）' },
+  { value: 'ESA', label: 'ESA' },
   { value: 'CloudFront', label: 'CloudFront' },
   { value: 'Fastly', label: 'Fastly' },
   // 旧名称临时选项：避免旧数据（CF）编辑时值丢失，后续可统一改为 Cloudflare
@@ -178,39 +178,63 @@ export function cdnSummary(src) {
   };
 }
 
-/** 从节点行数组汇总已配置的 CDN 域名（去重、排序），供域名下拉选项使用。 */
-export function collectCdnDomains(rows) {
-  const set = new Set();
-  (Array.isArray(rows) ? rows : []).forEach((r) => {
-    normalizeCdnEntries(r).forEach((e) => {
-      if (e.domain) set.add(e.domain);
-    });
+// CDN 品牌色（用于列表标签）；未知名称使用中性色。
+export const CDN_BRAND_COLORS = {
+  Cloudflare: '#F38020',
+  CF: '#F38020',
+  ESA: '#FF6A00',
+  EO: '#0052D9',
+  EdgeOne: '#0052D9',
+  CloudFront: '#FF9900',
+  Fastly: '#FF282D',
+};
+
+/** 旧名称/别名统一成展示名（不修改存储值）。 */
+export function cdnDisplayName(name, domain) {
+  const n = String(name || '').trim();
+  const key = n.toUpperCase();
+  if (key === 'CF') return 'Cloudflare';
+  if (key === 'EO' || key === 'EDGEONE') return 'EO';
+  if (key === 'ESA') return 'ESA';
+  if (n) return n;
+  return domain || 'CDN';
+}
+
+/** 节点列表用标签：每个已配置 CDN 一个标签，品牌色；停用标签灰色。 */
+export function cdnTagItems(src) {
+  return normalizeCdnEntries(src).map((e) => {
+    const label = cdnDisplayName(e.name, e.domain);
+    const color = CDN_BRAND_COLORS[e.name] || CDN_BRAND_COLORS[label] || '#64748b';
+    return {
+      key: e.domain,
+      label,
+      domain: e.domain,
+      name: e.name,
+      enabled: e.enabled,
+      color: e.enabled ? color : '#94a3b8',
+      tooltip: `${label} · ${e.domain} · ${e.enabled ? '启用' : '已停用'}`,
+    };
   });
-  return Array.from(set).sort();
 }
 
 /**
  * 表单字段：多 CDN 动态列表（名称 + 启用开关 + 域名 + 删除）。
- * 名称严格下拉（Select，不可手填；旧值自动作为临时选项保留）；域名 AutoComplete（可下拉选择或手填）。
- * 用法：在 Form 内 <CdnDomainsField name="cdn_entries" domainOptions={...} />
+ * 名称严格下拉（Select，不可手填；旧值自动作为临时选项保留）；域名手动填写（Input，不下拉）。
+ * 用法：在 Form 内 <CdnDomainsField name="cdn_entries" />
  */
 export default function CdnDomainsField({
   name = 'cdn_entries',
   label = 'CDN 域名',
   disabled = false,
   nameOptions,
-  domainOptions,
 }) {
   const form = Form.useFormInstance();
   const list = Form.useWatch(name, form) || [];
   const enabledCount = list.filter((x) => x && x.enabled !== false).length;
-  // 名称预设（可手填）；域名选项来自调用方汇总的已配置域名（可手填）
+  // 名称预设（严格下拉）；域名由用户手动填写
   const nameOptionList = (Array.isArray(nameOptions) && nameOptions.length ? nameOptions : CDN_NAME_PRESETS).map((o) =>
     typeof o === 'string' ? { value: o, label: o } : o
   );
-  const domainOptionList = (Array.isArray(domainOptions) ? domainOptions : [])
-    .filter(Boolean)
-    .map((d) => ({ value: String(d), label: String(d) }));
 
   const applyList = (next) => {
     form.setFieldValue(name, next);
@@ -320,13 +344,9 @@ export default function CdnDomainsField({
                     ]}
                     style={{ flex: 1, marginBottom: 0 }}
                   >
-                    <AutoComplete
-                      options={domainOptionList}
-                      placeholder="cdn.example.com（可下拉或手填）"
+                    <Input
+                      placeholder="cdn.example.com"
                       disabled={disabled}
-                      filterOption={(input, option) =>
-                        String((option && option.value) || '').toLowerCase().includes(String(input || '').toLowerCase())
-                      }
                     />
                   </Form.Item>
                   <div style={{ width: 28, paddingTop: 2 }}>
@@ -362,7 +382,7 @@ export default function CdnDomainsField({
         )}
       </Form.List>
       <div style={{ fontSize: 11.5, color: '#94a3b8', lineHeight: 1.7, marginTop: 4 }}>
-        名称从下拉选择（Cloudflare/ESA/EO，不可手填）用于后台识别和节点命名；域名可从已配置域名中选择或手填，需在对应 CDN/Tunnel 侧配置回源到本节点；最多 8 条；
+        名称从下拉选择（Cloudflare/EO/ESA/CloudFront 等，不可手填）用于后台识别和节点命名；域名需手动填写，并在对应 CDN/Tunnel 侧配置回源到本节点；最多 8 条；
         停用的 CDN 不生成订阅链接，可同时启用多个。
       </div>
     </div>

@@ -41,7 +41,7 @@ import { api, apiPost } from '../api';
 import TemplateEditor from './SingboxTemplateEditor';
 import { useAsync, readForm } from '../hooks';
 import { CopyText, EmptyBlock, ErrorBlock, IconAction, JsonView, PageCard, StatCard } from '../components';
-import CdnDomainsField, { collectCdnEntries, collectCdnDomains, normalizeCdnEntries, cdnSummary } from '../components/CdnDomainsField';
+import CdnDomainsField, { collectCdnEntries, normalizeCdnEntries, cdnTagItems } from '../components/CdnDomainsField';
 import { watchBatch } from '../components/JobCenter';
 import { fmtAgo, fmtNum, fmtTime, shortUuid } from '../format';
 import { chartPalette } from '../theme';
@@ -137,7 +137,7 @@ export default function Nodes({ initialTab, templatesOnly }) {
   const uuidRows = (uuids.data && uuids.data.data) || [];
   const serverRows = (servers.data && servers.data.data) || [];
   // 已配置 CDN 域名汇总（所有节点），供编辑表单的域名下拉选择
-  const cdnDomainOptions = useMemo(() => collectCdnDomains(nodeRows), [nodeRows]);
+  
   const [tplModal, setTplModal] = useState(null); // { mode, row }
   const [nodeModal, setNodeModal] = useState(null); // { mode, row }
   const [view, setView] = useState(null); // { title, value }
@@ -348,16 +348,31 @@ export default function Nodes({ initialTab, templatesOnly }) {
       width: 170,
       ellipsis: true,
       render: (v, row) => {
-        const cdn = cdnSummary(row);
+        const tags = cdnTagItems(row);
         return (
           <div>
             {v ? <span className="pp-mono">{v}</span> : <span className="pp-muted">—</span>}
-            {cdn ? (
-              <Tooltip title={<span style={{ whiteSpace: 'pre-line' }}>{cdn.tooltip}</span>}>
-                <div className="pp-muted" style={{ fontSize: 11.5, marginTop: 2, cursor: 'help' }}>
-                  {cdn.text}
-                </div>
-              </Tooltip>
+            {tags.length ? (
+              <Space size={4} wrap style={{ marginTop: 4 }}>
+                {tags.map((t) => (
+                  <Tooltip key={t.key} title={t.tooltip}>
+                    <Tag
+                      color={t.enabled ? t.color : 'default'}
+                      style={{
+                        marginInlineEnd: 0,
+                        border: 'none',
+                        backgroundColor: t.enabled ? t.color : '#e2e8f0',
+                        borderColor: t.enabled ? t.color : '#e2e8f0',
+                        color: t.enabled ? '#fff' : '#64748b',
+                        fontWeight: 500,
+                      }}
+                    >
+                      {t.label}
+                      {t.enabled ? '' : '（停用）'}
+                    </Tag>
+                  </Tooltip>
+                ))}
+              </Space>
             ) : null}
           </div>
         );
@@ -558,7 +573,6 @@ export default function Nodes({ initialTab, templatesOnly }) {
         state={nodeModal}
         servers={serverRows}
         templates={tplRows}
-        domainOptions={cdnDomainOptions}
         onClose={() => setNodeModal(null)}
         onSaved={() => {
           setNodeModal(null);
@@ -609,7 +623,7 @@ const TPL_DEFAULTS = {
 /* =================================================================
  *  节点绑定编辑器
  * ================================================================= */
-function NodeEditor({ state, servers, templates, domainOptions, onClose, onSaved }) {
+function NodeEditor({ state, servers, templates, onClose, onSaved }) {
   const { message } = AntdApp.useApp();
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
@@ -763,7 +777,7 @@ function NodeEditor({ state, servers, templates, domainOptions, onClose, onSaved
             </Form.Item>
           </Col>
         </Row>
-        <CdnDomainsField name="cdn_entries" label="CDN 域名" domainOptions={domainOptions} />
+        <CdnDomainsField name="cdn_entries" label="CDN 域名" />
 
         <Collapse
           ghost

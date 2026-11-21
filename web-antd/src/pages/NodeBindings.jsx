@@ -3,7 +3,7 @@ import { App as AntdApp, Button, Form, Input, Modal, Select, Space, Table, Tag, 
 import { CloudUploadOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import { api, apiGet, apiPost } from '../api';
 import { PageCard } from '../components';
-import CdnDomainsField, { collectCdnEntries, collectCdnDomains, normalizeCdnEntries, cdnSummary } from '../components/CdnDomainsField';
+import CdnDomainsField, { collectCdnEntries, normalizeCdnEntries, cdnTagItems } from '../components/CdnDomainsField';
 import { fmtTime } from '../format';
 import VpnNodesPanel from './VpnNodesPanel';
 
@@ -67,12 +67,7 @@ export default function NodeBindings() {
 
   const options = rows.map((r) => ({ value: r.server_id, label: `${r.server_name}${r.host ? ` · ${r.host}` : ''}` }));
 
-  // 已配置 CDN 域名汇总（rows + 当前编辑行），供编辑表单的域名下拉选择
-  const cdnDomainOptions = useMemo(() => {
-    const set = new Set(collectCdnDomains(rows));
-    if (editRow) normalizeCdnEntries(editRow).forEach((e) => { if (e.domain) set.add(e.domain); });
-    return Array.from(set).sort();
-  }, [rows, editRow]);
+  
 
   const applyNode = async (row) => {
     try {
@@ -236,22 +231,31 @@ export default function NodeBindings() {
     { title: '域名', dataIndex: 'domain', width: 170, ellipsis: true, render: (v) => v || <span className="pp-muted">—</span> },
     {
       title: 'CDN',
-      width: 180,
+      width: 200,
       render: (_, r) => {
-        const cdn = cdnSummary(r);
-        if (!cdn) return <span className="pp-muted">—</span>;
+        const tags = cdnTagItems(r);
+        if (!tags.length) return <span className="pp-muted">—</span>;
         return (
-          <Tooltip title={<span style={{ whiteSpace: 'pre-line' }}>{cdn.tooltip}</span>}>
-            <span
-              style={{
-                fontSize: 12,
-                cursor: 'help',
-                color: cdn.enabledCount === 0 ? '#f59e0b' : undefined,
-              }}
-            >
-              {cdn.text}
-            </span>
-          </Tooltip>
+          <Space size={4} wrap>
+            {tags.map((t) => (
+              <Tooltip key={t.key} title={t.tooltip}>
+                <Tag
+                  color={t.enabled ? t.color : 'default'}
+                  style={{
+                    marginInlineEnd: 0,
+                    border: 'none',
+                    backgroundColor: t.enabled ? t.color : '#e2e8f0',
+                    borderColor: t.enabled ? t.color : '#e2e8f0',
+                    color: t.enabled ? '#fff' : '#64748b',
+                    fontWeight: 500,
+                  }}
+                >
+                  {t.label}
+                  {t.enabled ? '' : '（停用）'}
+                </Tag>
+              </Tooltip>
+            ))}
+          </Space>
         );
       },
     },
@@ -407,7 +411,7 @@ export default function NodeBindings() {
                       <Input placeholder="留空自动生成" />
                     </Form.Item>
                   </div>
-                  <CdnDomainsField name="cdn_entries" label="CDN 域名" domainOptions={cdnDomainOptions} />
+                  <CdnDomainsField name="cdn_entries" label="CDN 域名" />
                 </>
               ) : null
             }
