@@ -383,6 +383,7 @@ func (h *handlers) singboxTemplateFromConfig(w http.ResponseWriter, r *http.Requ
 		"masque_versions":  parsed.MasqueVersions,
 		"warp_enabled":     singboxBool(warpOn, false),
 		"warp_private_key": warpKey, "warp_address": warpAddr, "warp_peer_public_key": warpPeer,
+		"singbox_version":  strings.TrimSpace(mapStr(body, "singbox_version", "")),
 		"protocol_options": string(optsJSON),
 		"enabled":          singboxBool(body["enabled"], true),
 	}

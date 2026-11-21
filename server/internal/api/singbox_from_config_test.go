@@ -87,6 +87,44 @@ func TestParseSbConfigCDNListen(t *testing.T) {
 	}
 }
 
+func TestFromConfigSavesSingboxVersion(t *testing.T) {
+	fdb, db := newFakeDB(t)
+	var insertArgs []driver.Value
+	fdb.onQuery = func(q string, args []driver.Value) (driver.Rows, error) {
+		if strings.Contains(q, "COUNT(*) FROM singbox_templates") {
+			return fakeRowsSet([]string{"n"}, []driver.Value{int64(0)}), nil
+		}
+		if strings.Contains(q, "SELECT * FROM singbox_templates") {
+			return fakeRowsSet([]string{"id", "name", "singbox_version"}, []driver.Value{
+				int64(1), "t", "1.15.0-alpha.13",
+			}), nil
+		}
+		return &fakeRows{}, nil
+	}
+	fdb.onExec = func(q string, args []driver.Value) (driver.Result, error) {
+		insertArgs = args
+		return fakeResult(1, 1), nil
+	}
+	h := &handlers{db: db, log: testLogger()}
+	body := `{"name":"t","singbox_version":"1.15.0-alpha.13","sb_json":"{\"inbounds\":[{\"type\":\"vless\",\"tag\":\"vless-ws\",\"listen_port\":13706,\"transport\":{\"type\":\"ws\",\"path\":\"/vlws\"},\"users\":[{\"name\":\"u1\",\"uuid\":\"11111111-1111-4111-8111-111111111111\"}]}]}"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/singbox/templates/from-config", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.singboxTemplateFromConfig(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	found := false
+	for _, a := range insertArgs {
+		if s, ok := a.(string); ok && s == "1.15.0-alpha.13" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("singbox_version 未保存：%#v", insertArgs)
+	}
+}
+
 func TestFromConfigSavesCDNListen(t *testing.T) {
 	fdb, db := newFakeDB(t)
 	var insertQuery string
