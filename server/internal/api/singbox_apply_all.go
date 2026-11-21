@@ -72,6 +72,8 @@ func (h *handlers) applySingboxNode(ctx context.Context, nodeID int64, usersOver
 	out := make([]map[string]any, 0, len(files))
 	changed := 0
 	hashParts := make([]string, 0, len(files))
+	// 版本切换同样属于下发变更：内容不变时也要更新 install_versions 并升版本。
+	desiredInstall := singboxInstallVersions(tpl, h.componentVersion(ctx))
 
 	for _, f := range files {
 		key := mapStr(f, "key", "")
@@ -90,17 +92,18 @@ func (h *handlers) applySingboxNode(ctx context.Context, nodeID int64, usersOver
 			existHash    string
 			existPath    string
 			existRestart string
+			existInstall string
 			existVersion int64
 		)
 		err := h.db.QueryRowContext(ctx, `SELECT id, COALESCE(content_hash,''), COALESCE(target_path,''),
-		      COALESCE(restart_cmd,''), COALESCE(version,0) FROM node_configs WHERE name = ? LIMIT 1`, cfgName).
-			Scan(&existID, &existHash, &existPath, &existRestart, &existVersion)
+		      COALESCE(restart_cmd,''), COALESCE(install_versions,''), COALESCE(version,0) FROM node_configs WHERE name = ? LIMIT 1`, cfgName).
+			Scan(&existID, &existHash, &existPath, &existRestart, &existInstall, &existVersion)
 		if err == sql.ErrNoRows {
 			res, err := h.db.ExecContext(ctx, `INSERT INTO node_configs
 			  (name, server_id, engine, target_path, service_name, restart_cmd, check_cmd, content, backup,
 			   enabled, auto_push, push_interval_min, template_id, uuid, install_versions, version, content_hash, created_at, updated_at)
 			  VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1, 0, 0, 0, '', ?, 1, ?, ?, ?)`,
-				cfgName, mapInt(nodeRow, "server_id", 0), engine, path, service, restartCmd, checkCmd, content, hash, singboxInstallVersions(tpl, h.componentVersion(ctx)), now, now)
+				cfgName, mapInt(nodeRow, "server_id", 0), engine, path, service, restartCmd, checkCmd, content, hash, desiredInstall, now, now)
 			if err != nil {
 				return nil, nil, nil, 0, "写入节点配置失败：" + err.Error()
 			}
@@ -118,7 +121,7 @@ func (h *handlers) applySingboxNode(ctx context.Context, nodeID int64, usersOver
 		}
 		// hash / existHash 都是「content 原文」的 sha256（content_hash 口径，见
 		// nodeConfigContentHash），只用于判断生成内容是否变化。
-		same := existHash == hash && existPath == path && existRestart == restartCmd
+		same := existHash == hash && existPath == path && existRestart == restartCmd && existInstall == desiredInstall
 		if same && !force {
 			out = append(out, map[string]any{
 				"key": key, "name": cfgName, "engine": engine, "path": path,
@@ -130,7 +133,7 @@ func (h *handlers) applySingboxNode(ctx context.Context, nodeID int64, usersOver
 		if _, err := h.db.ExecContext(ctx, `UPDATE node_configs SET server_id = ?, engine = ?, target_path = ?,
 		      service_name = ?, restart_cmd = ?, check_cmd = ?, content = ?, content_hash = ?, install_versions = ?,
 		      version = COALESCE(version,0) + 1, enabled = 1, updated_at = ? WHERE id = ?`,
-			mapInt(nodeRow, "server_id", 0), engine, path, service, restartCmd, checkCmd, content, hash, singboxInstallVersions(tpl, h.componentVersion(ctx)),
+			mapInt(nodeRow, "server_id", 0), engine, path, service, restartCmd, checkCmd, content, hash, desiredInstall,
 			now, existID); err != nil {
 			return nil, nil, nil, 0, "下发失败"
 		}
