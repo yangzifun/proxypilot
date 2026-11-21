@@ -177,7 +177,7 @@ func (h *handlers) reconcileSingboxUUIDState(ctx context.Context, actor string, 
 
 // syncSingboxConfigsForUsers 按用户生成/回收该节点的订阅配置（幂等）。
 func (h *handlers) syncSingboxConfigsForUsers(ctx context.Context, nodeID int64, nodeName string, tpl *singboxTemplate, node singboxRenderNode, users []sbUser) (int64, int64, error) {
-	linkNode := singboxNode{Name: node.Name, Domain: node.Domain, CDNDomain: node.CDNDomain}
+	linkNode := singboxNodeFromRender(node)
 	desired := []map[string]any{}
 	for _, u := range users {
 		desired = append(desired, singboxClientLinks(tpl, linkNode, []sbUser{u})...)

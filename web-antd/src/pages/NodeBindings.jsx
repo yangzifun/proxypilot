@@ -3,6 +3,7 @@ import { App as AntdApp, Button, Form, Input, Modal, Select, Space, Table, Tag }
 import { CloudUploadOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import { api, apiGet, apiPost } from '../api';
 import { PageCard } from '../components';
+import CdnDomainsField, { collectCdnEntries, normalizeCdnEntries } from '../components/CdnDomainsField';
 import { fmtTime } from '../format';
 import VpnNodesPanel from './VpnNodesPanel';
 
@@ -109,10 +110,22 @@ export default function NodeBindings() {
   };
   const submit = async () => {
     const v = await form.validateFields();
+    let cdnEntries = [];
+    try {
+      cdnEntries = collectCdnEntries(v.cdn_entries || []);
+    } catch (e) {
+      message.error(e.message || 'CDN 配置不正确');
+      return;
+    }
+    const primaryCdnDomain = (cdnEntries.find((x) => x.primary) || cdnEntries[0] || {}).domain || '';
     const tasks = [];
     if (v.sb_tpl) tasks.push(['singbox', '/api/singbox/nodes', {
       name: (v.sb_name || v.name || '').trim(), server_id: v.server_id, template_id: v.sb_tpl,
-      domain: v.sb_domain || v.domain || '', cdn_domain: v.sb_cdn || '',
+      domain: v.sb_domain || v.domain || '',
+      // 多 CDN：cdn_entries 为主，同时写旧字段 cdn_domains / cdn_domain（第一条）兼容旧后端
+      cdn_entries: cdnEntries,
+      cdn_domains: cdnEntries.map((x) => x.domain),
+      cdn_domain: primaryCdnDomain,
     }]);
     if (v.mh_tpl) tasks.push(['mihomo', '/api/mihomo/nodes', {
       name: (v.mh_name || v.name || '').trim(), server_id: v.server_id, template_id: v.mh_tpl,
@@ -208,7 +221,18 @@ export default function NodeBindings() {
             onClick={() => {
               const row = r;
               setEditRow(row);
-              form.setFieldsValue({ server_id: row.server_id, name: row.node_name, domain: row.domain || '', sb_domain: row.domain || '', sb_cdn: row.sb_cdn || '', mh_domain: row.domain || '', mp_domain: row.domain || '', sb_tpl: row.sb_tpl || undefined, mh_tpl: row.mh_tpl || undefined, mp_tpl: row.mp_tpl || undefined });
+              form.setFieldsValue({
+                server_id: row.server_id,
+                name: row.node_name,
+                domain: row.domain || '',
+                sb_domain: row.domain || '',
+                cdn_entries: normalizeCdnEntries(row),
+                mh_domain: row.domain || '',
+                mp_domain: row.domain || '',
+                sb_tpl: row.sb_tpl || undefined,
+                mh_tpl: row.mh_tpl || undefined,
+                mp_tpl: row.mp_tpl || undefined,
+              });
               setOpen(true);
             }}
           >
@@ -287,17 +311,17 @@ export default function NodeBindings() {
           <Form.Item noStyle shouldUpdate={(a, b) => a.sb_tpl !== b.sb_tpl}>
             {({ getFieldValue }) =>
               getFieldValue('sb_tpl') ? (
-                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                  <Form.Item name="sb_name" label="sing-box 节点名" style={{ width: 200 }}>
-                    <Input placeholder="留空自动生成" />
-                  </Form.Item>
-                  <Form.Item name="sb_domain" label="域名" style={{ width: 240 }}>
-                    <Input placeholder="hk.example.com" />
-                  </Form.Item>
-                  <Form.Item name="sb_cdn" label="CDN 域名" style={{ width: 240 }}>
-                    <Input placeholder="cdn.example.com（可选）" />
-                  </Form.Item>
-                </div>
+                <>
+                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                    <Form.Item name="sb_name" label="sing-box 节点名" style={{ width: 200 }}>
+                      <Input placeholder="留空自动生成" />
+                    </Form.Item>
+                    <Form.Item name="sb_domain" label="域名" style={{ width: 240 }}>
+                      <Input placeholder="hk.example.com" />
+                    </Form.Item>
+                  </div>
+                  <CdnDomainsField name="cdn_entries" label="CDN 域名" />
+                </>
               ) : null
             }
           </Form.Item>

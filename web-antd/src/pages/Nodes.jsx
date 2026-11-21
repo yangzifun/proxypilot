@@ -41,6 +41,7 @@ import { api, apiPost } from '../api';
 import TemplateEditor from './SingboxTemplateEditor';
 import { useAsync, readForm } from '../hooks';
 import { CopyText, EmptyBlock, ErrorBlock, IconAction, JsonView, PageCard, StatCard } from '../components';
+import CdnDomainsField, { collectCdnEntries, normalizeCdnEntries, cdnSummary } from '../components/CdnDomainsField';
 import { watchBatch } from '../components/JobCenter';
 import { fmtAgo, fmtNum, fmtTime, shortUuid } from '../format';
 import { chartPalette } from '../theme';
@@ -329,16 +330,21 @@ export default function Nodes({ initialTab, templatesOnly }) {
       dataIndex: 'domain',
       width: 170,
       ellipsis: true,
-      render: (v, row) => (
-        <div>
-          {v ? <span className="pp-mono">{v}</span> : <span className="pp-muted">—</span>}
-          {row.cdn_domain ? (
-            <div className="pp-muted" style={{ fontSize: 11.5, marginTop: 2 }}>
-              CDN {row.cdn_domain}
-            </div>
-          ) : null}
-        </div>
-      ),
+      render: (v, row) => {
+        const cdn = cdnSummary(row);
+        return (
+          <div>
+            {v ? <span className="pp-mono">{v}</span> : <span className="pp-muted">—</span>}
+            {cdn ? (
+              <Tooltip title={<span style={{ whiteSpace: 'pre-line' }}>{cdn.tooltip}</span>}>
+                <div className="pp-muted" style={{ fontSize: 11.5, marginTop: 2, cursor: 'help' }}>
+                  {cdn.text}
+                </div>
+              </Tooltip>
+            ) : null}
+          </div>
+        );
+      },
     },
     {
       title: '授权 UUID',
@@ -602,7 +608,8 @@ function NodeEditor({ state, servers, templates, onClose, onSaved }) {
         server_id: r.server_id,
         template_id: r.template_id || 0,
         domain: r.domain || '',
-        cdn_domain: r.cdn_domain || '',
+        // 多 CDN：优先 cdn_entries，回退旧 cdn_domains / cdn_domain
+        cdn_entries: normalizeCdnEntries(r),
         sb_path: r.sb_path || '/etc/sing-box/sb.json',
         caddy_path: r.caddy_path || '/etc/sing-box/Caddyfile',
         service_sb: r.service_sb || 'sing-box',
@@ -630,12 +637,23 @@ function NodeEditor({ state, servers, templates, onClose, onSaved }) {
     if (!v) return;
     setSaving(true);
     try {
+      let cdnEntries = [];
+      try {
+        cdnEntries = collectCdnEntries(v.cdn_entries || []);
+      } catch (ce) {
+        message.error(ce.message || 'CDN 配置不正确');
+        return;
+      }
+      const primaryCdnDomain = (cdnEntries.find((x) => x.primary) || cdnEntries[0] || {}).domain || '';
       const body = {
         name: v.name,
         server_id: v.server_id,
         template_id: v.template_id || 0,
         domain: v.domain || '',
-        cdn_domain: v.cdn_domain || '',
+        // 多 CDN：cdn_entries 为主，同时写旧字段兼容（第一条为主 CDN）
+        cdn_entries: cdnEntries,
+        cdn_domains: cdnEntries.map((x) => x.domain),
+        cdn_domain: primaryCdnDomain,
         port_base: v.port_base || 0,
         warp_base: v.warp_base || 0,
         warp_enabled: Number(v.warp_enabled),
@@ -712,16 +730,8 @@ function NodeEditor({ state, servers, templates, onClose, onSaved }) {
               <Input placeholder="hk.example.com" />
             </Form.Item>
           </Col>
-          <Col span={12}>
-            <Form.Item
-              name="cdn_domain"
-              label="CDN 域名（可选）"
-              extra="填了会部署 13707（127.0.0.1 明文 WS，供 Cloudflare Tunnel 回源），并给用户生成一条 CDN 链接（客户端连 CDN 域名:443）"
-            >
-              <Input placeholder="cdn.example.com" />
-            </Form.Item>
-          </Col>
         </Row>
+        <CdnDomainsField name="cdn_entries" label="CDN 域名" />
 
         <Collapse
           ghost

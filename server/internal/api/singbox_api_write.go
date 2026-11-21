@@ -298,14 +298,12 @@ func normalizeSingboxNodeInput(body map[string]any) (map[string]any, string) {
 		return nil, "请选择目标服务器"
 	}
 	templateID := jsonInt(body["template_id"])
-	cdnRaw := strings.TrimSpace(mapStr(body, "cdn_domain", ""))
-	cdn := ""
-	if cdnRaw != "" {
-		cdn = normalizeDomain(cdnRaw)
-		if cdn == "" {
-			return nil, "CDN 域名无效：只填域名（如 cdn.example.com），不要带协议、路径或 IP"
-		}
+	// CDN 条目：新 cdn_entries，或兼容旧 cdn_domains / cdn_domain。
+	cdnEntries, cdnErr := normalizeCDNInput(body)
+	if cdnErr != "" {
+		return nil, cdnErr
 	}
+	cdn := cdnPrimaryDomain(cdnEntries)
 	warp := int64(-1)
 	if v, ok := body["warp_enabled"]; ok && v != nil {
 		w := jsonInt(v)
@@ -317,6 +315,7 @@ func normalizeSingboxNodeInput(body map[string]any) (map[string]any, string) {
 		"name": name, "server_id": serverID, "template_id": templateID,
 		"domain":        strings.TrimSpace(mapStr(body, "domain", "")),
 		"cdn_domain":    cdn,
+		"cdn_entries":   cdnEntriesJSON(cdnEntries),
 		"port_base":     intOrJS(body["port_base"], 0, 0, 65000),
 		"warp_base":     intOrJS(body["warp_base"], 0, 0, 65000),
 		"sb_path":       firstNonEmpty(mapStr(body, "sb_path", ""), "/etc/sing-box/sb.json"),

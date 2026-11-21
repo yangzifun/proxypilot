@@ -94,7 +94,11 @@ func singboxRenderBundle(tpl *singboxTemplate, node singboxRenderNode, srv serve
 		// 官方 sing-box 没有 with_v2ray_api 标签，提前写会让 sing-box check 失败。
 		// 上线顺序：先切版本（第一次下发），节点回报新版本后再下发一次（第二次带 v2ray_api）。
 		userStats := singboxUserStatsCapable(serverComponentVersion(srv, "sing-box"))
-		cfg := singboxRenderSb(tpl, users, ports, node.StatsSecret, userStats, node.CDNDomain)
+		cdnDomain := node.CDNDomain
+		if strings.TrimSpace(cdnDomain) == "" {
+			cdnDomain = cdnPrimaryDomain(node.CDNEntries)
+		}
+		cfg := singboxRenderSb(tpl, users, ports, node.StatsSecret, userStats, cdnDomain)
 		if extraFn != nil {
 			if extra := extraFn(users, ports); len(extra) > 0 {
 				if inb, ok := cfg["inbounds"].([]any); ok {
@@ -132,7 +136,8 @@ func singboxUserStatsCapable(ver string) bool {
 	return strings.Contains(strings.ToLower(strings.TrimSpace(ver)), "proxypilot")
 }
 
-func mustJSON(v any) string {	b, err := json.MarshalIndent(v, "", "  ")
+func mustJSON(v any) string {
+	b, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return ""
 	}
@@ -153,6 +158,7 @@ type singboxRenderNode struct {
 	Name             string
 	Domain           string
 	CDNDomain        string
+	CDNEntries       []singboxCDNEntry
 	SBPath           string
 	CaddyPath        string
 	ServiceSBName    string
@@ -204,9 +210,13 @@ func (h *handlers) singboxPreview(w http.ResponseWriter, r *http.Request) {
 	for _, f := range files {
 		view = append(view, singboxFileView(f))
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	resp := map[string]any{
 		"success": true, "ports": ports, "users": users, "files": view,
-	})
+	}
+	for k, v := range cdnJSONFields(node.CDNEntries) {
+		resp[k] = v
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func inputToTemplate(in map[string]any) *singboxTemplate {
@@ -217,10 +227,15 @@ func inputToTemplate(in map[string]any) *singboxTemplate {
 }
 
 func inputToNode(in map[string]any) singboxRenderNode {
+	entries := parseCDNEntriesValue(in["cdn_entries"])
+	if len(entries) == 0 {
+		entries = parseStoredCDNEntries("", jsonStr(in["cdn_domain"]))
+	}
 	return singboxRenderNode{
 		Name:          jsonStr(in["name"]),
 		Domain:        jsonStr(in["domain"]),
-		CDNDomain:     jsonStr(in["cdn_domain"]),
+		CDNDomain:     firstNonEmpty(cdnPrimaryDomain(entries), jsonStr(in["cdn_domain"])),
+		CDNEntries:    entries,
 		SBPath:        jsonStr(in["sb_path"]),
 		ServiceSBName: jsonStr(in["service_sb"]),
 	}

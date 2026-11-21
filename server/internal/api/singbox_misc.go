@@ -42,10 +42,16 @@ func (h *handlers) singboxTemplatePreview(w http.ResponseWriter, r *http.Request
 		}
 	}
 	tpl := inputToTemplate(input)
+	cdnEntries, cdnErr := normalizeCDNInput(body)
+	if cdnErr != "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": cdnErr})
+		return
+	}
 	node := singboxRenderNode{
 		Name: "preview", Domain: firstNonEmpty(strings.TrimSpace(mapStr(body, "domain", "")), "preview.example.com"),
-		CDNDomain: strings.TrimSpace(mapStr(body, "cdn_domain", "")),
-		SBPath:    "/etc/sing-box/sb.json", CaddyPath: "/etc/sing-box/Caddyfile",
+		CDNDomain:  cdnPrimaryDomain(cdnEntries),
+		CDNEntries: cdnEntries,
+		SBPath:     "/etc/sing-box/sb.json", CaddyPath: "/etc/sing-box/Caddyfile",
 		ServiceSBName: "sing-box", ServiceCaddyName: "caddy-naive",
 	}
 	files, ports, _, msg := singboxRenderBundle(tpl, node, serverRow{}, nil)

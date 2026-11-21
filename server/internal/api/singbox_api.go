@@ -188,13 +188,17 @@ func singboxNodeToJSON(row map[string]any) map[string]any {
 			filtered = append(filtered, s)
 		}
 	}
-	return map[string]any{
+	cdnEntries := parseCDNEntriesValue(row["cdn_entries"])
+	if len(cdnEntries) == 0 {
+		cdnEntries = parseStoredCDNEntries("", mapStr(row, "cdn_domain", ""))
+	}
+	out := map[string]any{
 		"id": mapInt(row, "id", 0), "name": mapStr(row, "name", ""),
 		"server_id": mapInt(row, "server_id", 0), "template_id": mapInt(row, "template_id", 0),
 		"server_name": mapStr(row, "server_name", ""), "server_host": mapStr(row, "server_host", ""),
 		"template_name": mapStr(row, "template_name", ""),
-		"domain":        mapStr(row, "domain", ""), "cdn_domain": mapStr(row, "cdn_domain", ""),
-		"port_base": mapInt(row, "port_base", 0), "warp_base": mapInt(row, "warp_base", 0),
+		"domain":        mapStr(row, "domain", ""),
+		"port_base":     mapInt(row, "port_base", 0), "warp_base": mapInt(row, "warp_base", 0),
 		"sb_path": mapStr(row, "sb_path", ""), "caddy_path": mapStr(row, "caddy_path", ""),
 		"service_sb": mapStr(row, "service_sb", "sing-box"), "service_caddy": mapStr(row, "service_caddy", "caddy-naive"),
 		"enabled": func() int64 {
@@ -208,6 +212,10 @@ func singboxNodeToJSON(row map[string]any) map[string]any {
 		"uuid_list": filtered, "remark": mapStr(row, "remark", ""),
 		"created_at": mapInt(row, "created_at", 0), "updated_at": mapInt(row, "updated_at", 0),
 	}
+	for k, v := range cdnJSONFields(cdnEntries) {
+		out[k] = v
+	}
+	return out
 }
 
 // GET /api/singbox/templates

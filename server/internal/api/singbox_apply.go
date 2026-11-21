@@ -29,10 +29,12 @@ func (h *handlers) loadSingboxNodeFull(ctx context.Context, id int64) (*singboxT
 	if tpl.UsersJSON == "" {
 		tpl.UsersJSON = mapStr(tplRows[0], "users_json", "[]")
 	}
+	cdnEntries := parseStoredCDNEntries(mapStr(nodeRow, "cdn_entries", ""), mapStr(nodeRow, "cdn_domain", ""))
 	node := singboxRenderNode{
 		Name:             mapStr(nodeRow, "name", ""),
 		Domain:           mapStr(nodeRow, "domain", ""),
-		CDNDomain:        mapStr(nodeRow, "cdn_domain", ""),
+		CDNDomain:        firstNonEmpty(cdnPrimaryDomain(cdnEntries), mapStr(nodeRow, "cdn_domain", "")),
+		CDNEntries:       cdnEntries,
 		SBPath:           mapStr(nodeRow, "sb_path", ""),
 		CaddyPath:        mapStr(nodeRow, "caddy_path", ""),
 		ServiceSBName:    mapStr(nodeRow, "service_sb", ""),
@@ -66,7 +68,11 @@ func (h *handlers) singboxNodePreview(w http.ResponseWriter, r *http.Request) {
 	for _, f := range files {
 		view = append(view, singboxFileView(f))
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"success": true, "ports": ports, "users": users, "files": view})
+	resp := map[string]any{"success": true, "ports": ports, "users": users, "files": view}
+	for k, v := range cdnJSONFields(node.CDNEntries) {
+		resp[k] = v
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // GET /api/singbox/nodes/{id}/links
@@ -82,8 +88,12 @@ func (h *handlers) singboxNodeLinks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	users := singboxParseUsers(currentTemplateUsers(tpl))
-	links := singboxClientLinks(tpl, singboxNode{Name: node.Name, Domain: node.Domain, CDNDomain: node.CDNDomain}, users)
-	writeJSON(w, http.StatusOK, map[string]any{"success": true, "data": links, "total": len(links)})
+	links := singboxClientLinks(tpl, singboxNodeFromRender(node), users)
+	resp := map[string]any{"success": true, "data": links, "total": len(links)}
+	for k, v := range cdnJSONFields(node.CDNEntries) {
+		resp[k] = v
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // GET /api/singbox/nodes/{id}

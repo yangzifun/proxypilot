@@ -56,7 +56,7 @@ func (h *handlers) singboxReconcile(w http.ResponseWriter, r *http.Request) {
 			out = append(out, map[string]any{"id": nodeID, "name": nodeName, "ok": false, "error": msg})
 			continue
 		}
-		linkNode := singboxNode{Name: node.Name, Domain: node.Domain, CDNDomain: node.CDNDomain}
+		linkNode := singboxNodeFromRender(node)
 		users := singboxParseUsers(currentTemplateUsers(tpl))
 		var uuidList []string
 		if raw := mapStr(row, "uuid_list", ""); raw != "" {
