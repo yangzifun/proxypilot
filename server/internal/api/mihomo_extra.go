@@ -251,19 +251,3 @@ func (h *handlers) mihomoCheck(w http.ResponseWriter, r *http.Request) {
 		"data":    map[string]any{"checked": len(rows), "issues": issues, "issue_count": len(issues)},
 	})
 }
-
-// GET /api/mihomo/stats
-func (h *handlers) mihomoStats(w http.ResponseWriter, r *http.Request) {
-	var templates, templatesOn, bindings, bindingsOn, servers int
-	_ = h.db.QueryRowContext(r.Context(), `SELECT COUNT(*), COALESCE(SUM(CASE WHEN COALESCE(enabled,1)=1 THEN 1 ELSE 0 END),0) FROM mihomo_templates`).Scan(&templates, &templatesOn)
-	_ = h.db.QueryRowContext(r.Context(), `SELECT COUNT(*), COALESCE(SUM(CASE WHEN enabled=1 THEN 1 ELSE 0 END),0) FROM mihomo_nodes`).Scan(&bindings, &bindingsOn)
-	_ = h.db.QueryRowContext(r.Context(), `SELECT COUNT(DISTINCT server_id) FROM mihomo_nodes`).Scan(&servers)
-	writeJSON(w, http.StatusOK, map[string]any{
-		"success": true,
-		"data": map[string]any{
-			"templates": templates, "templates_enabled": templatesOn,
-			"bindings": bindings, "bindings_enabled": bindingsOn,
-			"servers": servers,
-		},
-	})
-}

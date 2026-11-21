@@ -1,3 +1,5 @@
+> **历史迁移文档**：`PP_LEGACY_BASE` 旧 Worker 兜底已在 V1.5.2 移除；未注册路径统一 404。本文保留当时迁移记录，不再代表当前行为。
+
 # 旧版 Worker → V15.0（Go + MySQL）迁移 Runbook
 
 > 目标：把 Cloudflare Worker + D1 上的现有数据与配置迁移到 Go + MySQL，同时让旧 Agent、旧订阅链接、旧管理员密码/令牌继续可用。

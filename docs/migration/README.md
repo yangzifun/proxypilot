@@ -1,3 +1,5 @@
+> **历史迁移文档**：`PP_LEGACY_BASE` 旧 Worker 兜底已在 V1.5.2 移除；未注册路径统一 404。本文保留当时迁移记录，不再代表当前行为。
+
 > 迁移操作手册（含 D1 导出、导入、切换与回滚）：[runbook.md](runbook.md)
 
 # 迁移总案：Cloudflare Worker → Go + MySQL

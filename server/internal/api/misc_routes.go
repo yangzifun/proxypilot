@@ -178,10 +178,6 @@ func (h *handlers) serversMonitor(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h *handlers) serversServices(w http.ResponseWriter, r *http.Request) {
-	h.serversMonitor(w, r)
-}
-
 func keysOf(m map[string]bool) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {

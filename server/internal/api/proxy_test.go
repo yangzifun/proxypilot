@@ -12,64 +12,67 @@ import (
 	"github.com/yzfn/proxypilot/server/internal/config"
 )
 
-func handlerWith(cfg config.Config) http.Handler {
-	cfg.JWTSecret = "test-secret"
-	cfg.SuperAdmin = "admin"
+func newCleanupHandler() http.Handler {
+	cfg := config.Config{JWTSecret: "test-secret", SuperAdmin: "admin"}
 	return api.New(cfg, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
 }
 
-func TestProxyForwardsToLegacyWithAuth(t *testing.T) {
-	var gotAuth, gotQuery string
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotAuth = r.Header.Get("Authorization")
-		gotQuery = r.URL.RawQuery
-		w.Header().Set("X-Upstream", "1")
-		w.WriteHeader(http.StatusCreated)
-		_, _ = w.Write([]byte(`{"ok":true}`))
-	}))
-	defer upstream.Close()
-
-	h := handlerWith(config.Config{LegacyBase: upstream.URL})
-	req := httptest.NewRequest(http.MethodGet, "/api/singbox/warp?x=1", nil)
-	req.Header.Set("Authorization", "Bearer abc.def.ghi")
-	rr := httptest.NewRecorder()
-	h.ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusCreated {
-		t.Fatalf("状态码 = %d，期望 201", rr.Code)
-	}
-	if gotAuth != "Bearer abc.def.ghi" {
-		t.Fatalf("Authorization 未透传: %q", gotAuth)
-	}
-	if gotQuery != "x=1" {
-		t.Fatalf("查询串未透传: %q", gotQuery)
-	}
-	if rr.Header().Get("X-Upstream") != "1" {
-		t.Fatal("上游响应头未回传")
-	}
-	if rr.Body.String() != `{"ok":true}` {
-		t.Fatalf("响应体 = %q", rr.Body.String())
+// 旧 Worker 兜底已移除：未注册 API 一律 404，不再 501/代理。
+func TestUnknownAPIAndPathReturn404(t *testing.T) {
+	t.Setenv("PP_LEGACY_BASE", "http://127.0.0.1:1")
+	for _, tc := range []struct{ method, path string }{
+		{http.MethodGet, "/api/singbox/warp"},
+		{http.MethodPost, "/api/legacy/anything"},
+		{http.MethodGet, "/nope"},
+	} {
+		rr := httptest.NewRecorder()
+		newCleanupHandler().ServeHTTP(rr, httptest.NewRequest(tc.method, tc.path, nil))
+		if rr.Code != http.StatusNotFound {
+			t.Fatalf("%s %s = %d，期望 404", tc.method, tc.path, rr.Code)
+		}
+		if strings.Contains(rr.Body.String(), "尚未迁移") || strings.Contains(rr.Body.String(), "PP_LEGACY_BASE") {
+			t.Fatalf("%s %s 不应再出现旧 Worker 兜底提示：%s", tc.method, tc.path, rr.Body.String())
+		}
 	}
 }
 
-func TestProxyNotUsedForPages(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Fatal("页面路径不应转发")
-	}))
-	defer upstream.Close()
-
-	h := handlerWith(config.Config{LegacyBase: upstream.URL})
-	rr := httptest.NewRecorder()
-	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/admin", nil))
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("状态码 = %d，期望 200（内嵌前端）", rr.Code)
+// 审计确认下线的旧路由必须不再注册（保持 404）。
+func TestRemovedLegacyRoutes(t *testing.T) {
+	cases := []struct{ method, path string }{
+		{http.MethodGet, "/api/node-templates"},
+		{http.MethodPost, "/api/node-templates"},
+		{http.MethodGet, "/api/node-templates/1"},
+		{http.MethodPut, "/api/node-templates/1"},
+		{http.MethodDelete, "/api/node-templates/1"},
+		{http.MethodPost, "/api/node-configs/preview"},
+		{http.MethodPost, "/api/node-configs/push"},
+		{http.MethodGet, "/api/stats/uuid-details"},
+		{http.MethodGet, "/api/uuid-configs/stats"},
+		{http.MethodGet, "/api/servers/services"},
+		{http.MethodGet, "/api/mihomo/stats"},
+		{http.MethodGet, "/me"},
+		{http.MethodGet, "/ui"},
+		{http.MethodGet, "/manage"},
+		{http.MethodGet, "/manage/"},
+		{http.MethodGet, "/manage/all-uuid-info"},
+		{http.MethodGet, "/manage/entry"},
+		{http.MethodGet, "/manage/generate-uuid"},
+		{http.MethodGet, "/manage/uuid-check/x"},
+		{http.MethodGet, "/admin/certs"},
+		{http.MethodGet, "/admin/settings"},
+	}
+	for _, tc := range cases {
+		rr := httptest.NewRecorder()
+		newCleanupHandler().ServeHTTP(rr, httptest.NewRequest(tc.method, tc.path, nil))
+		if rr.Code != http.StatusNotFound {
+			t.Fatalf("%s %s = %d，期望 404（路由应已删除）", tc.method, tc.path, rr.Code)
+		}
 	}
 }
-
 
 func TestLoginDisabledWhenOIDCOnly(t *testing.T) {
-	h := handlerWith(config.Config{OIDCDisablePassword: true})
+	cfg := config.Config{JWTSecret: "test-secret", SuperAdmin: "admin", OIDCDisablePassword: true}
+	h := api.New(cfg, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	req := httptest.NewRequest(http.MethodPost, "/api/login",
 		strings.NewReader(`{"username":"admin","password":"x"}`))
 	req.Header.Set("Content-Type", "application/json")

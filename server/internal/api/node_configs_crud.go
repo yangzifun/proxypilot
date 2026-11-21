@@ -7,31 +7,6 @@ import (
 )
 
 // GET /api/node-templates/{id}
-func (h *handlers) nodeTemplateGet(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(r)
-	if !ok {
-		writeError(w, http.StatusNotFound, "模板不存在")
-		return
-	}
-	rows, err := queryRowsAsMaps(r.Context(), h.db, `SELECT t.*,
-	      (SELECT COUNT(*) FROM node_configs c WHERE c.template_id = t.id) AS usage_count
-	    FROM node_templates t WHERE t.id = ? LIMIT 1`, id)
-	if err != nil || len(rows) == 0 {
-		writeError(w, http.StatusNotFound, "模板不存在")
-		return
-	}
-	row := rows[0]
-	writeJSON(w, http.StatusOK, map[string]any{"success": true, "data": map[string]any{
-		"id": mapInt(row, "id", 0), "name": mapStr(row, "name", ""),
-		"engine": mapStr(row, "engine", "other"), "target_path": mapStr(row, "target_path", ""),
-		"service_name": mapStr(row, "service_name", ""), "restart_cmd": mapStr(row, "restart_cmd", ""),
-		"check_cmd": mapStr(row, "check_cmd", ""), "content": mapStr(row, "content", ""),
-		"backup": mapInt(row, "backup", 1), "remark": mapStr(row, "remark", ""),
-		"enabled": mapInt(row, "enabled", 1), "usage_count": mapInt(row, "usage_count", 0),
-		"created_at": mapInt(row, "created_at", 0), "updated_at": mapInt(row, "updated_at", 0),
-	}})
-}
-
 func normalizeNodeConfigInput(body map[string]any) (map[string]any, string) {
 	name := strings.TrimSpace(mapStr(body, "name", ""))
 	if name == "" {

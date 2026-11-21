@@ -174,7 +174,6 @@ proxypilot/
 
 - `workers/`、`wrangler.toml` 与依赖 Worker 的测试脚本已从本分支删除。
 - 历史迁移方案、D1 导入工具仍保留在 `docs/migration/` 与 `server/tools/`，仅用于迁移旧数据。
-- `PP_LEGACY_BASE` 配置项保留，作为迁移期可选兜底；新部署无需配置。
 - 当前版本：V35.3（Go 1.24+ / MySQL 8 / React 18 + Ant Design 6 / Go Agent 2.1.1 / Wails v3 桌面客户端）。
 
 ## 功能总览

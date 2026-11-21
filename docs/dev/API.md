@@ -1,6 +1,9 @@
 # API 参考
 
-> 共 **367 条路由**，全部注册在 `server/internal/api/router.go`。
+> **V1.5.2 清理**：旧 Worker 兜底（`PP_LEGACY_BASE`/501）、`/api/node-templates`、`/api/node-configs/preview|push`、`/api/stats/uuid-details`、`/api/uuid-configs/stats`、`/api/servers/services`、`/api/mihomo/stats` 以及旧页面别名 `/me`、`/ui`、`/manage`、`/manage/entry|all-uuid-info|generate-uuid|uuid-check`、`/admin/certs`、`/admin/settings` 已删除；未注册路径统一 404。
+
+
+> 共 **377 条路由**，全部注册在 `server/internal/api/router.go`。
 > 本文件按模块分组列出，可作为接口总目录；具体请求/响应字段见各 handler 实现。
 
 ## 通用约定
@@ -125,7 +128,6 @@
 
 | 方法 | 路径 | Handler | 权限 |
 |---|---|---|---|
-| `GET` | `/api/uuid-configs/stats` | `authed` | 管理员 |
 | `GET` | `/api/uuids` | `authed` | 管理员 |
 | `POST` | `/api/uuids` | `authed` | 管理员 |
 | `PUT` | `/api/uuids` | `authed` | 管理员 |
@@ -148,11 +150,6 @@
 
 | 方法 | 路径 | Handler | 权限 |
 |---|---|---|---|
-| `GET` | `/api/node-templates` | `authed` | 管理员 |
-| `POST` | `/api/node-templates` | `authed` | 管理员 |
-| `GET` | `/api/node-templates/{id}` | `authed` | 管理员 |
-| `PUT` | `/api/node-templates/{id}` | `authed` | 管理员 |
-| `DELETE` | `/api/node-templates/{id}` | `authed` | 管理员 |
 | `GET` | `/api/templates` | `templatesList` | 公开 |
 | `GET` | `/api/templates/manage` | `authed` | 管理员 |
 | `POST` | `/api/templates/manage` | `authed` | 管理员 |
@@ -268,7 +265,6 @@
 | `GET` | `/api/servers/{id}/unlock` | `authed` | 管理员 |
 | `POST` | `/api/servers/{id}/unlock` | `authed` | 管理员 |
 | `GET` | `/api/servers/monitor` | `authed` | 管理员 |
-| `GET` | `/api/servers/services` | `authed` | 管理员 |
 | `GET` | `/api/servers/status` | `authed` | 管理员 |
 | `GET` | `/api/servers/stream` | `sseServersStream` | 公开 |
 | `GET` | `/api/servers/traffic-limits` | `authed` | 管理员 |
@@ -289,8 +285,6 @@
 | `DELETE` | `/api/node-configs/{id}` | `authed` | 管理员 |
 | `POST` | `/api/node-configs/{id}/push` | `authed` | 管理员 |
 | `GET` | `/api/node-configs/logs` | `authed` | 管理员 |
-| `POST` | `/api/node-configs/preview` | `authed` | 管理员 |
-| `POST` | `/api/node-configs/push` | `authed` | 管理员 |
 | `GET` | `/api/singbox` | `authed` | 管理员 |
 | `POST` | `/api/singbox/apply-all` | `authed` | 管理员 |
 | `POST` | `/api/singbox/deploy-all` | `authed` | 管理员 |
@@ -334,7 +328,6 @@
 | `POST` | `/api/mihomo/nodes/{id}/render` | `authed` | 管理员 |
 | `POST` | `/api/mihomo/nodes/bulk` | `authed` | 管理员 |
 | `POST` | `/api/mihomo/report` | `mihomoConnReport` | 公开 |
-| `GET` | `/api/mihomo/stats` | `authed` | 管理员 |
 | `GET` | `/api/mihomo/templates` | `authed` | 管理员 |
 | `POST` | `/api/mihomo/templates` | `authed` | 管理员 |
 | `GET` | `/api/mihomo/templates/{id}` | `authed` | 管理员 |
@@ -464,7 +457,6 @@
 | `GET` | `/api/stats/traffic/users` | `authed` | 管理员 |
 | `GET` | `/api/stats/traffic/users/{uuid}` | `authed` | 管理员 |
 | `GET` | `/api/stats/users/growth` | `authed` | 管理员 |
-| `GET` | `/api/stats/uuid-details` | `authed` | 管理员 |
 
 ## 附件与存储（14）
 
@@ -517,17 +509,13 @@
 | `GET` | `/api/portal/uuids` | `portalUuids` | 公开 |
 | `GET` | `/manage` | `pageIndex` | 公开 |
 | `GET` | `/manage/` | `pageIndex` | 公开 |
-| `GET` | `/manage/all-uuid-info` | `pageIndex` | 公开 |
 | `POST` | `/manage/configs` | `manageConfigsAdd` | 公开 |
 | `PUT` | `/manage/configs` | `manageConfigsUpdate` | 公开 |
 | `GET` | `/manage/configs/{uuid}` | `manageConfigsList` | 公开 |
 | `DELETE` | `/manage/configs/{uuid}` | `manageConfigsClear` | 公开 |
 | `DELETE` | `/manage/configs/batch` | `manageConfigsBatchDelete` | 公开 |
 | `DELETE` | `/manage/configs/id/{id}` | `manageConfigDeleteByID` | 公开 |
-| `GET` | `/manage/entry` | `pageIndex` | 公开 |
-| `GET` | `/manage/generate-uuid` | `pageIndex` | 公开 |
 | `GET` | `/manage/stats/{uuid}` | `manageStats` | 公开 |
-| `GET` | `/manage/uuid-check/{uuid}` | `pageIndex` | 公开 |
 | `GET` | `/manage/uuid-info` | `manageUUIDInfoGet` | 公开 |
 | `POST` | `/manage/uuid-info` | `manageUUIDInfoSave` | 公开 |
 | `GET` | `/manage/uuid-info/{uuid}` | `manageUUIDInfoGet` | 公开 |
@@ -545,8 +533,6 @@
 | `GET` | `/admin-app.css` | `adminAppCSS` | 公开 |
 | `GET` | `/admin-app.js` | `adminAppJS` | 公开 |
 | `GET` | `/admin/` | `pageIndex` | 公开 |
-| `GET` | `/admin/certs` | `vpnCertPage` | 公开 |
-| `GET` | `/admin/settings` | `settingsPage` | 公开 |
 | `GET` | `/agent-dist/` | `agentDistFile` | 公开 |
 | `GET` | `/agent/install.sh` | `agentInstallScript` | 公开 |
 | `POST` | `/api/change-password` | `authed` | 管理员 |
@@ -568,12 +554,8 @@
 | `GET` | `/install.sh` | `agentInstallScript` | 公开 |
 | `GET` | `/login` | `pageIndex` | 公开 |
 | `GET` | `/login/` | `pageIndex` | 公开 |
-| `GET` | `/me` | `pageIndex` | 公开 |
-| `GET` | `/me/` | `pageIndex` | 公开 |
 | `GET` | `/sub/{uuid}` | `rawSubscription` | 公开 |
 | `GET` | `/sub/mihomo/{uuid}` | `mihomoSubscribe` | 公开 |
-| `GET` | `/ui` | `pageIndex` | 公开 |
-| `GET` | `/ui/` | `pageIndex` | 公开 |
 | `GET` | `/xterm-app.js` | `xtermAppJS` | 公开 |
 
 ## 主要接口示例

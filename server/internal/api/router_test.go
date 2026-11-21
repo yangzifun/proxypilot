@@ -18,16 +18,16 @@ func newHandler() http.Handler {
 	return api.New(cfg, nil, log) // 这些用例不触达数据库
 }
 
-func TestUnmigratedAPIReturns501(t *testing.T) {
+func TestUnknownAPIReturns404(t *testing.T) {
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/singbox/warp", nil)
 	newHandler().ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusNotImplemented {
-		t.Fatalf("状态码 = %d，期望 501", rr.Code)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("状态码 = %d，期望 404", rr.Code)
 	}
-	if !strings.Contains(rr.Body.String(), "尚未迁移") {
-		t.Fatalf("响应体缺少提示: %s", rr.Body.String())
+	if !strings.Contains(rr.Body.String(), "Not Found") {
+		t.Fatalf("响应体缺少 Not Found: %s", rr.Body.String())
 	}
 }
 

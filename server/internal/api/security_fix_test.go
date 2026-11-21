@@ -542,8 +542,6 @@ func TestServerRenderedPagesNoInlineScripts(t *testing.T) {
 		path string
 		fn   http.HandlerFunc
 	}{
-		"settings":    {"/admin/settings", h.settingsPage},
-		"certs":       {"/admin/certs", h.vpnCertPage},
 		"client-auth": {"/client-auth", h.clientAuthPage},
 	}
 	for name, p := range pages {
@@ -597,8 +595,6 @@ func TestNoNonceAnywhere(t *testing.T) {
 	}
 	pages := []page{
 		{"/admin", h.pageIndex},
-		{"/admin/settings", h.settingsPage},
-		{"/admin/certs", h.vpnCertPage},
 		{"/client-auth", h.clientAuthPage},
 	}
 	for _, p := range pages {

@@ -21,7 +21,7 @@ type serverBindingItem struct {
 func (h *handlers) serverBindings(w http.ResponseWriter, r *http.Request) {
 	id, ok := serverID(r)
 	if !ok {
-		h.notMigrated(w, r)
+		writeError(w, http.StatusBadRequest, "服务器 ID 无效")
 		return
 	}
 

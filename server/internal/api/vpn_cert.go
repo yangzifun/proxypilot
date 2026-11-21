@@ -625,52 +625,6 @@ openssl x509 -in /etc/proxypilot/tunnel/tls/cert.pem -noout -fingerprint -sha256
 		certB64, keyB64)
 }
 
-// ---------- 页面 ----------
-
-func (h *handlers) vpnCertPage(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	// 页面里含 CSS 百分号与 ${} 模板占位，这里必须按普通字符串写出，不能当格式化串
-	_, _ = io.WriteString(w, certPageHTML)
-}
-
-const certPageHTML = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
-<title>证书管理 · ProxyPilot</title>
-<style>
-body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#f5f7fa;color:#1f2937}
-.wrap{max-width:980px;margin:0 auto;padding:28px 20px}
-h1{font-size:20px;margin:0 0 4px}p.sub{color:#6b7280;font-size:13px;margin:0 0 20px}
-.card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:18px;margin-bottom:16px}
-.card h2{font-size:14px;margin:0 0 12px}
-table{width:100%;border-collapse:collapse;font-size:13px}
-td,th{padding:8px 10px;border-bottom:1px solid #f1f5f9;text-align:left}
-th{color:#6b7280;font-weight:500;font-size:12px}
-code{font-family:ui-monospace,Consolas,monospace;font-size:12px;word-break:break-all}
-button{padding:9px 16px;border-radius:8px;border:1px solid #d1d5db;background:#fff;cursor:pointer;font-size:13px;margin-right:8px}
-button.primary{background:#1677ff;border-color:#1677ff;color:#fff}
-button:disabled{opacity:.55;cursor:not-allowed}
-.msg{font-size:12.5px;margin-top:10px;white-space:pre-wrap}
-.ok{color:#15803d}.err{color:#b91c1c}
-</style></head><body><div class="wrap">
-<h1>证书管理</h1>
-<p class="sub">用 Cloudflare DNS-01 申请通配证书，签发后统一下发到组网中心与各节点 VPN。</p>
-
-<div class="card"><h2>当前证书</h2><table id="certTable">
-<tr><th>域名</th><td id="domains">—</td></tr>
-<tr><th>来源</th><td id="source">—</td></tr>
-<tr><th>到期</th><td id="notAfter">—</td></tr>
-<tr><th>SHA-256</th><td><code id="fp">—</code></td></tr>
-</table></div>
-
-<div class="card"><h2>操作</h2>
-<button class="primary" id="btnIssue">签发通配证书</button>
-<button id="btnDist">统一下发到节点</button>
-<div class="msg" id="msg"></div></div>
-
-<div class="card"><h2>下发结果</h2><table id="distTable"><tr><th>目标</th><th>状态</th><th>说明</th></tr></table></div>
-
-<script data-cfasync="false" src="` + pageScriptAdminCerts + `"></script></div></body></html>`
-
-
 // vpnCertDiag 诊断 Cloudflare Token：能看哪些域名、能不能读写 DNS 记录。
 func (h *handlers) vpnCertDiag(w http.ResponseWriter, r *http.Request) {
 	token := strings.TrimSpace(h.settingValue(r.Context(), settingCFToken))

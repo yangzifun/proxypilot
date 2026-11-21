@@ -1,4 +1,4 @@
-﻿package api
+package api
 
 import (
 	"context"
@@ -190,7 +190,7 @@ func serverID(r *http.Request) (int64, bool) {
 func (h *handlers) serverGet(w http.ResponseWriter, r *http.Request) {
 	id, ok := serverID(r)
 	if !ok {
-		h.notMigrated(w, r)
+		writeError(w, http.StatusBadRequest, "服务器 ID 无效")
 		return
 	}
 	row, err := h.fetchServerRow(r.Context(), id)
@@ -269,7 +269,7 @@ func (h *handlers) serverGet(w http.ResponseWriter, r *http.Request) {
 func (h *handlers) serverUpdate(w http.ResponseWriter, r *http.Request) {
 	id, ok := serverID(r)
 	if !ok {
-		h.notMigrated(w, r)
+		writeError(w, http.StatusBadRequest, "服务器 ID 无效")
 		return
 	}
 	cur, err := h.fetchServerRow(r.Context(), id)
@@ -429,7 +429,7 @@ var serverDeleteCascadeSQL = []string{
 func (h *handlers) serverDelete(w http.ResponseWriter, r *http.Request) {
 	id, ok := serverID(r)
 	if !ok {
-		h.notMigrated(w, r)
+		writeError(w, http.StatusBadRequest, "服务器 ID 无效")
 		return
 	}
 	if _, err := h.fetchServerRow(r.Context(), id); errors.Is(err, sql.ErrNoRows) {
@@ -468,7 +468,7 @@ func (h *handlers) serverDelete(w http.ResponseWriter, r *http.Request) {
 func (h *handlers) serverRotateToken(w http.ResponseWriter, r *http.Request) {
 	id, ok := serverID(r)
 	if !ok {
-		h.notMigrated(w, r)
+		writeError(w, http.StatusBadRequest, "服务器 ID 无效")
 		return
 	}
 	if _, err := h.fetchServerRow(r.Context(), id); errors.Is(err, sql.ErrNoRows) {

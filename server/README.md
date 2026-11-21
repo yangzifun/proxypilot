@@ -156,7 +156,6 @@ cp server/.env.example server/.env
 - **AGENT_KEY_SECRET 必须与 Worker 一致**，否则已有服务器的 Agent 密钥无法解密（可在后台重置）。
 - `PP_PUBLIC_BASE_URL` 反代后必填，用于 `/agent-dist` 下载地址与 OIDC 回调。
 - `PP_ADMIN_PASSWORD` 生产必配：首次启动若 admin 仍是默认口令 `password`，会自动重置为该值；不配则日志告警。
-- 旧 Worker 可临时保留：`PP_LEGACY_BASE=https://旧域名` 作为未注册路径兜底。
 
 ### 4. 启动
 
@@ -254,7 +253,6 @@ curl -s localhost:8080/api/servers -H "Authorization: Bearer $TOKEN" | jq
 |---|---|---|
 | `PP_MYSQL_DSN` | ✅ | `user:pass@tcp(host:3306)/proxypilot?charset=utf8mb4&parseTime=false&loc=UTC` |
 | `PP_JWT_SECRET` | ✅ | 与 Worker 共用可让旧 token 直接可用；等于默认值会拒绝启动 |
-| `PP_LEGACY_BASE` | | 未迁移接口的转发地址（如 `https://proxypilot.example.com`）；为空返回 501 |
 | `PP_SMTP_ADDR` | | SMTP 地址（如 `smtp.example.com:587`，STARTTLS）；未配置时验证码接口返回 503 |
 | `PP_SMTP_USER` / `PP_SMTP_PASS` | | SMTP 认证（可留空） |
 | `PP_MAIL_FROM` | | 发件地址，需与 SMTP 账号匹配 |

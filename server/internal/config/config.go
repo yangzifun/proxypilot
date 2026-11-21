@@ -40,9 +40,6 @@ type Config struct {
 	TurnstileSecret string
 	// AllowDevSecret 允许在本地开发时使用短密钥（仅 PP_DEV=1 时）。
 	AllowDevSecret bool
-	// LegacyBase 未迁移接口的转发目标（例如 https://proxypilot.example.com）。
-	// 为空时未迁移接口返回 501。
-	LegacyBase string
 	// SMTP 配置；全为空时发送验证码接口返回 503。
 	SMTPAddr string
 	SMTPUser string
@@ -115,7 +112,6 @@ func Load() (Config, error) {
 		TurnstileSecret:     os.Getenv("PP_TURNSTILE_SECRET"),
 		TurnstileSiteKey:    firstNonEmpty(os.Getenv("PP_TURNSTILE_SITE_KEY"), os.Getenv("TURNSTILE_SITE_KEY")),
 		AllowDevSecret:      envBool("PP_DEV", false),
-		LegacyBase:          strings.TrimRight(strings.TrimSpace(os.Getenv("PP_LEGACY_BASE")), "/"),
 		SMTPAddr:            strings.TrimSpace(os.Getenv("PP_SMTP_ADDR")),
 		SMTPUser:            os.Getenv("PP_SMTP_USER"),
 		SMTPPass:            os.Getenv("PP_SMTP_PASS"),
@@ -125,7 +121,7 @@ func Load() (Config, error) {
 		MailProvider:        firstNonEmpty(os.Getenv("PP_MAIL_PROVIDER"), "auto"),
 		CloudflareAPIToken:  firstNonEmpty(os.Getenv("PP_CLOUDFLARE_API_TOKEN"), os.Getenv("CLOUDFLARE_API_TOKEN")),
 		CloudflareAccountID: firstNonEmpty(os.Getenv("PP_CLOUDFLARE_ACCOUNT_ID"), os.Getenv("CLOUDFLARE_ACCOUNT_ID")),
-			// 兼容 Worker 的环境变量名，便于直接沿用线上配置
+		// 兼容 Worker 的环境变量名，便于直接沿用线上配置
 		OIDCDisablePassword: envBool("PP_OIDC_DISABLE_PASSWORD", envBool("OIDC_DISABLE_PASSWORD", false)),
 		OIDCIssuer:          firstNonEmpty(os.Getenv("PP_OIDC_ISSUER"), os.Getenv("OIDC_ISSUER")),
 		OIDCClientID:        firstNonEmpty(os.Getenv("PP_OIDC_CLIENT_ID"), os.Getenv("OIDC_CLIENT_ID")),

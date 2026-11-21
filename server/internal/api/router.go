@@ -17,11 +17,10 @@ var Version = ""
 // New 构造 HTTP 处理器。已迁移的路由走真实实现，其余转发给旧 Worker 或返回 501。
 func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	h := &handlers{
-		cfg:    cfg,
-		db:     pool,
-		log:    log,
-		legacy: &http.Client{Timeout: 60 * time.Second},
-		box:    LoadSecretBox(cfg.SecretKeyFile, log),
+		cfg: cfg,
+		db:  pool,
+		log: log,
+		box: LoadSecretBox(cfg.SecretKeyFile, log),
 	}
 	// 低-01：转发头只信任可信反代；对外基址配置优先。
 	configureTrustedProxies(cfg.TrustedProxies)
@@ -59,7 +58,6 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("POST /api/vpn/cert/issue", h.authed(authOpts{}, h.vpnCertIssue))
 	mux.HandleFunc("POST /api/vpn/cert/distribute", h.authed(authOpts{}, h.vpnCertDistribute))
 	mux.HandleFunc("GET /api/vpn/cert/download", h.authed(authOpts{superOnly: true}, h.vpnCertDownload))
-	mux.HandleFunc("GET /admin/certs", h.vpnCertPage)
 	mux.HandleFunc("GET /api/vpn/ca.crt", h.vpnPublicCACert)
 	mux.HandleFunc("POST /api/admin/vpn/mesh/batch", h.authed(authOpts{}, h.vpnAdminMeshBatch))
 	mux.HandleFunc("GET /api/admin/vpn/mesh", h.authed(authOpts{}, h.vpnAdminMesh))
@@ -232,7 +230,6 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /api/mihomo/export", h.authed(authOpts{}, h.mihomoExport))
 	mux.HandleFunc("GET /api/mihomo/check", h.authed(authOpts{}, h.mihomoCheck))
 	mux.HandleFunc("POST /api/mihomo/check/fix", h.authed(authOpts{}, h.mihomoCheckFix))
-	mux.HandleFunc("GET /api/mihomo/stats", h.authed(authOpts{}, h.mihomoStats))
 	mux.HandleFunc("POST /api/mihomo/nodes", h.authed(authOpts{}, h.mihomoNodeCreate))
 	mux.HandleFunc("PUT /api/mihomo/nodes/{id}", h.authed(authOpts{}, h.mihomoNodeUpdate))
 	mux.HandleFunc("DELETE /api/mihomo/nodes/{id}", h.authed(authOpts{}, h.mihomoNodeDelete))
@@ -355,12 +352,7 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("POST /api/mtproto/push", h.authed(authOpts{}, h.mtprotoPush))
 	mux.HandleFunc("POST /api/mtproto/reconcile", h.authed(authOpts{}, h.mtprotoReconcile))
 
-	// 节点配置模板 / 配置
-	mux.HandleFunc("GET /api/node-templates", h.authed(authOpts{}, h.nodeTemplatesList))
-	mux.HandleFunc("POST /api/node-templates", h.authed(authOpts{}, h.nodeTemplateCreate))
-	mux.HandleFunc("GET /api/node-templates/{id}", h.authed(authOpts{}, h.nodeTemplateGet))
-	mux.HandleFunc("PUT /api/node-templates/{id}", h.authed(authOpts{}, h.nodeTemplateUpdate))
-	mux.HandleFunc("DELETE /api/node-templates/{id}", h.authed(authOpts{}, h.nodeTemplateDelete))
+	// 节点配置（模板接口已下线）
 	mux.HandleFunc("GET /api/node-configs", h.authed(authOpts{}, h.nodeConfigsList))
 	mux.HandleFunc("POST /api/node-configs", h.authed(authOpts{}, h.nodeConfigCreate))
 	mux.HandleFunc("GET /api/node-configs/{id}", h.authed(authOpts{}, h.nodeConfigItem))
@@ -368,17 +360,11 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("DELETE /api/node-configs/{id}", h.authed(authOpts{}, h.nodeConfigItem))
 	mux.HandleFunc("POST /api/node-configs/{id}/push", h.authed(authOpts{}, h.nodeConfigPushOne))
 	mux.HandleFunc("GET /api/node-configs/logs", h.authed(authOpts{}, h.nodeConfigLogs))
-	mux.HandleFunc("POST /api/node-configs/preview", h.authed(authOpts{}, h.nodeConfigPreview))
-	mux.HandleFunc("POST /api/node-configs/push", h.authed(authOpts{}, h.nodeConfigPush))
 
 	// OIDC
 	mux.HandleFunc("GET /api/oidc/status", h.oidcStatus)
 	mux.HandleFunc("GET /api/oidc/login", h.oidcLogin)
 	mux.HandleFunc("GET /api/oidc/callback", h.oidcCallback)
-
-	// 访问统计
-	mux.HandleFunc("GET /api/stats/uuid-details", h.authed(authOpts{}, h.statsUUIDDetails))
-	mux.HandleFunc("GET /api/uuid-configs/stats", h.authed(authOpts{}, h.uuidConfigsStats))
 
 	// 流量 / 连接统计（V15.6）
 	mux.HandleFunc("GET /api/stats/protocols", h.authed(authOpts{}, h.statsProtocols))
@@ -438,7 +424,8 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("POST /api/bucket/file", h.authed(authOpts{}, h.bucketFile))
 	mux.HandleFunc("PUT /api/bucket/file", h.authed(authOpts{}, h.bucketFile))
 
-	mux.HandleFunc("GET /api/servers/services", h.authed(authOpts{}, h.serversServices))
+	// 旧别名 /api/servers/services 已删除；显式 404，避免被 /api/servers/{id} 捕获后返回 401。
+	mux.HandleFunc("GET /api/servers/services", h.notFound)
 	mux.HandleFunc("GET /api/servers/monitor", h.authed(authOpts{}, h.serversMonitor))
 	mux.HandleFunc("GET /api/shell/status", h.authed(authOpts{}, h.shellStatus))
 	mux.HandleFunc("GET /api/shell/precheck/{id}", h.authed(authOpts{}, h.shellPrecheck))
@@ -453,23 +440,15 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /{$}", h.pageIndex)
 	mux.HandleFunc("GET /admin", h.pageIndex)
 	mux.HandleFunc("GET /admin/", h.pageIndex)
+	// 旧独立管理页已删除；显式 404，避免被 /admin/ 子树捕获。
+	mux.HandleFunc("GET /admin/certs", h.notFound)
+	mux.HandleFunc("GET /admin/settings", h.notFound)
 	mux.HandleFunc("GET /login", h.pageIndex)
 	mux.HandleFunc("GET /login/", h.pageIndex)
-	mux.HandleFunc("GET /me", h.pageIndex)
-	mux.HandleFunc("GET /me/", h.pageIndex)
-	mux.HandleFunc("GET /ui", h.pageIndex)
-	mux.HandleFunc("GET /ui/", h.pageIndex)
-	mux.HandleFunc("GET /admin/settings", h.settingsPage)
-	mux.HandleFunc("GET /manage", h.pageIndex)
-	mux.HandleFunc("GET /manage/all-uuid-info", h.pageIndex)
-	mux.HandleFunc("GET /manage/entry", h.pageIndex)
-	mux.HandleFunc("GET /manage/generate-uuid", h.pageIndex)
 	mux.HandleFunc("GET /manage/stats/{uuid}", h.manageStats)
-	mux.HandleFunc("GET /manage/uuid-check/{uuid}", h.pageIndex)
 	mux.HandleFunc("GET /manage/uuid-info", h.manageUUIDInfoGet)
 	mux.HandleFunc("GET /manage/uuid-info/{uuid}", h.manageUUIDInfoGet)
 	mux.HandleFunc("POST /manage/uuid-info", h.manageUUIDInfoSave)
-	mux.HandleFunc("GET /manage/", h.pageIndex)
 	mux.HandleFunc("GET /agent-dist/", h.agentDistFile)
 	// 服务端渲染页面的外部脚本（强制 CSP 下不允许可执行内联脚本）
 	mux.HandleFunc("GET /boot.js", h.bootJS)
@@ -486,17 +465,16 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /favicon.ico", h.favicon)
 	mux.HandleFunc("GET /assets/", h.pageAssets)
 
-	// 兜底：转发旧 Worker（若配置了 PP_LEGACY_BASE），否则 501 / 404
-	mux.HandleFunc("/", h.notMigrated)
+	// 未注册路径统一 404（旧 Worker 兜底已移除；不再转发 PP_LEGACY_BASE）。
+	mux.HandleFunc("/", h.notFound)
 
 	return h.recoverer(h.cors(h.secureHeaders(h.logRequests(mux))))
 }
 
 type handlers struct {
-	cfg    config.Config
-	db     *sql.DB
-	log    *slog.Logger
-	legacy *http.Client
+	cfg config.Config
+	db  *sql.DB
+	log *slog.Logger
 	// box 是面板外部 KEK（静态加密，中-03/中-06）；nil 表示未启用。
 	box *secretBox
 

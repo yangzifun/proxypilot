@@ -116,15 +116,4 @@ func TestClientIPTrustsCloudflareHeaderOnlyFromTrustedPeer(t *testing.T) {
 	}
 }
 
-func TestLegacyPath(t *testing.T) {
-	for _, p := range []string{"/api/uuids", "/sub/x", "/clash-config", "/manage/configs"} {
-		if !legacyPath(p) {
-			t.Errorf("%s 应可转发", p)
-		}
-	}
-	for _, p := range []string{"/admin", "/login", "/healthz"} {
-		if legacyPath(p) {
-			t.Errorf("%s 不应转发", p)
-		}
-	}
-}
+
