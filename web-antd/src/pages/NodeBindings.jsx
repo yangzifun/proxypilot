@@ -214,19 +214,24 @@ export default function NodeBindings() {
       ),
     },
     {
-      title: 'singbox 模板',
-      width: 150,
-      render: (_, r) => (r.sb_id ? <Tag color="geekblue">{r.sb_tpl_name || '内置默认'}</Tag> : <span className="pp-muted">未绑定</span>),
-    },
-    {
-      title: 'mihomo 模板',
-      width: 150,
-      render: (_, r) => (r.mh_id ? <Tag color="purple">{r.mh_tpl_name || '—'}</Tag> : <span className="pp-muted">未绑定</span>),
-    },
-    {
-      title: 'MTProto 模板',
-      width: 150,
-      render: (_, r) => (r.mp_id ? <Tag color="volcano">{r.mp_tpl_name || '—'}</Tag> : <span className="pp-muted">未绑定</span>),
+      title: '模板',
+      width: 320,
+      render: (_, r) => {
+        const items = [];
+        if (r.sb_id) items.push({ key: 'sb', label: `sing-box · ${r.sb_tpl_name || '内置默认'}`, color: 'geekblue' });
+        if (r.mh_id) items.push({ key: 'mh', label: `mihomo · ${r.mh_tpl_name || '—'}`, color: 'purple' });
+        if (r.mp_id) items.push({ key: 'mp', label: `MTProto · ${r.mp_tpl_name || '默认模板'}`, color: 'volcano' });
+        if (!items.length) return <span className="pp-muted">未绑定</span>;
+        return (
+          <Space size={4} wrap>
+            {items.map((it) => (
+              <Tag key={it.key} color={it.color} style={{ marginInlineEnd: 0 }}>
+                {it.label}
+              </Tag>
+            ))}
+          </Space>
+        );
+      },
     },
     { title: '域名', dataIndex: 'domain', width: 170, ellipsis: true, render: (v) => v || <span className="pp-muted">—</span> },
     {
@@ -328,7 +333,7 @@ export default function NodeBindings() {
         </Space>
       }
     >
-      <Table rowKey="server_id" size="middle" loading={loading} dataSource={rows} columns={columns} scroll={{ x: 1720 }} pagination={{ pageSize: 10, hideOnSinglePage: true }} />
+      <Table rowKey="server_id" size="middle" loading={loading} dataSource={rows} columns={columns} scroll={{ x: 1570 }} pagination={{ pageSize: 10, hideOnSinglePage: true }} />
 
       <Modal
         title="UUID 一致性检查"
