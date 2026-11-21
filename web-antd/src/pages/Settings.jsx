@@ -59,7 +59,7 @@ export default function Settings({ embedded = false }) {
     if (!d) return;
     setHasSecret(d.has || {});
     const v = d.values || {};
-    form.setFieldsValue({
+    const initialValues = {
       ...v,
       auth_password_enabled: v.auth_password_enabled === '1',
       agent_mesh_enabled: v.agent_mesh_enabled === '1',
@@ -75,7 +75,11 @@ export default function Settings({ embedded = false }) {
       turnstile_secret: '',
       smtp_pass: '',
       oidc_client_secret: '',
-    });
+    };
+    // 组网中心域名以通用 settings 的 agent_mesh_center 为准；为空时先不覆盖，
+    // 由 vpnSettings 里旧的 server_mesh_domain 回填（兼容历史数据）。
+    if (!String(v.agent_mesh_center || '').trim()) delete initialValues.agent_mesh_center;
+    form.setFieldsValue(initialValues);
     // Agent 访问地址：优先读数组；兼容旧的单地址配置。
     let urls = [];
     try {
@@ -91,12 +95,19 @@ export default function Settings({ embedded = false }) {
   }, [settings.data, form]);
 
   useEffect(() => {
+    // 等 VPN 设置真正加载完成再回填，避免先用默认值占位导致旧 server_mesh_domain 无法回填
+    if (!vpnSettings.data) return;
     const d = vpnSettings.data || {};
-    form.setFieldsValue({
-      server_mesh_domain: d.server_mesh_domain || 'vpncenter.yzfn.top',
+    const patch = {
       server_mesh_ip4: d.server_mesh_ip4 || '10.99.0.1',
       mesh_cidr4: d.mesh_cidr4 || '10.99.0.0/16',
-    });
+    };
+    // 旧数据兼容：通用设置没有 agent_mesh_center 时，用 VPN 设置的旧 server_mesh_domain
+    // 回填「组网中心域名」唯一输入（页面不再单独维护 server_mesh_domain）。
+    if (!String(form.getFieldValue('agent_mesh_center') || '').trim()) {
+      patch.agent_mesh_center = d.server_mesh_domain || 'vpncenter.yzfn.top';
+    }
+    form.setFieldsValue(patch);
   }, [vpnSettings.data, form]);
 
   const save = async () => {
@@ -121,11 +132,13 @@ export default function Settings({ embedded = false }) {
     setSaving(true);
     try {
       const res = await api('settings', { method: 'PUT', body });
+      // 组网中心域名只维护一个输入：同步到 VPN 设置的 server_mesh_domain（空则回退默认）
+      const meshCenter = String(values.agent_mesh_center || '').trim() || 'vpncenter.yzfn.top';
       await api('admin/vpn/settings', {
         method: 'PUT',
         body: {
           ...(vpnSettings.data || {}),
-          server_mesh_domain: values.server_mesh_domain,
+          server_mesh_domain: meshCenter,
           server_mesh_ip4: values.server_mesh_ip4,
           mesh_cidr4: values.mesh_cidr4,
         },
@@ -464,7 +477,7 @@ export default function Settings({ embedded = false }) {
                   <Form.Item name="agent_mesh_enabled" label="启用节点自建组网" valuePropName="checked">
                     <Switch checkedChildren="开" unCheckedChildren="关" />
                   </Form.Item>
-                  <Form.Item name="agent_mesh_center" label="组网中心域名" extra="节点通过该域名与中心服务器建立自建组网">
+                  <Form.Item name="agent_mesh_center" label="组网中心域名" extra="该域名同时用于 Agent 组网与中心状态（自建组网），只需在此填写一次">
                     <Input placeholder="vpncenter.yzfn.top" allowClear />
                   </Form.Item>
                   <Form.Item
@@ -476,9 +489,6 @@ export default function Settings({ embedded = false }) {
                     <Switch checkedChildren="开" unCheckedChildren="关" />
                   </Form.Item>
                   <Divider orientation="left">自建组网</Divider>
-                  <Form.Item name="server_mesh_domain" label="组网中心域名" extra="节点通过该域名与中心服务器组网">
-                    <Input placeholder="vpncenter.yzfn.top" allowClear />
-                  </Form.Item>
                   <Form.Item name="server_mesh_ip4" label="中心组网 IP">
                     <Input placeholder="10.99.0.1" allowClear />
                   </Form.Item>
