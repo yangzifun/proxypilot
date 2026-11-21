@@ -12,7 +12,8 @@ func (h *handlers) nodeBindingsList(w http.ResponseWriter, r *http.Request) {
 		        COALESCE(s.last_status,'') AS last_status,
 		        sb.id AS sb_id, sb.name AS sb_name, sb.template_id AS sb_tpl, COALESCE(st.name,'') AS sb_tpl_name,
 		        COALESCE(sb.uuid_list,'[]') AS sb_uuid_list, sb.enabled AS sb_enabled,
-		        COALESCE(sb.domain,'') AS sb_domain, COALESCE(sb.cdn_domain,'') AS sb_cdn, COALESCE(sb.last_apply_at,0) AS sb_last_apply,
+		        COALESCE(sb.domain,'') AS sb_domain, COALESCE(sb.cdn_domain,'') AS sb_cdn,
+		        COALESCE(sb.cdn_entries,'') AS sb_cdn_entries, COALESCE(sb.last_apply_at,0) AS sb_last_apply,
 		        mh.id AS mh_id, mh.name AS mh_name, mh.template_id AS mh_tpl, COALESCE(mt.name,'') AS mh_tpl_name,
 		        COALESCE(mt.mode,'subscription') AS mh_mode, COALESCE(mh.uuid_list,'[]') AS mh_uuid_list, mh.enabled AS mh_enabled,
 		        COALESCE(mh.domain,'') AS mh_domain, COALESCE(mh.last_apply_at,0) AS mh_last_apply,
@@ -37,6 +38,18 @@ func (h *handlers) nodeBindingsList(w http.ResponseWriter, r *http.Request) {
 		row["mh_uuids"] = len(mihomoParseUUIDs(mapStr(row, "mh_uuid_list", "[]")))
 		delete(row, "sb_uuid_list")
 		delete(row, "mh_uuid_list")
+		// 多 CDN 回填：前端 NodeBindings 编辑时必须拿到 cdn_entries（含名称/启用状态），
+		// 只给 sb_cdn 旧域名会导致名称丢失。空/旧列时回退 sb_cdn 单域名。
+		cdnEntries := parseCDNEntriesValue(row["sb_cdn_entries"])
+		if len(cdnEntries) == 0 {
+			cdnEntries = parseStoredCDNEntries("", mapStr(row, "sb_cdn", ""))
+		}
+		if cdnEntries == nil {
+			cdnEntries = []singboxCDNEntry{}
+		}
+		row["sb_cdn_entries"] = cdnEntries
+		row["sb_cdn_domains"] = cdnDomainsOf(cdnEntries)
+		row["sb_cdn"] = cdnPrimaryDomain(cdnEntries)
 		name := mapStr(row, "sb_name", "")
 		if name == "" {
 			name = mapStr(row, "mh_name", "")

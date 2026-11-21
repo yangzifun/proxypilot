@@ -231,10 +231,15 @@ func inputToNode(in map[string]any) singboxRenderNode {
 	if len(entries) == 0 {
 		entries = parseStoredCDNEntries("", jsonStr(in["cdn_domain"]))
 	}
+	cdnDomain := jsonStr(in["cdn_domain"])
+	if len(entries) > 0 {
+		// entries 存在（即使全部停用）时以 entries 的主 CDN 为准。
+		cdnDomain = cdnPrimaryDomain(entries)
+	}
 	return singboxRenderNode{
 		Name:          jsonStr(in["name"]),
 		Domain:        jsonStr(in["domain"]),
-		CDNDomain:     firstNonEmpty(cdnPrimaryDomain(entries), jsonStr(in["cdn_domain"])),
+		CDNDomain:     cdnDomain,
 		CDNEntries:    entries,
 		SBPath:        jsonStr(in["sb_path"]),
 		ServiceSBName: jsonStr(in["service_sb"]),

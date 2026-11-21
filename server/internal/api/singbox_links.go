@@ -21,11 +21,19 @@ import (
 //   - 新数据存 singbox_nodes.cdn_entries（JSON 数组），同时继续维护
 //     cdn_domain 列为主 CDN 域名（兼容旧前端/旧订阅逻辑）。
 type singboxCDNEntry struct {
-	Name        string `json:"name"`
-	Domain      string `json:"domain"`
-	Primary     bool   `json:"primary"`
+	Name    string `json:"name"`
+	Domain  string `json:"domain"`
+	Primary bool   `json:"primary"`
+	// Enabled 缺省（nil / 字段不存在）视为启用；显式 false 表示停用。
+	// 指针用于区分“旧数据/旧请求没传”和“明确停用”。
+	Enabled     *bool  `json:"enabled,omitempty"`
 	PreferGroup string `json:"prefer_group"`
 }
+
+func cdnBoolPtr(v bool) *bool { b := v; return &b }
+
+// cdnEntryEnabled 缺省启用；只有显式 false 才停用（兼容旧数据/旧请求）。
+func cdnEntryEnabled(e singboxCDNEntry) bool { return e.Enabled == nil || *e.Enabled }
 
 const (
 	singboxMaxCDNEntries = 8
@@ -89,12 +97,77 @@ func normalizeCDNEntryDomain(raw string) string {
 	return d
 }
 
+// orderCDNEntries 把启用的条目排在前面：主 CDN → 其它启用 → 停用；
+// 同组内保持原顺序，便于前端显示与链接生成。
+func orderCDNEntries(entries []singboxCDNEntry) []singboxCDNEntry {
+	if len(entries) <= 1 {
+		return entries
+	}
+	out := make([]singboxCDNEntry, 0, len(entries))
+	var main *singboxCDNEntry
+	restEnabled := make([]singboxCDNEntry, 0, len(entries))
+	disabled := make([]singboxCDNEntry, 0, len(entries))
+	for i := range entries {
+		e := entries[i]
+		if !cdnEntryEnabled(e) {
+			disabled = append(disabled, e)
+			continue
+		}
+		if e.Primary && main == nil {
+			cp := e
+			main = &cp
+			continue
+		}
+		restEnabled = append(restEnabled, e)
+	}
+	if main != nil {
+		out = append(out, *main)
+	}
+	out = append(out, restEnabled...)
+	out = append(out, disabled...)
+	return out
+}
+
+// finalizeCDNEntries 归一化 primary：
+//   - 停用条目的 primary 一律清空；
+//   - 启用条目中 primary 最多一个；没有则第一个启用条目自动为主；
+//   - 主 CDN 排最前；全部停用时保留 entries（供前端展示），但不产生主 CDN。
+func finalizeCDNEntries(entries []singboxCDNEntry) []singboxCDNEntry {
+	if len(entries) == 0 {
+		return nil
+	}
+	primary := -1
+	for i := range entries {
+		if !cdnEntryEnabled(entries[i]) {
+			entries[i].Primary = false
+			continue
+		}
+		if entries[i].Primary {
+			if primary < 0 {
+				primary = i
+			} else {
+				entries[i].Primary = false
+			}
+		}
+	}
+	if primary < 0 {
+		for i := range entries {
+			if cdnEntryEnabled(entries[i]) {
+				entries[i].Primary = true
+				primary = i
+				break
+			}
+		}
+	}
+	return orderCDNEntries(entries)
+}
+
 // normalizeStoredCDNEntries 对数据库中已存/旧数据做宽松解析：坏条目丢弃，
-// 域名去重、小写，primary 唯一且排最前；用于响应与链接生成，不返回错误。
+// 域名去重、小写；enabled 缺省 true；primary 只在启用条目中唯一且排最前。
+// 用于响应与链接生成，不返回错误。
 func normalizeStoredCDNEntries(entries []singboxCDNEntry) []singboxCDNEntry {
 	out := make([]singboxCDNEntry, 0, len(entries))
 	seen := map[string]bool{}
-	primary := -1
 	for _, e := range entries {
 		domain := normalizeCDNEntryDomain(e.Domain)
 		if domain == "" || seen[domain] {
@@ -109,33 +182,27 @@ func normalizeStoredCDNEntries(entries []singboxCDNEntry) []singboxCDNEntry {
 		if len(group) > 64 {
 			group = group[:64]
 		}
-		item := singboxCDNEntry{Name: name, Domain: domain, Primary: e.Primary, PreferGroup: group}
-		if item.Primary {
-			if primary < 0 {
-				primary = len(out)
-			} else {
-				item.Primary = false
-			}
+		enabled := e.Enabled
+		if enabled == nil {
+			enabled = cdnBoolPtr(true) // 旧数据/旧请求缺省启用
 		}
-		out = append(out, item)
+		out = append(out, singboxCDNEntry{
+			Name: name, Domain: domain, Primary: e.Primary, Enabled: enabled, PreferGroup: group,
+		})
 		if len(out) == singboxMaxCDNEntries {
 			break
 		}
 	}
-	if len(out) == 0 {
-		return nil
-	}
-	if primary < 0 {
-		out[0].Primary = true
-		primary = 0
-	}
-	// 主 CDN 排最前（其余保持原顺序）。
-	if primary > 0 {
-		main := out[primary]
-		rest := make([]singboxCDNEntry, 0, len(out))
-		rest = append(rest, out[:primary]...)
-		rest = append(rest, out[primary+1:]...)
-		out = append([]singboxCDNEntry{main}, rest...)
+	return finalizeCDNEntries(out)
+}
+
+// enabledCDNEntries 只保留启用的条目（链接生成/主 CDN 判断使用）。
+func enabledCDNEntries(entries []singboxCDNEntry) []singboxCDNEntry {
+	out := make([]singboxCDNEntry, 0, len(entries))
+	for _, e := range entries {
+		if cdnEntryEnabled(e) {
+			out = append(out, e)
+		}
 	}
 	return out
 }
@@ -155,7 +222,7 @@ func parseStoredCDNEntries(raw, legacyDomain string) []singboxCDNEntry {
 	if legacy == "" {
 		return nil
 	}
-	return []singboxCDNEntry{{Domain: legacy, Primary: true}}
+	return []singboxCDNEntry{{Domain: legacy, Primary: true, Enabled: cdnBoolPtr(true)}}
 }
 
 // parseCDNEntriesValue 兼容内存中的多种表示（string JSON / []singboxCDNEntry / []any），
@@ -193,6 +260,7 @@ func effectiveCDNEntries(node singboxNode) []singboxCDNEntry {
 }
 
 func cdnEntriesJSON(entries []singboxCDNEntry) string {
+	entries = normalizeStoredCDNEntries(entries)
 	if len(entries) == 0 {
 		return "[]"
 	}
@@ -203,6 +271,8 @@ func cdnEntriesJSON(entries []singboxCDNEntry) string {
 	return string(b)
 }
 
+// cdnDomainsOf 是 cdn_entries 的兼容投影：包含全部条目（含停用），
+// 便于旧前端回填/展示；新前端应以 cdn_entries.enabled 为准。
 func cdnDomainsOf(entries []singboxCDNEntry) []string {
 	out := make([]string, 0, len(entries))
 	for _, e := range entries {
@@ -213,6 +283,7 @@ func cdnDomainsOf(entries []singboxCDNEntry) []string {
 
 // cdnJSONFields 统一列表/详情/预览响应里的三个兼容字段（数组不为 null）。
 func cdnJSONFields(entries []singboxCDNEntry) map[string]any {
+	entries = normalizeStoredCDNEntries(entries)
 	if entries == nil {
 		entries = []singboxCDNEntry{}
 	}
@@ -229,12 +300,14 @@ func cdnJSONFields(entries []singboxCDNEntry) map[string]any {
 
 func cdnPrimaryDomain(entries []singboxCDNEntry) string {
 	for _, e := range entries {
-		if e.Primary {
+		if cdnEntryEnabled(e) && e.Primary {
 			return e.Domain
 		}
 	}
-	if len(entries) > 0 {
-		return entries[0].Domain
+	for _, e := range entries {
+		if cdnEntryEnabled(e) {
+			return e.Domain
+		}
 	}
 	return ""
 }
@@ -365,27 +438,23 @@ func normalizeCDNInput(body map[string]any) ([]singboxCDNEntry, string) {
 				}
 			}
 		}
-		if entries[i].Primary {
+		enabled := entries[i].Enabled
+		if enabled == nil {
+			enabled = cdnBoolPtr(true) // 缺省启用（兼容旧请求/旧前端）
+		}
+		primary := entries[i].Primary
+		if !*enabled {
+			// primary 只在启用条目中生效：停用条目即使传了 primary 也清空。
+			primary = false
+		} else if primary {
 			primaryCount++
 		}
-		entries[i] = singboxCDNEntry{Name: name, Domain: domain, Primary: entries[i].Primary, PreferGroup: group}
+		entries[i] = singboxCDNEntry{Name: name, Domain: domain, Primary: primary, Enabled: enabled, PreferGroup: group}
 	}
 	if primaryCount > 1 {
 		return nil, "只能设置一个主 CDN"
 	}
-	if primaryCount == 0 {
-		entries[0].Primary = true
-	}
-	// 主 CDN 排最前。
-	for i := range entries {
-		if entries[i].Primary && i > 0 {
-			main := entries[i]
-			copy(entries[1:i+1], entries[0:i])
-			entries[0] = main
-			break
-		}
-	}
-	return entries, ""
+	return finalizeCDNEntries(entries), ""
 }
 
 // singboxNodeFromRender 把渲染节点转成链接节点，保留多 CDN 条目。
@@ -480,20 +549,20 @@ func singboxClientLinks(tpl *singboxTemplate, node singboxNode, users []sbUser) 
 	ports := singboxPorts(tpl)
 	domain := strings.TrimSpace(node.Domain)
 	cdnDomain := strings.TrimSpace(node.CDNDomain)
-	entries := effectiveCDNEntries(node)
+	allEntries := effectiveCDNEntries(node)
+	// 停用的 CDN 不生成任何订阅链接；全部停用时 entries 为空（无 CDN 链接）。
+	entries := enabledCDNEntries(allEntries)
 	// 旧单域名（含迁移回填后 name="" 的单条目）沿用原模板 cdn_prefer 展开逻辑。
 	// 新条目 name 必填（normalizeCDNInput 已校验），因此“单条无名称”只可能来自旧数据。
 	legacyCDN := false
-	if len(entries) == 1 && strings.TrimSpace(entries[0].Name) == "" && strings.TrimSpace(entries[0].PreferGroup) == "" {
+	if len(allEntries) == 1 && strings.TrimSpace(allEntries[0].Name) == "" && strings.TrimSpace(allEntries[0].PreferGroup) == "" {
 		legacyCDN = true
 	}
 	if len(node.CDNEntries) == 0 && cdnDomain != "" {
 		legacyCDN = true
 	}
-	if len(entries) > 0 {
-		if primary := cdnPrimaryDomain(entries); primary != "" {
-			cdnDomain = primary
-		}
+	if primary := cdnPrimaryDomain(allEntries); primary != "" {
+		cdnDomain = primary
 	}
 	enc := url.QueryEscape
 	out := []map[string]any{}

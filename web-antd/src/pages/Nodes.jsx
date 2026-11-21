@@ -644,15 +644,16 @@ function NodeEditor({ state, servers, templates, onClose, onSaved }) {
         message.error(ce.message || 'CDN 配置不正确');
         return;
       }
-      const primaryCdnDomain = (cdnEntries.find((x) => x.primary) || cdnEntries[0] || {}).domain || '';
+      const enabledCdnEntries = cdnEntries.filter((x) => x.enabled !== false);
+      const primaryCdnDomain = (enabledCdnEntries.find((x) => x.primary) || enabledCdnEntries[0] || {}).domain || '';
       const body = {
         name: v.name,
         server_id: v.server_id,
         template_id: v.template_id || 0,
         domain: v.domain || '',
-        // 多 CDN：cdn_entries 为主，同时写旧字段兼容（第一条为主 CDN）
+        // 多 CDN：cdn_entries 为主（含 enabled），旧字段只写启用中的域名兼容
         cdn_entries: cdnEntries,
-        cdn_domains: cdnEntries.map((x) => x.domain),
+        cdn_domains: enabledCdnEntries.map((x) => x.domain),
         cdn_domain: primaryCdnDomain,
         port_base: v.port_base || 0,
         warp_base: v.warp_base || 0,

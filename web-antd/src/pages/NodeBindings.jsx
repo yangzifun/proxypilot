@@ -117,14 +117,18 @@ export default function NodeBindings() {
       message.error(e.message || 'CDN 配置不正确');
       return;
     }
-    const primaryCdnDomain = (cdnEntries.find((x) => x.primary) || cdnEntries[0] || {}).domain || '';
+    // 兼容旧字段：只写启用中的域名；主启用域名写 cdn_domain。
+    // 名称随 cdn_entries 保存；编辑回填时 normalizeCdnEntries(row) 优先读取
+    // 行数据里的 sb_cdn_entries / cdn_entries，再回退 sb_cdn/sb_cdn_domains。
+    const enabledCdnEntries = cdnEntries.filter((x) => x.enabled !== false);
+    const primaryCdnDomain = (enabledCdnEntries.find((x) => x.primary) || enabledCdnEntries[0] || {}).domain || '';
     const tasks = [];
     if (v.sb_tpl) tasks.push(['singbox', '/api/singbox/nodes', {
       name: (v.sb_name || v.name || '').trim(), server_id: v.server_id, template_id: v.sb_tpl,
       domain: v.sb_domain || v.domain || '',
-      // 多 CDN：cdn_entries 为主，同时写旧字段 cdn_domains / cdn_domain（第一条）兼容旧后端
+      // 多 CDN：cdn_entries 为主，同时写旧字段 cdn_domains / cdn_domain（主启用域名）兼容旧后端
       cdn_entries: cdnEntries,
-      cdn_domains: cdnEntries.map((x) => x.domain),
+      cdn_domains: enabledCdnEntries.map((x) => x.domain),
       cdn_domain: primaryCdnDomain,
     }]);
     if (v.mh_tpl) tasks.push(['mihomo', '/api/mihomo/nodes', {
