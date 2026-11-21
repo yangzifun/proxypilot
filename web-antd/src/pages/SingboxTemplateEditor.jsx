@@ -156,6 +156,8 @@ function InboundEditor({ raw, index, last, mutate }) {
   const reality = tls && tls.reality && tls.reality.enabled ? tls.reality : null;
   const transport = raw.transport || null;
   const isWs = type === 'vless' && !!transport && transport.type === 'ws';
+  // CDN 入站（tag 含 -cdn，如 vless-ws-cdn）：监听地址决定能否被 ESA/EO 等 CDN 公网回源
+  const isCdnInbound = String(raw.tag || '').toLowerCase().includes('-cdn');
 
   const setTop = (key, val) => mutate((ib) => {
     if (val === undefined || val === '') delete ib[key];
@@ -208,6 +210,30 @@ function InboundEditor({ raw, index, last, mutate }) {
         </Col>
       </Row>
       <Hint>标签只用于 sing-box 内部识别；端口是客户端连接端口，保存时会反推为模板端口基线；监听留空默认 ::（IPv4+IPv6）。</Hint>
+
+      {/* CDN 入站（tag 含 -cdn）：监听地址与公网回源提示（不改变保存逻辑） */}
+      {isCdnInbound ? (
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginTop: 8, padding: '8px 10px', fontSize: 12 }}
+          message={<span style={{ fontSize: 12 }}>CDN 入站监听提示（{raw.tag}）</span>}
+          description={
+            <div style={{ fontSize: 12, lineHeight: 1.75 }}>
+              <div>
+                · 默认 <code>127.0.0.1</code> 仅用于 Cloudflare Tunnel 本地回源；
+              </div>
+              <div>
+                · 填 <code>0.0.0.0</code> / <code>::</code> 允许 ESA/EO 等 CDN 从公网回源（需在服务器防火墙 / 云安全组放行该端口）；
+              </div>
+              <div>
+                · 公网回源为明文 WS（TLS 在 CDN 边缘终止），回源协议按 CDN 配置使用 HTTP + 该端口；
+              </div>
+              <div>· 如 CDN 强制 HTTPS 源站，需额外配置 TLS 反向代理。</div>
+            </div>
+          }
+        />
+      ) : null}
 
       {/* 协议专属字段 */}
       {ui.fields && ui.fields.length ? (

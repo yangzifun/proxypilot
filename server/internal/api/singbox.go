@@ -341,7 +341,7 @@ func singboxRenderSb(tpl *singboxTemplate, users []sbUser, ports map[string]int,
 				cdnPort = ports["vlws"] + 1
 			}
 			inbounds = append(inbounds, map[string]any{
-				"type": "vless", "tag": "vless-ws-cdn", "listen": "127.0.0.1", "listen_port": cdnPort,
+				"type": "vless", "tag": "vless-ws-cdn", "listen": cdnListenOf(tpl), "listen_port": cdnPort,
 				"transport": map[string]any{"type": "ws", "path": wsPath},
 				"users":     u,
 			})
@@ -441,6 +441,21 @@ func singboxInstallVersions(tpl *singboxTemplate, defaultVersion string) string 
 	}
 	b, _ := json.Marshal(m)
 	return string(b)
+}
+
+// cdnListenOf CDN 明文 WS 回源监听地址：默认 127.0.0.1，仅允许
+// 127.0.0.1 / 0.0.0.0 / :: / [::]；其它值（含空）一律回退 127.0.0.1。
+// [::] 统一写成 sing-box 可识别的 ::。
+func cdnListenOf(tpl *singboxTemplate) string {
+	raw := strings.TrimSpace(jsonStr(optMap(tpl.protoOptions(), "vlws")["cdn_listen"]))
+	switch raw {
+	case "0.0.0.0":
+		return "0.0.0.0"
+	case "::", "[::]":
+		return "::"
+	default:
+		return "127.0.0.1"
+	}
 }
 
 // cdnPortOf CDN 明文 WS 回源端口：默认 base+7（13707），可用模板 vlws.cdn_port 覆盖。

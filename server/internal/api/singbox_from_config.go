@@ -22,6 +22,7 @@ type sbParsed struct {
 	HasWarp        bool
 	Masque         bool
 	CDNPort        int
+	CDNListen      string
 	MasquePort     int
 	MasquePath     string
 	MasqueVersions []int
@@ -154,6 +155,8 @@ func parseSbConfig(text string) (*sbParsed, string) {
 			if asString(tr["type"]) == "ws" {
 				if strings.Contains(strings.ToLower(asString(ib["tag"])), "-cdn") || asString(ib["listen"]) == "127.0.0.1" {
 					p.CDNPort = port
+					// 记录 CDN 入站 listen，模板保存后由 render 决定是否开放公网监听。
+					p.CDNListen = strings.TrimSpace(asString(ib["listen"]))
 				}
 				p.Enable["vlws"] = 1
 				p.Paths["vlws"] = firstNonEmpty(asString(tr["path"]), "/vlws")
@@ -309,6 +312,10 @@ func (h *handlers) singboxTemplateFromConfig(w http.ResponseWriter, r *http.Requ
 	}
 	if parsed.CDNPort > 0 {
 		setOpt("vlws", map[string]any{"cdn_port": parsed.CDNPort})
+	}
+	if parsed.CDNListen != "" {
+		// 空值不写，旧模板/旧 sb.json 保持默认 127.0.0.1。
+		setOpt("vlws", map[string]any{"cdn_listen": parsed.CDNListen})
 	}
 	if parsed.Reality["server_name"] != "" || parsed.Reality["dest"] != "" || parsed.Reality["short_id"] != "" {
 		setOpt("reality", map[string]any{
