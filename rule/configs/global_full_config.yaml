@@ -1,6 +1,6 @@
 # ==========================================================
-# 更新时间: 2026-11-08
-# 模板类型: 全球上网全量模板 (已修正核心报错)
+# 更新时间: 2026-11-22
+# 模板类型: 全球上网全量模板
 # 作者: YZFN
 # 适用场景:
 #   1. 适用于需要稳定访问全球站点、AI 服务、社交媒体和流媒体的环境。
@@ -297,6 +297,7 @@ rules:
   # Google 按 IP 和域名覆盖；微软、Apple、PayPal 与常规境外网络分别使用专属策略。
   - RULE-SET,google_ip,🔍 Google,no-resolve
   - RULE-SET,google_domain,🔍 Google
+  - RULE-SET,googleplay,🔍 Google
   - RULE-SET,onedrive_domain,🪟 微软
   - RULE-SET,microsoft_domain,🪟 微软
   - RULE-SET,apple_domain,🚀 默认代理
@@ -315,6 +316,7 @@ rules:
 # ==========================================================
 rule-providers:
   proxylite: { <<: *class, url: "https://s3.proxypilot.yangzifun.org/rule/proxy.list"}
+  googleplay: { <<: *class, url: "https://s3.proxypilot.yangzifun.org/rule/googleplay.list"}
   se_asia: { <<: *class, url: "https://s3.proxypilot.yangzifun.org/rule/se_asia.list"}
   korea: { <<: *class, url: "https://s3.proxypilot.yangzifun.org/rule/korea.list"}
   private_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs"}

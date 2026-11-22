@@ -1,5 +1,5 @@
 # ==========================================================
-# 更新时间: 2026-11-08
+# 更新时间: 2026-11-22
 # 模板类型: 全球上网模板 (已修正核心报错与语法隐患)
 # 策略说明: 全部策略组使用 include-all + exclude-filter 自动测速选路
 # 作者: YZFN
@@ -224,6 +224,7 @@ rules:
 
   - RULE-SET,google_ip,🔍 Google,no-resolve
   - RULE-SET,google_domain,🔍 Google
+  - RULE-SET,googleplay,🔍 Google
   - RULE-SET,onedrive_domain,🪟 微软
   - RULE-SET,microsoft_domain,🪟 微软
   - RULE-SET,apple_domain,🚀 默认代理
@@ -241,6 +242,7 @@ rules:
 # ==========================================================
 rule-providers:
   proxylite: { <<: *class, url: "https://s3.proxypilot.yangzifun.org/rule/proxy.list"}
+  googleplay: { <<: *class, url: "https://s3.proxypilot.yangzifun.org/rule/googleplay.list"}
   se_asia: { <<: *class, url: "https://s3.proxypilot.yangzifun.org/rule/se_asia.list"}
   korea: { <<: *class, url: "https://s3.proxypilot.yangzifun.org/rule/korea.list"}
   private_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs"}
