@@ -635,6 +635,13 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
           value={sections[section]}
           disabled={!!busy}
           columns={vw >= 1000 ? 2 : 1}
+          groups={
+            section === 'dns'
+              ? [{ title: 'DNS 设置', test: () => true }]
+              : section === 'tun'
+                ? [{ title: 'TUN 设置', test: () => true }]
+                : undefined
+          }
           onApply={(next) => applyPatch(section, next)}
         />
       );

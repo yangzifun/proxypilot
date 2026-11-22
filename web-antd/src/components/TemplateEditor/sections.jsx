@@ -73,7 +73,15 @@ function scalarText(v) {
 /* -----------------------------------------------------------------
  * 通用对象表单：基础设置 / DNS / TUN
  * ----------------------------------------------------------------- */
-export function ObjectForm({ title, hint, value, onApply, disabled, extraActions, columns = 2 }) {
+// 语义分组：基础设置按字段名归类为多个卡片（DNS/TUN 可传入单卡片 groups）
+const OBJECT_CARD_DEFS = [
+  { title: '网络与端口', test: (k) => /(^|[-_])(port|bind|bind-address|listen|address|interface|proxy|socks|redir|tproxy|mixed)/i.test(k) },
+  { title: '运行与日志', test: (k) => /(lan|mode|log|ipv6|find-process|profile|sniffer|controller|secret|geodata|geosite|fingerprint|delay|concurrent|tcp|udp|rule|geo|clash|smart|unified)/i.test(k) },
+  { title: '连接与保活', test: (k) => /(keep|alive|timeout|relay|connection|max|limit|pool|idle)/i.test(k) },
+  { title: '其它', test: () => true },
+];
+
+export function ObjectForm({ title, hint, value, onApply, disabled, extraActions, columns = 2, groups }) {
   const objectValue = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
   const [draft, setDraft] = useState(objectValue);
   const [jsonTexts, setJsonTexts] = useState({});
@@ -159,6 +167,79 @@ export function ObjectForm({ title, hint, value, onApply, disabled, extraActions
 
   const entries = Object.entries(draft);
 
+  // 按语义把字段分到多个卡片（自定义 groups 可覆盖）
+  const cardDefs = Array.isArray(groups) && groups.length ? groups : OBJECT_CARD_DEFS;
+  const buckets = cardDefs.map((d) => ({ title: d.title, fields: [] }));
+  entries.forEach(([k, v]) => {
+    let idx = cardDefs.findIndex((d) => (typeof d.test === 'function' ? d.test(k, v) : true));
+    if (idx < 0) idx = buckets.length - 1;
+    buckets[idx].fields.push([k, v]);
+  });
+  const fieldCards = buckets.filter((b) => b.fields.length);
+
+  const renderFieldCell = ([key, v]) => {
+    const isJson = v !== null && typeof v === 'object';
+    const isLongText = typeof v === 'string' && v.length > 60;
+    const isLong = isJson || isLongText;
+    const isBool = typeof v === 'boolean';
+    return (
+      <div
+        key={key}
+        style={{
+          gridColumn: isLong ? '1 / -1' : 'auto',
+          justifySelf: isBool ? 'start' : 'stretch',
+          minWidth: 0,
+          padding: '8px 10px',
+          border: '1px solid #eef2f7',
+          borderRadius: 8,
+          background: '#fbfcfe',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: isBool ? 0 : 4 }}>
+          <span className="pp-mono" style={{ fontSize: 12, color: '#334155', wordBreak: 'break-all' }}>
+            {key}
+          </span>
+          <Popconfirm title={`删除字段 ${key}？`} okText="删除" onConfirm={() => removeKey(key)} disabled={disabled}>
+            <Button
+              size="small"
+              type="text"
+              icon={<DeleteOutlined />}
+              disabled={disabled}
+              aria-label={`删除 ${key}`}
+              title={`删除字段 ${key}`}
+              style={{ marginLeft: 'auto', color: '#94a3b8' }}
+            />
+          </Popconfirm>
+        </div>
+        {isBool ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Switch checked={v} onChange={(checked) => setScalar(key, checked)} disabled={disabled} size="small" />
+            <span className="pp-muted" style={{ fontSize: 12 }}>{v ? '开启' : '关闭'}</span>
+          </div>
+        ) : typeof v === 'number' ? (
+          <InputNumber value={v} onChange={(n) => setScalar(key, n)} disabled={disabled} style={{ width: '100%' }} />
+        ) : v === null || typeof v === 'string' ? (
+          <Input
+            value={v === null ? '' : v}
+            onChange={(e) => setScalar(key, e.target.value)}
+            disabled={disabled}
+            className={isLongText ? 'pp-mono' : undefined}
+          />
+        ) : (
+          <Input.TextArea
+            className="pp-mono"
+            autoSize={{ minRows: 2, maxRows: 8 }}
+            value={jsonTexts[key] !== undefined ? jsonTexts[key] : toJSONText(v)}
+            onChange={(e) => setJSONText(key, e.target.value)}
+            spellCheck={false}
+            disabled={disabled}
+            style={{ fontSize: 12, lineHeight: 1.6 }}
+          />
+        )}
+      </div>
+    );
+  };
+
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
@@ -184,75 +265,27 @@ export function ObjectForm({ title, hint, value, onApply, disabled, extraActions
       ) : null}
 
       {entries.length ? (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: columns > 1 ? 'repeat(2, minmax(0, 1fr))' : '1fr',
-            gap: 10,
-          }}
-        >
-          {entries.map(([key, v]) => {
-            const isJson = v !== null && typeof v === 'object';
-            const isLongText = typeof v === 'string' && v.length > 60;
-            const isLong = isJson || isLongText;
-            const isBool = typeof v === 'boolean';
-            return (
+        <div style={{ display: 'grid', gap: 12 }}>
+          {fieldCards.map((card) => (
+            <div
+              key={card.title}
+              style={{ border: '1px solid #eef2f7', borderRadius: 10, padding: '10px 12px', background: '#fff' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <span style={{ fontSize: 12.5, fontWeight: 600, color: '#334155' }}>{card.title}</span>
+                <span className="pp-muted" style={{ fontSize: 11 }}>{card.fields.length} 项</span>
+              </div>
               <div
-                key={key}
                 style={{
-                  gridColumn: isLong ? '1 / -1' : 'auto',
-                  justifySelf: isBool ? 'start' : 'stretch',
-                  minWidth: 0,
-                  padding: '8px 10px',
-                  border: '1px solid #eef2f7',
-                  borderRadius: 8,
-                  background: '#fbfcfe',
+                  display: 'grid',
+                  gridTemplateColumns: columns > 1 ? 'repeat(2, minmax(0, 1fr))' : '1fr',
+                  gap: 10,
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: isBool ? 0 : 4 }}>
-                  <span className="pp-mono" style={{ fontSize: 12, color: '#334155', wordBreak: 'break-all' }}>
-                    {key}
-                  </span>
-                  <Popconfirm title={`删除字段 ${key}？`} okText="删除" onConfirm={() => removeKey(key)} disabled={disabled}>
-                    <Button
-                      size="small"
-                      type="text"
-                      icon={<DeleteOutlined />}
-                      disabled={disabled}
-                      aria-label={`删除 ${key}`}
-                      title={`删除字段 ${key}`}
-                      style={{ marginLeft: 'auto', color: '#94a3b8' }}
-                    />
-                  </Popconfirm>
-                </div>
-                {isBool ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Switch checked={v} onChange={(checked) => setScalar(key, checked)} disabled={disabled} size="small" />
-                    <span className="pp-muted" style={{ fontSize: 12 }}>{v ? '开启' : '关闭'}</span>
-                  </div>
-                ) : typeof v === 'number' ? (
-                  <InputNumber value={v} onChange={(n) => setScalar(key, n)} disabled={disabled} style={{ width: '100%' }} />
-                ) : v === null || typeof v === 'string' ? (
-                  <Input
-                    value={v === null ? '' : v}
-                    onChange={(e) => setScalar(key, e.target.value)}
-                    disabled={disabled}
-                    className={isLongText ? 'pp-mono' : undefined}
-                  />
-                ) : (
-                  <Input.TextArea
-                    className="pp-mono"
-                    autoSize={{ minRows: 2, maxRows: 8 }}
-                    value={jsonTexts[key] !== undefined ? jsonTexts[key] : toJSONText(v)}
-                    onChange={(e) => setJSONText(key, e.target.value)}
-                    spellCheck={false}
-                    disabled={disabled}
-                    style={{ fontSize: 12, lineHeight: 1.6 }}
-                  />
-                )}
+                {card.fields.map((field) => renderFieldCell(field))}
               </div>
-            );
-          })}
+            </div>
+          ))}
         </div>
       ) : (
         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该区段没有可编辑字段" />
