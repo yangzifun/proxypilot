@@ -21,9 +21,8 @@ type loginRequest struct {
 // login 对应 POST /api/login：账号密码 + 可选 TOTP。
 //
 // 安全约束：
-//   - 第一步（密码）必须携带有效 Turnstile；
-//   - 第二步（verify_totp）必须携带第一步签发的 5 分钟 mfa_token，
-//     不再重复校验密码、也不允许用 step 参数绕过 Turnstile；
+//   - 管理后台登录不再要求 Turnstile（用户要求取消后台人机验证）；
+//   - 第二步（verify_totp）仍必须携带第一步签发的 5 分钟 mfa_token；
 //   - 两个步骤共用登录失败限速，避免无限爆破密码 / TOTP。
 func (h *handlers) login(w http.ResponseWriter, r *http.Request) {
 	if !h.passwordLoginEnabled(r.Context()) {
@@ -58,11 +57,6 @@ func (h *handlers) login(w http.ResponseWriter, r *http.Request) {
 
 	if req.Password == "" {
 		writeError(w, http.StatusBadRequest, "用户名或密码不能为空")
-		return
-	}
-	if err := h.verifyTurnstile(r, req.Turnstile); err != nil {
-		loginLimiter.Fail(key)
-		writeError(w, http.StatusForbidden, err.Error())
 		return
 	}
 

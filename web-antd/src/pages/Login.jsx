@@ -18,7 +18,9 @@ import LoginAnimation from '../components/LoginAnimation';
 import { LOGO_URL } from '../theme';
 
 const boot = (typeof window !== 'undefined' && window.__PP_BOOT__) || {};
-const SITE_KEY = String(boot.turnstile || '');
+// 管理后台登录不再要求人机验证；用户中心仍独立使用 Turnstile。
+// 固定为空，避免后台登录页加载/弹出 Cloudflare Turnstile。
+const SITE_KEY = '';
 const OIDC = boot.oidc || { enabled: false, buttonText: '使用单点登录（OIDC）', passwordDisabled: false };
 const EMAIL_ENABLED = !!boot.emailLogin;
 
@@ -266,15 +268,7 @@ export default function Login() {
                   : '使用后台管理员账号登录'}
           </p>
 
-          {!SITE_KEY && boot.turnstileRequired ? (
-            <Alert
-              type="warning"
-              showIcon
-              style={{ marginBottom: 16, borderRadius: 10 }}
-              message="服务端开启了人机验证，但前端没有拿到站点密钥"
-              description="Turnstile 的 Site Key 与 Secret 必须成对配置；只配置 Secret 时，服务端会对所有登录请求返回「请完成人机验证」。"
-            />
-          ) : null}
+          
 
           {OIDC_ERROR && !err ? (
             <Alert

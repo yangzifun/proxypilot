@@ -48,12 +48,7 @@ func (h *handlers) loginEmailCodeSend(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "邮箱格式无效")
 		return
 	}
-	// 审计低-04：发送登录验证码必须过人机验证（与 /api/login、/api/portal/send-code
-	// 保持一致），防止被用于邮件轰炸。
-	if err := h.verifyTurnstile(r, mapStr(body, "cf_turnstile_response", "")); err != nil {
-		writeError(w, http.StatusForbidden, err.Error())
-		return
-	}
+	// 管理后台登录不再要求 Turnstile；仍保留邮箱验证码频率限制，防止邮件轰炸。
 	if code, msg := h.checkEmailCodeRate(r.Context(), email, emailLoginPurpose); code != 0 {
 		writeError(w, code, msg)
 		return
