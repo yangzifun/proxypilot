@@ -52,7 +52,7 @@ const PERMISSIONS = [
 ];
 
 function SystemAccounts() {
-  const { user, superAdmin, isSuper } = useAuth();
+  const { user, superAdmin, isSuper, logout } = useAuth();
   const users = useAsync(() => api('admin/users'), []);
 
   const userRows = (users.data && users.data.users) || [];
@@ -83,22 +83,24 @@ function SystemAccounts() {
       </Row>
 
       <div style={{ marginTop: 16 }}>
-        <UsersTab rows={userRows} state={users} self={user} superAdmin={superAdmin} isSuper={isSuper} />
+        <UsersTab rows={userRows} state={users} self={user} superAdmin={superAdmin} isSuper={isSuper} onLogout={logout} />
       </div>
     </div>
   );
 }
 
 /* ---------------- 用户 ---------------- */
-function UsersTab({ rows, state, self, superAdmin, isSuper }) {
+function UsersTab({ rows, state, self, superAdmin, isSuper, onLogout }) {
   const { message } = AntdApp.useApp();
   const [compose, setCompose] = useState(null); // { mode, row }
   const [pwFor, setPwFor] = useState(null);
   const [emailFor, setEmailFor] = useState(null);
+  const [renameFor, setRenameFor] = useState(null);
   const [saving, setSaving] = useState(false);
   const [form] = Form.useForm();
   const [pwForm] = Form.useForm();
   const [emailForm] = Form.useForm();
+  const [renameForm] = Form.useForm();
 
   // 角色行判定（兼容后端 0/1 与 bool）：root 行不可降级
   const isRootRow = (row) => !!(row && (row.is_root === true || row.is_root === 1 || row.is_root === '1' || String(row.username || '') === superAdmin));
@@ -112,6 +114,37 @@ function UsersTab({ rows, state, self, superAdmin, isSuper }) {
       state.reload().catch(() => {});
     } catch (e) {
       message.error(e.message || '角色修改失败');
+    }
+  };
+
+  // 修改用户名（root 不可改；改当前账号后需重新登录）
+  const renameUser = async () => {
+    const values = await readForm(renameForm);
+    if (!values) return;
+    const target = renameFor;
+    if (!target) return;
+    const newUsername = String(values.newUsername || '').trim();
+    if (newUsername === target.username) {
+      message.warning('新用户名与当前用户名相同');
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await api('admin/users', { method: 'PUT', body: { username: target.username, newUsername } });
+      setRenameFor(null);
+      renameForm.resetFields();
+      const needRelogin = !!(res && res.relogin_required) || target.username === self || isRootRow(target);
+      if (needRelogin) {
+        message.warning('用户名已修改，请重新登录');
+        if (onLogout) onLogout();
+      } else {
+        message.success(`用户名已修改：${target.username} → ${newUsername}`);
+        state.reload().catch(() => {});
+      }
+    } catch (e) {
+      message.error(e.message || '修改用户名失败');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -232,7 +265,7 @@ function UsersTab({ rows, state, self, superAdmin, isSuper }) {
     },
     {
       title: '操作',
-      width: 280,
+      width: 340,
       render: (_, row) => (
         <Space size={0}>
           {isSuper ? (
@@ -247,6 +280,18 @@ function UsersTab({ rows, state, self, superAdmin, isSuper }) {
                 {isSuperRow(row) ? '取消超管' : '设为超管'}
               </Button>
             )
+          ) : null}
+          {isSuper ? (
+            <Button
+              type="text"
+              size="small"
+              onClick={() => {
+                setRenameFor(row);
+                renameForm.resetFields();
+              }}
+            >
+              改名
+            </Button>
           ) : null}
           <IconAction
             title="重置密码"
@@ -361,6 +406,38 @@ function UsersTab({ rows, state, self, superAdmin, isSuper }) {
           <Form.Item name="newPassword" label="新密码" rules={[{ required: true, min: 6, message: '至少 6 位' }]}>
             <Input.Password placeholder="至少 6 位" />
           </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        open={!!renameFor}
+        title={renameFor ? `修改用户名 · ${renameFor.username}` : ''}
+        onCancel={() => {
+          setRenameFor(null);
+          renameForm.resetFields();
+        }}
+        onOk={renameUser}
+        confirmLoading={saving}
+        okText="保存"
+        destroyOnHidden
+      >
+        <Form form={renameForm} layout="vertical" requiredMark={false} style={{ marginTop: 14 }}>
+          <Form.Item label="当前用户名">
+            <Input value={renameFor ? renameFor.username : ''} disabled />
+          </Form.Item>
+          <Form.Item
+            name="newUsername"
+            label="新用户名"
+            rules={[
+              { required: true, message: '请填写新用户名' },
+              { pattern: /^[A-Za-z0-9._@-]{1,64}$/, message: '仅支持字母、数字与 . _ @ -（1-64 位）' },
+            ]}
+          >
+            <Input placeholder="例如：ops-02" />
+          </Form.Item>
+          <div className="pp-muted" style={{ fontSize: 12, lineHeight: 1.7 }}>
+            修改后该账号需使用新用户名登录；若修改的是根超管或当前登录账号，保存后会退出登录并要求重新登录。
+          </div>
         </Form>
       </Modal>
 

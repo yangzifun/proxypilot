@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -48,7 +49,7 @@ func (h *handlers) adminUsersDispatch(w http.ResponseWriter, r *http.Request) {
 func (h *handlers) adminUsersList(w http.ResponseWriter, r *http.Request) {
 	claims, _ := claimsFrom(r)
 	rows, err := h.db.QueryContext(r.Context(),
-		`SELECT id, username, COALESCE(is_super,0), email, COALESCE(email_verified,0), COALESCE(email_verified_at,0),
+		`SELECT id, username, COALESCE(is_super,0), COALESCE(is_root,0), email, COALESCE(email_verified,0), COALESCE(email_verified_at,0),
 		        COALESCE(mfa_enabled,0), COALESCE(last_mfa_login,0), COALESCE(created_at,0)
 		   FROM admin_users ORDER BY id ASC`)
 	if err != nil {
@@ -63,13 +64,13 @@ func (h *handlers) adminUsersList(w http.ResponseWriter, r *http.Request) {
 			u     adminUserRow
 			email sql.NullString
 		)
-		var isSuper int64
-		if rows.Scan(&u.ID, &u.Username, &isSuper, &email, &u.EmailVerified, &u.EmailVerifiedAt,
+		var isSuper, isRoot int64
+		if rows.Scan(&u.ID, &u.Username, &isSuper, &isRoot, &email, &u.EmailVerified, &u.EmailVerifiedAt,
 			&u.MFAEnabled, &u.LastMFALogin, &u.CreatedAt) == nil {
 			if email.Valid {
 				u.Email = email.String
 			}
-			u.IsRoot = u.Username == strings.TrimSpace(h.cfg.SuperAdmin)
+			u.IsRoot = isRoot == 1
 			u.IsSuper = u.IsRoot || isSuper == 1
 			users = append(users, u)
 		}
@@ -81,12 +82,14 @@ func (h *handlers) adminUsersList(w http.ResponseWriter, r *http.Request) {
 }
 
 type adminUserRequest struct {
-	Username    string `json:"username"`
-	IsSuper     *bool  `json:"is_super"`
-	Password    string `json:"password"`
-	Email       string `json:"email"`
-	NewPassword string `json:"newPassword"`
-	MFAReset    bool   `json:"mfaReset"`
+	Username    string  `json:"username"`
+	Current     *string `json:"current"`
+	NewUsername *string `json:"newUsername"`
+	IsSuper     *bool   `json:"is_super"`
+	Password    string  `json:"password"`
+	Email       string  `json:"email"`
+	NewPassword string  `json:"newPassword"`
+	MFAReset    bool    `json:"mfaReset"`
 }
 
 func (h *handlers) adminUsersCreate(w http.ResponseWriter, r *http.Request) {
@@ -175,6 +178,9 @@ func (h *handlers) adminUsersUpdate(w http.ResponseWriter, r *http.Request) {
 	_ = json.Unmarshal(rawBody, &rawMap)
 	_, emailProvided := rawMap["email"]
 	username := strings.TrimSpace(req.Username)
+	if username == "" && req.Current != nil {
+		username = strings.TrimSpace(*req.Current)
+	}
 	if !usernameRe.MatchString(username) {
 		writeError(w, http.StatusBadRequest, "用户名不能为空")
 		return
@@ -183,11 +189,12 @@ func (h *handlers) adminUsersUpdate(w http.ResponseWriter, r *http.Request) {
 		curEmail         sql.NullString
 		curEmailVerified int64
 		curIsSuper       int64
+		curIsRoot        int64
 	)
 	err := h.db.QueryRowContext(r.Context(),
-		`SELECT email, COALESCE(email_verified,0), COALESCE(is_super,0)
+		`SELECT email, COALESCE(email_verified,0), COALESCE(is_super,0), COALESCE(is_root,0)
 		   FROM admin_users WHERE username = ? LIMIT 1`, username).
-		Scan(&curEmail, &curEmailVerified, &curIsSuper)
+		Scan(&curEmail, &curEmailVerified, &curIsSuper, &curIsRoot)
 	if errors.Is(err, sql.ErrNoRows) {
 		writeError(w, http.StatusNotFound, "账号不存在")
 		return
@@ -198,7 +205,31 @@ func (h *handlers) adminUsersUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	claims, _ := claimsFrom(r)
-	isRootAccount := username == strings.TrimSpace(h.cfg.SuperAdmin)
+	isRootAccount := curIsRoot == 1
+
+	// 用户名修改：只允许非 root 账号；root 名由 PP_SUPER_ADMIN 固定。
+	newUsername := ""
+	renameRequested := false
+	if req.NewUsername != nil {
+		newUsername = strings.TrimSpace(*req.NewUsername)
+		if newUsername != "" && newUsername != username {
+			renameRequested = true
+		}
+	}
+	if renameRequested {
+		if !usernameRe.MatchString(newUsername) {
+			writeError(w, http.StatusBadRequest, "新用户名仅支持字母、数字与 . _ @ -（最长 64 位）")
+			return
+		}
+		var dup int64
+		if err := h.db.QueryRowContext(r.Context(),
+			`SELECT COUNT(*) FROM admin_users WHERE username = ? AND username <> ?`,
+			newUsername, username).Scan(&dup); err == nil && dup > 0 {
+			writeError(w, http.StatusConflict, "用户名已存在")
+			return
+		}
+	}
+
 	if req.IsSuper != nil {
 		if isRootAccount && !*req.IsSuper {
 			writeError(w, http.StatusBadRequest, "root 管理员不可降级为普通管理员")
@@ -311,14 +342,61 @@ func (h *handlers) adminUsersUpdate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	resultUsername := username
+	reloginRequired := false
+	if renameRequested {
+		if err := h.renameAdminUser(r.Context(), username, newUsername, isRootAccount); err != nil {
+			if strings.Contains(strings.ToLower(err.Error()), "duplicate") {
+				writeError(w, http.StatusConflict, "用户名已存在")
+			} else {
+				writeError(w, http.StatusInternalServerError, "修改用户名失败")
+			}
+			return
+		}
+		resultUsername = newUsername
+		reloginRequired = claims.Sub == username
+	}
 	resultIsSuper := isRootAccount || curIsSuper == 1
 	if req.IsSuper != nil {
 		resultIsSuper = *req.IsSuper || isRootAccount
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"success": true, "username": username,
-		"is_super": resultIsSuper, "is_root": isRootAccount,
+		"success": true, "username": resultUsername, "old_username": username,
+		"relogin_required": reloginRequired,
+		"is_super":         resultIsSuper, "is_root": isRootAccount,
 	})
+}
+
+// renameAdminUser 在单个事务内同步管理员用户名到所有 username 关联表。
+// root 账号改名时强制保留 is_root=1、is_super=1。
+func (h *handlers) renameAdminUser(ctx context.Context, oldUsername, newUsername string, root bool) error {
+	tx, err := h.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if root {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE admin_users SET username = ?, is_root = 1, is_super = 1 WHERE username = ?`,
+			newUsername, oldUsername); err != nil {
+			return err
+		}
+	} else {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE admin_users SET username = ? WHERE username = ?`, newUsername, oldUsername); err != nil {
+			return err
+		}
+	}
+	for _, q := range []string{
+		`UPDATE admin_oidc_identities SET username = ? WHERE username = ?`,
+		`UPDATE admin_email_codes SET username = ? WHERE username = ?`,
+		`UPDATE mfa_backup_codes SET username = ? WHERE username = ?`,
+	} {
+		if _, err := tx.ExecContext(ctx, q, newUsername, oldUsername); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 func (h *handlers) adminUsersDelete(w http.ResponseWriter, r *http.Request) {
@@ -333,7 +411,7 @@ func (h *handlers) adminUsersDelete(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "用户名不能为空")
 		return
 	}
-	if username == strings.TrimSpace(h.cfg.SuperAdmin) {
+	if h.isRootAdmin(r.Context(), username) {
 		writeError(w, http.StatusBadRequest, "root 管理员不可删除")
 		return
 	}

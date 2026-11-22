@@ -8,12 +8,12 @@ package main
 
 import (
 	"context"
-	"strings"
 	"errors"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -24,7 +24,7 @@ import (
 )
 
 // version 由构建脚本注入：-ldflags "-X main.version=v1.0.0"
-var version = "V1.5.32"
+var version = "V1.5.33"
 
 func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -61,6 +61,7 @@ func run(log *slog.Logger) error {
 
 	api.Version = version
 	api.EnsureAdminPassword(ctx, pool, cfg, log)
+	api.EnsureRootAdmin(ctx, pool, cfg.SuperAdmin, log)
 	// 密钥持久化：JWT / Agent 密钥写入 app_settings，重启后登录态与 Agent 令牌不失效
 	// 中-03：数据库存储用面板外部 KEK 加密（enc:v2:）；KEK 文件放在数据库之外。
 	secretBox := api.LoadSecretBox(cfg.SecretKeyFile, log)
@@ -178,29 +179,3 @@ func agentOnlyHandler(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
