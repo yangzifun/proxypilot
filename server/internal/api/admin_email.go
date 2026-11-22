@@ -25,7 +25,7 @@ func (h *handlers) adminEmailSelfOrSuper(r *http.Request, username string) bool 
 	if !ok {
 		return false
 	}
-	if c.Sub == h.cfg.SuperAdmin {
+	if h.isSuperAdmin(r.Context(), c.Sub) {
 		return true
 	}
 	return c.Sub == username
@@ -111,7 +111,7 @@ func (h *handlers) adminEmailVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	direct := false
-	if c, ok := claimsFrom(r); ok && c.Sub == h.cfg.SuperAdmin && c.Sub != username {
+	if c, ok := claimsFrom(r); ok && h.isSuperAdmin(r.Context(), c.Sub) && c.Sub != username {
 		direct = true
 	}
 	if !direct && len(code) != 6 {

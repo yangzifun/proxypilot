@@ -52,7 +52,7 @@ const PERMISSIONS = [
 ];
 
 function SystemAccounts() {
-  const { user, superAdmin } = useAuth();
+  const { user, superAdmin, isSuper } = useAuth();
   const users = useAsync(() => api('admin/users'), []);
 
   const userRows = (users.data && users.data.users) || [];
@@ -83,14 +83,14 @@ function SystemAccounts() {
       </Row>
 
       <div style={{ marginTop: 16 }}>
-        <UsersTab rows={userRows} state={users} self={user} superAdmin={superAdmin} />
+        <UsersTab rows={userRows} state={users} self={user} superAdmin={superAdmin} isSuper={isSuper} />
       </div>
     </div>
   );
 }
 
 /* ---------------- 用户 ---------------- */
-function UsersTab({ rows, state, self, superAdmin }) {
+function UsersTab({ rows, state, self, superAdmin, isSuper }) {
   const { message } = AntdApp.useApp();
   const [compose, setCompose] = useState(null); // { mode, row }
   const [pwFor, setPwFor] = useState(null);
@@ -100,12 +100,27 @@ function UsersTab({ rows, state, self, superAdmin }) {
   const [pwForm] = Form.useForm();
   const [emailForm] = Form.useForm();
 
+  // 角色行判定（兼容后端 0/1 与 bool）：root 行不可降级
+  const isRootRow = (row) => !!(row && (row.is_root === true || row.is_root === 1 || row.is_root === '1' || String(row.username || '') === superAdmin));
+  const isSuperRow = (row) => !!(row && (row.is_super === true || row.is_super === 1 || row.is_super === '1'));
+
+  const toggleSuper = async (row) => {
+    const next = !isSuperRow(row);
+    try {
+      await api('admin/users', { method: 'PUT', body: { username: row.username, is_super: next } });
+      message.success(next ? `已将 ${row.username} 设为超级管理员` : `已取消 ${row.username} 的超级管理员`);
+      state.reload().catch(() => {});
+    } catch (e) {
+      message.error(e.message || '角色修改失败');
+    }
+  };
+
   const create = async () => {
     const values = await readForm(form);
     if (!values) return;
     setSaving(true);
     try {
-      await api('admin/users', { method: 'POST', body: values });
+      await api('admin/users', { method: 'POST', body: { ...values, is_super: !!values.is_super } });
       message.success('账号已创建');
       setCompose(null);
       form.resetFields();
@@ -159,15 +174,23 @@ function UsersTab({ rows, state, self, superAdmin }) {
       title: '用户名',
       dataIndex: 'username',
       width: 180,
-      render: (v) => (
-        <Space size={6}>
-          <b>{v}</b>
-          {v === self ? <Tag color="geekblue" style={{ marginInlineEnd: 0 }}>当前账号</Tag> : null}
-          {v === (window.__PP_BOOT__ && window.__PP_BOOT__.superAdmin) ? (
-            <Tag color="gold" style={{ marginInlineEnd: 0 }}>超管</Tag>
-          ) : null}
-        </Space>
-      ),
+      render: (v, row) => {
+        const root = isRootRow(row);
+        const sup = isSuperRow(row);
+        return (
+          <Space size={6}>
+            <b>{v}</b>
+            {v === self ? <Tag color="geekblue" style={{ marginInlineEnd: 0 }}>当前账号</Tag> : null}
+            {root ? (
+              <Tag color="red" style={{ marginInlineEnd: 0 }}>超管（根）</Tag>
+            ) : sup ? (
+              <Tag color="gold" style={{ marginInlineEnd: 0 }}>超管</Tag>
+            ) : (
+              <Tag style={{ marginInlineEnd: 0 }}>管理员</Tag>
+            )}
+          </Space>
+        );
+      },
     },
     {
       title: '绑定邮箱',
@@ -209,9 +232,22 @@ function UsersTab({ rows, state, self, superAdmin }) {
     },
     {
       title: '操作',
-      width: 170,
+      width: 280,
       render: (_, row) => (
         <Space size={0}>
+          {isSuper ? (
+            isRootRow(row) ? (
+              <Tooltip title="PP_SUPER_ADMIN 根超管不可降级">
+                <Button type="text" size="small" disabled>
+                  根超管
+                </Button>
+              </Tooltip>
+            ) : (
+              <Button type="text" size="small" onClick={() => toggleSuper(row)}>
+                {isSuperRow(row) ? '取消超管' : '设为超管'}
+              </Button>
+            )
+          ) : null}
           <IconAction
             title="重置密码"
             icon={<LockOutlined />}
@@ -300,6 +336,14 @@ function UsersTab({ rows, state, self, superAdmin }) {
           </Form.Item>
           <Form.Item name="email" label="邮箱（可选）" rules={[{ type: 'email', message: '邮箱格式不正确' }]}>
             <Input placeholder="用于邮箱验证码登录" />
+          </Form.Item>
+          <Form.Item
+            name="is_super"
+            label="设为超级管理员"
+            valuePropName="checked"
+            extra="超级管理员可管理其它管理员账号；创建后也可在列表中调整"
+          >
+            <Switch />
           </Form.Item>
         </Form>
       </Modal>

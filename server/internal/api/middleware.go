@@ -44,7 +44,7 @@ func (h *handlers) authed(opts authOpts, next http.HandlerFunc) http.HandlerFunc
 			writeError(w, http.StatusForbidden, "用户端登录令牌不能访问管理接口")
 			return
 		}
-		if opts.superOnly && claims.Sub != h.cfg.SuperAdmin {
+		if opts.superOnly && !h.isSuperAdmin(r.Context(), claims.Sub) {
 			writeError(w, http.StatusForbidden, "仅超级管理员可访问")
 			return
 		}

@@ -4,7 +4,7 @@
  *  · 登录方式：账号密码(+TOTP) / 邮箱验证码(+TOTP) / OIDC 单点
  * ================================================================= */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { authBus, clearSession, getToken, publicApi, setToken } from './api';
+import { api, authBus, clearSession, getToken, publicApi, setToken } from './api';
 
 const AuthCtx = createContext(null);
 
@@ -33,6 +33,34 @@ export function decodeJwt(token) {
 export function AuthProvider({ children }) {
   const [token, setTokenState] = useState(() => getToken());
   const [unauthorizedTick, setUnauthorizedTick] = useState(0);
+  // 当前管理员身份以 GET /api/auth/me 为准（{username,is_super,is_root}），用于多超管权限
+  const [me, setMe] = useState(null);
+  const [meLoaded, setMeLoaded] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    if (!token) {
+      setMe(null);
+      setMeLoaded(false);
+      return undefined;
+    }
+    setMeLoaded(false);
+    api('auth/me')
+      .then((r) => {
+        if (!alive) return;
+        setMe(r && typeof r === 'object' ? r : {});
+        setMeLoaded(true);
+      })
+      .catch(() => {
+        if (!alive) return;
+        // token 无效/接口失败：不授予超管权限
+        setMe(null);
+        setMeLoaded(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [token]);
 
   useEffect(() => {
     const onUnauthorized = () => {
@@ -55,7 +83,12 @@ export function AuthProvider({ children }) {
   const payload = useMemo(() => (token ? decodeJwt(token) : null), [token]);
   const user = payload && payload.sub ? String(payload.sub) : '';
   const superAdmin = String(boot.superAdmin || 'admin');
-  const isSuper = !!user && user === superAdmin;
+  const meName = String((me && (me.username || me.user)) || '');
+  const isRoot = !!(me && (me.is_root || me.isRoot)) || (!meLoaded && !!user && user === superAdmin);
+  // 超管判定以 /api/auth/me 为准；加载中暂用 JWT 用户名回退（避免闪烁），token 无效时保持 false
+  const isSuper = meLoaded
+    ? (!!(me && (me.is_super || me.isSuper)) || (!!meName && meName === superAdmin) || !!(me && (me.is_root || me.isRoot)))
+    : (!!user && user === superAdmin);
 
   const applySession = useCallback((nextToken, ttlMs) => {
     setToken(nextToken, ttlMs || DAY_MS);
@@ -146,6 +179,8 @@ export function AuthProvider({ children }) {
     () => ({
       token,
       user,
+      me,
+      isRoot,
       superAdmin,
       isSuper,
       ready: true,
@@ -160,6 +195,8 @@ export function AuthProvider({ children }) {
     [
       token,
       user,
+      me,
+      isRoot,
       superAdmin,
       isSuper,
       unauthorizedTick,

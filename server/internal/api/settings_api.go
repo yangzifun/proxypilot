@@ -221,7 +221,7 @@ func (h *handlers) settingsAPI(w http.ResponseWriter, r *http.Request) {
 		// 安全敏感设置只允许超级管理员修改（审计 P2-14 提权链）。
 		// 只拦「真的改了」的键：设置页会整表单回传当前值，未修改不应报错。
 		claims, hasClaims := claimsFrom(r)
-		isSuper := hasClaims && h.cfg.SuperAdmin != "" && claims.Sub == h.cfg.SuperAdmin
+		isSuper := hasClaims && h.isSuperAdmin(ctx, claims.Sub)
 		if !isSuper {
 			for key, v := range changes {
 				if !isSuperOnlySetting(key) {

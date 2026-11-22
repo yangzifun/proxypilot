@@ -35,6 +35,7 @@ import { CopyText, ErrorBlock, IconAction, PageCard, StatCard, Toolbar } from '.
 import { fmtAgo, fmtBytes, fmtTime } from '../format';
 import { chartPalette } from '../theme';
 import TemplateEditor from './TemplateEditor';
+import TemplateListEditor from '../components/TemplateEditor/TemplateListEditor';
 
 /** 从模板 URL 解析存储桶 key（兼容旧数据：https://cdn/rule/configs/x.yaml → rule/configs/x.yaml） */
 function bucketKeyFromUrl(url) {
@@ -69,6 +70,8 @@ function TemplateList() {
   const [size, setSize] = useState(10);
   const [compose, setCompose] = useState(null);
   const [editor, setEditor] = useState(null); // 当前打开内容编辑器的模板行
+  const [listEditorOpen, setListEditorOpen] = useState(false);
+  const [listEditorKey, setListEditorKey] = useState('');
   const [saving, setSaving] = useState(false);
   const [form] = Form.useForm();
 
@@ -84,6 +87,23 @@ function TemplateList() {
 
   // 存储桶附件：rule/configs/ 下的 YAML 文件，作为「模板地址」下拉选项
   const attachments = useAsync(() => api('attachments', { query: { prefix: 'rule/configs/' } }), []);
+  // 模板列表下方的域名列表（rule/*.list）管理卡片
+  const ruleLists = useAsync(() => api('attachments', { query: { prefix: 'rule/' } }), []);
+  const ruleRows = useMemo(() => {
+    return ((ruleLists.data && ruleLists.data.files) || [])
+      .filter((f) => /\.list$/i.test(String((f && f.key) || '')))
+      .map((f) => ({
+        key: f.key,
+        name: f.name || String(f.key || '').split('/').pop(),
+        size: f.size,
+        cdn_url: f.cdn_url,
+        updated_at: f.updated_at,
+      }));
+  }, [ruleLists.data]);
+  const openListEditor = (key) => {
+    setListEditorKey(key || '');
+    setListEditorOpen(true);
+  };
   const fileOptions = useMemo(() => {
     const list = ((attachments.data && attachments.data.files) || [])
       .filter((f) => /\.(ya?ml)$/i.test(String((f && f.key) || '')))
@@ -318,6 +338,94 @@ function TemplateList() {
         </PageCard>
       </div>
 
+      <div style={{ marginTop: 16 }}>
+        <PageCard
+          title={<span className="pp-section-title">域名列表（rule/*.list）</span>}
+          extra={
+            <Space>
+              <span className="pp-muted" style={{ fontSize: 12 }}>共 {ruleRows.length} 个</span>
+              <Button
+                icon={<ReloadOutlined />}
+                onClick={() => ruleLists.reload().catch(() => {})}
+                loading={ruleLists.loading}
+              >
+                刷新
+              </Button>
+            </Space>
+          }
+          bodyStyle={{ padding: 0 }}
+        >
+          {ruleLists.error ? (
+            <div style={{ padding: 18 }}>
+              <ErrorBlock
+                error={ruleLists.error}
+                onRetry={() => ruleLists.reload().catch(() => {})}
+                title="域名列表读取失败（请检查 R2 存储桶配置）"
+              />
+            </div>
+          ) : (
+            <Table
+              className="pp-table"
+              rowKey="key"
+              size="medium"
+              loading={ruleLists.loading}
+              dataSource={ruleRows}
+              pagination={{ pageSize: 20, showTotal: (t) => `共 ${t} 个` }}
+              locale={{ emptyText: 'rule/ 下没有 .list 文件' }}
+              columns={[
+                {
+                  title: '文件',
+                  dataIndex: 'key',
+                  render: (v) => (
+                    <span className="pp-mono" style={{ color: '#334155' }}>
+                      <CloudOutlined style={{ color: '#94a3b8', marginRight: 8 }} />
+                      {v}
+                    </span>
+                  ),
+                },
+                {
+                  title: '大小',
+                  dataIndex: 'size',
+                  width: 110,
+                  align: 'right',
+                  render: (v) => fmtBytes(Number(v) || 0),
+                },
+                {
+                  title: 'CDN URL',
+                  dataIndex: 'cdn_url',
+                  render: (v) => {
+                    if (!v) return <span className="pp-muted">—</span>;
+                    return (
+                      <Space size={6}>
+                        <a href={v} target="_blank" rel="noreferrer" className="pp-mono" style={{ fontSize: 12 }}>
+                          <LinkOutlined /> 打开
+                        </a>
+                        <CopyText value={v} display={<span style={{ fontSize: 12 }}>复制</span>} tip="复制 CDN 地址" />
+                      </Space>
+                    );
+                  },
+                },
+                {
+                  title: '操作',
+                  width: 90,
+                  render: (_, row) => (
+                    <Button
+                      type="link"
+                      size="small"
+                      icon={<EditOutlined />}
+                      style={{ paddingInline: 4 }}
+                      onClick={() => openListEditor(row.key)}
+                    >
+                      编辑
+                    </Button>
+                  ),
+                },
+              ]}
+            />
+          )}
+        </PageCard>
+      </div>
+
       <Modal
         open={!!compose}
         title={compose && compose.mode === 'edit' ? '编辑模板' : '新建模板'}
@@ -358,6 +466,13 @@ function TemplateList() {
       </Modal>
 
       {/* 内容编辑器（全屏 Drawer）：解析分区表单 + 原始 YAML + 校验/预览/发布/版本 */}
+      <TemplateListEditor
+        open={listEditorOpen}
+        initialKey={listEditorKey}
+        onClose={() => setListEditorOpen(false)}
+        onSaved={() => ruleLists.reload().catch(() => {})}
+      />
+
       <TemplateEditor
         id={editor ? editor.id : undefined}
         open={!!editor}

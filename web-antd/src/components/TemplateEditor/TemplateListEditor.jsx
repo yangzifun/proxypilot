@@ -38,7 +38,7 @@ export function analyzeList(text) {
   return issues;
 }
 
-export default function TemplateListEditor({ open, onClose }) {
+export default function TemplateListEditor({ open, onClose, initialKey = '', onSaved }) {
   const { message } = AntdApp.useApp();
   const gutterRef = useRef(null);
   const taRef = useRef(null);
@@ -65,13 +65,18 @@ export default function TemplateListEditor({ open, onClose }) {
           cdn_url: f.cdn_url,
         }));
       setFiles(list);
-      setSelected((prev) => (prev && list.some((x) => x.key === prev) ? prev : (list[0] ? list[0].key : '')));
+      const want = String(initialKey || '').trim();
+      setSelected((prev) => {
+        // 从列表页点击「编辑」时优先选中传入的 key；不存在则按需求选第一个。
+        if (want) return list.some((x) => x.key === want) ? want : (list[0] ? list[0].key : '');
+        return prev && list.some((x) => x.key === prev) ? prev : (list[0] ? list[0].key : '');
+      });
     } catch (e) {
       setListError(e);
     } finally {
       setListLoading(false);
     }
-  }, []);
+  }, [initialKey]);
 
   const loadFile = useCallback(async (key) => {
     if (!key) {
@@ -117,6 +122,7 @@ export default function TemplateListEditor({ open, onClose }) {
       });
       setSavedContent(content);
       setState((s) => ({ ...s, saving: false, meta: { ...(s.meta || {}), ...(res || {}) } }));
+      if (onSaved) onSaved();
       message.success('已保存到存储桶');
     } catch (e) {
       setState((s) => ({ ...s, saving: false, error: e }));

@@ -19,6 +19,8 @@ var usernameRe = regexp.MustCompile(`^[A-Za-z0-9._@-]{1,64}$`)
 type adminUserRow struct {
 	ID              int64  `json:"id"`
 	Username        string `json:"username"`
+	IsSuper         bool   `json:"is_super"`
+	IsRoot          bool   `json:"is_root"`
 	Email           any    `json:"email"`
 	EmailVerified   int64  `json:"email_verified"`
 	EmailVerifiedAt int64  `json:"email_verified_at"`
@@ -46,7 +48,7 @@ func (h *handlers) adminUsersDispatch(w http.ResponseWriter, r *http.Request) {
 func (h *handlers) adminUsersList(w http.ResponseWriter, r *http.Request) {
 	claims, _ := claimsFrom(r)
 	rows, err := h.db.QueryContext(r.Context(),
-		`SELECT id, username, email, COALESCE(email_verified,0), COALESCE(email_verified_at,0),
+		`SELECT id, username, COALESCE(is_super,0), email, COALESCE(email_verified,0), COALESCE(email_verified_at,0),
 		        COALESCE(mfa_enabled,0), COALESCE(last_mfa_login,0), COALESCE(created_at,0)
 		   FROM admin_users ORDER BY id ASC`)
 	if err != nil {
@@ -61,19 +63,26 @@ func (h *handlers) adminUsersList(w http.ResponseWriter, r *http.Request) {
 			u     adminUserRow
 			email sql.NullString
 		)
-		if rows.Scan(&u.ID, &u.Username, &email, &u.EmailVerified, &u.EmailVerifiedAt,
+		var isSuper int64
+		if rows.Scan(&u.ID, &u.Username, &isSuper, &email, &u.EmailVerified, &u.EmailVerifiedAt,
 			&u.MFAEnabled, &u.LastMFALogin, &u.CreatedAt) == nil {
 			if email.Valid {
 				u.Email = email.String
 			}
+			u.IsRoot = u.Username == strings.TrimSpace(h.cfg.SuperAdmin)
+			u.IsSuper = u.IsRoot || isSuper == 1
 			users = append(users, u)
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"users": users, "self": claims.Sub})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"users": users, "self": claims.Sub,
+		"self_is_super": h.isSuperAdmin(r.Context(), claims.Sub),
+	})
 }
 
 type adminUserRequest struct {
 	Username    string `json:"username"`
+	IsSuper     *bool  `json:"is_super"`
 	Password    string `json:"password"`
 	Email       string `json:"email"`
 	NewPassword string `json:"newPassword"`
@@ -138,14 +147,21 @@ func (h *handlers) adminUsersCreate(w http.ResponseWriter, r *http.Request) {
 	if email != "" {
 		emailArg = email
 	}
+	isSuper := int64(0)
+	if req.IsSuper != nil && *req.IsSuper {
+		isSuper = 1
+	}
+	if username == strings.TrimSpace(h.cfg.SuperAdmin) {
+		isSuper = 1
+	}
 	if _, err := h.db.ExecContext(r.Context(),
-		`INSERT INTO admin_users (username, password_hash, mfa_enabled, email, email_verified, email_verified_at, created_at)
-		 VALUES (?, ?, 0, ?, 0, 0, ?)`, username, hash, emailArg, nowMillis()); err != nil {
+		`INSERT INTO admin_users (username, password_hash, mfa_enabled, email, email_verified, email_verified_at, created_at, is_super)
+		 VALUES (?, ?, 0, ?, 0, 0, ?, ?)`, username, hash, emailArg, nowMillis(), isSuper); err != nil {
 		h.log.Error("创建管理员失败", "err", err)
 		writeError(w, http.StatusInternalServerError, "创建失败")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"success": true, "username": username})
+	writeJSON(w, http.StatusOK, map[string]any{"success": true, "username": username, "is_super": isSuper == 1})
 }
 
 func (h *handlers) adminUsersUpdate(w http.ResponseWriter, r *http.Request) {
@@ -166,10 +182,12 @@ func (h *handlers) adminUsersUpdate(w http.ResponseWriter, r *http.Request) {
 	var (
 		curEmail         sql.NullString
 		curEmailVerified int64
+		curIsSuper       int64
 	)
 	err := h.db.QueryRowContext(r.Context(),
-		`SELECT email, COALESCE(email_verified,0) FROM admin_users WHERE username = ? LIMIT 1`, username).
-		Scan(&curEmail, &curEmailVerified)
+		`SELECT email, COALESCE(email_verified,0), COALESCE(is_super,0)
+		   FROM admin_users WHERE username = ? LIMIT 1`, username).
+		Scan(&curEmail, &curEmailVerified, &curIsSuper)
 	if errors.Is(err, sql.ErrNoRows) {
 		writeError(w, http.StatusNotFound, "账号不存在")
 		return
@@ -177,6 +195,19 @@ func (h *handlers) adminUsersUpdate(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "查询失败")
 		return
+	}
+
+	claims, _ := claimsFrom(r)
+	isRootAccount := username == strings.TrimSpace(h.cfg.SuperAdmin)
+	if req.IsSuper != nil {
+		if isRootAccount && !*req.IsSuper {
+			writeError(w, http.StatusBadRequest, "root 管理员不可降级为普通管理员")
+			return
+		}
+		if username == claims.Sub && !*req.IsSuper && (isRootAccount || curIsSuper == 1) {
+			writeError(w, http.StatusBadRequest, "不能取消当前登录账号自己的超级管理员权限")
+			return
+		}
 	}
 
 	// 只有请求显式带了 email 字段才处理（空字符串表示解绑）
@@ -269,7 +300,25 @@ func (h *handlers) adminUsersUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"success": true})
+	if req.IsSuper != nil {
+		flag := int64(0)
+		if *req.IsSuper {
+			flag = 1
+		}
+		if _, err := h.db.ExecContext(r.Context(),
+			`UPDATE admin_users SET is_super = ? WHERE username = ?`, flag, username); err != nil {
+			writeError(w, http.StatusInternalServerError, "更新超管权限失败")
+			return
+		}
+	}
+	resultIsSuper := isRootAccount || curIsSuper == 1
+	if req.IsSuper != nil {
+		resultIsSuper = *req.IsSuper || isRootAccount
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success": true, "username": username,
+		"is_super": resultIsSuper, "is_root": isRootAccount,
+	})
 }
 
 func (h *handlers) adminUsersDelete(w http.ResponseWriter, r *http.Request) {
@@ -282,6 +331,10 @@ func (h *handlers) adminUsersDelete(w http.ResponseWriter, r *http.Request) {
 	claims, _ := claimsFrom(r)
 	if username == "" {
 		writeError(w, http.StatusBadRequest, "用户名不能为空")
+		return
+	}
+	if username == strings.TrimSpace(h.cfg.SuperAdmin) {
+		writeError(w, http.StatusBadRequest, "root 管理员不可删除")
 		return
 	}
 	if username == claims.Sub {
