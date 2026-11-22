@@ -50,6 +50,13 @@ const (
 	settingR2SecretKey    = "r2_secret_access_key"
 	settingR2Endpoint     = "r2_endpoint"
 	settingCDNBaseURL     = "cdn_base_url"
+	// DoH（面板内置 DNS over HTTPS）
+	settingDoHEnabled      = "doh_enabled"
+	settingDoHDomain       = "doh_domain"
+	settingDoHUpstreams    = "doh_upstreams"
+	settingDoHMaxQPS       = "doh_max_qps"
+	settingDoHLogQueries   = "doh_log_queries"
+	settingDoHMaxBodyBytes = "doh_max_body_bytes"
 	settingOIDCIssuer     = "oidc_issuer"
 	settingOIDCClientID   = "oidc_client_id"
 	settingOIDCSecret     = "oidc_client_secret"
@@ -118,6 +125,14 @@ var settingDefs = []settingDef{
 	{Key: "batch_retention_days"},
 	{Key: "agent_task_retention_days"},
 	{Key: "metrics_retention_days"},
+
+	// DoH
+	{Key: settingDoHEnabled, Bool: true},
+	{Key: settingDoHDomain},
+	{Key: settingDoHUpstreams},
+	{Key: settingDoHMaxQPS},
+	{Key: settingDoHLogQueries, Bool: true},
+	{Key: settingDoHMaxBodyBytes},
 }
 
 // loadAppSettings 读取 app_settings（30 秒缓存）。
@@ -508,6 +523,18 @@ func (h *handlers) settingDefault(key string) string {
 		return strings.TrimSpace(h.cfg.R2Endpoint)
 	case settingCDNBaseURL:
 		return strings.TrimSpace(h.cfg.CDNBaseURL)
+	case settingDoHEnabled:
+		return "1"
+	case settingDoHDomain:
+		return defaultDoHDomain
+	case settingDoHUpstreams:
+		return strings.Join(defaultDoHUpstreams, ",")
+	case settingDoHMaxQPS:
+		return "20"
+	case settingDoHLogQueries:
+		return "0"
+	case settingDoHMaxBodyBytes:
+		return "4096"
 	case settingSMTPPass:
 		return h.cfg.SMTPPass
 	case settingOIDCSecret:

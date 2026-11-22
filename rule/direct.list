@@ -1,10 +1,7 @@
 # 直连补充列表
 
 # 域名后缀匹配
-DOMAIN-SUFFIX,baidu.com
 DOMAIN-SUFFIX,yangzihome.space
-DOMAIN-SUFFIX,alicdn.com
-DOMAIN-SUFFIX,aliyuncs.com
-DOMAIN-SUFFIX,sunglowsec.com
-DOMAIN-SUFFIX,pandajun.xyz
+DOMAIN-SUFFIX,yangzifun.org
+DOMAIN-SUFFIX,yzfn.top
 

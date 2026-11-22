@@ -18,6 +18,7 @@ import MobileAccount from './MobileAccount';
 import MtprotoCard from './MtprotoCard';
 import MobileTraffic from './MobileTraffic';
 import MasqueCard from './MasqueCard';
+import DohCard from './DohCard';
 import { portalApi } from './portalApi';
 import { shortUuid } from '../format';
 
@@ -177,6 +178,9 @@ export default function PortalMobileApp({ email, onLogout }) {
                 <MtprotoCard mobile />
                 <div style={{ marginTop: 18 }}>
                   <MasqueCard mobile />
+                </div>
+                <div style={{ marginTop: 18 }}>
+                  <DohCard mobile />
                 </div>
               </div>
             </>

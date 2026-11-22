@@ -22,6 +22,7 @@ import Guide from './Guide';
 import EmailChange from './EmailChange';
 import MtprotoCard from './MtprotoCard';
 import MasqueCard from './MasqueCard';
+import DohCard from './DohCard';
 import PortalNav from './PortalNav';
 import TrafficStrip from './TrafficStrip';
 import useIsPc from './useIsPc';
@@ -537,6 +538,7 @@ export default function PortalUuid({ uuid, onBack, onUnauthorized, embedded = fa
                   <div>
                     <MtprotoCard />
                     <MasqueCard />
+                    <DohCard />
                   </div>
                 ),
               },

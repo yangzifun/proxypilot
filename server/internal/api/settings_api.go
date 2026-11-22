@@ -120,6 +120,40 @@ func (h *handlers) settingsAPI(w http.ResponseWriter, r *http.Request) {
 						return
 					}
 				}
+			case settingDoHDomain:
+				d, err := normalizeDoHDomain(v)
+				if err != nil {
+					writeError(w, http.StatusBadRequest, "doh_domain "+err.Error())
+					return
+				}
+				v = d
+			case settingDoHUpstreams:
+				if v != "" {
+					if _, err := parseDoHUpstreams(v); err != nil {
+						writeError(w, http.StatusBadRequest, "doh_upstreams "+err.Error())
+						return
+					}
+				}
+			case settingDoHMaxQPS:
+				n := intOrJS(v, -1, -1, 1<<30)
+				if n < 0 {
+					writeError(w, http.StatusBadRequest, "doh_max_qps 必须是整数")
+					return
+				}
+				if v != "" && (n < 1 || n > 10000) {
+					writeError(w, http.StatusBadRequest, "doh_max_qps 超出范围（1-10000）")
+					return
+				}
+			case settingDoHMaxBodyBytes:
+				n := intOrJS(v, -1, -1, 1<<30)
+				if n < 0 {
+					writeError(w, http.StatusBadRequest, "doh_max_body_bytes 必须是整数")
+					return
+				}
+				if v != "" && (n < 512 || n > 65535) {
+					writeError(w, http.StatusBadRequest, "doh_max_body_bytes 超出范围（512-65535）")
+					return
+				}
 			case settingSMTPAddr:
 				if v != "" && !strings.Contains(v, ":") {
 					writeError(w, http.StatusBadRequest, "smtp_addr 需要 host:port")

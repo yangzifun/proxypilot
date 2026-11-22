@@ -49,10 +49,40 @@ export default function Settings({ embedded = false }) {
   const settings = useAsync(() => api('settings'), []);
   const vpnSettings = useAsync(() => api('admin/vpn/settings'), []);
   const mailGuide = useAsync(() => api('admin/mail/guide'), []);
+  const dohConfig = useAsync(() => api('doh/config'), []);
   const [saving, setSaving] = useState(false);
   const [checking, setChecking] = useState(false);
   const [checkResult, setCheckResult] = useState(null);
   const [hasSecret, setHasSecret] = useState({});
+  // DoH 服务配置（独立接口 /api/doh/config，不进入通用设置表单）
+  const [doh, setDoh] = useState({
+    doh_enabled: false,
+    doh_domain: 'proxypilot.yangzifun.org',
+    doh_upstreams: '',
+    doh_max_qps: 30,
+    doh_log_queries: false,
+  });
+  const [dohSaving, setDohSaving] = useState(false);
+
+  useEffect(() => {
+    const raw = dohConfig.data;
+    if (!raw) return;
+    const cfg = raw.data || raw;
+    const patch = {};
+    const enabled = cfg.doh_enabled !== undefined ? cfg.doh_enabled : cfg.enabled;
+    if (enabled !== undefined) patch.doh_enabled = !!enabled;
+    const domain = cfg.doh_domain !== undefined ? cfg.doh_domain : cfg.domain;
+    if (domain !== undefined) patch.doh_domain = String(domain || '');
+    const upstreams = cfg.doh_upstreams !== undefined ? cfg.doh_upstreams : cfg.upstreams;
+    if (upstreams !== undefined) {
+      patch.doh_upstreams = Array.isArray(upstreams) ? upstreams.join('\n') : String(upstreams || '');
+    }
+    const qps = cfg.doh_max_qps !== undefined ? cfg.doh_max_qps : cfg.max_qps;
+    if (qps !== undefined) patch.doh_max_qps = Number(qps) || 30;
+    const logQueries = cfg.doh_log_queries !== undefined ? cfg.doh_log_queries : cfg.log_queries;
+    if (logQueries !== undefined) patch.doh_log_queries = !!logQueries;
+    setDoh((prev) => ({ ...prev, ...patch }));
+  }, [dohConfig.data]);
 
   useEffect(() => {
     const d = settings.data;
@@ -149,6 +179,31 @@ export default function Settings({ embedded = false }) {
       message.error(e.message || '保存失败');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const saveDoh = async () => {
+    setDohSaving(true);
+    try {
+      const upstreams = String(doh.doh_upstreams || '')
+        .split(/[\n,，]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      await api('doh/config', {
+        method: 'PUT',
+        body: {
+          doh_enabled: !!doh.doh_enabled,
+          doh_domain: String(doh.doh_domain || '').trim(),
+          doh_upstreams: upstreams,
+          doh_max_qps: Number(doh.doh_max_qps) || 30,
+          doh_log_queries: !!doh.doh_log_queries,
+        },
+      });
+      message.success('DoH 配置已保存');
+    } catch (e) {
+      message.error(e.message || 'DoH 配置保存失败');
+    } finally {
+      setDohSaving(false);
     }
   };
 
@@ -545,6 +600,102 @@ export default function Settings({ embedded = false }) {
                   <Typography.Text type="secondary">
                     <ApiOutlined /> 保存后写入 app_settings，30 秒内全节点生效。
                   </Typography.Text>
+                </>
+              ),
+            },
+            {
+              key: 'doh',
+              label: (
+                <span>
+                  <GlobalOutlined /> DoH 服务
+                </span>
+              ),
+              children: (
+                <>
+                  <Alert
+                    type="info"
+                    showIcon
+                    style={{ marginBottom: 16 }}
+                    message="DoH（DNS over HTTPS）由面板服务器统一提供"
+                    description="每位用户有独立链接 /dns-query/<uuid>；需先把 DoH 域名解析到面板服务器，并确保 HTTPS 证书覆盖该域名。"
+                  />
+                  {dohConfig.error ? (
+                    <Alert
+                      type="error"
+                      showIcon
+                      style={{ marginBottom: 16 }}
+                      message={dohConfig.error.message || '读取 DoH 配置失败'}
+                      action={
+                        <Button size="small" onClick={() => dohConfig.reload && dohConfig.reload()}>
+                          重试
+                        </Button>
+                      }
+                    />
+                  ) : null}
+                  <div style={{ maxWidth: 620 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+                      <Switch
+                        checked={!!doh.doh_enabled}
+                        onChange={(v) => setDoh((d) => ({ ...d, doh_enabled: v }))}
+                        checkedChildren="开"
+                        unCheckedChildren="关"
+                      />
+                      <span>启用 DoH 服务</span>
+                    </div>
+                    <div style={{ marginBottom: 14 }}>
+                      <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>DoH 域名</div>
+                      <Input
+                        value={doh.doh_domain}
+                        onChange={(e) => setDoh((d) => ({ ...d, doh_domain: e.target.value }))}
+                        placeholder="proxypilot.yangzifun.org"
+                        allowClear
+                      />
+                    </div>
+                    <div style={{ marginBottom: 14 }}>
+                      <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>
+                        上游 DoH 列表（每行或逗号分隔）
+                      </div>
+                      <Input.TextArea
+                        rows={3}
+                        value={doh.doh_upstreams}
+                        onChange={(e) => setDoh((d) => ({ ...d, doh_upstreams: e.target.value }))}
+                        placeholder={'https://1.1.1.1/dns-query\nhttps://dns.google/dns-query'}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 14 }}>
+                      <div>
+                        <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>每用户 QPS 上限</div>
+                        <InputNumber
+                          min={1}
+                          max={1000}
+                          style={{ width: 140 }}
+                          value={doh.doh_max_qps}
+                          onChange={(v) => setDoh((d) => ({ ...d, doh_max_qps: Number(v) || 30 }))}
+                        />
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 4 }}>
+                        <Switch
+                          checked={!!doh.doh_log_queries}
+                          onChange={(v) => setDoh((d) => ({ ...d, doh_log_queries: v }))}
+                          size="small"
+                        />
+                        <span style={{ fontSize: 13 }}>记录查询日志（默认关闭）</span>
+                      </div>
+                    </div>
+                    <div style={{ marginBottom: 16 }}>
+                      <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>
+                        示例 URL（实际每位用户的 uuid 不同）
+                      </div>
+                      <Typography.Text code style={{ fontSize: 12 }}>
+                        {`https://${String(doh.doh_domain || 'proxypilot.yangzifun.org')
+                          .replace(/^https?:\/\//, '')
+                          .replace(/\/+$/, '')}/dns-query/<uuid>`}
+                      </Typography.Text>
+                    </div>
+                    <Button type="primary" icon={<SaveOutlined />} loading={dohSaving} onClick={saveDoh}>
+                      保存 DoH 配置
+                    </Button>
+                  </div>
                 </>
               ),
             },

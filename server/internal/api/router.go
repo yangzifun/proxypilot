@@ -114,6 +114,7 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("DELETE /api/portal/vpn/devices/{id}", h.vpnPortalDeviceItem)
 	mux.HandleFunc("POST /api/portal/vpn/connect", h.vpnPortalConnect)
 	mux.HandleFunc("POST /api/portal/vpn/disconnect", h.vpnPortalDisconnect)
+	mux.HandleFunc("GET /api/portal/doh", h.portalDoH)
 	mux.HandleFunc("GET /api/portal/mtproto", h.portalMtproto)
 	mux.HandleFunc("POST /api/portal/mtproto/{id}/deliver", h.portalMtprotoDeliver)
 	mux.HandleFunc("POST /api/portal/mtproto/{id}/send-mail", h.portalMtprotoSendMail)
@@ -121,6 +122,10 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("POST /api/portal/email/verify", h.portalEmailVerify)
 
 	// 订阅输出
+	// 面板内置 DoH（公开，UUID 鉴权；路径固定 /dns-query/<uuid>）
+	mux.HandleFunc("GET /dns-query/{uuid}", h.dohQuery)
+	mux.HandleFunc("POST /dns-query/{uuid}", h.dohQuery)
+
 	mux.HandleFunc("GET /sub/{uuid}", h.rawSubscription)
 	mux.HandleFunc("GET /batch-configs/{uuid}", h.batchSubscription)
 	mux.HandleFunc("GET /clash-config", h.clashConfig)
@@ -372,6 +377,11 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /api/stats/users/growth", h.authed(authOpts{}, h.statsUsersGrowth))
 	mux.HandleFunc("GET /api/stats/traffic/rate", h.authed(authOpts{}, h.statsTrafficRate))
 	mux.HandleFunc("GET /api/stats/traffic/series", h.authed(authOpts{}, h.statsTrafficSeries))
+	// DoH 配置与统计（普通管理员）
+	mux.HandleFunc("GET /api/doh/config", h.authed(authOpts{}, h.dohConfigGet))
+	mux.HandleFunc("PUT /api/doh/config", h.authed(authOpts{}, h.dohConfigPut))
+	mux.HandleFunc("GET /api/doh/stats", h.authed(authOpts{}, h.dohStats))
+
 	mux.HandleFunc("GET /api/stats/traffic/users", h.authed(authOpts{}, h.statsTrafficUsers))
 	mux.HandleFunc("GET /api/traffic/nodes", h.authed(authOpts{}, h.trafficNodes))
 	mux.HandleFunc("GET /api/stats/traffic/users/{uuid}", h.authed(authOpts{}, h.statsTrafficUserDetail))
