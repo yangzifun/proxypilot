@@ -36,12 +36,14 @@ import {
   MenuUnfoldOutlined,
   ReloadOutlined,
   SaveOutlined,
+  UnorderedListOutlined,
   WarningOutlined,
 } from '@ant-design/icons';
 import { api } from '../api';
 import { fmtBytes, fmtTime } from '../format';
 import { CopyText } from '../components';
 import { ObjectForm, ProxyGroupsTable, RuleProvidersTable, RulesTable } from '../components/TemplateEditor/sections';
+import TemplateListEditor from '../components/TemplateEditor/TemplateListEditor';
 
 const SECTIONS = [
   { key: 'base', label: '基础设置' },
@@ -205,6 +207,7 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
   const [preview, setPreview] = useState(null);
   const [versions, setVersions] = useState({ open: false, list: [], loading: false, view: null });
   const [saveError, setSaveError] = useState(false);
+  const [listEditorOpen, setListEditorOpen] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [vw, setVw] = useState(() => (typeof window !== 'undefined' ? window.innerWidth || 1440 : 1440));
   const narrow = vw < 1200;
@@ -747,6 +750,9 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
               <Button size="small" icon={<HistoryOutlined />} onClick={openVersions}>
                 版本历史
               </Button>
+              <Button size="small" icon={<UnorderedListOutlined />} onClick={() => setListEditorOpen(true)}>
+                List 编辑
+              </Button>
               <Button size="small" icon={<ReloadOutlined />} onClick={load} loading={loading}>
                 重新加载
               </Button>
@@ -908,6 +914,7 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
       </div>
 
       {/* 预览弹窗 */}
+      <TemplateListEditor open={listEditorOpen} onClose={() => setListEditorOpen(false)} />
       <Modal
         open={!!preview}
         title="预览：注入 proxies 后的订阅 YAML"
