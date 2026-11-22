@@ -4,7 +4,7 @@
  *  设计要点：
  *  · 前端不解析、不重写 YAML：所有结构化编辑都调用后端 patch-section 生成新 YAML；
  *  · 分区：基础设置 / DNS / TUN / 策略组 / 规则 / 规则集 / 原始 YAML；
- *  · 流程：加载内容（直接读取存储桶/模板 URL）→ 编辑 → 校验 → 保存到存储桶（立即生效）→（可选）发布版本快照；
+ *  · 流程：加载内容（直接读取存储桶/模板 URL）→ 编辑 → 校验 → 保存到存储桶（立即生效）；发布版本快照仅保留兼容；
  *  · 版本历史可查看/回滚（回滚写入内容，保存到存储桶后生效）；
  *  · 原始 YAML 采用「带行号的等宽 TextArea」（未引入 CodeMirror，避免新增依赖与构建体积，见报告）。
  * ================================================================= */
@@ -28,7 +28,6 @@ import {
 import {
   CheckCircleOutlined,
   CloseOutlined,
-  CloudUploadOutlined,
   DownloadOutlined,
   EyeOutlined,
   HistoryOutlined,
@@ -193,7 +192,6 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
   const [validation, setValidation] = useState(null);
   const [patchWarnings, setPatchWarnings] = useState([]);
   const [preview, setPreview] = useState(null);
-  const [publishOpen, setPublishOpen] = useState(false);
   const [versions, setVersions] = useState({ open: false, list: [], loading: false, view: null });
 
   const dirty = content !== savedContent;
@@ -207,12 +205,8 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
   const draftState = useMemo(() => {
     if (dirty) return { color: 'orange', text: '已修改（未保存）' };
     const ds = String((meta && (meta.draft_sha256 || meta.sha256)) || '');
-    const ps = String((meta && meta.published_sha256) || '');
     if (!ds) return { color: 'default', text: '未保存' };
-    if (ds && ps && ds !== ps) return { color: 'gold', text: '已保存到存储桶（版本快照未更新）' };
-    if (ds && ps && ds === ps) return { color: 'green', text: '已保存（与最新版本一致）' };
-    if (ds && !ps) return { color: 'blue', text: '已保存到存储桶' };
-    return { color: 'default', text: '未知状态' };
+    return { color: 'green', text: '已保存到存储桶' };
   }, [dirty, meta]);
 
   const summary = (parsed && parsed.summary) || {};
@@ -441,48 +435,6 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
       }, 800);
     } catch (e) {
       message.error('浏览器不支持下载，请复制内容');
-    }
-  };
-
-  /* ---------------- 发布 ---------------- */
-  const doPublish = async () => {
-    if (busy || !content) return;
-    if (external) {
-      message.warning('外部 URL 模板不支持在面板内发布');
-      return;
-    }
-    setBusy('publish');
-    try {
-      const v = await validateContent(content, true);
-      if (!v.ok) {
-        setPublishOpen(false);
-        message.error('校验未通过，不能发布；请先修正错误');
-        return;
-      }
-      const res = await api(`${base}/publish`, { method: 'POST', body: { content } });
-      const d = unwrap(res) || {};
-      setPublishOpen(false);
-      setSavedContent(content);
-      setMeta((m) => ({
-        ...(m || {}),
-        published_content: content,
-        published_sha256: String(d.sha256 || ''),
-        published_at: Date.now(),
-        content_version: Number(d.version || (m && m.content_version) || 0),
-      }));
-      const warns = Array.isArray(d.warnings) ? d.warnings : [];
-      if (warns.length) {
-        message.warning(`已发布 v${d.version || '?'}，但有 ${warns.length} 条警告：${warns.slice(0, 2).join('；')}`);
-      } else {
-        message.success(`已发布 v${d.version || '?'}${d.url ? '：' + d.url : ''}`);
-      }
-      setValidation(v);
-      if (onChanged) onChanged();
-    } catch (e) {
-      if (e && e.status === 403) message.error('需要超级管理员权限才能发布模板');
-      else message.error(e.message || '发布失败');
-    } finally {
-      setBusy('');
     }
   };
 
@@ -730,20 +682,8 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
               预览
             </Button>
             <Tooltip title="保存后直接写入存储桶并立即生效（无需发布）">
-              <Button size="small" icon={<SaveOutlined />} loading={busy === 'save'} onClick={saveDraft} disabled={!content || !dirty}>
+              <Button size="small" type="primary" icon={<SaveOutlined />} loading={busy === 'save'} onClick={saveDraft} disabled={!content || !dirty}>
                 保存到存储桶
-              </Button>
-            </Tooltip>
-            <Tooltip title={external ? '外部模板不能在面板内发布' : '发布仅生成版本快照（内容保存到存储桶后已生效）'}>
-              <Button
-                size="small"
-                type="primary"
-                icon={<CloudUploadOutlined />}
-                loading={busy === 'publish'}
-                disabled={!content || external}
-                onClick={() => setPublishOpen(true)}
-              >
-                发布
               </Button>
             </Tooltip>
             <Button size="small" icon={<HistoryOutlined />} onClick={openVersions}>
@@ -927,42 +867,7 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
           {(preview && preview.yaml) || (preview && preview.loading ? '生成中…' : '点击「生成预览」查看注入 proxies 后的完整 YAML')}
         </pre>
         <div className="pp-muted" style={{ fontSize: 12, marginTop: 8 }}>
-          仅预览，不写访问日志；不会修改模板内容。发布前建议用目标 UUID 预览确认注入结果。
-        </div>
-      </Modal>
-
-      {/* 发布确认 */}
-      <Modal
-        open={publishOpen}
-        title="发布版本快照"
-        width={600}
-        centered
-        destroyOnHidden
-        onCancel={() => setPublishOpen(false)}
-        onOk={doPublish}
-        okText="确认发布"
-        okButtonProps={{ danger: true }}
-        confirmLoading={busy === 'publish'}
-      >
-        <Alert
-          type="warning"
-          showIcon
-          style={{ marginBottom: 12 }}
-          message="内容已保存到存储桶并立即生效；发布仅生成版本快照"
-          description="所有引用该模板的 Clash / Mihomo 订阅已使用存储桶中的最新内容；发布会额外记录一个版本快照，便于历史回滚。"
-        />
-        <Descriptions column={1} size="small" bordered>
-          <Descriptions.Item label="模板">{(meta && meta.name) || `#${id}`}</Descriptions.Item>
-          <Descriptions.Item label="草稿 SHA">{String((meta && meta.draft_sha256) || '').slice(0, 16) || '—'}</Descriptions.Item>
-          <Descriptions.Item label="已发布 SHA">{String((meta && meta.published_sha256) || '').slice(0, 16) || '—'}</Descriptions.Item>
-          <Descriptions.Item label="内容大小">{fmtBytes(content.length)}</Descriptions.Item>
-          <Descriptions.Item label="解析摘要">{summaryTags.join(' · ') || '—'}</Descriptions.Item>
-        </Descriptions>
-        {validation && !validation.ok ? (
-          <Alert type="error" showIcon style={{ marginTop: 12 }} message={`当前内容校验未通过（${errorItems.length} 个错误），发布会被阻止`} />
-        ) : null}
-        <div className="pp-muted" style={{ fontSize: 12, marginTop: 10 }}>
-          发布前会自动再校验一次；失败则不会发布。
+          仅预览，不写访问日志；不会修改模板内容。保存前建议用目标 UUID 预览确认注入结果。
         </div>
       </Modal>
 
@@ -1027,7 +932,7 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
                     <Button size="small" type="link" onClick={() => viewVersion(row)}>查看</Button>
                     <Popconfirm
                       title="回滚到该版本？"
-                      description="回滚只会写入草稿，需要再发布才会影响订阅。"
+                      description="回滚后请点击「保存到存储桶」，才会重新写入并影响订阅。"
                       okText="回滚"
                       onConfirm={() => restoreVersion(row)}
                     >
