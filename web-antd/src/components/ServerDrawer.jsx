@@ -428,7 +428,7 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
       width={860}
       title={
         <span className="pp-section-title">
-          <CloudServerOutlined style={{ color: '#0ea5e9' }} />
+          <CloudServerOutlined style={{ color: 'var(--pp-chart-3)' }} />
           {d ? d.name : '服务器详情'}
         </span>
       }
@@ -508,7 +508,7 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
             </Col>
           </Row>
 
-          <div style={{ marginTop: 14, border: '1px solid #eef2f7', borderRadius: 12, padding: '10px 14px', background: '#fbfdff' }}>
+          <div style={{ marginTop: 14, border: '1px solid var(--pp-border)', borderRadius: 12, padding: '10px 14px', background: 'var(--pp-surface)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
               <b style={{ fontSize: 13 }}>流量限额</b>
               {traffic && traffic.state === 'exceeded' ? <Tag color="error">已超限</Tag> : null}
@@ -524,11 +524,11 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
               const limit = Number(l.limit_bytes) || 0;
               const left = Math.max(0, limit - used);
               return (
-                <div style={{ fontSize: 12.5, color: '#475569', lineHeight: 1.9 }}>
+                <div style={{ fontSize: 12.5, color: 'var(--pp-text)', lineHeight: 1.9 }}>
                   <div>本周期：↑ {fmtBytes(rx)} / ↓ {fmtBytes(tx)}，合计 {fmtBytes(used)}</div>
                   {enabled ? (
                     <div>
-                      上限 {fmtBytes(limit)}，剩余 <b style={{ color: left / limit <= 0.1 ? '#f43f5e' : left / limit <= 0.2 ? '#f59e0b' : '#16a34a' }}>{fmtBytes(left)}（{((left / limit) * 100).toFixed(1)}%）</b>
+                      上限 {fmtBytes(limit)}，剩余 <b style={{ color: left / limit <= 0.1 ? 'var(--pp-danger)' : left / limit <= 0.2 ? 'var(--pp-warning)' : 'var(--pp-success)' }}>{fmtBytes(left)}（{((left / limit) * 100).toFixed(1)}%）</b>
                     </div>
                   ) : (
                     <div className="pp-muted">未设置上限，点右上「设置」启用</div>
@@ -683,9 +683,9 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
                       alignItems: 'center',
                       gap: 10,
                       padding: '8px 12px',
-                      border: '1px solid #eef2f7',
+                      border: '1px solid var(--pp-border)',
                       borderRadius: 10,
-                      background: '#fbfcfe',
+                      background: 'var(--pp-surface)',
                       flexWrap: 'wrap',
                     }}
                   >
@@ -712,7 +712,7 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
                       </Tooltip>
                     ) : showLatest && svc.latestInfo && svc.latestInfo.error ? (
                       <Tooltip title={`最新版本获取失败：${svc.latestInfo.error}`}>
-                        <span style={{ fontSize: 12, color: '#d97706', borderBottom: '1px dotted #d97706' }}>
+                        <span style={{ fontSize: 12, color: 'var(--pp-warning)', borderBottom: '1px dotted var(--pp-warning)' }}>
                           · 最新查询失败
                         </span>
                       </Tooltip>
@@ -783,9 +783,9 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
                   alignItems: 'center',
                   gap: 10,
                   padding: '8px 12px',
-                  border: '1px solid #eef2f7',
+                  border: '1px solid var(--pp-border)',
                   borderRadius: 10,
-                  background: '#fbfcfe',
+                  background: 'var(--pp-surface)',
                 }}
               >
                 <i className={`pp-dot ${sshGuardOn ? 'online' : 'warn'}`} />
@@ -845,7 +845,7 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
             items={[
               {
                 key: 'raw',
-                label: <span style={{ fontSize: 13, color: '#64748b' }}>原始指标（网络 / 连接 / 进程 / 磁盘 IO）</span>,
+                label: <span style={{ fontSize: 13, color: 'var(--pp-text)' }}>原始指标（网络 / 连接 / 进程 / 磁盘 IO）</span>,
                 children: (
                   <JsonView
                     value={{
@@ -903,7 +903,7 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
                 </div>
                 <JsonView value={String((install && install.command) || '')} maxHeight={260} />
                 {install && install.note ? (
-                  <div style={{ marginTop: 10, fontSize: 12, color: '#94a3b8', lineHeight: 1.7 }}>{install.note}</div>
+                  <div style={{ marginTop: 10, fontSize: 12, color: 'var(--pp-text)', lineHeight: 1.7 }}>{install.note}</div>
                 ) : null}
               </>
             )}
@@ -983,7 +983,7 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
           即将删除 <b>{d ? d.name : ''}</b>，以下内容会<b>一并解绑或删除</b>：
         </p>
         {delBindings === null ? (
-          <div style={{ padding: '8px 0', color: '#888' }}>正在检查绑定…</div>
+          <div style={{ padding: '8px 0', color: 'var(--pp-text)' }}>正在检查绑定…</div>
         ) : delBindings.error ? (
           <Alert type="error" showIcon message={delBindings.error} />
         ) : (
@@ -995,14 +995,14 @@ export default function ServerDrawer({ serverId, onClose, onChanged }) {
             {(delBindings.vpn_nodes || []).length > 0 ? (
               <ul style={{ margin: '0 0 8px 18px', padding: 0 }}>
                 {delBindings.vpn_nodes.map((n) => (
-                  <li key={n.id}>{n.name} <span style={{ color: '#999' }}>{n.detail}</span></li>
+                  <li key={n.id}>{n.name} <span style={{ color: 'var(--pp-text)' }}>{n.detail}</span></li>
                 ))}
               </ul>
             ) : null}
             <div style={{ marginBottom: 6 }}>sing-box 节点：{(delBindings.singbox || []).length} 个</div>
             <div style={{ marginBottom: 6 }}>下发配置：{delBindings.node_configs || 0} 条</div>
             <div style={{ marginBottom: 6 }}>VPN 会话记录：{delBindings.vpn_sessions || 0} 条</div>
-            <p style={{ color: '#cf1322', marginBottom: 0 }}>
+            <p style={{ color: 'var(--pp-danger)', marginBottom: 0 }}>
               删除后这些 VPN 节点的用户授权会一起消失，且无法恢复。
             </p>
           </div>
@@ -1273,7 +1273,7 @@ function TasksModal({ row, onClose }) {
             title: '结果',
             ellipsis: true,
             render: (_, r) => (
-              <span className="pp-mono" style={{ color: '#64748b', fontSize: 12 }}>
+              <span className="pp-mono" style={{ color: 'var(--pp-text)', fontSize: 12 }}>
                 {String(r.result || r.message || r.error || r.output || '—').slice(0, 120)}
               </span>
             ),

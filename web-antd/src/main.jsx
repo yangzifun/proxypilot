@@ -1,11 +1,10 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { ConfigProvider, App as AntdApp } from 'antd';
-import zhCNraw from 'antd/locale/zh_CN';
+import { App as AntdApp } from 'antd';
 import dayjs from 'dayjs';
 import 'dayjs/locale/zh-cn';
 
-import { themeConfig } from './theme';
+import { ThemeProvider } from './theme';
 import { AuthProvider } from './auth';
 import App from './App';
 
@@ -20,12 +19,6 @@ import PortalApp from './portal/PortalApp';
 import './styles.css';
 
 dayjs.locale('zh-cn');
-
-/**
- * antd 的 locale 在 CJS→ESM 打包后可能多包一层 default（此时 locale.Modal 为空，
- * Modal 的取消/确定按钮会退回英文 OK/Cancel）。这里兼容两种形态。
- */
-const zhCN = zhCNraw && zhCNraw.default && zhCNraw.default.Modal ? zhCNraw.default : zhCNraw;
 
 /**
  * 版本兜底：服务端会在 <meta name="pp-version"> 与 #pp-boot 数据块里注入真实版本。
@@ -82,7 +75,7 @@ const IS_PORTAL =
   (window.__PP_BOOT__ && window.__PP_BOOT__.mode === 'portal') || /^\/(me\/?)?$/.test(window.location.pathname);
 
 createRoot(document.getElementById('root')).render(
-  <ConfigProvider locale={zhCN} theme={themeConfig} button={{ autoInsertSpace: false }}>
+  <ThemeProvider>
     <AntdApp>
       {IS_PORTAL ? (
         <PortalApp />
@@ -92,5 +85,5 @@ createRoot(document.getElementById('root')).render(
         </AuthProvider>
       )}
     </AntdApp>
-  </ConfigProvider>
+  </ThemeProvider>
 );

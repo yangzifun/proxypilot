@@ -164,7 +164,7 @@ export default function JobCenter() {
                 />
             )
         },
-        { title: '失败', dataIndex: 'failed', width: 58, render: (v) => (Number(v) ? <b style={{ color: '#e11d48' }}>{v}</b> : 0) },
+        { title: '失败', dataIndex: 'failed', width: 58, render: (v) => (Number(v) ? <b style={{ color: 'var(--pp-danger)' }}>{v}</b> : 0) },
         { title: '时间', dataIndex: 'created_at', width: 92, render: (v) => <span className="pp-muted">{fmtAgo(v)}</span> },
         {
             title: '操作', width: 130,
@@ -233,7 +233,7 @@ export default function JobCenter() {
                 destroyOnClose
             >
                 {detail && detail.job ? (
-                    <div style={{ marginBottom: 18, padding: 12, border: '1px solid #eef2f7', borderRadius: 12, background: '#fbfcff' }}>
+                    <div style={{ marginBottom: 18, padding: 12, border: '1px solid var(--pp-border-soft)', borderRadius: 12, background: 'var(--pp-surface-muted)' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                             <b>#{detail.job.id} · {detail.job.title}</b>
                             <Tag color={(STATUS[detail.job.status] || [])[0]}>{(STATUS[detail.job.status] || [])[1] || detail.job.status}</Tag>

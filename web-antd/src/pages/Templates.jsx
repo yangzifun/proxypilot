@@ -276,7 +276,7 @@ function TemplateList() {
       width: 176,
       render: (v) => (
         <Tooltip title={v ? `${fmtAgo(v)}（${fmtTime(v)}）` : '—'}>
-          <span className="pp-nowrap" style={{ color: '#475569', fontVariantNumeric: 'tabular-nums' }}>
+          <span className="pp-nowrap" style={{ color: 'var(--pp-text)', fontVariantNumeric: 'tabular-nums' }}>
             {v ? fmtTime(v) : '—'}
           </span>
         </Tooltip>
@@ -370,7 +370,7 @@ function TemplateList() {
               left={
                 <Input
                   allowClear
-                  prefix={<SearchOutlined style={{ color: '#94a3b8' }} />}
+                  prefix={<SearchOutlined style={{ color: 'var(--pp-text)' }} />}
                   placeholder="搜索模板名称 / 存储桶文件 / 描述"
                   value={q}
                   onChange={(e) => {
@@ -461,8 +461,8 @@ function TemplateList() {
                   title: '文件',
                   dataIndex: 'key',
                   render: (v) => (
-                    <span className="pp-mono" style={{ color: '#334155' }}>
-                      <CloudOutlined style={{ color: '#94a3b8', marginRight: 8 }} />
+                    <span className="pp-mono" style={{ color: 'var(--pp-text)' }}>
+                      <CloudOutlined style={{ color: 'var(--pp-text)', marginRight: 8 }} />
                       {v}
                     </span>
                   ),
@@ -675,7 +675,7 @@ function BucketBrowser() {
               onChange={(e) => setPrefix(e.target.value)}
               style={{ width: 240 }}
               onPressEnter={() => load()}
-              prefix={<SearchOutlined style={{ color: '#94a3b8' }} />}
+              prefix={<SearchOutlined style={{ color: 'var(--pp-text)' }} />}
             />
             <Button icon={<ReloadOutlined />} onClick={load} loading={state.loading}>
               读取
@@ -709,8 +709,8 @@ function BucketBrowser() {
                 title: '文件',
                 dataIndex: 'key',
                 render: (v) => (
-                  <span className="pp-mono" style={{ color: '#334155' }}>
-                    <CloudOutlined style={{ color: '#94a3b8', marginRight: 8 }} />
+                  <span className="pp-mono" style={{ color: 'var(--pp-text)' }}>
+                    <CloudOutlined style={{ color: 'var(--pp-text)', marginRight: 8 }} />
                     {v}
                   </span>
                 ),
@@ -749,7 +749,7 @@ function BucketBrowser() {
         onOk={save}
       >
         {editing && editing.loading ? (
-          <div style={{ padding: 26, textAlign: 'center', color: '#94a3b8' }}>读取中…</div>
+          <div style={{ padding: 26, textAlign: 'center', color: 'var(--pp-text)' }}>读取中…</div>
         ) : (
           <Input.TextArea
             className="pp-mono"
@@ -757,10 +757,10 @@ function BucketBrowser() {
             onChange={(e) => setEditing((s) => ({ ...s, content: e.target.value }))}
             autoSize={{ minRows: 16, maxRows: 24 }}
             spellCheck={false}
-            style={{ fontSize: 12.5, lineHeight: 1.7 }}
+            style={{ fontSize: 12.5, lineHeight: 1.7, background: 'var(--pp-code-bg)', color: 'var(--pp-code-text)' }}
           />
         )}
-        <div style={{ marginTop: 8, fontSize: 12, color: '#94a3b8' }}>
+        <div style={{ marginTop: 8, fontSize: 12, color: 'var(--pp-text)' }}>
           单文件上限 512KB；改动会立即影响引用该文件的模板与规则集。
         </div>
       </Modal>
@@ -794,7 +794,7 @@ function BucketBrowser() {
         }}
       >
         <div style={{ marginTop: 12 }}>
-          <div style={{ fontSize: 13, color: '#64748b', marginBottom: 6 }}>
+          <div style={{ fontSize: 13, color: 'var(--pp-text)', marginBottom: 6 }}>
             文件路径（需在 {state.root || '允许'} 前缀下）
           </div>
           <Input
@@ -803,7 +803,7 @@ function BucketBrowser() {
             onChange={(e) => setCreating((s) => ({ ...s, key: e.target.value }))}
             placeholder="rule/clash/new.yaml"
           />
-          <div style={{ fontSize: 13, color: '#64748b', margin: '14px 0 6px' }}>初始内容</div>
+          <div style={{ fontSize: 13, color: 'var(--pp-text)', margin: '14px 0 6px' }}>初始内容</div>
           <Input.TextArea
             className="pp-mono"
             rows={10}
@@ -811,7 +811,7 @@ function BucketBrowser() {
             onChange={(e) => setCreating((s) => ({ ...s, content: e.target.value }))}
             spellCheck={false}
             placeholder={'# 可留空，创建后再编辑\n'}
-            style={{ fontSize: 12.5, lineHeight: 1.7 }}
+            style={{ fontSize: 12.5, lineHeight: 1.7, background: 'var(--pp-code-bg)', color: 'var(--pp-code-text)' }}
           />
         </div>
       </Modal>

@@ -82,7 +82,7 @@ export default function GroupDetail({ uuid, onClose }) {
       width={920}
       title={
         <span className="pp-section-title">
-          <ApartmentOutlined style={{ color: '#4f46e5' }} />
+          <ApartmentOutlined style={{ color: 'var(--pp-primary)' }} />
           用户详情
         </span>
       }
@@ -267,7 +267,7 @@ function Configs({ uuid, onChanged }) {
       title: '一键清理该 UUID 的全部配置？',
       content: (
         <div style={{ fontSize: 13, lineHeight: 1.8 }}>
-          将删除该用户的全部节点配置，并<b style={{ color: '#f43f5e' }}>解除所有节点对该 UUID 的授权</b>，然后按剩余配置重新下发。
+          将删除该用户的全部节点配置，并<b style={{ color: 'var(--pp-danger)' }}>解除所有节点对该 UUID 的授权</b>，然后按剩余配置重新下发。
         </div>
       ),
       okText: '确认清理',
@@ -292,7 +292,7 @@ function Configs({ uuid, onChanged }) {
       title: '配置',
       dataIndex: 'config_data',
       ellipsis: true,
-      render: (v) => <span className="pp-mono" style={{ color: '#475569' }}>{String(v || '').slice(0, 88)}</span>,
+      render: (v) => <span className="pp-mono" style={{ color: 'var(--pp-text)' }}>{String(v || '').slice(0, 88)}</span>,
     },
     { title: '备注', dataIndex: 'remark', width: 110, ellipsis: true, render: (v) => v || <span className="pp-muted">—</span> },
     { title: '更新时间', dataIndex: 'updated_at', width: 116, render: (v) => <span className="pp-muted">{fmtAgo(v)}</span> },
@@ -878,7 +878,7 @@ function SubSources({ uuid }) {
               { pattern: /^https?:\/\//i, message: '需以 http:// 或 https:// 开头' },
             ]}
           >
-            <Input placeholder="https://example.com/sub?token=xxx" prefix={<ApiOutlined style={{ color: '#94a3b8' }} />} />
+            <Input placeholder="https://example.com/sub?token=xxx" prefix={<ApiOutlined style={{ color: 'var(--pp-text)' }} />} />
           </Form.Item>
           <Form.Item name="remark" label="备注">
             <Input placeholder="来源说明，可为空" maxLength={100} />

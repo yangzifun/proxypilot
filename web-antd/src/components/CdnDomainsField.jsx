@@ -184,13 +184,13 @@ export function cdnSummary(src) {
 
 // CDN 品牌色（用于列表标签）；未知名称使用中性色。
 export const CDN_BRAND_COLORS = {
-  Cloudflare: '#F38020',
-  CF: '#F38020',
-  ESA: '#FF6A00',
-  EO: '#0052D9',
-  EdgeOne: '#0052D9',
-  CloudFront: '#FF9900',
-  Fastly: '#FF282D',
+  Cloudflare: 'var(--pp-chart-8)',
+  CF: 'var(--pp-chart-8)',
+  ESA: 'var(--pp-chart-8)',
+  EO: 'var(--pp-chart-7)',
+  EdgeOne: 'var(--pp-chart-7)',
+  CloudFront: 'var(--pp-chart-8)',
+  Fastly: 'var(--pp-chart-5)',
 };
 
 /** 旧名称/别名统一成展示名（不修改存储值）。 */
@@ -208,14 +208,14 @@ export function cdnDisplayName(name, domain) {
 export function cdnTagItems(src) {
   return normalizeCdnEntries(src).map((e) => {
     const label = cdnDisplayName(e.name, e.domain);
-    const color = CDN_BRAND_COLORS[e.name] || CDN_BRAND_COLORS[label] || '#64748b';
+    const color = CDN_BRAND_COLORS[e.name] || CDN_BRAND_COLORS[label] || 'var(--pp-text-secondary)';
     return {
       key: e.domain,
       label,
       domain: e.domain,
       name: e.name,
       enabled: e.enabled,
-      color: e.enabled ? color : '#94a3b8',
+      color: e.enabled ? color : 'var(--pp-text-tertiary)',
       tooltip: `${label} · ${e.domain} · ${e.enabled ? '启用' : '已停用'}`,
     };
   });
@@ -261,7 +261,7 @@ export default function CdnDomainsField({
 
   return (
     <div style={{ width: '100%' }}>
-      <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+      <div style={{ fontSize: 12, color: 'var(--pp-text-secondary)', marginBottom: 6, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
         <span>{label}（每个启用的 CDN 生成一条订阅链接，可同时启用多个；停用后不生成链接）</span>
         <span className="pp-muted">{list.length}/{CDN_MAX}</span>
       </div>
@@ -278,7 +278,7 @@ export default function CdnDomainsField({
         {(fields, { add, remove }, { errors }) => (
           <>
             {fields.length ? (
-              <div style={{ display: 'flex', gap: 8, fontSize: 11.5, color: '#94a3b8', padding: '0 2px 4px' }}>
+              <div style={{ display: 'flex', gap: 8, fontSize: 11.5, color: 'var(--pp-text-tertiary)', padding: '0 2px 4px' }}>
                 <span style={{ width: 110 }}>名称（Cloudflare/ESA/EO）</span>
                 <span style={{ width: 64, textAlign: 'center' }}>启用</span>
                 <span style={{ flex: 1 }}>域名</span>
@@ -368,7 +368,7 @@ export default function CdnDomainsField({
               );
             })}
             {fields.length > 0 && enabledCount === 0 ? (
-              <div style={{ fontSize: 12, color: '#f59e0b', margin: '2px 0 6px' }}>
+              <div style={{ fontSize: 12, color: 'var(--pp-warning)', margin: '2px 0 6px' }}>
                 所有 CDN 已停用，不会生成 CDN 链接
               </div>
             ) : null}
@@ -385,7 +385,7 @@ export default function CdnDomainsField({
           </>
         )}
       </Form.List>
-      <div style={{ fontSize: 11.5, color: '#94a3b8', lineHeight: 1.7, marginTop: 4 }}>
+      <div style={{ fontSize: 11.5, color: 'var(--pp-text-tertiary)', lineHeight: 1.7, marginTop: 4 }}>
         名称从下拉选择（Cloudflare/EO/ESA/CloudFront 等，不可手填）用于后台识别和节点命名；域名需手动填写，并在对应 CDN/Tunnel 侧配置回源到本节点；最多 8 条；
         停用的 CDN 不生成订阅链接，可同时启用多个。
       </div>

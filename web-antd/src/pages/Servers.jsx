@@ -294,7 +294,7 @@ export default function Servers({ embedded = false }) {
       width: 210,
       render: (v, row) => (
         <div>
-          <div style={{ fontWeight: 600, color: '#0f172a' }}>
+          <div style={{ fontWeight: 600, color: 'var(--pp-text)' }}>
             {v}
             {row.link_mode === 'local' ? <Tag color="purple" style={{ marginLeft: 6 }}>本地</Tag> : null}
           </div>
@@ -333,17 +333,17 @@ export default function Servers({ embedded = false }) {
         return (
           <div>
             {v4 ? (
-              <div className="pp-mono" style={{ color: '#334155', fontSize: 12 }}>
+              <div className="pp-mono" style={{ color: 'var(--pp-text)', fontSize: 12 }}>
                 {v4}
               </div>
             ) : null}
             {v6 ? (
-              <div className="pp-mono" style={{ color: '#64748b', fontSize: 11.5 }}>
+              <div className="pp-mono" style={{ color: 'var(--pp-text)', fontSize: 11.5 }}>
                 {v6}
               </div>
             ) : null}
             {!v4 && !v6 ? (
-              <div className="pp-mono" style={{ color: '#334155' }}>
+              <div className="pp-mono" style={{ color: 'var(--pp-text)' }}>
                 {row.host || '—'}
               </div>
             ) : null}
@@ -551,7 +551,7 @@ export default function Servers({ embedded = false }) {
                 <Space wrap>
                   <Input
                     allowClear
-                    prefix={<SearchOutlined style={{ color: '#94a3b8' }} />}
+                    prefix={<SearchOutlined style={{ color: 'var(--pp-text)' }} />}
                     placeholder="搜索名称 / IP / 标签"
                     value={q}
                     onChange={(e) => setQ(e.target.value)}
@@ -677,7 +677,7 @@ export default function Servers({ embedded = false }) {
             </div>
             <JsonView value={String((result && result.command) || '')} maxHeight={260} />
             {result && result.note ? (
-              <div style={{ marginTop: 10, fontSize: 12, color: '#94a3b8', lineHeight: 1.7 }}>{result.note}</div>
+              <div style={{ marginTop: 10, fontSize: 12, color: 'var(--pp-text)', lineHeight: 1.7 }}>{result.note}</div>
             ) : null}
           </>
         )}
@@ -864,7 +864,7 @@ function TasksModal({ row, onClose }) {
             title: '结果',
             ellipsis: true,
             render: (_, r) => (
-              <span className="pp-mono" style={{ color: '#64748b', fontSize: 12 }}>
+              <span className="pp-mono" style={{ color: 'var(--pp-text)', fontSize: 12 }}>
                 {String(r.result || r.message || r.error || r.output || '—').slice(0, 120)}
               </span>
             ),

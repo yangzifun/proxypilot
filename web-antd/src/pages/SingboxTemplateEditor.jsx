@@ -173,8 +173,8 @@ function InboundEditor({ raw, index, last, mutate }) {
     <div
       style={{
         padding: '10px 12px',
-        borderBottom: last ? 'none' : '1px dashed #eef2f7',
-        background: index % 2 ? '#fbfcfe' : '#fff',
+        borderBottom: last ? 'none' : '1px dashed var(--pp-border)',
+        background: index % 2 ? 'var(--pp-surface)' : 'var(--pp-surface)',
       }}
     >
       {/* 协议说明 */}
@@ -576,7 +576,7 @@ export default function SingboxTemplateEditor({ state, onClose, onSaved }) {
 
   const sectionTitle = (text, extra) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '16px 0 8px' }}>
-      <span style={{ fontSize: 13, fontWeight: 600, color: '#334155' }}>{text}</span>
+      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--pp-text)' }}>{text}</span>
       <span className="pp-muted" style={{ fontSize: 12 }}>{extra}</span>
     </div>
   );
@@ -611,7 +611,7 @@ export default function SingboxTemplateEditor({ state, onClose, onSaved }) {
         </Row>
 
         <div style={{ margin: '18px 0 8px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 13, color: '#475569' }}>
+          <span style={{ fontSize: 13, color: 'var(--pp-text)' }}>
             服务端引擎
           </span>
           <Space size={18} style={{ marginLeft: 'auto' }}>
@@ -627,7 +627,7 @@ export default function SingboxTemplateEditor({ state, onClose, onSaved }) {
         {engSb ? (
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '14px 0 8px' }}>
-              <span style={{ fontSize: 13, color: '#475569' }}>
+              <span style={{ fontSize: 13, color: 'var(--pp-text)' }}>
                 sb.json<span className="pp-muted">（sing-box；保存时自动反推端口 / 协议开关 / WS 路径 / REALITY 参数 / 用户）</span>
               </span>
               <Space style={{ marginLeft: 'auto' }}>
@@ -646,7 +646,7 @@ export default function SingboxTemplateEditor({ state, onClose, onSaved }) {
               className="pp-mono"
               spellCheck={false}
               placeholder='{"log":{...},"inbounds":[...]}'
-              style={{ fontSize: 12.5, lineHeight: 1.7 }}
+              style={{ fontSize: 12.5, lineHeight: 1.7, background: 'var(--pp-code-bg)', color: 'var(--pp-code-text)' }}
             />
           </>
         ) : null}
@@ -684,7 +684,7 @@ export default function SingboxTemplateEditor({ state, onClose, onSaved }) {
         </Row>
 
         <div style={{ margin: '16px 0 8px', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#334155' }}>解析结果</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--pp-text)' }}>解析结果</span>
           <span className="pp-muted" style={{ fontSize: 12 }}>
             （按上面的 sb.json / MASQUE 实时解析；编辑会写回对应配置，用户凭据由节点授权注入）
           </span>
@@ -703,7 +703,7 @@ export default function SingboxTemplateEditor({ state, onClose, onSaved }) {
               style={{ padding: '14px 0' }}
             />
           ) : (
-            <div style={{ border: '1px solid #eef2f7', borderRadius: 10, overflow: 'hidden' }}>
+            <div style={{ border: '1px solid var(--pp-border)', borderRadius: 10, overflow: 'hidden' }}>
               {parsed.inbounds.map((r, i) => (
                 <InboundEditor
                   key={i}
@@ -722,10 +722,10 @@ export default function SingboxTemplateEditor({ state, onClose, onSaved }) {
           <div
             style={{
               marginTop: engSb ? 12 : 0,
-              border: '1px solid #eef2f7',
+              border: '1px solid var(--pp-border)',
               borderRadius: 10,
               padding: '10px 12px',
-              background: '#fbfcfe',
+              background: 'var(--pp-surface)',
             }}
           >
             <Row gutter={8} align="middle" wrap>
@@ -754,7 +754,7 @@ export default function SingboxTemplateEditor({ state, onClose, onSaved }) {
           </div>
         ) : null}
 
-        <div style={{ marginTop: 14, fontSize: 12, color: '#94a3b8', lineHeight: 1.8 }}>
+        <div style={{ marginTop: 14, fontSize: 12, color: 'var(--pp-text)', lineHeight: 1.8 }}>
           保存后由后端解析 JSON 生成模板参数；端口基线、WARP 凭据等已不再在界面上暴露 ——
           需要时直接在配置里写，或由模板默认值处理。
         </div>

@@ -5,11 +5,12 @@
  *    两端在 DO 里配对，输入输出按字节双向转发（真正的交互式 shell）
  *  · 没有 canvas 的环境（jsdom / 极简浏览器）退化成 <pre> 输出，不阻塞连接
  * ================================================================= */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Button, Modal, Space, Tag, Tooltip } from 'antd';
 import { ClearOutlined, CodeOutlined, ReloadOutlined } from '@ant-design/icons';
 import '@xterm/xterm/css/xterm.css';
 import { api, getToken } from '../api';
+import { useAppTheme } from '../theme';
 
 let xtermPromise = null;
 /** xterm 独立分包，只在首次打开远程终端时加载。 */
@@ -56,29 +57,7 @@ function serverStatusOf(srv) {
   return 'unknown';
 }
 
-const THEME = {
-  background: '#0b1220',
-  foreground: '#dbe4f0',
-  cursor: '#34d399',
-  cursorAccent: '#0b1220',
-  selectionBackground: 'rgba(99, 102, 241, 0.35)',
-  black: '#1e293b',
-  red: '#f87171',
-  green: '#34d399',
-  yellow: '#fbbf24',
-  blue: '#60a5fa',
-  magenta: '#c084fc',
-  cyan: '#22d3ee',
-  white: '#e2e8f0',
-  brightBlack: '#475569',
-  brightRed: '#fca5a5',
-  brightGreen: '#6ee7b7',
-  brightYellow: '#fde68a',
-  brightBlue: '#93c5fd',
-  brightMagenta: '#d8b4fe',
-  brightCyan: '#67e8f9',
-  brightWhite: '#f8fafc',
-};
+
 
 function stripAnsi(text) {
   return String(text || '')
@@ -102,6 +81,34 @@ function decodeUtf8(bytes) {
 }
 
 export default function RemoteShell({ server, open, onClose, local = false }) {
+  const { vars: themeVars, colors: themeColors, palette: themePalette } = useAppTheme();
+  // xterm 使用主题实际色值（canvas 无法解析 CSS var）；主题切换时同步刷新终端主题。
+  const termTheme = useMemo(() => {
+    const chart = (idx, fallback) => themePalette[idx] || fallback;
+    return {
+      background: themeVars['--pp-code-bg'] || themeColors.bg,
+      foreground: themeVars['--pp-code-text'] || themeColors.text,
+      cursor: themeColors.success,
+      cursorAccent: themeVars['--pp-code-bg'] || themeColors.bg,
+      selectionBackground: themeColors.primarySoft,
+      black: themeColors.text,
+      red: themeColors.danger,
+      green: themeColors.success,
+      yellow: themeColors.warning,
+      blue: themeColors.primary,
+      magenta: chart(5, themeColors.primary),
+      cyan: chart(1, themeColors.info),
+      white: themeColors.textSecondary,
+      brightBlack: themeColors.textSecondary,
+      brightRed: themeColors.danger,
+      brightGreen: themeColors.success,
+      brightYellow: themeColors.warning,
+      brightBlue: themeColors.primary,
+      brightMagenta: chart(5, themeColors.primary),
+      brightCyan: chart(1, themeColors.info),
+      brightWhite: themeColors.text,
+    };
+  }, [themeVars, themeColors, themePalette]);
   const [status, setStatus] = useState('checking');
   const [message, setMessage] = useState('');
   const [nonce, setNonce] = useState(0);
@@ -120,6 +127,12 @@ export default function RemoteShell({ server, open, onClose, local = false }) {
   const wsRef = useRef(null);
   const preRef = useRef(null);
   const aliveRef = useRef(true);
+
+  useEffect(() => {
+    if (termRef.current && termRef.current.options) {
+      termRef.current.options.theme = termTheme;
+    }
+  }, [termTheme]);
 
   useEffect(() => {
     aliveRef.current = true;
@@ -337,7 +350,7 @@ export default function RemoteShell({ server, open, onClose, local = false }) {
                   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
                   lineHeight: 1.2,
                   scrollback: 1500,
-                  theme: THEME,
+                  theme: termTheme,
                   convertEol: true,
                   smoothScrollDuration: 0,
                   fastScrollModifier: 'alt',
@@ -421,6 +434,7 @@ export default function RemoteShell({ server, open, onClose, local = false }) {
       destroyOnHidden
       width={900}
       className="pp-shell-modal"
+      styles={{ content: { background: 'var(--pp-bg-elevated)', color: 'var(--pp-text)' } }}
       title={
         <span className="pp-shell-title">
           <CodeOutlined /> 远程终端 · {(server && server.name) || ''}
@@ -480,8 +494,8 @@ export default function RemoteShell({ server, open, onClose, local = false }) {
         />
       ) : null}
 
-      <div className="pp-shell-body" onClick={() => termRef.current && termRef.current.focus()}>
-        <div className="pp-shell-term" ref={preRef} />
+      <div className="pp-shell-body" style={{ background: 'var(--pp-code-bg)', borderColor: 'var(--pp-border)' }} onClick={() => termRef.current && termRef.current.focus()}>
+        <div className="pp-shell-term" style={{ background: 'var(--pp-code-bg)', color: 'var(--pp-code-text)' }} ref={preRef} />
       </div>
 
       <div className="pp-shell-foot">

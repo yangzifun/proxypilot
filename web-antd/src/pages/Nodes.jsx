@@ -332,7 +332,7 @@ export default function Nodes({ initialTab, templatesOnly }) {
       width: 150,
       render: (_, row) => (
         <div>
-          <div style={{ color: '#334155' }}>{row.server_name || '—'}</div>
+          <div style={{ color: 'var(--pp-text)' }}>{row.server_name || '—'}</div>
           <div className="pp-mono pp-muted" style={{ fontSize: 12 }}>{row.server_host || ''}</div>
         </div>
       ),
@@ -361,9 +361,9 @@ export default function Nodes({ initialTab, templatesOnly }) {
                       style={{
                         marginInlineEnd: 0,
                         border: 'none',
-                        backgroundColor: t.enabled ? t.color : '#e2e8f0',
-                        borderColor: t.enabled ? t.color : '#e2e8f0',
-                        color: t.enabled ? '#fff' : '#64748b',
+                        backgroundColor: t.enabled ? t.color : 'var(--pp-border)',
+                        borderColor: t.enabled ? t.color : 'var(--pp-border)',
+                        color: t.enabled ? 'var(--pp-surface)' : 'var(--pp-text)',
                         fontWeight: 500,
                       }}
                     >
@@ -544,14 +544,14 @@ export default function Nodes({ initialTab, templatesOnly }) {
       >
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(430px, 1fr))', gap: 12 }}>
           {Object.entries(PROTO_DOCS).map(([key, d]) => (
-            <div key={key} style={{ border: '1px solid #e8edf5', borderRadius: 12, padding: '14px 16px', background: '#fbfcff' }}>
+            <div key={key} style={{ border: '1px solid var(--pp-border)', borderRadius: 12, padding: '14px 16px', background: 'var(--pp-surface)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <b style={{ fontSize: 14 }}>{d.label}</b>
                 <Tag color="purple" style={{ marginInlineEnd: 0 }}>{d.port}</Tag>
                 <span className="pp-muted" style={{ fontSize: 12 }}>{d.transport}</span>
               </div>
-              <div style={{ fontSize: 13, lineHeight: 1.8, color: '#475569', marginTop: 6 }}>{d.desc}</div>
-              <ul style={{ margin: '8px 0 0', paddingLeft: 18, fontSize: 12.5, lineHeight: 1.8, color: '#64748b' }}>
+              <div style={{ fontSize: 13, lineHeight: 1.8, color: 'var(--pp-text)', marginTop: 6 }}>{d.desc}</div>
+              <ul style={{ margin: '8px 0 0', paddingLeft: 18, fontSize: 12.5, lineHeight: 1.8, color: 'var(--pp-text)' }}>
                 {d.tips.map((tip) => <li key={tip}>{tip}</li>)}
               </ul>
             </div>
@@ -784,7 +784,7 @@ function NodeEditor({ state, servers, templates, onClose, onSaved }) {
           items={[
             {
               key: 'adv',
-              label: <span style={{ fontSize: 13, color: '#64748b' }}>高级：落盘路径与服务名</span>,
+              label: <span style={{ fontSize: 13, color: 'var(--pp-text)' }}>高级：落盘路径与服务名</span>,
               children: (
                 <>
                   <Row gutter={12}>

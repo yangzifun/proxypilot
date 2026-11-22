@@ -239,16 +239,16 @@ export default function Login() {
                 <img src={LOGO_URL} alt="ProxyPilot" />
               </div>
               <div>
-                <div style={{ color: '#fff', fontWeight: 650, fontSize: 15, lineHeight: 1.3 }}>ProxyPilot</div>
-                <div style={{ color: '#64748b', fontSize: 11.5 }}>All-in-One Proxy Tool</div>
+                <div style={{ color: 'var(--pp-bg-elevated)', fontWeight: 650, fontSize: 15, lineHeight: 1.3 }}>ProxyPilot</div>
+                <div style={{ color: 'var(--pp-text-tertiary)', fontSize: 11.5 }}>All-in-One Proxy Tool</div>
               </div>
             </div>
 
             <LoginAnimation />
           </div>
 
-          <div style={{ position: 'relative', zIndex: 1, color: '#475569', fontSize: 11.5 }}>
-            <Tag color="geekblue" style={{ background: 'rgba(99,102,241,.14)', border: 'none', color: '#a5b4fc' }}>
+          <div style={{ position: 'relative', zIndex: 1, color: 'var(--pp-text-tertiary)', fontSize: 11.5 }}>
+            <Tag color="geekblue" style={{ background: 'var(--pp-primary-soft)', border: 'none', color: 'var(--pp-primary)' }}>
               {boot.version || '—'} · Ant Design
             </Tag>
             <span style={{ marginLeft: 8 }}>后端由 Go 服务端与节点 Agent 提供</span>
@@ -312,7 +312,7 @@ export default function Login() {
             <Form layout="vertical" requiredMark={false} onFinish={submitPassword} size="large">
               <Form.Item name="username" rules={[{ required: true, message: '请输入用户名' }]}>
                 <Input
-                  prefix={<UserOutlined style={{ color: '#94a3b8' }} />}
+                  prefix={<UserOutlined style={{ color: 'var(--pp-text-tertiary)' }} />}
                   placeholder="用户名"
                   autoComplete="username"
                   autoFocus
@@ -320,7 +320,7 @@ export default function Login() {
               </Form.Item>
               <Form.Item name="password" rules={[{ required: true, message: '请输入密码' }]}>
                 <Input.Password
-                  prefix={<LockOutlined style={{ color: '#94a3b8' }} />}
+                  prefix={<LockOutlined style={{ color: 'var(--pp-text-tertiary)' }} />}
                   placeholder="密码"
                   autoComplete="current-password"
                 />
@@ -337,7 +337,7 @@ export default function Login() {
               {backupMode ? (
                 <Form.Item name="backup" rules={[{ required: true, message: '请输入备份码' }]}>
                   <Input
-                    prefix={<KeyOutlined style={{ color: '#94a3b8' }} />}
+                    prefix={<KeyOutlined style={{ color: 'var(--pp-text-tertiary)' }} />}
                     placeholder="备份码（如 A1B2C3D4）"
                     maxLength={20}
                     autoFocus
@@ -347,7 +347,7 @@ export default function Login() {
               ) : (
                 <Form.Item name="totp" rules={[{ required: true, message: '请输入 6 位动态码' }]}>
                   <Input
-                    prefix={<SafetyOutlined style={{ color: '#94a3b8' }} />}
+                    prefix={<SafetyOutlined style={{ color: 'var(--pp-text-tertiary)' }} />}
                     placeholder="6 位动态验证码"
                     maxLength={6}
                     autoFocus
@@ -387,7 +387,7 @@ export default function Login() {
                 ]}
               >
                 <Input
-                  prefix={<MailOutlined style={{ color: '#94a3b8' }} />}
+                  prefix={<MailOutlined style={{ color: 'var(--pp-text-tertiary)' }} />}
                   placeholder="已绑定的管理员邮箱"
                   autoComplete="email"
                 />
@@ -403,7 +403,7 @@ export default function Login() {
             <Form layout="vertical" requiredMark={false} onFinish={submitEmailVerify} size="large">
               <Form.Item name="code" rules={[{ required: true, message: '请输入 6 位验证码' }]}>
                 <Input
-                  prefix={<SafetyOutlined style={{ color: '#94a3b8' }} />}
+                  prefix={<SafetyOutlined style={{ color: 'var(--pp-text-tertiary)' }} />}
                   placeholder="6 位数字验证码"
                   maxLength={6}
                   autoFocus
@@ -450,7 +450,7 @@ export default function Login() {
 
           {OIDC.enabled ? (
             <>
-              <Divider plain style={{ color: '#cbd5e1', fontSize: 12, margin: '20px 0 14px' }}>
+              <Divider plain style={{ color: 'var(--pp-text-tertiary)', fontSize: 12, margin: '20px 0 14px' }}>
                 或
               </Divider>
               <Button block size="large" onClick={startOidc}>
@@ -460,7 +460,7 @@ export default function Login() {
           ) : null}
 
           {!EMAIL_ENABLED && !OIDC.enabled ? (
-            <div style={{ marginTop: 18, fontSize: 12, color: '#b6c2d1', lineHeight: 1.7 }}>
+            <div style={{ marginTop: 18, fontSize: 12, color: 'var(--pp-text-tertiary)', lineHeight: 1.7 }}>
               提示：邮箱验证码登录需要先在系统设置中配置邮件服务；
               单点登录需要 <code>OIDC_ISSUER</code> / <code>OIDC_CLIENT_ID</code>。
             </div>
@@ -485,11 +485,11 @@ export default function Login() {
           <div className="pp-turnstile" ref={turnstile.slotRef} />
         </div>
         {turnstile.status === 'error' ? (
-          <div style={{ fontSize: 12, color: '#f43f5e', textAlign: 'center', marginTop: 8 }}>
+          <div style={{ fontSize: 12, color: 'var(--pp-danger)', textAlign: 'center', marginTop: 8 }}>
             验证组件加载失败，<a onClick={() => turnstile.reload()}>点此重试</a>
           </div>
         ) : null}
-        <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', marginTop: 10 }}>
+        <div style={{ fontSize: 12, color: 'var(--pp-text-tertiary)', textAlign: 'center', marginTop: 10 }}>
           {pending && pending.kind === 'pwd'
             ? '完成验证后将自动登录'
             : '完成验证后将自动发送验证码'}

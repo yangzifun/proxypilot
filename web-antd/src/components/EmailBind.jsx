@@ -106,7 +106,7 @@ export default function EmailBindModal({ open, username, email, verified, canEdi
       footer={<Button onClick={onClose}>关闭</Button>}
       destroyOnHidden
     >
-      <div style={{ margin: '4px 0 16px', fontSize: 13, color: '#64748b' }}>
+      <div style={{ margin: '4px 0 16px', fontSize: 13, color: 'var(--pp-text-secondary)' }}>
         当前邮箱：
         {email ? <span className="pp-mono">{email}</span> : '未绑定'}
         {verified ? (
@@ -143,7 +143,7 @@ export default function EmailBindModal({ open, username, email, verified, canEdi
           value={mail}
           onChange={(e) => setMail(e.target.value)}
           placeholder="user@example.com"
-          prefix={<MailOutlined style={{ color: '#94a3b8' }} />}
+          prefix={<MailOutlined style={{ color: 'var(--pp-text-tertiary)' }} />}
           disabled={!canEdit || step === 2}
         />
         <Space wrap>
@@ -174,7 +174,7 @@ export default function EmailBindModal({ open, username, email, verified, canEdi
               value={code}
               onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
               placeholder="6 位数字验证码"
-              prefix={<SafetyOutlined style={{ color: '#94a3b8' }} />}
+              prefix={<SafetyOutlined style={{ color: 'var(--pp-text-tertiary)' }} />}
               maxLength={6}
               style={{ letterSpacing: 6, fontSize: 16 }}
             />
@@ -184,7 +184,7 @@ export default function EmailBindModal({ open, username, email, verified, canEdi
           </>
         ) : null}
 
-        <div style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.8 }}>
+        <div style={{ fontSize: 12, color: 'var(--pp-text-tertiary)', lineHeight: 1.8 }}>
           验证通过后，该邮箱才能用于「邮箱验证码登录」与 OIDC 账号关联；一个邮箱只能绑定一个账号。
         </div>
       </Space>

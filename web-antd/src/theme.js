@@ -1,7 +1,34 @@
 /* =================================================================
- *  Ant Design 主题：把品牌色 / 圆角 / 字体统一收口
- *  图表配色也从这里取，保证图和组件是同一套视觉语言
+ *  ProxyPilot 主题（兼容层）
+ *  · 旧 API 保持不变：brand / chartPalette / themeConfig / chartAxisColor /
+ *    chartGridColor / THEME_OPTIONS / THEME_TOKENS / getTheme / setTheme /
+ *    subscribeTheme / applyTheme
+ *  · 新主题基础设施：theme/tokens（语义变量 + AntD 动态主题）、theme/store、
+ *    theme/ThemeProvider（useAppTheme）
  * ================================================================= */
+import { buildAntdTheme } from './theme/tokens';
+
+export {
+  DEFAULT_THEME,
+  SEMANTIC_VARS,
+  SITE_THEMES,
+  SERVERS_THEMES,
+  SITE_THEME_NAMES,
+  SERVERS_THEME_NAMES,
+  THEME_OPTIONS,
+  SERVERS_THEME_OPTIONS,
+  THEME_TOKENS,
+  buildAntdTheme,
+  getThemeVars,
+  getServersThemeVars,
+  applyThemeVars,
+  isDarkTheme,
+} from './theme/tokens';
+
+export { getTheme, setTheme, applyTheme, subscribeTheme } from './theme/store';
+export { ThemeProvider, useAppTheme } from './theme/ThemeProvider';
+
+/* ---- 品牌色与图表配色（旧引用保持兼容） ---- */
 export const brand = {
   primary: '#4f46e5',
   primarySoft: '#eef2ff',
@@ -19,8 +46,6 @@ export const brand = {
   line: '#eef2f7',
 };
 
-/* 品牌 Logo：统一使用站点内置的圆角图标（与服务端 favicon / 客户端图标同款），
-   不再引用对象存储上的外链图片（外链失效会变成裂图，且风格不统一）。 */
 export const LOGO_URL = '/favicon.svg';
 
 export const chartPalette = [
@@ -34,168 +59,9 @@ export const chartPalette = [
   brand.orange,
 ];
 
-const fontFamily =
-  "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', " +
-  "'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif";
-
-export const themeConfig = {
-  token: {
-    colorPrimary: brand.primary,
-    colorInfo: brand.primary,
-    colorSuccess: brand.green,
-    colorWarning: brand.amber,
-    colorError: brand.rose,
-    colorLink: brand.primary,
-    colorBgLayout: '#f6f7fb',
-    colorTextBase: '#1e293b',
-    borderRadius: 8,
-    borderRadiusLG: 10,
-    controlHeight: 30,
-    fontFamily,
-    fontSize: 13,
-    wireframe: false,
-    boxShadowSecondary:
-      '0 6px 24px -8px rgba(15, 23, 42, 0.12), 0 2px 6px -2px rgba(15, 23, 42, 0.06)',
-  },
-  components: {
-    Layout: {
-      siderBg: brand.slate900,
-      triggerBg: '#151f33',
-      headerBg: '#ffffff',
-      bodyBg: '#f6f7fb',
-      headerHeight: 54,
-    },
-    Menu: {
-      darkItemBg: 'transparent',
-      darkSubMenuItemBg: 'transparent',
-      darkPopupBg: '#101a2c',
-      darkItemColor: '#94a3b8',
-      darkItemHoverBg: 'rgba(148, 163, 184, 0.10)',
-      darkItemSelectedBg: 'rgba(99, 102, 241, 0.20)',
-      darkItemSelectedColor: '#e0e7ff',
-      darkGroupTitleColor: '#5b6b85',
-      itemHeight: 34,
-      itemMarginBlock: 1,
-      itemBorderRadius: 10,
-      iconSize: 15,
-    },
-    Card: {
-      borderRadiusLG: 10,
-      headerBg: 'transparent',
-      headerFontSize: 14,
-      boxShadowTertiary: '0 1px 2px rgba(15, 23, 42, 0.04)',
-    },
-    Table: {
-      headerBg: '#f8fafc',
-      headerColor: '#475569',
-      headerSplitColor: 'transparent',
-      rowHoverBg: '#f8fafc',
-      borderColor: brand.line,
-      cellPaddingBlock: 6,
-      headerBorderRadius: 10,
-    },
-    Button: {
-      primaryShadow: '0 6px 16px rgba(79, 70, 229, 0.20)',
-      fontWeight: 500,
-    },
-    Statistic: {
-      contentFontSize: 21,
-      titleFontSize: 12,
-    },
-    Tag: {
-      defaultBg: '#f1f5f9',
-      defaultColor: '#475569',
-      borderRadiusSM: 5,
-    },
-    Input: { paddingBlock: 4 },
-    Modal: { borderRadiusLG: 12 },
-    Drawer: { colorBgElevated: '#ffffff' },
-    Segmented: { itemSelectedBg: '#ffffff' },
-    Tabs: { horizontalItemPadding: '7px 0' },
-  },
-};
-
-/* 图表里复用的坐标轴/网格样式 */
+/* 图表坐标轴/网格颜色：默认（light）值；图表组件可继续直接引用 */
 export const chartAxisColor = '#94a3b8';
 export const chartGridColor = '#eef2f7';
 
-/* ---- 全站主题切换 ---- */
-const THEME_KEY = 'pp.theme';
-const THEME_EVENT = 'pp-theme-change';
-
-export function getTheme() {
-  try {
-    return localStorage.getItem(THEME_KEY) || 'light';
-  } catch (e) {
-    return 'light';
-  }
-}
-
-export function applyTheme(theme) {
-  const t = theme || 'light';
-  document.body.classList.remove(
-    'pp-site-theme-light', 'pp-site-theme-emerald', 'pp-site-theme-pulse',
-    'pp-site-theme-horizon', 'pp-site-theme-glass',
-  );
-  document.body.classList.add('pp-site-theme-' + t);
-}
-
-export function setTheme(theme) {
-  const t = theme || 'light';
-  try {
-    localStorage.setItem(THEME_KEY, t);
-  } catch (e) {
-    /* ignore */
-  }
-  applyTheme(t);
-  window.dispatchEvent(new CustomEvent(THEME_EVENT, { detail: t }));
-}
-
-export function subscribeTheme(fn) {
-  const handler = (e) => fn(e.detail || getTheme());
-  window.addEventListener(THEME_EVENT, handler);
-  return () => window.removeEventListener(THEME_EVENT, handler);
-}
-
-export const THEME_OPTIONS = [
-  { value: 'light', label: '默认' },
-  { value: 'emerald', label: '翠绿' },
-  { value: 'pulse', label: '极简' },
-  { value: 'horizon', label: '扁平' },
-  { value: 'glass', label: '毛玻璃' },
-];
-
-/* 各主题对应的 AntD Design Token */
-export const THEME_TOKENS = {
-  light: {
-    colorPrimary: '#4f46e5',
-    colorInfo: '#4f46e5',
-    colorSuccess: '#10b981',
-    borderRadius: 8,
-  },
-  emerald: {
-    colorPrimary: '#10b981',
-    colorInfo: '#10b981',
-    colorSuccess: '#059669',
-    colorLink: '#047857',
-    borderRadius: 10,
-  },
-  pulse: {
-    colorPrimary: '#111827',
-    colorInfo: '#111827',
-    colorSuccess: '#10b981',
-    borderRadius: 8,
-  },
-  horizon: {
-    colorPrimary: '#2563eb',
-    colorInfo: '#2563eb',
-    colorSuccess: '#16a34a',
-    borderRadius: 8,
-  },
-  glass: {
-    colorPrimary: '#4f46e5',
-    colorInfo: '#6366f1',
-    colorSuccess: '#10b981',
-    borderRadius: 14,
-  },
-};
+/* AntD 静态主题（旧导出兼容；实际运行时由 ThemeProvider 动态生成） */
+export const themeConfig = buildAntdTheme('light');

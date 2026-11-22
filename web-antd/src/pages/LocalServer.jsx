@@ -281,22 +281,22 @@ export default function LocalServer() {
     <div>
       <Row gutter={[16, 16]}>
         <Col xs={12} lg={4}>
-          <StatCard icon={<ThunderboltOutlined />} label="CPU" value={`${Math.round(Number(m.cpuPercent) || 0)}%`} accent="#ef4444" />
+          <StatCard icon={<ThunderboltOutlined />} label="CPU" value={`${Math.round(Number(m.cpuPercent) || 0)}%`} accent="var(--pp-chart-1)" />
         </Col>
         <Col xs={12} lg={4}>
-          <StatCard icon={<CloudServerOutlined />} label="内存" value={`${Math.round(Number(m.memPercent) || 0)}%`} accent="#10b981" />
+          <StatCard icon={<CloudServerOutlined />} label="内存" value={`${Math.round(Number(m.memPercent) || 0)}%`} accent="var(--pp-success)" />
         </Col>
         <Col xs={12} lg={4}>
-          <StatCard icon={<CloudServerOutlined />} label="磁盘" value={`${Math.round(Number(m.diskPercent) || 0)}%`} accent="#0ea5e9" />
+          <StatCard icon={<CloudServerOutlined />} label="磁盘" value={`${Math.round(Number(m.diskPercent) || 0)}%`} accent="var(--pp-chart-3)" />
         </Col>
         <Col xs={12} lg={4}>
-          <StatCard icon={<Badge status="processing" />} label="负载 1m" value={fmtNum(Number((m.load && m.load.one) ?? m.load1) || 0)} accent="#8b5cf6" />
+          <StatCard icon={<Badge status="processing" />} label="负载 1m" value={fmtNum(Number((m.load && m.load.one) ?? m.load1) || 0)} accent="var(--pp-chart-4)" />
         </Col>
         <Col xs={12} lg={4}>
-          <StatCard icon={<CodeOutlined />} label="进程数" value={fmtNum(Number(m.procs ?? (m.proc && m.proc.total)) || 0)} accent="#f59e0b" />
+          <StatCard icon={<CodeOutlined />} label="进程数" value={fmtNum(Number(m.procs ?? (m.proc && m.proc.total)) || 0)} accent="var(--pp-warning)" />
         </Col>
         <Col xs={12} lg={4}>
-          <StatCard icon={<CloudDownloadOutlined />} label="运行时长" value={fmtUptime(m.uptimeSec)} accent="#06b6d4" />
+          <StatCard icon={<CloudDownloadOutlined />} label="运行时长" value={fmtUptime(m.uptimeSec)} accent="var(--pp-chart-6)" />
         </Col>
       </Row>
 
@@ -333,7 +333,7 @@ export default function LocalServer() {
             />
             <Row gutter={[12, 12]}>
               <Col xs={24} md={12}>
-                <div className="pp-svc-row" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', border: '1px solid #eef2f7', borderRadius: 10, background: '#fbfcfe', flexWrap: 'wrap' }}>
+                <div className="pp-svc-row" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', border: '1px solid var(--pp-border)', borderRadius: 10, background: 'var(--pp-surface)', flexWrap: 'wrap' }}>
                   <i className={`pp-dot ${cfState === 'active' ? 'online' : cfState === 'not-installed' ? 'unknown' : 'warn'}`} />
                   <span style={{ fontWeight: 500 }}>cloudflared</span>
                   <VersionPair
@@ -364,7 +364,7 @@ export default function LocalServer() {
                 </div>
               </Col>
               <Col xs={24} md={12}>
-                <div className="pp-svc-row" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', border: '1px solid #eef2f7', borderRadius: 10, background: '#fbfcfe', flexWrap: 'wrap' }}>
+                <div className="pp-svc-row" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', border: '1px solid var(--pp-border)', borderRadius: 10, background: 'var(--pp-surface)', flexWrap: 'wrap' }}>
                   <i className={`pp-dot ${warpState === 'active' ? 'online' : warpState === 'not-installed' ? 'unknown' : 'warn'}`} />
                   <span style={{ fontWeight: 500 }}>WARP 客户端</span>
                   <VersionPair
@@ -395,7 +395,7 @@ export default function LocalServer() {
                 </div>
               </Col>
               <Col xs={24} md={12}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', border: '1px solid #eef2f7', borderRadius: 10, background: '#fbfcfe' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', border: '1px solid var(--pp-border)', borderRadius: 10, background: 'var(--pp-surface)' }}>
                   <i className="pp-dot online" />
                   <span style={{ fontWeight: 500 }}>面板服务</span>
                   <Tag color="success" style={{ marginInlineEnd: 0 }}>运行中</Tag>
@@ -424,8 +424,8 @@ export default function LocalServer() {
                 alignItems: 'center',
                 gap: 8,
                 padding: '10px 12px',
-                borderBottom: '1px solid #f1f5f9',
-                background: '#fbfcfe',
+                borderBottom: '1px solid var(--pp-border)',
+                background: 'var(--pp-surface)',
               }}
             >
               <Input
@@ -451,7 +451,7 @@ export default function LocalServer() {
                 onChange={(e) => setNewSrc(e.target.value)}
                 onPressEnter={() => addRule('internal')}
               />
-              <span style={{ width: 1, height: 22, background: '#e2e8f0', margin: '0 2px' }} />
+              <span style={{ width: 1, height: 22, background: 'var(--pp-border)', margin: '0 2px' }} />
               <Button type="primary" icon={<PlusOutlined />} loading={busy === 'fw'} onClick={() => addRule('open')}>
                 对外开放
               </Button>
@@ -529,7 +529,7 @@ export default function LocalServer() {
                 },
               ]}
             />
-            <div className="pp-muted" style={{ fontSize: 11.5, padding: '8px 12px', borderTop: '1px solid #f1f5f9' }}>
+            <div className="pp-muted" style={{ fontSize: 11.5, padding: '8px 12px', borderTop: '1px solid var(--pp-border)' }}>
               「同步监听」把 ss 探测到的端口导入，默认「仅内网」（组网 100.96.0.0/12 + 回环可访问）；「对外开放」才允许公网直连；「关闭」显式 DROP。规则落在独立链 PP_PORTS，开机自动恢复。
             </div>
           </PageCard>
@@ -707,7 +707,7 @@ function VersionPair({ installed, latest, error, loading, source, checkedAt, onR
             tabIndex={0}
             onClick={() => onRetry && onRetry()}
             onKeyDown={(e) => { if (e.key === 'Enter' && onRetry) onRetry(); }}
-            style={{ fontSize: 12, color: '#d97706', borderBottom: '1px dotted #d97706', cursor: 'pointer' }}
+            style={{ fontSize: 12, color: 'var(--pp-warning)', borderBottom: '1px dotted var(--pp-warning)', cursor: 'pointer' }}
           >
             {loading ? '检查最新版本中…' : '最新查询失败'}
           </span>

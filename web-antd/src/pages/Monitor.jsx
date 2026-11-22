@@ -46,7 +46,6 @@ import { ErrorBlock, PageCard, StatCard, StatusPill } from '../components';
 import ServerDrawer from '../components/ServerDrawer';
 import { fmtAgo, fmtBytes, fmtNum, fmtTime, fmtUptime, levelColor, splitIps } from '../format';
 import { countryCentroid } from '../geo';
-import { chartPalette } from '../theme';
 import ServerUnlockModal from '../components/ServerUnlockModal';
 import OsIcon from '../components/osIcons';
 
@@ -182,7 +181,7 @@ export default function Monitor({ embedded = false }) {
             value={fmtBytes(summary.rx_rate || 0)}
             unit="/s"
             hint={`${online} 台在线 · 5 秒刷新`}
-            accent="#0ea5e9"
+            accent="var(--pp-chart-7)"
           />
         </Col>
         <Col xs={12} md={8}>
@@ -192,7 +191,7 @@ export default function Monitor({ embedded = false }) {
             value={fmtBytes(summary.tx_rate || 0)}
             unit="/s"
             hint={`${online} 台在线 · 5 秒刷新`}
-            accent="#8b5cf6"
+            accent="var(--pp-chart-6)"
           />
         </Col>
         <Col xs={24} md={8}>
@@ -202,7 +201,7 @@ export default function Monitor({ embedded = false }) {
             value={fmtBytes((summary.rx_rate || 0) + (summary.tx_rate || 0))}
             unit="/s"
             hint={`下行 + 上行 · ${servers.length} 台服务器`}
-            accent="#f59e0b"
+            accent="var(--pp-warning)"
           />
         </Col>
       </Row>
@@ -210,7 +209,7 @@ export default function Monitor({ embedded = false }) {
       <div className={cluster ? 'pp-mon-top-grid' : 'pp-mon-top-grid pp-mon-top-grid-2'}>
         <PageCard
           className="pp-mon-top"
-          title={<span className="pp-section-title"><DashboardOutlined style={{ color: '#4f46e5' }} />集群在线率</span>}
+          title={<span className="pp-section-title"><DashboardOutlined style={{ color: 'var(--pp-primary)' }} />集群在线率</span>}
           extra={<span className="pp-muted" style={{ fontSize: 12 }}>在线率 {servers.length ? ((online / servers.length) * 100).toFixed(0) : 0}%</span>}
           loading={showSkeleton}
         >
@@ -221,15 +220,15 @@ export default function Monitor({ embedded = false }) {
                 centerLabel="台服务器"
                 centerValue={servers.length}
                 data={[
-                  { name: '在线', value: online, color: chartPalette[3] },
-                  { name: '离线', value: offline, color: chartPalette[4] },
-                  { name: '未知', value: unknown, color: '#cbd5e1' },
+                  { name: '在线', value: online, color: 'var(--pp-chart-4)' },
+                  { name: '离线', value: offline, color: 'var(--pp-chart-5)' },
+                  { name: '未知', value: unknown, color: 'var(--pp-text-tertiary)' },
                 ]}
               />
             </div>
             {/* 服务器/在线/离线/未知 已在环图 + 图例里，这里只补服务异常与未安装项 */}
             <div className="pp-cluster-foot">
-              服务异常 <b style={{ color: summary.failed_services ? '#f59e0b' : '#0f172a' }}>{fmtNum(summary.failed_services || 0)}</b>
+              服务异常 <b style={{ color: summary.failed_services ? 'var(--pp-warning)' : 'var(--pp-text)' }}>{fmtNum(summary.failed_services || 0)}</b>
               <span className="pp-muted">· 未安装 {fmtNum(summary.not_installed || 0)} 项</span>
             </div>
           </div>
@@ -237,7 +236,7 @@ export default function Monitor({ embedded = false }) {
 
         <PageCard
           className="pp-mon-top"
-          title={<span className="pp-section-title"><ThunderboltOutlined style={{ color: '#f59e0b' }} />资源均值</span>}
+          title={<span className="pp-section-title"><ThunderboltOutlined style={{ color: 'var(--pp-warning)' }} />资源均值</span>}
           extra={<span className="pp-muted" style={{ fontSize: 12 }}>仅在线节点</span>}
           loading={showSkeleton}
         >
@@ -253,7 +252,7 @@ export default function Monitor({ embedded = false }) {
               </Row>
               <Row gutter={8} style={{ marginTop: 8 }}>
                 <Col span={24}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#64748b' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--pp-text-secondary)' }}>
                     <span>磁盘均值</span>
                     <b style={{ color: levelColor(avg.disk) }}>{avg.disk.toFixed(0)}%</b>
                   </div>
@@ -266,14 +265,14 @@ export default function Monitor({ embedded = false }) {
 
         <PageCard
           className="pp-map-card"
-          title={<span className="pp-section-title"><EnvironmentOutlined style={{ color: '#06b6d4' }} />全球分布</span>}
+          title={<span className="pp-section-title"><EnvironmentOutlined style={{ color: 'var(--pp-info)' }} />全球分布</span>}
           extra={
             <Space size={12}>
               <ChartLegend
                 items={[
-                  { name: '在线', color: '#10b981' },
-                  { name: '离线', color: '#f43f5e' },
-                  { name: '未知', color: '#cbd5e1' },
+                  { name: '在线', color: 'var(--pp-success)' },
+                  { name: '离线', color: 'var(--pp-danger)' },
+                  { name: '未知', color: 'var(--pp-text-tertiary)' },
                 ]}
               />
               <Button size="small" icon={<ExpandOutlined />} onClick={() => setMapOpen(true)}>
@@ -291,7 +290,7 @@ export default function Monitor({ embedded = false }) {
       <Modal
         className="pp-map-modal"
         open={mapOpen}
-        title={<span><EnvironmentOutlined style={{ color: '#06b6d4', marginRight: 6 }} />全球分布</span>}
+        title={<span><EnvironmentOutlined style={{ color: 'var(--pp-info)', marginRight: 6 }} />全球分布</span>}
         onCancel={() => setMapOpen(false)}
         footer={<Button onClick={() => setMapOpen(false)}>关闭</Button>}
         width={1120}
@@ -314,7 +313,7 @@ export default function Monitor({ embedded = false }) {
         open={alertsOpen}
         title={
           <span>
-            <AlertOutlined style={{ color: '#f43f5e', marginRight: 6 }} />
+            <AlertOutlined style={{ color: 'var(--pp-danger)', marginRight: 6 }} />
             告警（{activeFailedList.length + offline}）
           </span>
         }
@@ -362,9 +361,9 @@ export default function Monitor({ embedded = false }) {
           extra={
             <ChartLegend
               items={[
-                { name: 'CPU', color: chartPalette[0] },
-                { name: '内存', color: chartPalette[1] },
-                { name: '磁盘', color: chartPalette[2] },
+                { name: 'CPU', color: 'var(--pp-chart-1)' },
+                { name: '内存', color: 'var(--pp-chart-2)' },
+                { name: '磁盘', color: 'var(--pp-chart-3)' },
               ]}
             />
           }
@@ -374,9 +373,9 @@ export default function Monitor({ embedded = false }) {
             <ColumnChart
               data={perServer}
               series={[
-                { key: 'cpu', name: 'CPU', color: chartPalette[0] },
-                { key: 'mem', name: '内存', color: chartPalette[1] },
-                { key: 'disk', name: '磁盘', color: chartPalette[2] },
+                { key: 'cpu', name: 'CPU', color: 'var(--pp-chart-1)' },
+                { key: 'mem', name: '内存', color: 'var(--pp-chart-2)' },
+                { key: 'disk', name: '磁盘', color: 'var(--pp-chart-3)' },
               ]}
               height={248}
               unit="%"
@@ -489,7 +488,7 @@ export function MonitorTop({ servers = [], summary = {}, avg = { cpu: 0, mem: 0,
             value={fmtBytes(summary.rx_rate || 0)}
             unit="/s"
             hint={`${online} 台在线 · 5 秒刷新`}
-            accent="#0ea5e9"
+            accent="var(--pp-chart-7)"
           />
         </Col>
         <Col xs={12} md={8}>
@@ -499,7 +498,7 @@ export function MonitorTop({ servers = [], summary = {}, avg = { cpu: 0, mem: 0,
             value={fmtBytes(summary.tx_rate || 0)}
             unit="/s"
             hint={`${online} 台在线 · 5 秒刷新`}
-            accent="#8b5cf6"
+            accent="var(--pp-chart-6)"
           />
         </Col>
         <Col xs={24} md={8}>
@@ -509,7 +508,7 @@ export function MonitorTop({ servers = [], summary = {}, avg = { cpu: 0, mem: 0,
             value={fmtBytes((summary.rx_rate || 0) + (summary.tx_rate || 0))}
             unit="/s"
             hint={`下行 + 上行 · ${servers.length} 台服务器`}
-            accent="#f59e0b"
+            accent="var(--pp-warning)"
           />
         </Col>
       </Row>
@@ -519,7 +518,7 @@ export function MonitorTop({ servers = [], summary = {}, avg = { cpu: 0, mem: 0,
         {cluster ? (
         <PageCard
           className="pp-mon-top"
-          title={<span className="pp-section-title"><DashboardOutlined style={{ color: '#4f46e5' }} />集群在线率</span>}
+          title={<span className="pp-section-title"><DashboardOutlined style={{ color: 'var(--pp-primary)' }} />集群在线率</span>}
           extra={<span className="pp-muted" style={{ fontSize: 12 }}>在线率 {servers.length ? ((online / servers.length) * 100).toFixed(0) : 0}%</span>}
           loading={loading}
         >
@@ -530,14 +529,14 @@ export function MonitorTop({ servers = [], summary = {}, avg = { cpu: 0, mem: 0,
                 centerLabel="台服务器"
                 centerValue={servers.length}
                 data={[
-                  { name: '在线', value: online, color: chartPalette[3] },
-                  { name: '离线', value: offline, color: chartPalette[4] },
-                  { name: '未知', value: unknown, color: '#cbd5e1' },
+                  { name: '在线', value: online, color: 'var(--pp-chart-4)' },
+                  { name: '离线', value: offline, color: 'var(--pp-chart-5)' },
+                  { name: '未知', value: unknown, color: 'var(--pp-text-tertiary)' },
                 ]}
               />
             </div>
             <div className="pp-cluster-foot">
-              服务异常 <b style={{ color: summary.failed_services ? '#f59e0b' : '#0f172a' }}>{fmtNum(summary.failed_services || 0)}</b>
+              服务异常 <b style={{ color: summary.failed_services ? 'var(--pp-warning)' : 'var(--pp-text)' }}>{fmtNum(summary.failed_services || 0)}</b>
               <span className="pp-muted">· 未安装 {fmtNum(summary.not_installed || 0)} 项</span>
             </div>
           </div>
@@ -547,7 +546,7 @@ export function MonitorTop({ servers = [], summary = {}, avg = { cpu: 0, mem: 0,
 
         <PageCard
           className="pp-mon-top"
-          title={<span className="pp-section-title"><ThunderboltOutlined style={{ color: '#f59e0b' }} />资源均值</span>}
+          title={<span className="pp-section-title"><ThunderboltOutlined style={{ color: 'var(--pp-warning)' }} />资源均值</span>}
           extra={<span className="pp-muted" style={{ fontSize: 12 }}>仅在线节点</span>}
           loading={loading}
         >
@@ -563,7 +562,7 @@ export function MonitorTop({ servers = [], summary = {}, avg = { cpu: 0, mem: 0,
               </Row>
               <Row gutter={8} style={{ marginTop: 8 }}>
                 <Col span={24}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#64748b' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--pp-text-secondary)' }}>
                     <span>磁盘均值</span>
                     <b style={{ color: levelColor(avg.disk) }}>{Number(avg.disk || 0).toFixed(0)}%</b>
                   </div>
@@ -576,14 +575,14 @@ export function MonitorTop({ servers = [], summary = {}, avg = { cpu: 0, mem: 0,
 
         <PageCard
           className="pp-map-card"
-          title={<span className="pp-section-title"><EnvironmentOutlined style={{ color: '#06b6d4' }} />全球分布</span>}
+          title={<span className="pp-section-title"><EnvironmentOutlined style={{ color: 'var(--pp-info)' }} />全球分布</span>}
           extra={
             <Space size={12}>
               <ChartLegend
                 items={[
-                  { name: '在线', color: '#10b981' },
-                  { name: '离线', color: '#f43f5e' },
-                  { name: '未知', color: '#cbd5e1' },
+                  { name: '在线', color: 'var(--pp-success)' },
+                  { name: '离线', color: 'var(--pp-danger)' },
+                  { name: '未知', color: 'var(--pp-text-tertiary)' },
                 ]}
               />
               <Button size="small" icon={<ExpandOutlined />} onClick={() => setMapOpen(true)}>
@@ -600,7 +599,7 @@ export function MonitorTop({ servers = [], summary = {}, avg = { cpu: 0, mem: 0,
       <Modal
         className="pp-map-modal"
         open={mapOpen}
-        title={<span><EnvironmentOutlined style={{ color: '#06b6d4', marginRight: 6 }} />全球分布</span>}
+        title={<span><EnvironmentOutlined style={{ color: 'var(--pp-info)', marginRight: 6 }} />全球分布</span>}
         onCancel={() => setMapOpen(false)}
         footer={<Button onClick={() => setMapOpen(false)}>关闭</Button>}
         width={1120}
@@ -627,29 +626,29 @@ function osBadge(osName) {
   const name = String(osName || '').toLowerCase();
   if (!name) return null;
   const full = String(osName);
-  if (name.includes('windows')) return { icon: <WindowsOutlined />, label: 'Windows', color: '#2563eb', full };
+  if (name.includes('windows')) return { icon: <WindowsOutlined />, label: 'Windows', color: 'var(--pp-chart-7)', full };
   if (name.includes('mac os') || name.includes('macos') || name.includes('darwin')) {
-    return { icon: <AppleOutlined />, label: 'macOS', color: '#334155', full };
+    return { icon: <AppleOutlined />, label: 'macOS', color: 'var(--pp-text)', full };
   }
   const distros = [
-    ['ubuntu', 'Ubuntu', 'ubuntu', '#e95420'],
-    ['debian', 'Debian', 'debian', '#a80030'],
-    ['centos', 'CentOS', 'centos', '#932279'],
-    ['rocky', 'Rocky', 'rockylinux', '#10b981'],
-    ['alma', 'AlmaLinux', 'almalinux', '#0f4266'],
-    ['fedora', 'Fedora', 'fedora', '#294172'],
-    ['arch', 'Arch', 'archlinux', '#1793d1'],
-    ['alpine', 'Alpine', 'alpinelinux', '#0d597f'],
-    ['opensuse', 'openSUSE', 'opensuse', '#73ba25'],
-    ['amazon', 'Amazon Linux', '', '#ff9900'],
-    ['oracle', 'Oracle Linux', 'oracle', '#c74634'],
-    ['linux', 'Linux', '', '#f59e0b'],
+    ['ubuntu', 'Ubuntu', 'ubuntu', 'var(--pp-chart-8)'],
+    ['debian', 'Debian', 'debian', 'var(--pp-chart-5)'],
+    ['centos', 'CentOS', 'centos', 'var(--pp-chart-6)'],
+    ['rocky', 'Rocky', 'rockylinux', 'var(--pp-success)'],
+    ['alma', 'AlmaLinux', 'almalinux', 'var(--pp-chart-6)'],
+    ['fedora', 'Fedora', 'fedora', 'var(--pp-chart-6)'],
+    ['arch', 'Arch', 'archlinux', 'var(--pp-chart-7)'],
+    ['alpine', 'Alpine', 'alpinelinux', 'var(--pp-chart-7)'],
+    ['opensuse', 'openSUSE', 'opensuse', 'var(--pp-chart-4)'],
+    ['amazon', 'Amazon Linux', '', 'var(--pp-chart-8)'],
+    ['oracle', 'Oracle Linux', 'oracle', 'var(--pp-chart-5)'],
+    ['linux', 'Linux', '', 'var(--pp-warning)'],
   ];
   const hit = distros.find(([key]) => name.includes(key));
   return {
     icon: hit && hit[2] ? <OsIcon name={hit[2]} /> : <LinuxOutlined />,
     label: hit ? hit[1] : 'Linux',
-    color: hit ? hit[3] : '#f59e0b',
+    color: hit ? hit[3] : 'var(--pp-warning)',
     full,
   };
 }
@@ -1207,7 +1206,7 @@ export function WorldMap({ servers, onPick, large = false, onExpand, zoomable = 
               <div className="pp-tooltip-title">{hoverCluster.count} 台服务器</div>
               {hoverCluster.items.slice(0, 4).map((it) => (
                 <div className="pp-tooltip-row" key={it.s.id}>
-                  <i style={{ background: it.s.status === 'online' ? '#10b981' : it.s.status === 'offline' ? '#f43f5e' : '#cbd5e1' }} />
+                  <i style={{ background: it.s.status === 'online' ? 'var(--pp-success)' : it.s.status === 'offline' ? 'var(--pp-danger)' : 'var(--pp-text-tertiary)' }} />
                   <span>{it.s.name}</span>
                   <b>{String(it.s.ip_region || '').trim() || countryCodeOf(it.s.ip_country) || '—'}</b>
                 </div>
@@ -1215,7 +1214,7 @@ export function WorldMap({ servers, onPick, large = false, onExpand, zoomable = 
               {hoverCluster.count > 4 ? (
                 <div className="pp-tooltip-row"><span>还有 {hoverCluster.count - 4} 台…</span></div>
               ) : null}
-              <div style={{ marginTop: 6, fontSize: 11, color: '#94a3b8' }}>点击查看大图</div>
+              <div style={{ marginTop: 6, fontSize: 11, color: 'var(--pp-text-tertiary)' }}>点击查看大图</div>
             </div>
           ) : null}
           {hover ? (
@@ -1228,7 +1227,7 @@ export function WorldMap({ servers, onPick, large = false, onExpand, zoomable = 
             >
               <div className="pp-tooltip-title">{hover.s.name}</div>
               <div className="pp-tooltip-row">
-                <i style={{ background: hover.s.status === 'online' ? '#10b981' : hover.s.status === 'offline' ? '#f43f5e' : '#cbd5e1' }} />
+                <i style={{ background: hover.s.status === 'online' ? 'var(--pp-success)' : hover.s.status === 'offline' ? 'var(--pp-danger)' : 'var(--pp-text-tertiary)' }} />
                 <span>{hover.s.status === 'online' ? '在线' : hover.s.status === 'offline' ? '离线' : '未知'}</span>
                 <b>{countryCodeOf(hover.s.ip_country) || '—'}</b>
               </div>
@@ -1250,7 +1249,7 @@ export function WorldMap({ servers, onPick, large = false, onExpand, zoomable = 
               </div>
               {hover.approx ? (
                 <div className="pp-tooltip-row" style={{ marginTop: 4 }}>
-                  <span style={{ color: '#94a3b8', fontSize: 11.5 }}>按国家中心点估算位置</span>
+                  <span style={{ color: 'var(--pp-text-tertiary)', fontSize: 11.5 }}>按国家中心点估算位置</span>
                 </div>
               ) : null}
             </div>
@@ -1283,7 +1282,7 @@ export function WorldMap({ servers, onPick, large = false, onExpand, zoomable = 
         ) : null}
       </div>
 
-      <div style={{ marginTop: 10, fontSize: 12, color: '#94a3b8', lineHeight: 1.7 }}>
+      <div style={{ marginTop: 10, fontSize: 12, color: 'var(--pp-text-tertiary)', lineHeight: 1.7 }}>
         已标出 {pts.length} 台
         {approxCount ? `（其中 ${approxCount} 台按国家中心点估算）` : ''}
         {unplaced.length ? ` · ${unplaced.length} 台无地区信息（${unplaced.map((s) => s.name || `#${s.id}`).join('、')}）` : ''}

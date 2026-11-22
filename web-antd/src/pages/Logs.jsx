@@ -28,7 +28,6 @@ import { useAsync } from '../hooks';
 import { ColumnChart } from '../charts';
 import { EmptyBlock, ErrorBlock, PageCard, StatCard, StatusPill } from '../components';
 import { fmtAgo, fmtNum, fmtTime } from '../format';
-import { chartPalette } from '../theme';
 
 const DAY_OPTIONS = [
   { label: '保留最近 30 天', value: 30 },
@@ -105,20 +104,20 @@ function LogSummary() {
     <div>
       <Row gutter={[16, 16]}>
         <Col xs={12} lg={6}>
-          <StatCard icon={<FileSearchOutlined />} label="日志总量" value={fmtNum(total)} accent={chartPalette[0]} />
+          <StatCard icon={<FileSearchOutlined />} label="日志总量" value={fmtNum(total)} accent={'var(--pp-chart-1)'} />
         </Col>
         <Col xs={12} lg={6}>
-          <StatCard icon={<ThunderboltOutlined />} label="订阅访问" value={fmtNum(sub)} accent={chartPalette[3]} hint={total ? `${((sub / total) * 100).toFixed(1)}%` : '—'} />
+          <StatCard icon={<ThunderboltOutlined />} label="订阅访问" value={fmtNum(sub)} accent={'var(--pp-chart-4)'} hint={total ? `${((sub / total) * 100).toFixed(1)}%` : '—'} />
         </Col>
         <Col xs={12} lg={6}>
-          <StatCard icon={<ThunderboltOutlined />} label="网页生成" value={fmtNum(gen)} accent={chartPalette[2]} hint={total ? `${((gen / total) * 100).toFixed(1)}%` : '—'} />
+          <StatCard icon={<ThunderboltOutlined />} label="网页生成" value={fmtNum(gen)} accent={'var(--pp-chart-3)'} hint={total ? `${((gen / total) * 100).toFixed(1)}%` : '—'} />
         </Col>
         <Col xs={12} lg={6}>
           <StatCard
             icon={<ClockCircleOutlined />}
             label="时间跨度"
             value={data && data.oldest ? fmtAgo(data.oldest) : '—'}
-            accent={chartPalette[5]}
+            accent={'var(--pp-chart-6)'}
             hint={data && data.newest ? `最新 ${fmtTime(data.newest)}` : '—'}
           />
         </Col>
@@ -138,11 +137,11 @@ function LogSummary() {
             {error ? <ErrorBlock error={error} onRetry={() => reload().catch(() => {})} /> : null}
             <ColumnChart
               data={chartData}
-              series={[{ key: 'rows', name: '可删除行数', color: chartPalette[0] }]}
+              series={[{ key: 'rows', name: '可删除行数', color: 'var(--pp-chart-1)' }]}
               height={236}
               unit=" 行"
             />
-            <div style={{ marginTop: 8, fontSize: 12, color: '#94a3b8' }}>
+            <div style={{ marginTop: 8, fontSize: 12, color: 'var(--pp-text-tertiary)' }}>
               这里显示「清空到某个截止时间」会删掉多少行，实际执行前请复核。
             </div>
           </PageCard>
@@ -170,9 +169,9 @@ function LogSummary() {
               />
               <div
                 style={{
-                  background: willDelete ? 'rgba(244,63,94,.06)' : 'rgba(16,185,129,.07)',
-                  border: `1px solid ${willDelete ? 'rgba(244,63,94,.18)' : 'rgba(16,185,129,.2)'}`,
-                  color: willDelete ? '#be123c' : '#047857',
+                  background: willDelete ? 'var(--pp-danger-soft)' : 'var(--pp-success-soft)',
+                  border: `1px solid ${willDelete ? 'var(--pp-danger-soft)' : 'var(--pp-success-soft)'}`,
+                  color: willDelete ? 'var(--pp-danger)' : 'var(--pp-success)',
                   borderRadius: 10,
                   padding: '10px 12px',
                   fontSize: 12.5,
@@ -271,7 +270,7 @@ function PushLogs() {
       dataIndex: 'message',
       ellipsis: true,
       render: (v) => (
-        <span className="pp-mono" style={{ fontSize: 12, color: '#64748b' }}>
+        <span className="pp-mono" style={{ fontSize: 12, color: 'var(--pp-text-secondary)' }}>
           {String(v || '—').slice(0, 140)}
         </span>
       ),

@@ -87,7 +87,7 @@ export default function MailBuiltinGuide({ guide, reload }) {
           content: (
             <div>
               <pre style={{ fontSize: 12, margin: 0 }}>{detail}</pre>
-              <div style={{ marginTop: 8, fontSize: 12, color: '#64748b' }}>
+              <div style={{ marginTop: 8, fontSize: 12, color: 'var(--pp-text-secondary)' }}>
                 需要 Cloudflare Token 具备 <b>Zone → DNS → Edit</b> 权限；没有权限就按表格手动添加。
               </div>
             </div>
@@ -320,10 +320,10 @@ export default function MailBuiltinGuide({ guide, reload }) {
             dataSource={records}
             expandable={{
               expandedRowRender: (r) => (
-                <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.7 }}>
+                <div style={{ fontSize: 12, color: 'var(--pp-text-secondary)', lineHeight: 1.7 }}>
                   {r.note}
                   {r.detail ? (
-                    <div style={{ marginTop: 4, color: '#475569' }}>
+                    <div style={{ marginTop: 4, color: 'var(--pp-text-secondary)' }}>
                       判定附注：{r.detail}
                     </div>
                   ) : null}

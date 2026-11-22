@@ -1,6 +1,7 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Empty } from 'antd';
 import { fmtBytes } from '../format';
+import { useAppTheme } from '../theme';
 
 /**
  * 用户 → 节点 流量流向图（轻量 SVG 自绘，替代原 AntV G6 实现）。
@@ -21,7 +22,7 @@ import { fmtBytes } from '../format';
  *   height: 期望的最小画布高度（行数多、卡片放不下时会纵向增高，避免把文字压小）
  */
 
-const PALETTE = ['#6366f1', '#06b6d4', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#0ea5e9', '#f43f5e'];
+const PALETTE = ['var(--pp-primary)', 'var(--pp-info)', 'var(--pp-success)', 'var(--pp-warning)', 'var(--pp-chart-5)', 'var(--pp-chart-6)', 'var(--pp-info)', 'var(--pp-danger)'];
 
 // 尊重系统「减少动态效果」设置：关闭虚线动画与移动光点。
 const REDUCED_MOTION = (() => {
@@ -104,12 +105,12 @@ function rackIcon(w, h) {
   return (
     <g>
       <rect x={0.5} y={0.5} width={Math.max(0, w - 1)} height={Math.max(0, h - 1)} rx={4}
-        fill="#eef2ff" stroke="#6366f1" strokeWidth={1.3} />
+        fill={themeVars['--pp-primary-soft'] || 'var(--pp-primary-soft)'} stroke={themeVars['--pp-primary'] || 'var(--pp-primary)'} strokeWidth={1.3} />
       {[0.3, 0.52, 0.74].map((f) => (
         <g key={f}>
           <line x1={w * 0.17} y1={h * f} x2={w * 0.66} y2={h * f}
-            stroke="#a5b4fc" strokeWidth={1.6} strokeLinecap="round" />
-          <circle cx={w * 0.81} cy={h * f} r={1.25} fill="#10b981" />
+            stroke={themeVars['--pp-primary'] || 'var(--pp-chart-1)'} strokeWidth={1.6} strokeLinecap="round" />
+          <circle cx={w * 0.81} cy={h * f} r={1.25} fill={themeVars['--pp-success'] || 'var(--pp-success)'} />
         </g>
       ))}
     </g>
@@ -261,6 +262,10 @@ function buildFlowLayout(users, nodes, edges, height, width) {
 }
 
 export default function FlowGraph({ users = [], nodes = [], edges = [], height = 420, emptyText = '暂无流向数据' }) {
+  const { palette: themePalette, vars: themeVars } = useAppTheme();
+  // 主题色板遮蔽模块级默认 PALETTE（后续引用自动使用主题色）
+  const PALETTE = themePalette;
+
   const hostRef = useRef(null);
   const [width, setWidth] = useState(0);
   const [ready, setReady] = useState(false);
@@ -314,8 +319,8 @@ export default function FlowGraph({ users = [], nodes = [], edges = [], height =
         style={{
           width: '100%',
           borderRadius: 12,
-          background: 'linear-gradient(180deg, #fbfdff 0%, #ffffff 100%)',
-          border: '1px solid #f1f5f9',
+          background: themeVars['--pp-surface'] || 'var(--pp-surface)',
+          border: '1px solid ' + (themeVars['--pp-border'] || 'var(--pp-border-soft)'),
           overflow: 'hidden',
           opacity: ready ? 1 : 0.35,
           transition: 'opacity .25s ease',
@@ -393,10 +398,10 @@ export default function FlowGraph({ users = [], nodes = [], edges = [], height =
                 <g key={'u-' + u.key}>
                   <title>{u.title}</title>
                   <rect x={u.x} y={u.y} width={u.w} height={u.h} rx={10}
-                    fill="#ffffff" stroke="#e2e8f0" strokeWidth="1" />
+                    fill={themeVars['--pp-surface'] || 'var(--pp-surface)'} stroke={themeVars['--pp-border'] || 'var(--pp-border-soft)'} strokeWidth="1" />
                   <rect x={u.x + 7} y={u.y + 9} width="3.5" height={u.h - 18} rx="1.75" fill={u.color} />
                   <text x={u.x + u.w / 2 + 2} y={u.cy} textAnchor="middle" dominantBaseline="central"
-                    fontSize="12" fill="#0f172a">{u.label}</text>
+                    fontSize="12" fill={themeVars['--pp-text'] || 'var(--pp-text)'}>{u.label}</text>
                 </g>
               ))}
             </g>
@@ -421,9 +426,9 @@ export default function FlowGraph({ users = [], nodes = [], edges = [], height =
                     <title>{n.title}</title>
                     {/* 轻投影 + 卡片本体 */}
                     <rect x={n.x} y={n.y + 2} width={n.side} height={n.side} rx={12}
-                      fill="#0f172a" opacity="0.04" />
+                      fill="var(--pp-text)" opacity="0.04" />
                     <rect x={n.x} y={n.y} width={n.side} height={n.side} rx={12}
-                      fill="#ffffff" stroke="#dbeafe" strokeWidth="1" />
+                      fill={themeVars['--pp-surface'] || 'var(--pp-surface)'} stroke={themeVars['--pp-border'] || 'var(--pp-border-soft)'} strokeWidth="1" />
                     {/* 服务器机架图标 */}
                     <g transform={'translate(' + iconX + ',' + iconY + ')'}>{rackIcon(iconW, iconH)}</g>
                     {/* 国旗 + 节点名：水平排列，间距 8，按可用宽度截断 */}
@@ -442,10 +447,10 @@ export default function FlowGraph({ users = [], nodes = [], edges = [], height =
                       y={nameCy}
                       dominantBaseline="central"
                       fontSize={n.nameFont}
-                      fill="#0f172a"
+                      fill={themeVars['--pp-text'] || 'var(--pp-text)'}
                     >{n.name}</text>
                     <text x={cardCx} y={bytesCy} textAnchor="middle" dominantBaseline="central"
-                      fontSize="9.5" fill="#94a3b8">{fmtBytes(n.total)}</text>
+                      fontSize="9.5" fill={themeVars['--pp-text-tertiary'] || 'var(--pp-text-tertiary)'}>{fmtBytes(n.total)}</text>
                   </g>
                 );
               })}

@@ -73,8 +73,8 @@ function FlowOverview({ data, loading }) {
     <svg className="pp-flow-svg" viewBox={'0 0 900 ' + h} style={{ width: '100%', height: 'auto', display: 'block' }}>
       <defs>
         <linearGradient id="ppFlowOvGrad" x1="0" x2="1">
-          <stop offset="0%" stopColor="#818cf8" stopOpacity="0.25" />
-          <stop offset="100%" stopColor="#22d3ee" stopOpacity="0.85" />
+          <stop offset="0%" stopColor="var(--pp-chart-1)" stopOpacity="0.25" />
+          <stop offset="100%" stopColor="var(--pp-chart-2)" stopOpacity="0.85" />
         </linearGradient>
       </defs>
 
@@ -83,9 +83,9 @@ function FlowOverview({ data, loading }) {
         const pct = ((Number(u.total) || 0) / grand) * 100;
         return (
           <g key={u.uuid}>
-            <circle cx="46" cy={y} r="12" fill={u.active ? '#10b981' : '#cbd5e1'} opacity="0.9" />
-            <text x="66" y={y + 2} fontSize="12" fill="#0f172a">{String(u.label || u.uuid).slice(0, 10)}</text>
-            <text x="66" y={y + 17} fontSize="10.5" fill="#94a3b8">{fmtBytes(u.total)} · {pct.toFixed(0)}%</text>
+            <circle cx="46" cy={y} r="12" fill={u.active ? 'var(--pp-success)' : 'var(--pp-text-tertiary)'} opacity="0.9" />
+            <text x="66" y={y + 2} fontSize="12" fill="var(--pp-text)">{String(u.label || u.uuid).slice(0, 10)}</text>
+            <text x="66" y={y + 17} fontSize="10.5" fill="var(--pp-text-tertiary)">{fmtBytes(u.total)} · {pct.toFixed(0)}%</text>
           </g>
         );
       })}
@@ -98,10 +98,10 @@ function FlowOverview({ data, loading }) {
         const d = 'M62 ' + uy + ' C 300 ' + uy + ', 340 ' + ny + ', 600 ' + ny;
         return (
           <g key={e.uuid + '-' + e.node_id}>
-            <path d={d} fill="none" stroke={e.active ? 'url(#ppFlowOvGrad)' : '#e2e8f0'}
+            <path d={d} fill="none" stroke={e.active ? 'url(#ppFlowOvGrad)' : 'var(--pp-border-soft)'}
               strokeWidth={w} strokeLinecap="round" opacity={e.active ? 0.9 : 0.6} />
             {e.active ? (
-              <circle r="3.2" fill="#22d3ee">
+              <circle r="3.2" fill="var(--pp-chart-2)">
                 <animateMotion dur={(2 + (1 - Number(e.total) / maxTotal) * 2).toFixed(2) + 's'} repeatCount="indefinite" path={d} />
               </circle>
             ) : null}
@@ -113,9 +113,9 @@ function FlowOverview({ data, loading }) {
         const y = nodeY.get(String(n.node_id));
         return (
           <g key={n.node_id}>
-            <circle cx="612" cy={y} r="9" fill="#0ea5e9" opacity="0.85" />
-            <text x="628" y={y + 2} fontSize="12" fill="#0f172a">{String(n.label || ('#' + n.node_id)).slice(0, 18)}</text>
-            <text x="628" y={y + 17} fontSize="10.5" fill="#94a3b8">{fmtBytes(n.total)}</text>
+            <circle cx="612" cy={y} r="9" fill="var(--pp-chart-7)" opacity="0.85" />
+            <text x="628" y={y + 2} fontSize="12" fill="var(--pp-text)">{String(n.label || ('#' + n.node_id)).slice(0, 18)}</text>
+            <text x="628" y={y + 17} fontSize="10.5" fill="var(--pp-text-tertiary)">{fmtBytes(n.total)}</text>
           </g>
         );
       })}
@@ -384,7 +384,7 @@ export default function UserTraffic() {
             label="活跃用户"
             value={summary.online}
             hint="近 2 分钟有流量"
-            accent="#10b981"
+            accent="var(--pp-success)"
           />
         </Col>
         <Col xs={12} md={6}>
@@ -393,7 +393,7 @@ export default function UserTraffic() {
             label="今日流量"
             value={fmtBytes(summary.today)}
             hint={`共 ${summary.total} 个用户有记录`}
-            accent="#f59e0b"
+            accent="var(--pp-warning)"
           />
         </Col>
         <Col xs={12} md={6}>
@@ -402,7 +402,7 @@ export default function UserTraffic() {
             label="区间流量"
             value={fmtBytes(summary.rangeSum)}
             hint={range === '24h' ? '24 小时' : range === '30d' ? '30 天' : '7 天'}
-            accent="#8b5cf6"
+            accent="var(--pp-chart-6)"
           />
         </Col>
         <Col xs={12} md={6}>
@@ -411,7 +411,7 @@ export default function UserTraffic() {
             label="累计流量"
             value={fmtBytes(summary.all)}
             hint="自统计启用以来"
-            accent="#0ea5e9"
+            accent="var(--pp-chart-7)"
           />
         </Col>
       </Row>
@@ -427,7 +427,7 @@ export default function UserTraffic() {
         ) : !protocols.data || !(protocols.data.data || []).length ? (
           <Empty description="暂无协议数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />
         ) : (() => {
-          const colors = ['#10b981', '#0ea5e9', '#8b5cf6', '#f59e0b', '#ef4444', '#14b8a6'];
+          const colors = ['var(--pp-success)', 'var(--pp-chart-7)', 'var(--pp-chart-6)', 'var(--pp-warning)', 'var(--pp-danger)', 'var(--pp-chart-2)'];
           const list = (protocols.data.data || []).slice(0, 6);
           const total = list.reduce((s, x) => s + Number(x.count || 0), 0) || 1;
           let acc = 0;
@@ -436,7 +436,7 @@ export default function UserTraffic() {
           return (
             <div style={{ display: 'flex', alignItems: 'center', gap: 36, flexWrap: 'wrap' }}>
               <svg width="140" height="140" viewBox="0 0 140 140">
-                <circle cx="70" cy="70" r={R} fill="none" stroke="#eef2f7" strokeWidth="16" />
+                <circle cx="70" cy="70" r={R} fill="none" stroke="var(--pp-border-soft)" strokeWidth="16" />
                 {list.map((x, i) => {
                   const frac = Number(x.count || 0) / total;
                   const dash = frac * C;
@@ -453,7 +453,7 @@ export default function UserTraffic() {
                   acc += dash;
                   return el;
                 })}
-                <text x="70" y="74" textAnchor="middle" style={{ fontSize: 18, fontWeight: 700, fill: '#0f172a' }}>{total}</text>
+                <text x="70" y="74" textAnchor="middle" style={{ fontSize: 18, fontWeight: 700, fill: 'var(--pp-text)' }}>{total}</text>
               </svg>
               <div style={{ display: 'grid', gap: 8 }}>
                 {list.map((x, i) => (
@@ -481,7 +481,7 @@ export default function UserTraffic() {
         ) : (
           <AreaChart
             data={growth.data.data}
-            series={[{ key: 'value', name: '新增用户', color: '#10b981' }]}
+            series={[{ key: 'value', name: '新增用户', color: 'var(--pp-success)' }]}
             height={200}
             formatValue={(v) => String(v) + ' 人'}
           />
@@ -504,18 +504,18 @@ export default function UserTraffic() {
           return (
             <div style={{ display: 'flex', alignItems: 'center', gap: 36, flexWrap: 'wrap', padding: '4px 0' }}>
               <svg width="140" height="140" viewBox="0 0 140 140">
-                <circle cx="70" cy="70" r={r} fill="none" stroke="#eef2f7" strokeWidth="16" />
+                <circle cx="70" cy="70" r={r} fill="none" stroke="var(--pp-border-soft)" strokeWidth="16" />
                 <circle
-                  cx="70" cy="70" r={r} fill="none" stroke="#10b981" strokeWidth="16"
+                  cx="70" cy="70" r={r} fill="none" stroke="var(--pp-success)" strokeWidth="16"
                   strokeDasharray={c} strokeDashoffset={c - (pct / 100) * c}
                   strokeLinecap="round" transform="rotate(-90 70 70)"
                 />
-                <text x="70" y="66" textAnchor="middle" style={{ fontSize: 22, fontWeight: 700, fill: '#065f46' }}>{online}</text>
-                <text x="70" y="86" textAnchor="middle" style={{ fontSize: 12, fill: '#6b7280' }}>在线</text>
+                <text x="70" y="66" textAnchor="middle" style={{ fontSize: 22, fontWeight: 700, fill: 'var(--pp-success)' }}>{online}</text>
+                <text x="70" y="86" textAnchor="middle" style={{ fontSize: 12, fill: 'var(--pp-text-secondary)' }}>在线</text>
               </svg>
               <div style={{ display: 'grid', gap: 10 }}>
-                <div><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 5, background: '#10b981', marginRight: 8 }} />在线 <b>{online}</b></div>
-                <div><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 5, background: '#cbd5e1', marginRight: 8 }} />离线 <b>{offline}</b></div>
+                <div><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 5, background: 'var(--pp-success)', marginRight: 8 }} />在线 <b>{online}</b></div>
+                <div><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 5, background: 'var(--pp-text-tertiary)', marginRight: 8 }} />离线 <b>{offline}</b></div>
                 <div className="pp-muted" style={{ fontSize: 12 }}>合计 {total} 个用户 · 活跃率 {total ? pct.toFixed(0) : 0}%</div>
               </div>
             </div>
@@ -563,8 +563,8 @@ export default function UserTraffic() {
           <AreaChart
             data={(series.data && series.data.data) || []}
             series={[
-              { key: 'down', name: '下行', color: '#0ea5e9' },
-              { key: 'up', name: '上行', color: '#8b5cf6' },
+              { key: 'down', name: '下行', color: 'var(--pp-chart-7)' },
+              { key: 'up', name: '上行', color: 'var(--pp-chart-6)' },
             ]}
             height={240}
             formatValue={fmtBytes}
@@ -595,8 +595,8 @@ export default function UserTraffic() {
           <AreaChart
             data={rate.data.data}
             series={[
-              { key: 'down', name: '下行', color: '#0ea5e9' },
-              { key: 'up', name: '上行', color: '#8b5cf6' },
+              { key: 'down', name: '下行', color: 'var(--pp-chart-7)' },
+              { key: 'up', name: '上行', color: 'var(--pp-chart-6)' },
             ]}
             height={200}
             formatValue={(v) => fmtBytes(v) + '/s'}
@@ -630,8 +630,8 @@ export default function UserTraffic() {
                   <span style={{ width: 210, fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {u.owner || u.remark || u.email || String(u.uuid).slice(0, 8)}
                   </span>
-                  <div style={{ flex: 1, height: 8, background: '#eef2f7', borderRadius: 4, overflow: 'hidden' }}>
-                    <div style={{ width: (u._sum / max) * 100 + '%', height: '100%', borderRadius: 4, background: 'linear-gradient(90deg,#38bdf8,#8b5cf6)' }} />
+                  <div style={{ flex: 1, height: 8, background: 'var(--pp-border-soft)', borderRadius: 4, overflow: 'hidden' }}>
+                    <div style={{ width: (u._sum / max) * 100 + '%', height: '100%', borderRadius: 4, background: 'linear-gradient(90deg, var(--pp-chart-7), var(--pp-chart-6))' }} />
                   </div>
                   <span className="pp-mono" style={{ width: 96, textAlign: 'right', fontSize: 12 }}>{fmtBytes(u._sum)}</span>
                 </div>
@@ -673,8 +673,8 @@ export default function UserTraffic() {
                 <div key={n.name + i} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <span className="pp-muted" style={{ width: 22, textAlign: 'right', fontSize: 12 }}>{i + 1}</span>
                   <span style={{ width: 210, fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.name}</span>
-                  <div style={{ flex: 1, height: 8, background: '#eef2f7', borderRadius: 4, overflow: 'hidden' }}>
-                    <div style={{ width: (n.value / max) * 100 + '%', height: '100%', borderRadius: 4, background: 'linear-gradient(90deg,#10b981,#22d3ee)' }} />
+                  <div style={{ flex: 1, height: 8, background: 'var(--pp-border-soft)', borderRadius: 4, overflow: 'hidden' }}>
+                    <div style={{ width: (n.value / max) * 100 + '%', height: '100%', borderRadius: 4, background: 'linear-gradient(90deg, var(--pp-success), var(--pp-chart-2))' }} />
                   </div>
                   <span className="pp-mono" style={{ width: 96, textAlign: 'right', fontSize: 12 }}>{fmtBytes(n.value)}</span>
                 </div>
@@ -910,8 +910,8 @@ export default function UserTraffic() {
               <AreaChart
                 data={detailSeries}
                 series={[
-                  { key: 'down', name: '下行', color: '#0ea5e9' },
-                  { key: 'up', name: '上行', color: '#8b5cf6' },
+                  { key: 'down', name: '下行', color: 'var(--pp-chart-7)' },
+                  { key: 'up', name: '上行', color: 'var(--pp-chart-6)' },
                 ]}
                 height={240}
                 formatValue={fmtBytes}

@@ -121,7 +121,7 @@ const loadText = (row) => (row.load1 == null ? '—' : Number(row.load1).toFixed
 
 function MiniRing({ value, label }) {
   const pct = Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
-  const color = pct >= 90 ? '#f43f5e' : pct >= 75 ? '#f59e0b' : pct >= 50 ? '#0ea5e9' : '#10b981';
+  const color = pct >= 90 ? 'var(--pp-danger)' : pct >= 75 ? 'var(--pp-warning)' : pct >= 50 ? 'var(--pp-chart-3)' : 'var(--pp-success)';
   return (
     <div className="pp-ov-ring">
       <Progress
@@ -150,12 +150,12 @@ function Pct({ value }) {
 function IpText({ row }) {
   const { v4, v6 } = splitIps(row);
   if (!v4 && !v6) {
-    return <span className="pp-mono" style={{ color: '#334155', fontSize: 12 }}>{row.host || '—'}</span>;
+    return <span className="pp-mono" style={{ color: 'var(--pp-text)', fontSize: 12 }}>{row.host || '—'}</span>;
   }
   return (
-    <div className="pp-mono" style={{ fontSize: 12, lineHeight: 1.5, color: '#334155' }}>
+    <div className="pp-mono" style={{ fontSize: 12, lineHeight: 1.5, color: 'var(--pp-text)' }}>
       {v4 ? <div>{v4}</div> : null}
-      {v6 ? <div style={{ color: '#64748b' }}>{v6}</div> : null}
+      {v6 ? <div style={{ color: 'var(--pp-text)' }}>{v6}</div> : null}
     </div>
   );
 }
@@ -301,7 +301,7 @@ function RingGauge({ percent, label }) {
         size={46}
         percent={v}
         strokeWidth={7}
-        strokeColor={has ? levelColor(v) : '#e2e8f0'}
+        strokeColor={has ? levelColor(v) : 'var(--pp-border)'}
         format={() => <span style={{ fontSize: 11, fontWeight: 600 }}>{has ? `${v}%` : '—'}</span>}
       />
       <div className="pp-srv-ring-label">{label}</div>
@@ -797,7 +797,7 @@ export default function ServersUnified() {
         const limit = Number(x.limit_bytes);
         const left = Math.max(0, limit - used);
         const pct = (left * 100) / limit;
-        const color = pct <= 10 ? '#f43f5e' : pct <= 20 ? '#f59e0b' : '#16a34a';
+        const color = pct <= 10 ? 'var(--pp-danger)' : pct <= 20 ? 'var(--pp-warning)' : 'var(--pp-success)';
         return (
           <div>
             <div style={{ fontSize: 12, color, fontWeight: 600 }}>{fmtBytes(left)}（{pct.toFixed(1)}%）</div>
@@ -812,7 +812,7 @@ export default function ServersUnified() {
       width: 190,
       fixed: 'left',
       render: (v, row) => (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600, color: '#0f172a' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600, color: 'var(--pp-text)' }}>
           {v || `#${row.id}`}
           {isLocal(row) ? <Tag color="purple" style={{ marginInlineEnd: 0 }}>本地</Tag> : null}
         </span>
@@ -1026,7 +1026,7 @@ export default function ServersUnified() {
               <div className="pp-ov-foot">
                 未接入 <b>{fmtNum(counts.unknown)}</b> · 未安装 {fmtNum(summary.not_installed || 0)} 项
                 {anomalies.length ? (
-                  <span style={{ marginInlineStart: 8, color: '#f59e0b' }}>
+                  <span style={{ marginInlineStart: 8, color: 'var(--pp-warning)' }}>
                     服务异常 {anomalies.map((a) => a.name + ':' + a.services.join('/')).join('，')}
                   </span>
                 ) : null}
@@ -1080,7 +1080,7 @@ export default function ServersUnified() {
             <div className="pp-toolbar">
               <Input
                 allowClear
-                prefix={<SearchOutlined style={{ color: '#94a3b8' }} />}
+                prefix={<SearchOutlined style={{ color: 'var(--pp-text)' }} />}
                 placeholder="搜索名称 / IP / 标签"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
@@ -1130,9 +1130,9 @@ export default function ServersUnified() {
                 style={{
                   marginTop: 4,
                   padding: '8px 10px',
-                  border: '1px solid #eef2f7',
+                  border: '1px solid var(--pp-border)',
                   borderRadius: 10,
-                  background: '#f8fafc',
+                  background: 'var(--pp-surface)',
                 }}
               >
                 <span style={{ fontSize: 13 }}>
@@ -1321,20 +1321,20 @@ export default function ServersUnified() {
         </div>
         <JsonView value={String((created && created.command) || '')} maxHeight={260} />
         {created && created.note ? (
-          <div style={{ marginTop: 10, fontSize: 12, color: '#94a3b8', lineHeight: 1.7 }}>{created.note}</div>
+          <div style={{ marginTop: 10, fontSize: 12, color: 'var(--pp-text)', lineHeight: 1.7 }}>{created.note}</div>
         ) : null}
       </Modal>
     </div>
   );
 }
 
-function OvRing({ pct = 0, color = '#22c55e', size = 36 }) {
+function OvRing({ pct = 0, color = 'var(--pp-success)', size = 36 }) {
   const r = (size - 6) / 2;
   const c = 2 * Math.PI * r;
   const v = Math.max(0, Math.min(100, pct));
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ display: 'block' }}>
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#eef2f7" strokeWidth="3" />
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--pp-border)" strokeWidth="3" />
       <circle
         cx={size / 2}
         cy={size / 2}
@@ -1351,7 +1351,7 @@ function OvRing({ pct = 0, color = '#22c55e', size = 36 }) {
   );
 }
 
-function OvSpark({ data = [], color = '#38bdf8', height = 26 }) {
+function OvSpark({ data = [], color = 'var(--pp-chart-3)', height = 26 }) {
   const arr = (data || []).slice(-24);
   if (arr.length < 2) return <div style={{ height }} />;
   const max = Math.max(...arr, 1);
@@ -1372,11 +1372,11 @@ function renderOvChart(kind, ctx) {
   if (!kind) return null;
   const total = ctx.total || 0;
   const pct = (n) => (total ? (n / total) * 100 : 0);
-  if (kind === 'online') return <div className="pp-ov-chart"><OvRing pct={pct(ctx.online)} color="#22c55e" /></div>;
-  if (kind === 'offline') return <div className="pp-ov-chart"><OvRing pct={pct(ctx.offline)} color="#f43f5e" /></div>;
-  if (kind === 'unknown') return <div className="pp-ov-chart"><OvRing pct={pct(ctx.unknown)} color="#cbd5e1" /></div>;
-  if (kind === 'rx') return <div className="pp-ov-chart"><OvSpark data={ctx.hist.rx} color="#38bdf8" /></div>;
-  if (kind === 'tx') return <div className="pp-ov-chart"><OvSpark data={ctx.hist.tx} color="#a78bfa" /></div>;
-  if (kind === 'sum') return <div className="pp-ov-chart"><OvSpark data={ctx.hist.sum} color="#22c55e" /></div>;
+  if (kind === 'online') return <div className="pp-ov-chart"><OvRing pct={pct(ctx.online)} color="var(--pp-success)" /></div>;
+  if (kind === 'offline') return <div className="pp-ov-chart"><OvRing pct={pct(ctx.offline)} color="var(--pp-danger)" /></div>;
+  if (kind === 'unknown') return <div className="pp-ov-chart"><OvRing pct={pct(ctx.unknown)} color="var(--pp-chart-axis)" /></div>;
+  if (kind === 'rx') return <div className="pp-ov-chart"><OvSpark data={ctx.hist.rx} color="var(--pp-chart-3)" /></div>;
+  if (kind === 'tx') return <div className="pp-ov-chart"><OvSpark data={ctx.hist.tx} color="var(--pp-chart-4)" /></div>;
+  if (kind === 'sum') return <div className="pp-ov-chart"><OvSpark data={ctx.hist.sum} color="var(--pp-success)" /></div>;
   return null;
 }

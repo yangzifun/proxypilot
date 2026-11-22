@@ -244,7 +244,7 @@ export default function Groups() {
       content: (
         <div style={{ fontSize: 13, lineHeight: 1.8 }}>
           将删除 <b className="pp-mono">{shortUuid(row.uuid)}</b> 的全部节点配置与元信息，
-          <b style={{ color: '#f43f5e' }}>并从所有节点上移除该 UUID 的授权</b>。此操作不可撤销。
+          <b style={{ color: 'var(--pp-danger)' }}>并从所有节点上移除该 UUID 的授权</b>。此操作不可撤销。
         </div>
       ),
       okText: '确认删除',
@@ -278,7 +278,7 @@ export default function Groups() {
       dataIndex: 'email',
       width: 190,
       ellipsis: true,
-      render: (v) => (v ? <span style={{ color: '#475569' }}>{v}</span> : <span className="pp-muted">—</span>),
+      render: (v) => (v ? <span style={{ color: 'var(--pp-text)' }}>{v}</span> : <span className="pp-muted">—</span>),
     },
     {
       title: '状态',
@@ -392,7 +392,7 @@ export default function Groups() {
                 <Space wrap>
                   <Input
                     allowClear
-                    prefix={<SearchOutlined style={{ color: '#94a3b8' }} />}
+                    prefix={<SearchOutlined style={{ color: 'var(--pp-text)' }} />}
                     placeholder="搜索 UUID / 所有者 / 邮箱 / 备注"
                     value={q}
                     onChange={(e) => {
@@ -686,7 +686,7 @@ function BatchPushModal({ open, onClose }) {
       />
       <Space orientation="vertical" style={{ width: '100%' }} size={14}>
         <div>
-          <div style={{ fontSize: 13, color: '#64748b', marginBottom: 6 }}>服务器（已选 {selServers.length}）</div>
+          <div style={{ fontSize: 13, color: 'var(--pp-text)', marginBottom: 6 }}>服务器（已选 {selServers.length}）</div>
           <Select
             mode="multiple"
             allowClear
@@ -703,7 +703,7 @@ function BatchPushModal({ open, onClose }) {
           />
         </div>
         <div>
-          <div style={{ fontSize: 13, color: '#64748b', marginBottom: 6 }}>UUID（已选 {selUuids.length}）</div>
+          <div style={{ fontSize: 13, color: 'var(--pp-text)', marginBottom: 6 }}>UUID（已选 {selUuids.length}）</div>
           <Select
             mode="multiple"
             allowClear
@@ -721,7 +721,7 @@ function BatchPushModal({ open, onClose }) {
           />
         </div>
         <div>
-          <span style={{ fontSize: 13, color: '#64748b', marginRight: 8 }}>保存后立即下发</span>
+          <span style={{ fontSize: 13, color: 'var(--pp-text)', marginRight: 8 }}>保存后立即下发</span>
           <Switch size="small" checked={push} onChange={setPush} />
         </div>
       </Space>
@@ -850,7 +850,7 @@ function RotateUuidModal({ open, row, onClose, onRotated }) {
               />
             </Descriptions.Item>
           </Descriptions>
-          <div style={{ fontSize: 13, color: '#64748b', marginBottom: 8 }}>新订阅链接</div>
+          <div style={{ fontSize: 13, color: 'var(--pp-text)', marginBottom: 8 }}>新订阅链接</div>
           <Space orientation="vertical" size={8} style={{ width: '100%' }}>
             {links.map((it) => (
               <div key={it.key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -861,14 +861,14 @@ function RotateUuidModal({ open, row, onClose, onRotated }) {
             ))}
           </Space>
           {stats.length ? (
-            <div style={{ marginTop: 14, fontSize: 12, color: '#64748b' }}>
+            <div style={{ marginTop: 14, fontSize: 12, color: 'var(--pp-text)' }}>
               {stats.map((it) => `${it.label} ${Number(result[it.k]) || 0}`).join(' · ')}
             </div>
           ) : null}
           {result && result.warning ? (
             <Alert type="warning" showIcon style={{ marginTop: 14 }} message={String(result.warning)} />
           ) : null}
-          <div style={{ marginTop: 12, color: '#94a3b8', fontSize: 12 }}>
+          <div style={{ marginTop: 12, color: 'var(--pp-text)', fontSize: 12 }}>
             列表已自动刷新；详情抽屉如停在旧 UUID 已关闭。
           </div>
         </div>
@@ -896,7 +896,7 @@ function RotateUuidModal({ open, row, onClose, onRotated }) {
             ) : null}
           </Descriptions>
 
-          <div style={{ fontSize: 13, color: '#64748b', marginBottom: 6 }}>新 UUID</div>
+          <div style={{ fontSize: 13, color: 'var(--pp-text)', marginBottom: 6 }}>新 UUID</div>
           <Radio.Group
             value={mode}
             onChange={(e) => { setMode(e.target.value); setErr(''); }}
@@ -914,10 +914,10 @@ function RotateUuidModal({ open, row, onClose, onRotated }) {
               allowClear
             />
           ) : (
-            <div style={{ fontSize: 12, color: '#94a3b8' }}>提交后由服务端生成一个全新的 UUID（v4），无需手工填写。</div>
+            <div style={{ fontSize: 12, color: 'var(--pp-text)' }}>提交后由服务端生成一个全新的 UUID（v4），无需手工填写。</div>
           )}
 
-          <div style={{ fontSize: 13, color: '#64748b', margin: '16px 0 6px' }}>二次确认（防止误操作）</div>
+          <div style={{ fontSize: 13, color: 'var(--pp-text)', margin: '16px 0 6px' }}>二次确认（防止误操作）</div>
           <Input
             className="pp-mono"
             placeholder="粘贴旧 UUID"

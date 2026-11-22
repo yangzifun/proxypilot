@@ -262,9 +262,9 @@ export default function NodeBindings() {
                   style={{
                     marginInlineEnd: 0,
                     border: 'none',
-                    backgroundColor: t.enabled ? t.color : '#e2e8f0',
-                    borderColor: t.enabled ? t.color : '#e2e8f0',
-                    color: t.enabled ? '#fff' : '#64748b',
+                    backgroundColor: t.enabled ? t.color : 'var(--pp-border)',
+                    borderColor: t.enabled ? t.color : 'var(--pp-border)',
+                    color: t.enabled ? 'var(--pp-surface)' : 'var(--pp-text)',
                     fontWeight: 500,
                   }}
                 >

@@ -405,7 +405,7 @@ export default function MtprotoPanel({ templatesOnly }) {
       width: 140,
       render: (_, row) => (
         <div>
-          <div style={{ color: '#334155' }}>{row.server_name || '—'}</div>
+          <div style={{ color: 'var(--pp-text)' }}>{row.server_name || '—'}</div>
           <div className="pp-mono pp-muted" style={{ fontSize: 12 }}>{row.server_ip4 || row.server_host || ''}</div>
         </div>
       ),
@@ -734,7 +734,7 @@ export default function MtprotoPanel({ templatesOnly }) {
       <Modal open={!!linkModal} title={linkModal ? linkModal.title : ''} footer={null} onCancel={() => setLinkModal(null)} width={520} destroyOnClose>
         {linkModal ? (
           <div style={{ textAlign: 'center' }}>
-            <div style={{ display: 'inline-block', padding: 10, background: '#fff', borderRadius: 12 }}>
+            <div style={{ display: 'inline-block', padding: 10, background: 'var(--pp-surface)', borderRadius: 12 }}>
               <QRCode value={linkModal.tg} size={220} type="svg" errorLevel="M" bordered={false} />
             </div>
             <p className="pp-muted" style={{ marginTop: 10 }}>

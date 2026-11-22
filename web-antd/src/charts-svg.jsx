@@ -8,7 +8,7 @@
  *    配色直接继承 antd 主题 token，观感与组件库统一，且零外部请求。
  * ================================================================= */
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { chartAxisColor, chartGridColor, chartPalette } from './theme';
+import { chartPalette, useAppTheme } from './theme';
 
 const nf = new Intl.NumberFormat('zh-CN');
 
@@ -22,6 +22,24 @@ function fmtCompact(n) {
 /* ---------------- 基础工具 ---------------- */
 
 /** 监听容器宽度，图表等比自适应 */
+/** 图表主题：优先主题 palette / 语义变量；主题切换后组件重渲染即取新值 */
+function useChartTheme() {
+  const t = useAppTheme();
+  const vars = t.vars || {};
+  return {
+    palette: Array.isArray(t.palette) && t.palette.length ? t.palette : chartPalette,
+    axis: vars['--pp-chart-axis'] || 'var(--pp-text-tertiary)',
+    grid: vars['--pp-chart-grid'] || 'var(--pp-chart-grid)',
+    primary: vars['--pp-primary'] || 'var(--pp-primary)',
+    success: vars['--pp-success'] || 'var(--pp-success)',
+    warning: vars['--pp-warning'] || 'var(--pp-warning)',
+    danger: vars['--pp-danger'] || 'var(--pp-danger)',
+    info: vars['--pp-info'] || 'var(--pp-info)',
+    surface: vars['--pp-surface'] || 'var(--pp-surface)',
+    track: vars['--pp-border-soft'] || 'var(--pp-border-soft)',
+  };
+}
+
 function useWidth() {
   const ref = useRef(null);
   const [w, setW] = useState(0);
@@ -111,6 +129,7 @@ export function AreaChart({
   minTickGap = 56,
 }) {
   const [ref, w] = useWidth();
+  const ct = useChartTheme();
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
   const [hover, setHover] = useState(null);
 
@@ -171,8 +190,8 @@ export function AreaChart({
           <defs>
             {series.map((s, si) => (
               <linearGradient key={s.key} id={`${uid}-g${si}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={s.color || chartPalette[si]} stopOpacity="0.26" />
-                <stop offset="100%" stopColor={s.color || chartPalette[si]} stopOpacity="0.01" />
+                <stop offset="0%" stopColor={s.color || ct.palette[si]} stopOpacity="0.26" />
+                <stop offset="100%" stopColor={s.color || ct.palette[si]} stopOpacity="0.01" />
               </linearGradient>
             ))}
           </defs>
@@ -185,11 +204,11 @@ export function AreaChart({
                 x2={pad.left + innerW}
                 y1={yAt(t)}
                 y2={yAt(t)}
-                stroke={chartGridColor}
+                stroke={ct.grid}
                 strokeWidth="1"
                 strokeDasharray={t === 0 ? undefined : '3 4'}
               />
-              <text x={pad.left - 10} y={yAt(t) + 4} textAnchor="end" fontSize="11" fill={chartAxisColor}>
+              <text x={pad.left - 10} y={yAt(t) + 4} textAnchor="end" fontSize="11" fill={ct.axis}>
                 {formatValue(t)}
               </text>
             </g>
@@ -210,7 +229,7 @@ export function AreaChart({
                 y={height - 6}
                 textAnchor={i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'}
                 fontSize="11"
-                fill={chartAxisColor}
+                fill={ct.axis}
               >
                 {row.label}
               </text>
@@ -218,7 +237,7 @@ export function AreaChart({
           })}
 
           {series.map((s, si) => {
-            const color = s.color || chartPalette[si];
+            const color = s.color || ct.palette[si];
             const pts = (data || []).map((row, i) => [xAt(i), yAt(row[s.key])]);
             if (!pts.length) return null;
             const line = smoothPath(pts, pad.top, pad.top + innerH);
@@ -245,7 +264,7 @@ export function AreaChart({
                 x2={xAt(hover)}
                 y1={pad.top}
                 y2={pad.top + innerH}
-                stroke="#94a3b8"
+                stroke={ct.axis}
                 strokeWidth="1"
                 strokeDasharray="3 3"
               />
@@ -255,8 +274,8 @@ export function AreaChart({
                   cx={xAt(hover)}
                   cy={yAt(hoverRow[s.key])}
                   r="4.5"
-                  fill="#fff"
-                  stroke={s.color || chartPalette[si]}
+                  fill={ct.surface}
+                  stroke={s.color || ct.palette[si]}
                   strokeWidth="2.5"
                 />
               ))}
@@ -276,7 +295,7 @@ export function AreaChart({
           <div className="pp-tooltip-title">{hoverRow.fullLabel || hoverRow.label}</div>
           {series.map((s, si) => (
             <div className="pp-tooltip-row" key={s.key}>
-              <i style={{ background: s.color || chartPalette[si] }} />
+              <i style={{ background: s.color || ct.palette[si] }} />
               <span>{s.name}</span>
               <b>
                 {nf.format(Number(hoverRow[s.key]) || 0)}
@@ -294,6 +313,7 @@ export function AreaChart({
 
 export function ColumnChart({ data, series, height = 240, unit = '', formatValue = fmtCompact, referenceLine, yMax }) {
   const [ref, w] = useWidth();
+  const ct = useChartTheme();
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
   const [hover, setHover] = useState(null);
 
@@ -328,8 +348,8 @@ export function ColumnChart({ data, series, height = 240, unit = '', formatValue
           <defs>
             {series.map((s, si) => (
               <linearGradient key={s.key} id={`${uid}-c${si}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={s.color || chartPalette[si]} stopOpacity="0.95" />
-                <stop offset="100%" stopColor={s.color || chartPalette[si]} stopOpacity="0.55" />
+                <stop offset="0%" stopColor={s.color || ct.palette[si]} stopOpacity="0.95" />
+                <stop offset="100%" stopColor={s.color || ct.palette[si]} stopOpacity="0.55" />
               </linearGradient>
             ))}
           </defs>
@@ -340,7 +360,7 @@ export function ColumnChart({ data, series, height = 240, unit = '', formatValue
                 x2={pad.left + innerW}
                 y1={yAt(Number(referenceLine))}
                 y2={yAt(Number(referenceLine))}
-                stroke="#f59e0b"
+                stroke={ct.warning}
                 strokeWidth="1"
                 strokeDasharray="4 4"
               />
@@ -349,7 +369,7 @@ export function ColumnChart({ data, series, height = 240, unit = '', formatValue
                 y={yAt(Number(referenceLine)) - 4}
                 textAnchor="end"
                 fontSize="11"
-                fill="#f59e0b"
+                fill={ct.warning}
               >
                 {referenceLine}
               </text>
@@ -364,10 +384,10 @@ export function ColumnChart({ data, series, height = 240, unit = '', formatValue
                 x2={pad.left + innerW}
                 y1={yAt(t)}
                 y2={yAt(t)}
-                stroke={chartGridColor}
+                stroke={ct.grid}
                 strokeDasharray={t === 0 ? undefined : '3 4'}
               />
-              <text x={pad.left - 10} y={yAt(t) + 4} textAnchor="end" fontSize="11" fill={chartAxisColor}>
+              <text x={pad.left - 10} y={yAt(t) + 4} textAnchor="end" fontSize="11" fill={ct.axis}>
                 {formatValue(t)}
               </text>
             </g>
@@ -387,7 +407,7 @@ export function ColumnChart({ data, series, height = 240, unit = '', formatValue
                   y={pad.top}
                   width={slot}
                   height={innerH}
-                  fill={active ? 'rgba(79,70,229,0.05)' : 'transparent'}
+                  fill={active ? ct.primary + '0d' : 'transparent'}
                 />
                 {series.map((s, si) => {
                   const v = Number(row[s.key]) || 0;
@@ -408,7 +428,7 @@ export function ColumnChart({ data, series, height = 240, unit = '', formatValue
                   );
                 })}
                 {(i % labelEvery === 0 || n <= 8) && (
-                  <text x={cx} y={height - 8} textAnchor="middle" fontSize="11" fill={chartAxisColor}>
+                  <text x={cx} y={height - 8} textAnchor="middle" fontSize="11" fill={ct.axis}>
                     {row.label}
                   </text>
                 )}
@@ -432,7 +452,7 @@ export function ColumnChart({ data, series, height = 240, unit = '', formatValue
           <div className="pp-tooltip-title">{data[hover].fullLabel || data[hover].label}</div>
           {series.map((s, si) => (
             <div className="pp-tooltip-row" key={s.key}>
-              <i style={{ background: s.color || chartPalette[si] }} />
+              <i style={{ background: s.color || ct.palette[si] }} />
               <span>{s.name}</span>
               <b>
                 {nf.format(Number(data[hover][s.key]) || 0)}
@@ -450,6 +470,7 @@ export function ColumnChart({ data, series, height = 240, unit = '', formatValue
 
 export function DonutChart({ data, size = 168, thickness = 18, centerLabel = '总计', centerValue }) {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
+  const ct = useChartTheme();
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     const t = setTimeout(() => setMounted(true), 40);
@@ -467,7 +488,7 @@ export function DonutChart({ data, size = 168, thickness = 18, centerLabel = '�
     <div className="pp-donut">
       <div className="pp-donut-canvas" style={{ width: size, height: size }}>
         <svg width={size} height={size} role="img" aria-label="环形占比图">
-          <circle cx={cx} cy={cx} r={r} fill="none" stroke="#f1f5f9" strokeWidth={thickness} />
+          <circle cx={cx} cy={cx} r={r} fill="none" stroke={ct.track} strokeWidth={thickness} />
           {items.map((d, i) => {
             const frac = total ? (Number(d.value) || 0) / total : 0;
             const dash = mounted ? frac * c : 0;
@@ -480,7 +501,7 @@ export function DonutChart({ data, size = 168, thickness = 18, centerLabel = '�
                 cy={cx}
                 r={r}
                 fill="none"
-                stroke={d.color || chartPalette[i]}
+                stroke={d.color || ct.palette[i]}
                 strokeWidth={thickness}
                 strokeLinecap="butt"
                 strokeDasharray={`${dash} ${c}`}
@@ -502,7 +523,7 @@ export function DonutChart({ data, size = 168, thickness = 18, centerLabel = '�
           const pct = total ? ((v / total) * 100).toFixed(1) : '0.0';
           return (
             <div className="pp-donut-row" key={d.name || i}>
-              <i style={{ background: d.color || chartPalette[i] }} />
+              <i style={{ background: d.color || ct.palette[i] }} />
               <span className="pp-donut-name">{d.name}</span>
               <b className="pp-donut-num">{nf.format(v)}</b>
               <em className="pp-donut-pct">{pct}%</em>
@@ -517,6 +538,7 @@ export function DonutChart({ data, size = 168, thickness = 18, centerLabel = '�
 /* ---------------- 仪表盘 ---------------- */
 
 export function GaugeChart({ value = 0, max = 100, label = '', suffix = '%', color, size = 168 }) {
+  const ct = useChartTheme();
   const pct = Math.min(100, Math.max(0, max ? (Number(value) / max) * 100 : 0));
   const r = size / 2 - 14;
   const cx = size / 2;
@@ -524,12 +546,12 @@ export function GaugeChart({ value = 0, max = 100, label = '', suffix = '%', col
   const start = -118;
   const end = 118;
   const sweep = ((end - start) * pct) / 100;
-  const stroke = color || (pct >= 90 ? '#f43f5e' : pct >= 75 ? '#f59e0b' : pct >= 50 ? '#0ea5e9' : '#10b981');
+  const stroke = color || (pct >= 90 ? ct.danger : pct >= 75 ? ct.warning : pct >= 50 ? ct.info : ct.success);
 
   return (
     <div className="pp-gauge" style={{ width: size }}>
       <svg width={size} height={size * 0.82} viewBox={`0 0 ${size} ${size * 0.82}`} role="img" aria-label={label}>
-        <path d={arcPath(cx, cy, r, start, end)} fill="none" stroke="#f1f5f9" strokeWidth="12" strokeLinecap="round" />
+        <path d={arcPath(cx, cy, r, start, end)} fill="none" stroke={ct.track} strokeWidth="12" strokeLinecap="round" />
         <path
           d={arcPath(cx, cy, r, start, start + sweep)}
           fill="none"
@@ -552,7 +574,9 @@ export function GaugeChart({ value = 0, max = 100, label = '', suffix = '%', col
 
 /* ---------------- 迷你走势 ---------------- */
 
-export function Sparkline({ values, color = chartPalette[0], height = 34, fill = true }) {
+export function Sparkline({ values, color, height = 34, fill = true }) {
+  const ct = useChartTheme();
+  const strokeColor = color || ct.palette[0];
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
   const data = Array.isArray(values) ? values.map((v) => Number(v) || 0) : [];
   if (data.length < 2) return <div style={{ height }} />;
@@ -576,12 +600,12 @@ export function Sparkline({ values, color = chartPalette[0], height = 34, fill =
     >
       <defs>
         <linearGradient id={`${uid}-s`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.28" />
-          <stop offset="100%" stopColor={color} stopOpacity="0" />
+          <stop offset="0%" stopColor={strokeColor} stopOpacity="0.28" />
+          <stop offset="100%" stopColor={strokeColor} stopOpacity="0" />
         </linearGradient>
       </defs>
       {fill && <path d={`${line} L${W},${height} L0,${height} Z`} fill={`url(#${uid}-s)`} />}
-      <path d={line} fill="none" stroke={color} strokeWidth="1.6" vectorEffect="non-scaling-stroke" />
+      <path d={line} fill="none" stroke={strokeColor} strokeWidth="1.6" vectorEffect="non-scaling-stroke" />
     </svg>
   );
 }
@@ -589,6 +613,7 @@ export function Sparkline({ values, color = chartPalette[0], height = 34, fill =
 /* ---------------- 横向条形（标签 + 进度） ---------------- */
 
 export function BarList({ items, unit = '' }) {
+  const ct = useChartTheme();
   const max = Math.max(1, ...items.map((i) => Number(i.value) || 0));
   return (
     <div className="pp-barlist">
@@ -610,7 +635,7 @@ export function BarList({ items, unit = '' }) {
               <i
                 style={{
                   width: Math.max(2, w) + '%',
-                  background: it.color || chartPalette[i % chartPalette.length],
+                  background: it.color || ct.palette[i % ct.palette.length],
                 }}
               />
             </div>

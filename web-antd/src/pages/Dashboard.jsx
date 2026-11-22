@@ -14,7 +14,6 @@ import { useAsync } from '../hooks';
 import { AreaChart, BarList, ChartLegend, DonutChart } from '../charts';
 import { ErrorBlock, MiniStat, PageCard, StatCard } from '../components';
 import { dailyRows, fmtAgo, fmtCompact, fmtNum, fmtTime, shortUuid } from '../format';
-import { chartPalette } from '../theme';
 
 const TYPE_TAG = {
   subscription: { color: 'geekblue', text: '订阅访问' },
@@ -35,18 +34,18 @@ export default function Dashboard() {
 
   const series = useMemo(() => {
     if (view === 'total') {
-      return [{ key: 'total', name: '总访问', color: chartPalette[0] }];
+      return [{ key: 'total', name: '总访问', color: 'var(--pp-chart-1)' }];
     }
     return [
-      { key: 'subscription', name: '订阅访问', color: chartPalette[3] },
-      { key: 'api_generation', name: '网页生成', color: chartPalette[2] },
+      { key: 'subscription', name: '订阅访问', color: 'var(--pp-chart-4)' },
+      { key: 'api_generation', name: '网页生成', color: 'var(--pp-chart-3)' },
     ];
   }, [view]);
 
   const popular = (a.popular_uuids || []).map((p, i) => ({
     label: p.owner ? `${p.owner} · ${shortUuid(p.uuid)}` : shortUuid(p.uuid),
     value: Number(p.access_count) || 0,
-    color: chartPalette[i % chartPalette.length],
+    color: `var(--pp-chart-${(i % 8) + 1})`,
   }));
 
   const spark = daily.map((d) => d.total);
@@ -90,7 +89,7 @@ export default function Dashboard() {
             icon={<ApartmentOutlined />}
             label="订阅用户"
             value={showSkeleton ? '—' : fmtNum(data && data.uuids)}
-            accent={chartPalette[0]}
+            accent={'var(--pp-chart-1)'}
             hint="按 UUID 划分的配置分组"
           />
         </Col>
@@ -99,7 +98,7 @@ export default function Dashboard() {
             icon={<FileTextOutlined />}
             label="订阅模板"
             value={showSkeleton ? '—' : fmtNum(data && data.templates)}
-            accent={chartPalette[3]}
+            accent={'var(--pp-chart-4)'}
             hint="Clash / Mihomo 模板数量"
           />
         </Col>
@@ -109,7 +108,7 @@ export default function Dashboard() {
             label="访问总量"
             value={showSkeleton ? '—' : fmtCompact(a.total_requests)}
             unit="次"
-            accent={chartPalette[1]}
+            accent={'var(--pp-chart-2)'}
             hint={`统计窗口：近 ${days} 天`}
             spark={spark}
           />
@@ -120,7 +119,7 @@ export default function Dashboard() {
             label="今日访问"
             value={showSkeleton ? '—' : fmtNum(a.today_total)}
             unit="次"
-            accent={chartPalette[2]}
+            accent={'var(--pp-chart-3)'}
             hint={`订阅 ${fmtNum(a.today_subscription)} · 生成 ${fmtNum(a.today_apigen)}`}
           />
         </Col>
@@ -132,7 +131,7 @@ export default function Dashboard() {
           <PageCard
             title={
               <span className="pp-section-title">
-                <EyeOutlined style={{ color: '#4f46e5' }} />
+                <EyeOutlined style={{ color: 'var(--pp-primary)' }} />
                 访问趋势
               </span>
             }
@@ -168,7 +167,7 @@ export default function Dashboard() {
           <PageCard
             title={
               <span className="pp-section-title">
-                <ThunderboltOutlined style={{ color: '#06b6d4' }} />
+                <ThunderboltOutlined style={{ color: 'var(--pp-info)' }} />
                 访问构成
               </span>
             }
@@ -176,8 +175,8 @@ export default function Dashboard() {
           >
             <DonutChart
               data={[
-                { name: '订阅访问', value: a.subscription_requests || 0, color: chartPalette[3] },
-                { name: '网页生成', value: a.api_generation_requests || 0, color: chartPalette[2] },
+                { name: '订阅访问', value: a.subscription_requests || 0, color: 'var(--pp-chart-4)' },
+                { name: '网页生成', value: a.api_generation_requests || 0, color: 'var(--pp-chart-3)' },
               ]}
               centerLabel="总请求"
               centerValue={a.total_requests || 0}
@@ -189,10 +188,10 @@ export default function Dashboard() {
                 <MiniStat label="独立订阅 UUID" value={fmtNum(a.unique_uuids)} />
               </Col>
               <Col span={12}>
-                <MiniStat label="今日订阅" value={fmtNum(a.today_subscription)} accent={chartPalette[3]} />
+                <MiniStat label="今日订阅" value={fmtNum(a.today_subscription)} accent={'var(--pp-chart-4)'} />
               </Col>
               <Col span={12}>
-                <MiniStat label="今日网页生成" value={fmtNum(a.today_apigen)} accent={chartPalette[2]} />
+                <MiniStat label="今日网页生成" value={fmtNum(a.today_apigen)} accent={'var(--pp-chart-3)'} />
               </Col>
               <Col span={12}>
                 <MiniStat
@@ -243,7 +242,7 @@ export default function Dashboard() {
                           {tag.text}
                         </Tag>
                         <Tooltip title={log.uuid}>
-                          <span className="pp-mono" style={{ color: '#334155' }}>
+                          <span className="pp-mono" style={{ color: 'var(--pp-text)' }}>
                             {shortUuid(log.uuid)}
                           </span>
                         </Tooltip>
@@ -265,7 +264,7 @@ export default function Dashboard() {
         </Col>
       </Row>
 
-      <div style={{ marginTop: 14, color: '#a7b3c4', fontSize: 12, display: 'flex', gap: 6, alignItems: 'center' }}>
+      <div style={{ marginTop: 14, color: 'var(--pp-text-tertiary)', fontSize: 12, display: 'flex', gap: 6, alignItems: 'center' }}>
         <ArrowRightOutlined />
         数据来源：<code>/api/stats?days={days}</code>，统计窗口 {days} 天 · 最后刷新{' '}
         {fmtTime(Date.now(), '') || '—'}

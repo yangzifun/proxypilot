@@ -1,6 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { applyTheme, getTheme, subscribeTheme, THEME_TOKENS } from './theme';
-import { ConfigProvider } from 'antd';
 import { Button, Result } from 'antd';
 import { useAuth } from './auth';
 import { useHashRoute } from './hooks';
@@ -65,15 +63,7 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [route]);
 
-  // 全站主题 hooks 必须在任何条件 return 之前调用：logout/登录切换 token 时
-  // App 会从「登录页」与「后台外壳」之间切换，若 hooks 放在 if (!token) 之后，
-  // 同一次组件渲染的 hooks 数量会变化，触发 React #300（renamed more hooks than previous render）。
-  const [siteTheme, setSiteTheme] = useState(() => getTheme());
-  useEffect(() => {
-    applyTheme(getTheme());
-    return subscribeTheme((t) => { setSiteTheme(t); applyTheme(t); });
-  }, []);
-
+  // 主题由 main.jsx 的 ThemeProvider 统一提供（单一 ConfigProvider），App 不再重复包裹。
   if (!token) return <Login />;
 
   const legacySettings = route === 'settings';
@@ -100,18 +90,14 @@ export default function App() {
     body = <PageComp initialTab={legacySettings ? 'settings' : undefined} />;
   }
 
-  // 全站主题：启动时应用并订阅变化
-  const themeTokens = THEME_TOKENS[siteTheme] || THEME_TOKENS.light;
-
+  // 全站主题：main.jsx 的 ThemeProvider 已按当前主题生成唯一 ConfigProvider（token+components）。
   return (
-    <ConfigProvider theme={{ token: themeTokens }}>
     <AppLayout activeKey={key} onNavigate={navigate}>
       {routeLoading ? <div className="pp-route-progress" aria-hidden="true"><span /></div> : null}
       <div className="pp-page-enter" key={key}>
         {body}
       </div>
     </AppLayout>
-    </ConfigProvider>
   );
 }
 

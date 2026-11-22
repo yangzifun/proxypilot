@@ -232,7 +232,7 @@ function UsersTab({ rows, state, self, superAdmin, isSuper, onLogout }) {
       render: (v, row) =>
         v ? (
           <Space size={6}>
-            <span style={{ color: '#475569' }}>{v}</span>
+            <span style={{ color: 'var(--pp-text)' }}>{v}</span>
             {Number(row.email_verified) === 1 ? (
               <Tooltip title={fmtTime(row.email_verified_at)}>
                 <Tag color="success" style={{ marginInlineEnd: 0 }}>已验证</Tag>

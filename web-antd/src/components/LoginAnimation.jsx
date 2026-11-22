@@ -4,13 +4,14 @@
  *  · 周围节点脉冲、数据包沿连线流动、轨道缓慢旋转
  * ================================================================= */
 import React from 'react';
+import { useAppTheme } from '../theme';
 
 const NODES = [
-  { x: 92, y: 118, color: '#38bdf8', delay: '0s' },
-  { x: 100, y: 268, color: '#22c55e', delay: '0.8s' },
-  { x: 468, y: 116, color: '#a78bfa', delay: '1.4s' },
-  { x: 462, y: 262, color: '#38bdf8', delay: '2s' },
-  { x: 280, y: 58, color: '#f59e0b', delay: '0.4s' },
+  { x: 92, y: 118, color: 'var(--pp-chart-7)', delay: '0s' },
+  { x: 100, y: 268, color: 'var(--pp-success)', delay: '0.8s' },
+  { x: 468, y: 116, color: 'var(--pp-chart-6)', delay: '1.4s' },
+  { x: 462, y: 262, color: 'var(--pp-chart-7)', delay: '2s' },
+  { x: 280, y: 58, color: 'var(--pp-warning)', delay: '0.4s' },
 ];
 
 const LINKS = [
@@ -29,23 +30,25 @@ const BARS = [
 ];
 
 export default function LoginAnimation() {
+  const { palette, vars } = useAppTheme();
+  const nodes = NODES.map((n, i) => ({ ...n, color: palette[i % palette.length] || n.color }));
   return (
     <div className="pp-anim" aria-hidden="true">
       <div className="pp-anim-glow" />
       <svg className="pp-anim-svg" viewBox="0 0 560 330" role="presentation">
         <defs>
           <linearGradient id="ppAnimLink" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#6366f1" stopOpacity="0.15" />
-            <stop offset="55%" stopColor="#818cf8" stopOpacity="0.75" />
-            <stop offset="100%" stopColor="#6366f1" stopOpacity="0.15" />
+            <stop offset="0%" stopColor={vars['--pp-primary'] || 'var(--pp-primary)'} stopOpacity="0.15" />
+            <stop offset="55%" stopColor={vars['--pp-chart-2'] || 'var(--pp-chart-1)'} stopOpacity="0.75" />
+            <stop offset="100%" stopColor={vars['--pp-primary'] || 'var(--pp-primary)'} stopOpacity="0.15" />
           </linearGradient>
           <linearGradient id="ppAnimCard" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#1e293b" />
-            <stop offset="100%" stopColor="#0f172a" />
+            <stop offset="0%" stopColor="var(--pp-text)" />
+            <stop offset="100%" stopColor="var(--pp-text)" />
           </linearGradient>
           <radialGradient id="ppAnimHalo">
-            <stop offset="0%" stopColor="#6366f1" stopOpacity="0.35" />
-            <stop offset="100%" stopColor="#6366f1" stopOpacity="0" />
+            <stop offset="0%" stopColor={vars['--pp-primary'] || 'var(--pp-primary)'} stopOpacity="0.35" />
+            <stop offset="100%" stopColor={vars['--pp-primary'] || 'var(--pp-primary)'} stopOpacity="0" />
           </radialGradient>
         </defs>
 
@@ -56,13 +59,13 @@ export default function LoginAnimation() {
         {LINKS.map((d, i) => (
           <g key={d}>
             <path className="pp-anim-link" d={d} />
-            <circle className="pp-anim-packet" r="3.2" fill={NODES[i % NODES.length].color}>
+            <circle className="pp-anim-packet" r="3.2" fill={nodes[i % nodes.length].color}>
               <animateMotion dur={`${2.6 + i * 0.35}s`} begin={`${i * 0.3}s`} repeatCount="indefinite" path={d} />
             </circle>
           </g>
         ))}
 
-        {NODES.map((n) => (
+        {nodes.map((n) => (
           <g key={`${n.x}-${n.y}`} className="pp-anim-node" style={{ animationDelay: n.delay }}>
             <circle className="pp-anim-node-halo" cx={n.x} cy={n.y} r="18" fill={n.color} />
             <circle className="pp-anim-node-core" cx={n.x} cy={n.y} r="7" fill={n.color} />
@@ -71,15 +74,15 @@ export default function LoginAnimation() {
         ))}
 
         <g className="pp-anim-card">
-          <rect x="222" y="132" width="116" height="104" rx="20" fill="url(#ppAnimCard)" stroke="rgba(129,140,248,.55)" />
+          <rect x="222" y="132" width="116" height="104" rx="20" fill="url(#ppAnimCard)" stroke="var(--pp-primary)" strokeOpacity="0.55" />
           <rect x="222" y="132" width="116" height="104" rx="20" fill="none" stroke="url(#ppAnimLink)" strokeWidth="1.2" />
-          <rect x="238" y="150" width="44" height="6" rx="3" fill="rgba(148,163,184,.45)" />
-          <rect x="238" y="164" width="28" height="6" rx="3" fill="rgba(148,163,184,.25)" />
+          <rect x="238" y="150" width="44" height="6" rx="3" fill="var(--pp-text-tertiary)" fillOpacity="0.45" />
+          <rect x="238" y="164" width="28" height="6" rx="3" fill="var(--pp-text-tertiary)" fillOpacity="0.25" />
           {BARS.map((b) => (
             <rect key={b.x} className="pp-anim-bar" x={b.x} y="212" width="9" height="26" rx="4" style={{ animationDelay: b.d }} />
           ))}
-          <rect x="238" y="190" width="84" height="6" rx="3" fill="rgba(99,102,241,.35)" />
-          <circle className="pp-anim-led" cx="322" cy="152" r="4" fill="#22c55e" />
+          <rect x="238" y="190" width="84" height="6" rx="3" fill={vars['--pp-primary-soft'] || 'var(--pp-primary-soft)'} />
+          <circle className="pp-anim-led" cx="322" cy="152" r="4" fill={vars['--pp-success'] || 'var(--pp-success)'} />
         </g>
       </svg>
     </div>

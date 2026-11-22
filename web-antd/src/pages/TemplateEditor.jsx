@@ -132,10 +132,10 @@ function RawYamlEditor({ value, onChange, errorLines }) {
         display: 'flex',
         height: '100%',
         minHeight: 460,
-        border: '1px solid #e2e8f0',
+        border: '1px solid var(--pp-border)',
         borderRadius: 10,
         overflow: 'hidden',
-        background: '#fff',
+        background: 'var(--pp-surface)',
       }}
     >
       <div
@@ -144,19 +144,19 @@ function RawYamlEditor({ value, onChange, errorLines }) {
           width: 58,
           flex: 'none',
           overflow: 'hidden',
-          background: '#f8fafc',
-          borderRight: '1px solid #eef2f7',
+          background: 'var(--pp-code-bg)',
+          borderRight: '1px solid var(--pp-border)',
           fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
           fontSize: 12,
           lineHeight: '20px',
           padding: '10px 8px 10px 0',
           textAlign: 'right',
-          color: '#94a3b8',
+          color: 'var(--pp-code-text)',
           userSelect: 'none',
         }}
       >
         {Array.from({ length: lineCount }, (_, i) => (
-          <div key={i} style={{ color: errSet.has(i + 1) ? '#dc2626' : undefined, fontWeight: errSet.has(i + 1) ? 600 : 400 }}>
+          <div key={i} style={{ color: errSet.has(i + 1) ? 'var(--pp-danger)' : undefined, fontWeight: errSet.has(i + 1) ? 600 : 400 }}>
             {i + 1}
           </div>
         ))}
@@ -183,6 +183,8 @@ function RawYamlEditor({ value, onChange, errorLines }) {
           whiteSpace: 'pre',
           overflow: 'auto',
           tabSize: 2,
+          background: 'var(--pp-code-bg)',
+          color: 'var(--pp-code-text)',
         }}
       />
     </div>
@@ -690,7 +692,7 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
     >
       <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', paddingBottom: mobile ? 72 : 0 }}>
         {/* 顶部：信息行 + 操作行（sticky，不随内容滚动消失） */}
-        <div style={{ position: 'sticky', top: 0, zIndex: 20, background: '#fff', borderBottom: '1px solid #eef2f7' }}>
+        <div style={{ position: 'sticky', top: 0, zIndex: 20, background: 'var(--pp-surface)', borderBottom: '1px solid var(--pp-border)' }}>
           {/* 信息行：名称 / 状态 / 存储桶 / 解析摘要 / 上次保存 / 关闭（独立最右） */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 16px 6px' }}>
             <b style={{ fontSize: 15 }}>模板：{(meta && meta.name) || `#${id}`}</b>
@@ -764,7 +766,7 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '0 16px 10px' }}>
             <span className="pp-muted" style={{ fontSize: 12 }}>
               Ctrl/Cmd+S 保存到存储桶
-              {dirty ? <span style={{ color: '#d97706', marginLeft: 8 }}>有未保存修改</span> : null}
+              {dirty ? <span style={{ color: 'var(--pp-warning)', marginLeft: 8 }}>有未保存修改</span> : null}
             </span>
             <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
               <Button size="small" icon={<CheckCircleOutlined />} loading={busy === 'validate'} onClick={doValidate} disabled={!content}>
@@ -810,8 +812,8 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
               style={{
                 width: navCollapsed ? 56 : narrow ? 180 : 232,
                 flex: 'none',
-                borderRight: '1px solid #eef2f7',
-                background: '#fbfcfe',
+                borderRight: '1px solid var(--pp-border)',
+                background: 'var(--pp-surface)',
                 padding: '10px 8px',
                 overflow: 'auto',
                 transition: 'width .15s',
@@ -859,8 +861,8 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
                           marginBottom: 2,
                           borderRadius: 8,
                           cursor: 'pointer',
-                          background: active ? '#e0f2fe' : 'transparent',
-                          color: active ? '#0369a1' : '#475569',
+                          background: active ? 'var(--pp-info-soft)' : 'transparent',
+                          color: active ? 'var(--pp-info)' : 'var(--pp-text)',
                           fontWeight: active ? 600 : 400,
                           fontSize: navCollapsed ? 12 : 13,
                           whiteSpace: 'nowrap',
@@ -885,31 +887,31 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
 
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
             {errorItems.length ? (
-              <div style={{ maxHeight: 170, overflow: 'auto', borderBottom: '1px solid #fee2e2', background: '#fff7f7', padding: '8px 16px' }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: '#b91c1c', marginBottom: 4 }}>
+              <div style={{ maxHeight: 170, overflow: 'auto', borderBottom: '1px solid var(--pp-danger-soft)', background: 'var(--pp-danger-soft)', padding: '8px 16px' }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--pp-danger)', marginBottom: 4 }}>
                   <WarningOutlined /> 校验错误（{errorItems.length}）
                 </div>
                 {errorItems.map((e, i) => (
                   <div
                     key={i}
                     onClick={() => jumpToError(e)}
-                    style={{ fontSize: 12, color: '#b91c1c', padding: '2px 0', cursor: e.section ? 'pointer' : 'default' }}
+                    style={{ fontSize: 12, color: 'var(--pp-danger)', padding: '2px 0', cursor: e.section ? 'pointer' : 'default' }}
                     title={e.section ? '点击跳到对应分区' : undefined}
                   >
                     {e.section ? <Tag color="red" style={{ marginInlineEnd: 6 }}>{e.section}</Tag> : null}
-                    {e.line ? <span style={{ color: '#64748b' }}>行 {e.line}：</span> : null}
+                    {e.line ? <span style={{ color: 'var(--pp-text)' }}>行 {e.line}：</span> : null}
                     {e.message}
                   </div>
                 ))}
               </div>
             ) : null}
             {validation && validation.ok && (validation.warnings || []).length ? (
-              <div style={{ padding: '6px 16px', borderBottom: '1px solid #fef3c7', background: '#fffbeb', fontSize: 12, color: '#92400e' }}>
+              <div style={{ padding: '6px 16px', borderBottom: '1px solid var(--pp-warning-soft)', background: 'var(--pp-warning-soft)', fontSize: 12, color: 'var(--pp-warning)' }}>
                 <WarningOutlined /> 校验警告：{(validation.warnings || []).map((w) => (typeof w === 'string' ? w : w && w.message ? w.message : JSON.stringify(w))).join('；')}
               </div>
             ) : null}
             {patchWarnings.length ? (
-              <div style={{ padding: '6px 16px', borderBottom: '1px solid #fef3c7', background: '#fffbeb', fontSize: 12, color: '#92400e' }}>
+              <div style={{ padding: '6px 16px', borderBottom: '1px solid var(--pp-warning-soft)', background: 'var(--pp-warning-soft)', fontSize: 12, color: 'var(--pp-warning)' }}>
                 区段更新警告：{patchWarnings.join('；')}
               </div>
             ) : null}
@@ -926,10 +928,10 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
               right: 0,
               bottom: 0,
               zIndex: 100,
-              background: '#fff',
-              borderTop: '1px solid #eef2f7',
+              background: 'var(--pp-surface)',
+              borderTop: '1px solid var(--pp-border)',
               padding: '10px 16px',
-              boxShadow: '0 -2px 8px rgba(0,0,0,.06)',
+              boxShadow: 'var(--pp-shadow-md)',
             }}
           >
             <Button block type="primary" icon={<SaveOutlined />} loading={busy === 'save'} onClick={saveDraft} disabled={!content || !dirty}>
@@ -986,8 +988,8 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
             margin: 0,
             maxHeight: '52vh',
             overflow: 'auto',
-            background: '#0f172a',
-            color: '#e2e8f0',
+            background: 'var(--pp-code-bg)',
+            color: 'var(--pp-code-text)',
             padding: 12,
             borderRadius: 8,
             fontSize: 12,
@@ -1024,8 +1026,8 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
                 margin: 0,
                 maxHeight: '60vh',
                 overflow: 'auto',
-                background: '#0f172a',
-                color: '#e2e8f0',
+                background: 'var(--pp-code-bg)',
+                color: 'var(--pp-code-text)',
                 padding: 12,
                 borderRadius: 8,
                 fontSize: 12,

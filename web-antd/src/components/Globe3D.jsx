@@ -1,5 +1,13 @@
 import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
+import { useAppTheme } from '../theme';
+
+/** 把主题色转成带透明度的 CSS 颜色；避免在源码里写死具体色值。 */
+function withAlpha(color, alpha) {
+  const c = String(color || '').trim();
+  if (!c) return 'transparent';
+  return `color-mix(in srgb, ${c} ${Math.round(alpha * 100)}%, transparent)`;
+}
 
 /**
  * WebGL 3D 地球（three.js，重写版）
@@ -9,6 +17,7 @@ import * as THREE from 'three';
  *  - 拖拽旋转 / 自动自转 / 点击光点
  */
 export default function Globe3D({ servers = [], onPick, height = 320 }) {
+  const { name: themeName, vars: themeVars } = useAppTheme();
   const hostRef = useRef(null);
   const apiRef = useRef({});
   const serversRef = useRef(servers);
@@ -25,7 +34,7 @@ export default function Globe3D({ servers = [], onPick, height = 320 }) {
     try {
       renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true, powerPreference: 'high-performance' });
     } catch (e) {
-      host.innerHTML = '<div style="color:#94a3b8;font-size:12px;padding:16px">当前浏览器不支持 WebGL</div>';
+      host.innerHTML = '<div style="color:' + (themeVars['--pp-text-tertiary'] || 'var(--pp-text-tertiary)') + ';font-size:12px;padding:16px">当前浏览器不支持 WebGL</div>';
       return undefined;
     }
     // 高 DPI 下 2 倍分辨率会让像素量翻 4 倍，是卡顿主因；1.5 倍视觉几乎无差别
@@ -46,7 +55,7 @@ export default function Globe3D({ servers = [], onPick, height = 320 }) {
     scene.add(key);
 
     // 球体
-    const sphereMat = new THREE.MeshPhongMaterial({ color: 0x0b2a4a, shininess: 8, specular: 0x1e3a5f });
+    const sphereMat = new THREE.MeshPhongMaterial({ color: themeVars['--pp-bg'] || themeVars['--pp-primary'], shininess: 8, specular: themeVars['--pp-surface'] || themeVars['--pp-border-soft'] });
     const sphere = new THREE.Mesh(new THREE.SphereGeometry(1, 64, 44), sphereMat);
     group.add(sphere);
 
@@ -65,7 +74,7 @@ export default function Globe3D({ servers = [], onPick, height = 320 }) {
     const dotGeo = new THREE.BufferGeometry();
     dotGeo.setAttribute('position', new THREE.BufferAttribute(dotPositions, 3));
     const dotCloud = new THREE.Points(dotGeo, new THREE.PointsMaterial({
-      color: 0x67e8f9, size: 0.006, transparent: true, opacity: 0.55,
+      color: new THREE.Color(themeVars['--pp-chart-2'] || 'var(--pp-chart-2)'), size: 0.006, transparent: true, opacity: 0.55,
       depthWrite: false, blending: THREE.AdditiveBlending,
     }));
     group.add(dotCloud);
@@ -75,12 +84,12 @@ export default function Globe3D({ servers = [], onPick, height = 320 }) {
     canvas.width = 1440;
     canvas.height = 720;
     const cctx = canvas.getContext('2d');
-    cctx.fillStyle = '#04121f';
+    cctx.fillStyle = themeVars['--pp-bg'] || 'var(--pp-bg)';
     cctx.fillRect(0, 0, canvas.width, canvas.height);
     const img = new Image();
     // 把矢量图按给定经纬范围铺到任意画布上（支持经度环绕）
     const paintMap = (ctx, w, h, topLat, botLat, lonOff) => {
-      ctx.fillStyle = '#04121f';
+      ctx.fillStyle = themeVars['--pp-bg'] || 'var(--pp-bg)';
       ctx.fillRect(0, 0, w, h);
       const y0 = ((90 - topLat) / 180) * h;
       const y1 = ((90 - botLat) / 180) * h;
@@ -152,14 +161,14 @@ export default function Globe3D({ servers = [], onPick, height = 320 }) {
       const tex = new THREE.CanvasTexture(canvas);
       tex.colorSpace = THREE.SRGBColorSpace;
       sphereMat.map = tex;
-      sphereMat.color = new THREE.Color(0xffffff);
+      sphereMat.color = new THREE.Color(themeVars['--pp-surface'] || themeVars['--pp-text']);
       sphereMat.needsUpdate = true;
       apiRef.current.mapParams = params;
     };
     img.src = '/assets/world.svg';
 
     // 经纬网格
-    const gridMat = new THREE.LineBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending });
+    const gridMat = new THREE.LineBasicMaterial({ color: themeVars['--pp-chart-7'] || themeVars['--pp-info'], transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending });
     const grid = new THREE.Group();
     for (let lon = -180; lon < 180; lon += 15) {
       const pts = [];
@@ -184,7 +193,7 @@ export default function Globe3D({ servers = [], onPick, height = 320 }) {
     // 大气
     const atmo = new THREE.Mesh(
       new THREE.SphereGeometry(1.12, 40, 28),
-      new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.1, side: THREE.BackSide, blending: THREE.AdditiveBlending }),
+      new THREE.MeshBasicMaterial({ color: themeVars['--pp-chart-7'] || themeVars['--pp-info'], transparent: true, opacity: 0.1, side: THREE.BackSide, blending: THREE.AdditiveBlending }),
     );
     scene.add(atmo);
 
@@ -193,7 +202,7 @@ export default function Globe3D({ servers = [], onPick, height = 320 }) {
     [[1.28, 0.0022, 0.3], [1.4, 0.0016, -0.45]].forEach(([r, speed]) => {
       const ring = new THREE.Mesh(
         new THREE.TorusGeometry(r, 0.003, 6, 96),
-        new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending }),
+        new THREE.MeshBasicMaterial({ color: themeVars['--pp-chart-7'] || themeVars['--pp-info'], transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending }),
       );
       ring.rotation.x = Math.PI / 2 + 0.3;
       ring.userData.speed = speed;
@@ -204,7 +213,7 @@ export default function Globe3D({ servers = [], onPick, height = 320 }) {
     // 扫描带
     const scan = new THREE.Mesh(
       new THREE.TorusGeometry(1, 0.005, 6, 96),
-      new THREE.MeshBasicMaterial({ color: 0x67e8f9, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending }),
+      new THREE.MeshBasicMaterial({ color: themeVars['--pp-chart-2'] || themeVars['--pp-info'], transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending }),
     );
     scan.rotation.x = Math.PI / 2;
     scene.add(scan);
@@ -214,9 +223,10 @@ export default function Globe3D({ servers = [], onPick, height = 320 }) {
     glowCanvas.width = 64; glowCanvas.height = 64;
     const gctx = glowCanvas.getContext('2d');
     const grad = gctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-    grad.addColorStop(0, 'rgba(255,255,255,1)');
-    grad.addColorStop(0.4, 'rgba(255,255,255,0.7)');
-    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    const glowColor = themeVars['--pp-surface'] || themeVars['--pp-text'] || 'transparent';
+    grad.addColorStop(0, withAlpha(glowColor, 1));
+    grad.addColorStop(0.4, withAlpha(glowColor, 0.7));
+    grad.addColorStop(1, withAlpha(glowColor, 0));
     gctx.fillStyle = grad;
     gctx.fillRect(0, 0, 64, 64);
     const dotTex = new THREE.CanvasTexture(glowCanvas);
@@ -235,7 +245,7 @@ export default function Globe3D({ servers = [], onPick, height = 320 }) {
         const r = 1.012;
         positions.push(-r * Math.sin(phi) * Math.cos(theta), r * Math.cos(phi), r * Math.sin(phi) * Math.sin(theta));
         const online = s.last_status === 'online' || s.status === 'online';
-        const c = new THREE.Color(online ? 0x22c55e : 0xf43f5e);
+        const c = new THREE.Color(themeVars[online ? '--pp-success' : '--pp-danger'] || (online ? 'var(--pp-success)' : 'var(--pp-danger)'));
         colors.push(c.r, c.g, c.b);
       }
       if (points) {
@@ -349,7 +359,7 @@ export default function Globe3D({ servers = [], onPick, height = 320 }) {
       dotTex.dispose();
       if (host.contains(el)) host.removeChild(el);
     };
-  }, []);
+  }, [themeName]);
 
   // servers 变化时重建光点
   useEffect(() => {

@@ -228,7 +228,7 @@ export default function MasquePage() {
         render: (v, row) => (
           <div>
             <div style={{ fontFamily: 'monospace', fontSize: 12 }}>{v}</div>
-            <div style={{ color: '#94a3b8', fontSize: 12 }}>
+            <div style={{ color: 'var(--pp-text)', fontSize: 12 }}>
               {row.email || row.owner || row.remark || '—'}
             </div>
           </div>
@@ -252,7 +252,7 @@ export default function MasquePage() {
         render: (_, row) => (
           <div style={{ fontFamily: 'monospace', fontSize: 12 }}>
             <div>{row.profile?.warp_ipv4 || '—'}</div>
-            <div style={{ color: '#94a3b8' }}>{row.profile?.warp_ipv6 || ''}</div>
+            <div style={{ color: 'var(--pp-text)' }}>{row.profile?.warp_ipv6 || ''}</div>
           </div>
         ),
       },
@@ -343,10 +343,10 @@ export default function MasquePage() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="搜索 UUID / 邮箱 / 所有者"
-          prefix={<SearchOutlined style={{ color: '#94a3b8' }} />}
+          prefix={<SearchOutlined style={{ color: 'var(--pp-text)' }} />}
           allowClear
         />
-        <span style={{ color: '#64748b', fontSize: 13 }}>
+        <span style={{ color: 'var(--pp-text)', fontSize: 13 }}>
           共 {uuids.length} 个 UUID，已授权 {authorizedCount} 个
         </span>
         <Button icon={<ReloadOutlined />} onClick={reload} loading={loading}>

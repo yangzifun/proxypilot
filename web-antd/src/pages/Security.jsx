@@ -34,7 +34,6 @@ import { useAuth } from '../auth';
 import { CopyText, ErrorBlock, PageCard, StatCard } from '../components';
 import EmailBindModal from '../components/EmailBind';
 import { fmtAgo, fmtNum, fmtTime } from '../format';
-import { chartPalette } from '../theme';
 
 export default function Security() {
   const { user, superAdmin } = useAuth();
@@ -83,7 +82,7 @@ export default function Security() {
             icon={<SafetyCertificateOutlined />}
             label="双因素认证"
             value={mfaEnabled ? '已启用' : '未启用'}
-            accent={mfaEnabled ? chartPalette[3] : chartPalette[2]}
+            accent={mfaEnabled ? 'var(--pp-chart-4)' : 'var(--pp-chart-3)'}
           />
         </Col>
         <Col xs={12} lg={6}>
@@ -92,7 +91,7 @@ export default function Security() {
             label="剩余备份码"
             value={fmtNum(status.data && status.data.backup_codes_remaining)}
             unit="个"
-            accent={chartPalette[0]}
+            accent={'var(--pp-chart-1)'}
           />
         </Col>
         <Col xs={12} lg={6}>
@@ -100,19 +99,19 @@ export default function Security() {
             icon={<MobileOutlined />}
             label="最近 MFA 登录"
             value={status.data && status.data.last_mfa_login ? fmtAgo(status.data.last_mfa_login) : '—'}
-            accent={chartPalette[5]}
+            accent={'var(--pp-chart-6)'}
             hint={status.data && status.data.last_mfa_login ? fmtTime(status.data.last_mfa_login) : '尚无记录'}
           />
         </Col>
         <Col xs={12} lg={6}>
-          <StatCard icon={<SafetyOutlined />} label="当前账号" value={user || '—'} accent={chartPalette[1]} hint={user === superAdmin ? '超级管理员' : '管理员'} />
+          <StatCard icon={<SafetyOutlined />} label="当前账号" value={user || '—'} accent={'var(--pp-chart-2)'} hint={user === superAdmin ? '超级管理员' : '管理员'} />
         </Col>
       </Row>
 
       <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
         <Col xs={24} xl={12}>
           <PageCard
-            title={<span className="pp-section-title"><LockOutlined style={{ color: '#4f46e5' }} />修改密码</span>}
+            title={<span className="pp-section-title"><LockOutlined style={{ color: 'var(--pp-primary)' }} />修改密码</span>}
           >
             <Form form={pwForm} layout="vertical" requiredMark={false} onFinish={changePassword}>
               <Form.Item name="oldPassword" label="当前密码" rules={[{ required: true, message: '请输入当前密码' }]}>
@@ -178,15 +177,15 @@ export default function Security() {
       <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
         <Col xs={24} xl={12}>
           <PageCard
-            title={<span className="pp-section-title"><MailOutlined style={{ color: '#0ea5e9' }} />我的邮箱</span>}
+            title={<span className="pp-section-title"><MailOutlined style={{ color: 'var(--pp-chart-7)' }} />我的邮箱</span>}
             extra={<Button size="small" onClick={() => setEmailOpen(true)}>绑定 / 验证邮箱</Button>}
           >
-            <div style={{ fontSize: 13, color: '#64748b', lineHeight: 1.9 }}>
+            <div style={{ fontSize: 13, color: 'var(--pp-text-secondary)', lineHeight: 1.9 }}>
               绑定并验证邮箱后，可以用「邮箱验证码」登录，也可关联 OIDC 单点登录。
               验证码会发送到你填写的地址，验证通过即绑定到当前账号。
             </div>
-            <div style={{ marginTop: 10, fontSize: 12, color: '#94a3b8' }}>
-              当前账号：<b style={{ color: '#334155' }}>{user || '—'}</b>
+            <div style={{ marginTop: 10, fontSize: 12, color: 'var(--pp-text-tertiary)' }}>
+              当前账号：<b style={{ color: 'var(--pp-text)' }}>{user || '—'}</b>
               {user === superAdmin ? '（超级管理员）' : '（管理员）'}
             </div>
           </PageCard>
@@ -292,7 +291,7 @@ function MfaPanel({ enabled, backupRemaining, onChanged }) {
 
   return (
     <PageCard
-      title={<span className="pp-section-title"><SafetyCertificateOutlined style={{ color: '#10b981' }} />双因素认证（TOTP）</span>}
+      title={<span className="pp-section-title"><SafetyCertificateOutlined style={{ color: 'var(--pp-success)' }} />双因素认证（TOTP）</span>}
       extra={enabled ? <Tag color="success">已启用</Tag> : <Tag color="warning">未启用</Tag>}
     >
       <Steps
@@ -317,7 +316,7 @@ function MfaPanel({ enabled, backupRemaining, onChanged }) {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password"
-              prefix={<LockOutlined style={{ color: '#94a3b8' }} />}
+              prefix={<LockOutlined style={{ color: 'var(--pp-text-tertiary)' }} />}
             />
             <Button type="primary" icon={<QrcodeOutlined />} onClick={startBind} loading={busy} block>
               开始绑定
@@ -331,9 +330,9 @@ function MfaPanel({ enabled, backupRemaining, onChanged }) {
           <Col xs={24} sm={10} style={{ textAlign: 'center' }}>
             <div
               style={{
-                background: '#fff',
+                background: 'var(--pp-surface)',
                 padding: 10,
-                border: '1px solid #eef2f7',
+                border: '1px solid var(--pp-border-soft)',
                 borderRadius: 12,
                 display: 'inline-block',
               }}
@@ -349,10 +348,10 @@ function MfaPanel({ enabled, backupRemaining, onChanged }) {
                 type="svg"
                 errorLevel="M"
                 bordered={false}
-                style={{ padding: 20, background: '#fff', borderRadius: 10 }}
+                style={{ padding: 20, background: 'var(--pp-surface)', borderRadius: 10 }}
               />
             </div>
-            <div style={{ marginTop: 8, fontSize: 12, color: '#94a3b8' }}>用 TOTP App 扫码</div>
+            <div style={{ marginTop: 8, fontSize: 12, color: 'var(--pp-text-tertiary)' }}>用 TOTP App 扫码</div>
           </Col>
           <Col xs={24} sm={14}>
             <div className="pp-muted" style={{ fontSize: 12, marginBottom: 4 }}>
@@ -391,14 +390,14 @@ function MfaPanel({ enabled, backupRemaining, onChanged }) {
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fill, minmax(112px, 1fr))',
               gap: 8,
-              background: '#f8fafc',
-              border: '1px solid #eef2f7',
+              background: 'var(--pp-surface-muted)',
+              border: '1px solid var(--pp-border-soft)',
               borderRadius: 12,
               padding: 14,
             }}
           >
             {codes.map((c) => (
-              <span key={c} className="pp-mono" style={{ fontSize: 13, color: '#334155', letterSpacing: 0.5 }}>
+              <span key={c} className="pp-mono" style={{ fontSize: 13, color: 'var(--pp-text)', letterSpacing: 0.5 }}>
                 {c}
               </span>
             ))}
@@ -429,7 +428,7 @@ function MfaPanel({ enabled, backupRemaining, onChanged }) {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             autoComplete="current-password"
-            prefix={<LockOutlined style={{ color: '#94a3b8' }} />}
+            prefix={<LockOutlined style={{ color: 'var(--pp-text-tertiary)' }} />}
             style={{ marginBottom: 12 }}
           />
           <Space wrap>

@@ -36,6 +36,13 @@ export function PageCard({ title, extra, children, className = '', bodyStyle, si
       extra={extra}
       bodyStyle={bodyStyle}
       size={size}
+      style={{
+        background: 'var(--pp-surface)',
+        borderColor: 'var(--pp-border)',
+        boxShadow: 'var(--pp-shadow-md)',
+        borderRadius: 'var(--pp-radius-lg)',
+        color: 'var(--pp-text)',
+      }}
     >
       {loading ? (
         <div className="pp-loading-wrap">
@@ -49,21 +56,30 @@ export function PageCard({ title, extra, children, className = '', bodyStyle, si
 
 /* ---------------- 指标卡 ---------------- */
 
-export function StatCard({ icon, label, value, unit, hint, accent = '#4f46e5', bg, spark, onClick }) {
+export function StatCard({ icon, label, value, unit, hint, accent, bg, spark, onClick }) {
+  const accentColor = accent || 'var(--pp-primary)';
+  const iconBg = bg || (accent ? hexAlpha(accent, 0.12) : 'var(--pp-primary-soft)');
   return (
     <Card
       className="pp-card"
       hoverable={!!onClick}
       onClick={onClick}
-      style={onClick ? { cursor: 'pointer' } : undefined}
+      style={{
+        cursor: onClick ? 'pointer' : undefined,
+        background: 'var(--pp-surface)',
+        borderColor: 'var(--pp-border)',
+        boxShadow: 'var(--pp-shadow-md)',
+        borderRadius: 'var(--pp-radius-lg)',
+        color: 'var(--pp-text)',
+      }}
     >
       <div className="pp-stat">
-        <div className="pp-stat-icon" style={{ background: bg || hexAlpha(accent, 0.12), color: accent }}>
+        <div className="pp-stat-icon" style={{ background: iconBg, color: accentColor }}>
           {icon}
         </div>
         <div className="pp-stat-main">
-          <div className="pp-stat-label">{label}</div>
-          <div className="pp-stat-value">
+          <div className="pp-stat-label" style={{ color: 'var(--pp-text-secondary)' }}>{label}</div>
+          <div className="pp-stat-value" style={{ color: 'var(--pp-text)' }}>
             {value}
             {unit ? <small>{unit}</small> : null}
           </div>
@@ -72,7 +88,7 @@ export function StatCard({ icon, label, value, unit, hint, accent = '#4f46e5', b
       </div>
       {spark && spark.length > 1 ? (
         <div className="pp-stat-spark">
-          <Sparkline values={spark} color={accent} height={30} />
+          <Sparkline values={spark} color={accentColor} height={30} />
         </div>
       ) : null}
     </Card>
@@ -85,19 +101,25 @@ export function MiniStat({ label, value, unit, accent }) {
       <span className="pp-kv-k">{label}</span>
       <span className="pp-kv-v" style={accent ? { color: accent } : undefined}>
         {value}
-        {unit ? <span style={{ fontSize: 12, color: '#94a3b8', marginLeft: 2 }}>{unit}</span> : null}
+        {unit ? <span style={{ fontSize: 12, color: 'var(--pp-text-tertiary)', marginLeft: 2 }}>{unit}</span> : null}
       </span>
     </div>
   );
 }
 
 function hexAlpha(hex, alpha) {
-  const h = String(hex || '').replace('#', '');
-  if (h.length !== 6) return `rgba(79,70,229,${alpha})`;
+  const raw = String(hex || '').trim();
+  if (raw.startsWith('var(')) {
+    return `color-mix(in srgb, ${raw} ${Math.round(alpha * 100)}%, transparent)`;
+  }
+  const h = raw.replace('#', '');
+  if (h.length !== 6) {
+    return `color-mix(in srgb, var(--pp-primary) ${Math.round(alpha * 100)}%, transparent)`;
+  }
   const r = parseInt(h.slice(0, 2), 16);
   const g = parseInt(h.slice(2, 4), 16);
   const b = parseInt(h.slice(4, 6), 16);
-  return `rgba(${r},${g},${b},${alpha})`;
+  return `color-mix(in srgb, #${h} ${Math.round(alpha * 100)}%, transparent)`;
 }
 
 /* ---------------- 状态 ---------------- */
@@ -167,7 +189,7 @@ export function CopyText({ value, display, tip = '点击复制' }) {
         style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
       >
         {display !== undefined ? display : text}
-        <span style={{ color: done ? '#10b981' : '#94a3b8', fontSize: 12 }}>
+        <span style={{ color: done ? 'var(--pp-success)' : 'var(--pp-text-tertiary)', fontSize: 12 }}>
           {done ? <CheckOutlined /> : <CopyOutlined />}
         </span>
       </span>
@@ -180,7 +202,7 @@ export function CopyText({ value, display, tip = '点击复制' }) {
 export function EmptyBlock({ text = '暂无数据', children }) {
   return (
     <div className="pp-empty">
-      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={<span style={{ color: '#94a3b8' }}>{text}</span>}>
+      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={<span style={{ color: 'var(--pp-text-tertiary)' }}>{text}</span>}>
         {children}
       </Empty>
     </div>
@@ -250,9 +272,87 @@ export function JsonView({ value, maxHeight = 420 }) {
 
 export function Toolbar({ left, right }) {
   return (
-    <div className="pp-toolbar">
+    <div className="pp-toolbar" style={{ color: 'var(--pp-text-secondary)' }}>
       {left}
       <div className="pp-toolbar-right">{right}</div>
     </div>
   );
 }
+
+/* ---------------- 通用卡片（T1 主题基础设施，后续页面复用到） ---------------- */
+
+/** 数据卡片：表格/列表容器（与 PageCard 同构，语义化命名） */
+export function DataCard({ title, extra, children, className = '', bodyStyle, loading, size }) {
+  return (
+    <PageCard
+      title={title}
+      extra={extra}
+      className={`pp-data-card ${className}`}
+      bodyStyle={bodyStyle}
+      loading={loading}
+      size={size}
+    >
+      {children}
+    </PageCard>
+  );
+}
+
+/** 表单卡片：标题/描述 + 内容 + 可选底部操作区 */
+export function FormCard({ title, description, extra, children, footer, className = '' }) {
+  return (
+    <section
+      className={`pp-form-card ${className}`}
+      style={{
+        background: 'var(--pp-surface)',
+        border: '1px solid var(--pp-border)',
+        borderRadius: 'var(--pp-radius-md)',
+        boxShadow: 'var(--pp-shadow-sm)',
+        color: 'var(--pp-text)',
+        padding: 16,
+        marginBottom: 16,
+      }}
+    >
+      {title || description || extra ? (
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 12 }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            {title ? <div className="pp-section-title">{title}</div> : null}
+            {description ? <div className="pp-muted" style={{ fontSize: 12, marginTop: 2 }}>{description}</div> : null}
+          </div>
+          {extra ? <div>{extra}</div> : null}
+        </div>
+      ) : null}
+      {children}
+      {footer ? (
+        <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--pp-border-soft)' }}>{footer}</div>
+      ) : null}
+    </section>
+  );
+}
+
+/** 区块卡片：最小分区块（标题/描述/右侧操作） */
+export function SectionCard({ title, description, extra, children, className = '' }) {
+  return (
+    <section
+      className={`pp-section-card ${className}`}
+      style={{
+        background: 'var(--pp-surface)',
+        border: '1px solid var(--pp-border)',
+        borderRadius: 'var(--pp-radius-md)',
+        boxShadow: 'var(--pp-shadow-sm)',
+        color: 'var(--pp-text)',
+        padding: 16,
+        marginBottom: 16,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: children ? 12 : 0 }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          {title ? <span className="pp-section-title">{title}</span> : null}
+          {description ? <div className="pp-muted" style={{ fontSize: 12, marginTop: 2 }}>{description}</div> : null}
+        </div>
+        {extra ? <div>{extra}</div> : null}
+      </div>
+      {children}
+    </section>
+  );
+}
+

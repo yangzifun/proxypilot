@@ -63,7 +63,7 @@ function TestResultView({ result }) {
     },
     { label: '总延迟', value: latency > 0 ? `${latency} ms` : '—', tone: 'normal' },
   ];
-  const toneColor = (tone) => (tone === 'ok' ? '#16a34a' : tone === 'fail' ? '#dc2626' : tone === 'muted' ? '#64748b' : '#334155');
+  const toneColor = (tone) => (tone === 'ok' ? 'var(--pp-success)' : tone === 'fail' ? 'var(--pp-danger)' : tone === 'muted' ? 'var(--pp-text)' : 'var(--pp-text)');
   return (
     <div>
       <Alert
@@ -82,9 +82,9 @@ function TestResultView({ result }) {
               alignItems: 'center',
               gap: 10,
               padding: '7px 10px',
-              border: '1px solid #eef2f7',
+              border: '1px solid var(--pp-border)',
               borderRadius: 8,
-              background: '#fbfcfe',
+              background: 'var(--pp-surface)',
             }}
           >
             <span className="pp-muted" style={{ width: 64, flex: 'none', fontSize: 12 }}>{it.label}</span>

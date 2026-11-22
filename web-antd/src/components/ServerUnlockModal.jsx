@@ -108,7 +108,7 @@ export default function ServerUnlockModal({ server, onClose }) {
       open={!!server}
       title={
         <span>
-          <UnlockOutlined style={{ color: '#6366f1', marginRight: 6 }} />
+          <UnlockOutlined style={{ color: 'var(--pp-primary)', marginRight: 6 }} />
           解锁详情 · {server ? server.name : ''}
         </span>
       }
@@ -162,7 +162,7 @@ export default function ServerUnlockModal({ server, onClose }) {
                       const st = STATUS[s.status] || STATUS.unknown;
                       return (
                         <Col xs={24} sm={12} key={s.key}>
-                          <div style={{ border: '1px solid #eef2f7', borderRadius: 10, padding: '10px 12px', background: '#fbfcff' }}>
+                          <div style={{ border: '1px solid var(--pp-border)', borderRadius: 10, padding: '10px 12px', background: 'var(--pp-surface)' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                               <b style={{ fontSize: 13 }}>{s.name}</b>
                               <Tag color={st.color} style={{ marginLeft: 'auto', marginInlineEnd: 0 }}>{st.text}</Tag>

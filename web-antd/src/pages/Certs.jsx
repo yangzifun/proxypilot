@@ -147,7 +147,7 @@ export default function Certs() {
           icon={<SafetyCertificateOutlined />}
           label="本站 CA"
           value={caData.ok ? '可用' : '不可用'}
-          accent="#10b981"
+          accent="var(--pp-success)"
             hint={caData.common_name || '未初始化'}
           />
         </Col>
@@ -156,7 +156,7 @@ export default function Certs() {
           icon={<SafetyCertificateOutlined />}
           label="CA 到期"
             value={fmtDate(caData.not_after)}
-            accent="#0ea5e9"
+            accent="var(--pp-chart-7)"
             hint={caData.days_left != null ? `剩 ${caData.days_left} 天` : '—'}
           />
         </Col>
@@ -165,7 +165,7 @@ export default function Certs() {
           icon={<KeyOutlined />}
           label="功能证书"
             value={siteCert ? (siteCert.domains || '').split(',').length + ' 个域名' : '未签发'}
-            accent="#8b5cf6"
+            accent="var(--pp-chart-6)"
             hint={siteCert ? siteCert.source || 'acme' : '使用 Cloudflare DNS-01'}
           />
         </Col>
@@ -174,7 +174,7 @@ export default function Certs() {
           icon={<KeyOutlined />}
           label="证书到期"
             value={siteCert ? fmtDate(siteCert.not_after) : '—'}
-            accent={siteCert && daysLeft <= 30 ? '#f59e0b' : '#16a34a'}
+            accent={siteCert && daysLeft <= 30 ? 'var(--pp-warning)' : 'var(--pp-success)'}
             hint={siteCert ? `剩 ${daysLeft} 天` : '—'}
           />
         </Col>

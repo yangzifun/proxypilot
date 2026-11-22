@@ -139,14 +139,14 @@ export default function AppLayout({ activeKey, onNavigate, children }) {
               <div className="pp-user">
                 <Avatar
                   size={30}
-                  style={{ background: '#eef2ff', color: '#4f46e5', fontSize: 13, fontWeight: 600 }}
+                  style={{ background: 'var(--pp-primary-soft)', color: 'var(--pp-primary)', fontSize: 13, fontWeight: 600 }}
                   icon={!user ? <UserOutlined /> : undefined}
                 >
                   {user ? user.slice(0, 1).toUpperCase() : null}
                 </Avatar>
                 <div style={{ lineHeight: 1.2 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{user || '未登录'}</div>
-                  <div style={{ fontSize: 11, color: '#94a3b8' }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pp-text)' }}>{user || '未登录'}</div>
+                  <div style={{ fontSize: 11, color: 'var(--pp-text-tertiary)' }}>
                     {isSuper ? '超级管理员' : '管理员'}
                   </div>
                 </div>

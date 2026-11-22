@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Tooltip } from 'antd';
+import { useAppTheme } from '../theme';
 
 /**
  * 3D 地球视图（SVG/HTML 实现，无需 WebGL）：
@@ -8,6 +9,7 @@ import { Tooltip } from 'antd';
  *  - 支持拖拽旋转、悬停显示服务器信息、点击回调
  */
 export default function GlobeMap({ servers = [], onPick, height = 360 }) {
+  const { vars: themeVars } = useAppTheme();
   const wrapRef = useRef(null);
   const [size, setSize] = useState(320);
   const [centerLon, setCenterLon] = useState(105);
@@ -94,7 +96,7 @@ export default function GlobeMap({ servers = [], onPick, height = 360 }) {
         <div className="pp-globe-shade" />
         {pts.map(({ server, x, y, scale }) => {
           const online = server.last_status === 'online' || server.status === 'online';
-          const color = online ? '#22c55e' : server.last_status === 'unknown' ? '#cbd5e1' : '#f43f5e';
+          const color = online ? (themeVars['--pp-success'] || '#22c55e') : server.last_status === 'unknown' ? (themeVars['--pp-text-tertiary'] || '#cbd5e1') : (themeVars['--pp-danger'] || '#f43f5e');
           return (
             <Tooltip key={server.id} title={`${server.name || server.id} · ${online ? '在线' : '离线'}`} mouseEnterDelay={0.1}>
               <span

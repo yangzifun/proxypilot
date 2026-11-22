@@ -911,7 +911,7 @@ export default function Mihomo({ templatesOnly }) {
             value={tplJson}
             onChange={(e) => setTplJson(e.target.value)}
             autoSize={{ minRows: 14, maxRows: 26 }}
-            style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 12 }}
+            style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 12, background: 'var(--pp-code-bg)', color: 'var(--pp-code-text)' }}
             placeholder='{"listeners":[{"name":"hy2","type":"hysteria2","port":13801}]}'
           />
           <Space size={8} wrap style={{ marginTop: 8, marginBottom: 10 }}>
@@ -1024,8 +1024,8 @@ export default function Mihomo({ templatesOnly }) {
                 margin: '0 0 12px',
                 maxHeight: 220,
                 overflow: 'auto',
-                background: '#0f172a',
-                color: '#e2e8f0',
+                background: 'var(--pp-code-bg)',
+                color: 'var(--pp-code-text)',
                 borderRadius: 10,
                 padding: 12,
                 fontSize: 12,
@@ -1187,7 +1187,7 @@ export default function Mihomo({ templatesOnly }) {
         }
       >
         {preview?.templateOnly ? null : preview && !preview.templateOnly ? (
-          <div style={{ marginBottom: 10, color: '#64748b', fontSize: 12.5 }}>
+          <div style={{ marginBottom: 10, color: 'var(--pp-text)', fontSize: 12.5 }}>
             服务器 {preview.server || '—'} · 模板 {preview.template || '—'} · UUID {preview.uuid_count || 0} · 节点 {preview.proxy_count || 0}
             {preview.skipped ? ` · 跳过 ${preview.skipped}` : ''}
           </div>
@@ -1197,8 +1197,8 @@ export default function Mihomo({ templatesOnly }) {
             margin: 0,
             maxHeight: '60vh',
             overflow: 'auto',
-            background: '#0f172a',
-            color: '#e2e8f0',
+            background: 'var(--pp-code-bg)',
+            color: 'var(--pp-code-text)',
             borderRadius: 10,
             padding: 14,
             fontSize: 12,
@@ -1238,7 +1238,7 @@ export default function Mihomo({ templatesOnly }) {
           value={importText}
           onChange={(e) => setImportText(e.target.value)}
           placeholder="粘贴 mihomo / Clash YAML 配置"
-          style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12.5 }}
+          style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12.5, background: 'var(--pp-code-bg)', color: 'var(--pp-code-text)' }}
         />
       </Modal>
 
@@ -1249,7 +1249,7 @@ export default function Mihomo({ templatesOnly }) {
         footer={<Button onClick={() => setHelpOpen(false)}>关闭</Button>}
         width={720}
       >
-        <div style={{ fontSize: 13, lineHeight: 1.9, color: '#334155' }}>
+        <div style={{ fontSize: 13, lineHeight: 1.9, color: 'var(--pp-text)' }}>
           <p><b>常用字段</b></p>
           <ul style={{ paddingLeft: 18 }}>
             <li><code>mixed-port</code>：HTTP/SOCKS 混合端口，默认 7890</li>
@@ -1293,7 +1293,7 @@ export default function Mihomo({ templatesOnly }) {
       >
         {checkState.data ? (
           <>
-            <div style={{ marginBottom: 10, color: '#64748b', fontSize: 12.5 }}>
+            <div style={{ marginBottom: 10, color: 'var(--pp-text)', fontSize: 12.5 }}>
               已检查 {checkState.data.checked || 0} 个绑定，发现 {checkState.data.issue_count || 0} 个问题
             </div>
             <Table
@@ -1310,7 +1310,7 @@ export default function Mihomo({ templatesOnly }) {
             />
           </>
         ) : (
-          <div style={{ padding: '20px 0', color: '#94a3b8' }}>检查中…</div>
+          <div style={{ padding: '20px 0', color: 'var(--pp-text)' }}>检查中…</div>
         )}
       </Modal>
     </div>

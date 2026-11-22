@@ -78,10 +78,10 @@ export function clampPct(n) {
 /** 0~100 数值 → 颜色（绿 / 琥珀 / 玫红） */
 export function levelColor(pct) {
   const v = Number(pct) || 0;
-  if (v >= 90) return '#f43f5e';
-  if (v >= 75) return '#f59e0b';
-  if (v >= 50) return '#0ea5e9';
-  return '#10b981';
+  if (v >= 90) return 'var(--pp-danger)';
+  if (v >= 75) return 'var(--pp-warning)';
+  if (v >= 50) return 'var(--pp-info)';
+  return 'var(--pp-success)';
 }
 
 export function shortUuid(uuid) {
