@@ -19,6 +19,7 @@ import {
   Input,
   Modal,
   Popconfirm,
+  Select,
   Skeleton,
   Space,
   Table,
@@ -31,12 +32,15 @@ import {
   DownloadOutlined,
   EyeOutlined,
   HistoryOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
   ReloadOutlined,
   SaveOutlined,
   WarningOutlined,
 } from '@ant-design/icons';
 import { api } from '../api';
 import { fmtBytes, fmtTime } from '../format';
+import { CopyText } from '../components';
 import { ObjectForm, ProxyGroupsTable, RuleProvidersTable, RulesTable } from '../components/TemplateEditor/sections';
 
 const SECTIONS = [
@@ -47,6 +51,13 @@ const SECTIONS = [
   { key: 'rules', label: '规则' },
   { key: 'rule_providers', label: '规则集' },
   { key: 'raw', label: '原始 YAML' },
+];
+
+// 左侧导航按组展示
+const SECTION_GROUPS = [
+  { title: '基础', keys: ['base', 'dns', 'tun'] },
+  { title: '策略与规则', keys: ['proxy_groups', 'rules', 'rule_providers'] },
+  { title: '原始内容', keys: ['raw'] },
 ];
 
 const SECTION_ALIASES = {
@@ -193,6 +204,17 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
   const [patchWarnings, setPatchWarnings] = useState([]);
   const [preview, setPreview] = useState(null);
   const [versions, setVersions] = useState({ open: false, list: [], loading: false, view: null });
+  const [saveError, setSaveError] = useState(false);
+  const [navCollapsed, setNavCollapsed] = useState(false);
+  const [vw, setVw] = useState(() => (typeof window !== 'undefined' ? window.innerWidth || 1440 : 1440));
+  const narrow = vw < 1200;
+  const mobile = vw < 768;
+
+  useEffect(() => {
+    const onResize = () => setVw(window.innerWidth || 1440);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   const dirty = content !== savedContent;
   const external = !!(
@@ -203,14 +225,25 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
   );
 
   const draftState = useMemo(() => {
-    if (dirty) return { color: 'orange', text: '已修改（未保存）' };
+    if (dirty) return { color: 'orange', text: '已修改未保存' };
+    if (saveError) return { color: 'red', text: '保存失败' };
     const ds = String((meta && (meta.draft_sha256 || meta.sha256)) || '');
     if (!ds) return { color: 'default', text: '未保存' };
     return { color: 'green', text: '已保存到存储桶' };
-  }, [dirty, meta]);
+  }, [dirty, saveError, meta]);
 
   const summary = (parsed && parsed.summary) || {};
   const sections = (parsed && parsed.sections) || {};
+
+  // 左侧导航计数：对象分区显示字段数、列表分区显示条数、原始 YAML 显示字数
+  const sectionCount = useCallback((key) => {
+    const sec = sections[key];
+    if (key === 'raw') return content ? `${String(content).length} 字` : null;
+    if (key === 'base' || key === 'dns' || key === 'tun') {
+      return sec && typeof sec === 'object' ? Object.keys(sec).length : 0;
+    }
+    return Array.isArray(sec) ? sec.length : 0;
+  }, [sections, content]);
 
   const parseContent = useCallback(async (c, silent) => {
     setParseLoading(true);
@@ -231,6 +264,7 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
+    setSaveError(false);
     try {
       const m = unwrap(await api(`${base}/content`)) || {};
       // 内容优先使用 content API 返回的 content（后端可能直接读存储桶或模板 URL），
@@ -330,6 +364,7 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
       });
       const d = unwrap(res) || {};
       const sha = String(d.sha256 || d.draft_sha256 || '');
+      setSaveError(false);
       setSavedContent(content);
       setMeta((m) => ({ ...(m || {}), draft_content: content, draft_sha256: sha || (m && m.draft_sha256) || '', draft_updated_at: Date.now() }));
       let v = null;
@@ -342,6 +377,7 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
       if (onChanged) onChanged();
       return true;
     } catch (e) {
+      setSaveError(true);
       if (e && e.status === 409) {
         message.error('保存冲突：草稿已被他人修改，请关闭后重新打开再编辑');
       } else if (e && e.status === 403) {
@@ -598,6 +634,7 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
           hint={hint}
           value={sections[section]}
           disabled={!!busy}
+          columns={vw >= 1000 ? 2 : 1}
           onApply={(next) => applyPatch(section, next)}
         />
       );
@@ -637,143 +674,175 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
       title={null}
       destroyOnHidden={false}
     >
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
-        {/* 顶部操作栏 */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            flexWrap: 'wrap',
-            padding: '10px 16px',
-            borderBottom: '1px solid #eef2f7',
-            background: '#fff',
-          }}
-        >
-          <b style={{ fontSize: 15 }}>模板：{(meta && meta.name) || `#${id}`}</b>
-          <Tag color={draftState.color} style={{ marginInlineEnd: 0 }}>{draftState.text}</Tag>
-          {external ? <Tag color="default">外部模板（只读发布）</Tag> : null}
-          {meta && meta.bucket_key ? (
-            <span
-              className="pp-mono pp-muted"
-              style={{ fontSize: 12, maxWidth: 420, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-              title={meta.bucket_key}
-            >
-              存储桶：{meta.bucket_key}
-            </span>
-          ) : meta && meta.url ? (
-            <a
-              href={meta.url}
-              target="_blank"
-              rel="noreferrer"
-              className="pp-mono pp-muted"
-              style={{ fontSize: 12, maxWidth: 420, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-              title={meta.url}
-            >
-              {meta.url}
-            </a>
-          ) : null}
-          {parseLoading ? <span className="pp-muted" style={{ fontSize: 12 }}>解析中…</span> : null}
-          <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8, flexWrap: 'wrap' }}>
-            <Button size="small" icon={<CheckCircleOutlined />} loading={busy === 'validate'} onClick={doValidate} disabled={!content}>
-              校验
-            </Button>
-            <Button size="small" icon={<EyeOutlined />} onClick={openPreview} disabled={!content}>
-              预览
-            </Button>
-            <Tooltip title="保存后直接写入存储桶并立即生效（无需发布）">
-              <Button size="small" type="primary" icon={<SaveOutlined />} loading={busy === 'save'} onClick={saveDraft} disabled={!content || !dirty}>
-                保存到存储桶
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', paddingBottom: mobile ? 72 : 0 }}>
+        {/* 顶部：信息行 + 操作行（sticky，不随内容滚动消失） */}
+        <div style={{ position: 'sticky', top: 0, zIndex: 20, background: '#fff', borderBottom: '1px solid #eef2f7' }}>
+          {/* 信息行：名称 / 状态 / 存储桶 / 解析摘要 / 上次保存 / 关闭（独立最右） */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 16px 6px' }}>
+            <b style={{ fontSize: 15 }}>模板：{(meta && meta.name) || `#${id}`}</b>
+            <Tag color={draftState.color} style={{ marginInlineEnd: 0 }}>{draftState.text}</Tag>
+            {external ? <Tag color="default">外部模板</Tag> : null}
+            {meta && meta.bucket_key ? (
+              <span
+                className="pp-mono pp-muted"
+                style={{
+                  fontSize: 12,
+                  maxWidth: 360,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+                title={meta.bucket_key}
+              >
+                存储桶：{meta.bucket_key}
+                <CopyText value={meta.bucket_key} display={<span style={{ fontSize: 11 }}>复制</span>} tip="复制存储桶路径" />
+              </span>
+            ) : meta && meta.url ? (
+              <a
+                href={meta.url}
+                target="_blank"
+                rel="noreferrer"
+                className="pp-mono pp-muted"
+                style={{ fontSize: 12, maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                title={meta.url}
+              >
+                {meta.url}
+              </a>
+            ) : null}
+            {summaryTags.length ? summaryTags.map((t) => <Tag key={t} style={{ marginInlineEnd: 0 }}>{t}</Tag>) : null}
+            {meta && meta.content_version ? <Tag color="blue" style={{ marginInlineEnd: 0 }}>版本 {meta.content_version}</Tag> : null}
+            {parseLoading ? <span className="pp-muted" style={{ fontSize: 12 }}>解析中…</span> : null}
+            <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              {meta && meta.draft_updated_at ? (
+                <span className="pp-muted" style={{ fontSize: 12 }}>上次保存：{fmtTime(meta.draft_updated_at)}</span>
+              ) : null}
+              <Button size="small" icon={<CloseOutlined />} onClick={requestClose}>
+                关闭
               </Button>
-            </Tooltip>
-            <Button size="small" icon={<HistoryOutlined />} onClick={openVersions}>
-              版本历史
-            </Button>
-            <Button size="small" icon={<ReloadOutlined />} onClick={load} loading={loading}>
-              重新加载
-            </Button>
-            <Button size="small" icon={<CloseOutlined />} onClick={requestClose}>
-              关闭
-            </Button>
-          </span>
-        </div>
-
-        {/* 摘要条 */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            flexWrap: 'wrap',
-            padding: '6px 16px',
-            borderBottom: '1px solid #f1f5f9',
-            background: '#fbfcfe',
-            fontSize: 12,
-            color: '#64748b',
-          }}
-        >
-          {summaryTags.length ? summaryTags.map((t) => <Tag key={t} style={{ marginInlineEnd: 0 }}>{t}</Tag>) : <span>加载后显示解析摘要</span>}
-          {meta && meta.content_version ? <Tag color="blue" style={{ marginInlineEnd: 0 }}>草稿版本 {meta.content_version}</Tag> : null}
-          {dirty ? <span style={{ color: '#d97706' }}>有未保存修改，Ctrl/Cmd+S 可保存到存储桶（立即生效）</span> : null}
-          <span style={{ marginLeft: 'auto' }}>
-            {meta && meta.draft_updated_at ? `草稿更新：${fmtTime(meta.draft_updated_at)}` : ''}
-          </span>
-        </div>
-
-        {/* 主体：左侧分区 + 右侧编辑区 */}
-        <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-          <div
-            style={{
-              width: 196,
-              flex: 'none',
-              borderRight: '1px solid #eef2f7',
-              background: '#fbfcfe',
-              padding: '10px 8px',
-              overflow: 'auto',
-            }}
-          >
-            {SECTIONS.map((s) => {
-              const active = section === s.key;
-              return (
-                <div
-                  key={s.key}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setSection(s.key)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') setSection(s.key);
-                  }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    padding: '8px 12px',
-                    marginBottom: 2,
-                    borderRadius: 8,
-                    cursor: 'pointer',
-                    background: active ? '#e0f2fe' : 'transparent',
-                    color: active ? '#0369a1' : '#475569',
-                    fontWeight: active ? 600 : 400,
-                    fontSize: 13,
-                  }}
-                >
-                  {s.label}
-                  {s.key === 'proxy_groups' && summary.proxy_groups !== undefined ? (
-                    <span className="pp-muted" style={{ marginLeft: 'auto', fontSize: 11 }}>{summary.proxy_groups}</span>
-                  ) : null}
-                  {s.key === 'rules' && summary.rules !== undefined ? (
-                    <span className="pp-muted" style={{ marginLeft: 'auto', fontSize: 11 }}>{summary.rules}</span>
-                  ) : null}
-                  {s.key === 'rule_providers' && summary.rule_providers !== undefined ? (
-                    <span className="pp-muted" style={{ marginLeft: 'auto', fontSize: 11 }}>{summary.rule_providers}</span>
-                  ) : null}
-                </div>
-              );
-            })}
-            <div className="pp-muted" style={{ fontSize: 11.5, lineHeight: 1.7, padding: '12px 10px 0' }}>
-              结构化编辑由后端生成 YAML（patch-section），前端不解析、不重写模板；锚点/注入位保持不变。
-            </div>
+            </span>
           </div>
+          {/* 操作行：次要操作 + 保存主按钮（primary 靠右，与关闭按钮分开） */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '0 16px 10px' }}>
+            <span className="pp-muted" style={{ fontSize: 12 }}>
+              Ctrl/Cmd+S 保存到存储桶
+              {dirty ? <span style={{ color: '#d97706', marginLeft: 8 }}>有未保存修改</span> : null}
+            </span>
+            <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <Button size="small" icon={<CheckCircleOutlined />} loading={busy === 'validate'} onClick={doValidate} disabled={!content}>
+                校验
+              </Button>
+              <Button size="small" icon={<EyeOutlined />} onClick={openPreview} disabled={!content}>
+                预览
+              </Button>
+              <Button size="small" icon={<HistoryOutlined />} onClick={openVersions}>
+                版本历史
+              </Button>
+              <Button size="small" icon={<ReloadOutlined />} onClick={load} loading={loading}>
+                重新加载
+              </Button>
+              <Tooltip title="保存后直接写入存储桶并立即生效（无需发布）">
+                <Button size="small" type="primary" icon={<SaveOutlined />} loading={busy === 'save'} onClick={saveDraft} disabled={!content || !dirty}>
+                  保存到存储桶
+                </Button>
+              </Tooltip>
+            </span>
+          </div>
+          {/* 窄屏：导航收起，用下拉选择分区 */}
+          {mobile ? (
+            <div style={{ padding: '0 16px 10px' }}>
+              <Select
+                size="small"
+                value={section}
+                onChange={setSection}
+                style={{ width: '100%' }}
+                options={SECTIONS.map((s) => ({ value: s.key, label: s.label }))}
+              />
+            </div>
+          ) : null}
+        </div>
+
+        {/* 主体：左侧分区导航 + 右侧编辑区 */}
+        <div style={{ flex: 1, display: 'flex', minHeight: 0, minWidth: 0, overflow: 'hidden' }}>
+          {!mobile ? (
+            <div
+              style={{
+                width: navCollapsed ? 56 : narrow ? 180 : 232,
+                flex: 'none',
+                borderRight: '1px solid #eef2f7',
+                background: '#fbfcfe',
+                padding: '10px 8px',
+                overflow: 'auto',
+                transition: 'width .15s',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginBottom: 6, padding: '0 4px' }}>
+                {navCollapsed ? null : <span className="pp-muted" style={{ fontSize: 11.5 }}>分区导航</span>}
+                <Button
+                  size="small"
+                  type="text"
+                  aria-label="折叠导航"
+                  title={navCollapsed ? '展开导航' : '折叠导航'}
+                  icon={navCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+                  onClick={() => setNavCollapsed((v) => !v)}
+                  style={{ marginLeft: navCollapsed ? 0 : 'auto' }}
+                />
+              </div>
+              {SECTION_GROUPS.map((group) => (
+                <div key={group.title} style={{ marginBottom: 10 }}>
+                  {navCollapsed ? null : (
+                    <div className="pp-muted" style={{ fontSize: 11, padding: '4px 8px', letterSpacing: 0.5 }}>
+                      {group.title}
+                    </div>
+                  )}
+                  {group.keys.map((key) => {
+                    const s = SECTIONS.find((x) => x.key === key) || { key, label: key };
+                    const active = section === key;
+                    const count = sectionCount(key);
+                    return (
+                      <div
+                        key={key}
+                        role="button"
+                        tabIndex={0}
+                        title={s.label}
+                        onClick={() => setSection(key)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') setSection(key);
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          padding: navCollapsed ? '8px 0' : '8px 12px',
+                          justifyContent: navCollapsed ? 'center' : 'flex-start',
+                          marginBottom: 2,
+                          borderRadius: 8,
+                          cursor: 'pointer',
+                          background: active ? '#e0f2fe' : 'transparent',
+                          color: active ? '#0369a1' : '#475569',
+                          fontWeight: active ? 600 : 400,
+                          fontSize: navCollapsed ? 12 : 13,
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {navCollapsed ? String(s.label).slice(0, 2) : s.label}
+                        {!navCollapsed && count !== null ? (
+                          <span className="pp-muted" style={{ marginLeft: 'auto', fontSize: 11 }}>{count}</span>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+              {navCollapsed ? null : (
+                <div className="pp-muted" style={{ fontSize: 11.5, lineHeight: 1.7, padding: '12px 10px 0' }}>
+                  结构化编辑由后端生成 YAML（patch-section）；「应用到编辑内容」只改本地内容，点「保存到存储桶」后生效。
+                </div>
+              )}
+            </div>
+          ) : null}
 
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
             {errorItems.length ? (
@@ -808,6 +877,27 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
             <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>{renderSectionBody()}</div>
           </div>
         </div>
+
+        {/* 移动端：保存按钮固定底部 */}
+        {mobile ? (
+          <div
+            style={{
+              position: 'fixed',
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 100,
+              background: '#fff',
+              borderTop: '1px solid #eef2f7',
+              padding: '10px 16px',
+              boxShadow: '0 -2px 8px rgba(0,0,0,.06)',
+            }}
+          >
+            <Button block type="primary" icon={<SaveOutlined />} loading={busy === 'save'} onClick={saveDraft} disabled={!content || !dirty}>
+              保存到存储桶
+            </Button>
+          </div>
+        ) : null}
       </div>
 
       {/* 预览弹窗 */}

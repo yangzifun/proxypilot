@@ -73,7 +73,7 @@ function scalarText(v) {
 /* -----------------------------------------------------------------
  * 通用对象表单：基础设置 / DNS / TUN
  * ----------------------------------------------------------------- */
-export function ObjectForm({ title, hint, value, onApply, disabled, extraActions }) {
+export function ObjectForm({ title, hint, value, onApply, disabled, extraActions, columns = 2 }) {
   const objectValue = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
   const [draft, setDraft] = useState(objectValue);
   const [jsonTexts, setJsonTexts] = useState({});
@@ -167,7 +167,7 @@ export function ObjectForm({ title, hint, value, onApply, disabled, extraActions
         <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8 }}>
           {extraActions}
           <Button size="small" onClick={apply} disabled={disabled || !dirty || Object.keys(jsonErrs).length > 0}>
-            应用修改
+            应用到编辑内容
           </Button>
         </span>
       </div>
@@ -176,7 +176,7 @@ export function ObjectForm({ title, hint, value, onApply, disabled, extraActions
           type="info"
           showIcon
           style={{ marginBottom: 10, borderRadius: 8 }}
-          message="有未应用的修改：点「应用修改」后会调用后端生成新的 YAML，不会直接发布。"
+          message="有未应用的修改：点「应用到编辑内容」只更新本地内容（不写存储桶）；保存到存储桶后才会写入 bucket 并生效。"
         />
       ) : null}
       {Object.keys(jsonErrs).length ? (
@@ -184,51 +184,75 @@ export function ObjectForm({ title, hint, value, onApply, disabled, extraActions
       ) : null}
 
       {entries.length ? (
-        <div style={{ display: 'grid', gap: 8 }}>
-          {entries.map(([key, v]) => (
-            <div
-              key={key}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'minmax(120px, 200px) 1fr auto',
-                gap: 10,
-                alignItems: 'start',
-                padding: '8px 10px',
-                border: '1px solid #eef2f7',
-                borderRadius: 8,
-                background: '#fbfcfe',
-              }}
-            >
-              <span className="pp-mono" style={{ fontSize: 12.5, color: '#334155', paddingTop: 5, wordBreak: 'break-all' }}>
-                {key}
-              </span>
-              {typeof v === 'boolean' ? (
-                <Switch checked={v} onChange={(checked) => setScalar(key, checked)} disabled={disabled} />
-              ) : typeof v === 'number' ? (
-                <InputNumber value={v} onChange={(n) => setScalar(key, n)} disabled={disabled} style={{ width: '100%' }} />
-              ) : v === null || typeof v === 'string' ? (
-                <Input
-                  value={v === null ? '' : v}
-                  onChange={(e) => setScalar(key, e.target.value)}
-                  disabled={disabled}
-                  className={v && typeof v === 'string' && v.length > 60 ? 'pp-mono' : undefined}
-                />
-              ) : (
-                <Input.TextArea
-                  className="pp-mono"
-                  autoSize={{ minRows: 2, maxRows: 8 }}
-                  value={jsonTexts[key] !== undefined ? jsonTexts[key] : toJSONText(v)}
-                  onChange={(e) => setJSONText(key, e.target.value)}
-                  spellCheck={false}
-                  disabled={disabled}
-                  style={{ fontSize: 12, lineHeight: 1.6 }}
-                />
-              )}
-              <Popconfirm title={`删除字段 ${key}？`} okText="删除" onConfirm={() => removeKey(key)} disabled={disabled}>
-                <Button size="small" type="text" danger icon={<DeleteOutlined />} disabled={disabled} aria-label={`删除 ${key}`} />
-              </Popconfirm>
-            </div>
-          ))}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: columns > 1 ? 'repeat(2, minmax(0, 1fr))' : '1fr',
+            gap: 10,
+          }}
+        >
+          {entries.map(([key, v]) => {
+            const isJson = v !== null && typeof v === 'object';
+            const isLongText = typeof v === 'string' && v.length > 60;
+            const isLong = isJson || isLongText;
+            const isBool = typeof v === 'boolean';
+            return (
+              <div
+                key={key}
+                style={{
+                  gridColumn: isLong ? '1 / -1' : 'auto',
+                  justifySelf: isBool ? 'start' : 'stretch',
+                  minWidth: 0,
+                  padding: '8px 10px',
+                  border: '1px solid #eef2f7',
+                  borderRadius: 8,
+                  background: '#fbfcfe',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: isBool ? 0 : 4 }}>
+                  <span className="pp-mono" style={{ fontSize: 12, color: '#334155', wordBreak: 'break-all' }}>
+                    {key}
+                  </span>
+                  <Popconfirm title={`删除字段 ${key}？`} okText="删除" onConfirm={() => removeKey(key)} disabled={disabled}>
+                    <Button
+                      size="small"
+                      type="text"
+                      icon={<DeleteOutlined />}
+                      disabled={disabled}
+                      aria-label={`删除 ${key}`}
+                      title={`删除字段 ${key}`}
+                      style={{ marginLeft: 'auto', color: '#94a3b8' }}
+                    />
+                  </Popconfirm>
+                </div>
+                {isBool ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Switch checked={v} onChange={(checked) => setScalar(key, checked)} disabled={disabled} size="small" />
+                    <span className="pp-muted" style={{ fontSize: 12 }}>{v ? '开启' : '关闭'}</span>
+                  </div>
+                ) : typeof v === 'number' ? (
+                  <InputNumber value={v} onChange={(n) => setScalar(key, n)} disabled={disabled} style={{ width: '100%' }} />
+                ) : v === null || typeof v === 'string' ? (
+                  <Input
+                    value={v === null ? '' : v}
+                    onChange={(e) => setScalar(key, e.target.value)}
+                    disabled={disabled}
+                    className={isLongText ? 'pp-mono' : undefined}
+                  />
+                ) : (
+                  <Input.TextArea
+                    className="pp-mono"
+                    autoSize={{ minRows: 2, maxRows: 8 }}
+                    value={jsonTexts[key] !== undefined ? jsonTexts[key] : toJSONText(v)}
+                    onChange={(e) => setJSONText(key, e.target.value)}
+                    spellCheck={false}
+                    disabled={disabled}
+                    style={{ fontSize: 12, lineHeight: 1.6 }}
+                  />
+                )}
+              </div>
+            );
+          })}
         </div>
       ) : (
         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="该区段没有可编辑字段" />
@@ -367,7 +391,7 @@ export function ProxyGroupsTable({ groups, onChange, disabled }) {
           <Button size="small" type="text" disabled={disabled || index === list.length - 1} onClick={() => move(index, 1)} icon={<ArrowDownOutlined />} aria-label="下移" />
           <Button size="small" type="link" icon={<EditOutlined />} disabled={disabled} onClick={() => openEdit(index)}>编辑</Button>
           <Popconfirm title={`删除策略组「${String(list[index] && list[index].name) || ''}」？`} okText="删除" onConfirm={() => remove(index)} disabled={disabled}>
-            <Button size="small" type="link" danger icon={<DeleteOutlined />} disabled={disabled}>删除</Button>
+            <Button size="small" type="text" icon={<DeleteOutlined />} disabled={disabled} aria-label="删除" title="删除" style={{ color: '#94a3b8' }} />
           </Popconfirm>
         </Space>
       ),
@@ -516,7 +540,7 @@ export function RulesTable({ rules, onChange, disabled }) {
           <Button size="small" type="text" disabled={disabled || row.index === list.length - 1} onClick={() => move(row.index, 1)} icon={<ArrowDownOutlined />} aria-label="下移" />
           <Button size="small" type="link" icon={<EditOutlined />} disabled={disabled} onClick={() => setEditing({ index: row.index, text: row.text })}>编辑</Button>
           <Popconfirm title="删除该规则？" okText="删除" onConfirm={() => remove(row.index)} disabled={disabled}>
-            <Button size="small" type="link" danger icon={<DeleteOutlined />} disabled={disabled}>删除</Button>
+            <Button size="small" type="text" icon={<DeleteOutlined />} disabled={disabled} aria-label="删除" title="删除" style={{ color: '#94a3b8' }} />
           </Popconfirm>
         </Space>
       ),
@@ -648,7 +672,7 @@ export function RuleProvidersTable({ providers, onChange, disabled }) {
           <Button size="small" type="text" disabled={disabled || list.indexOf(r) === list.length - 1} onClick={() => move(list.indexOf(r), 1)} icon={<ArrowDownOutlined />} aria-label="下移" />
           <Button size="small" type="link" icon={<EditOutlined />} disabled={disabled} onClick={() => setEditing({ name: r.name, fields: { ...r.fields } })}>编辑</Button>
           <Popconfirm title={`删除规则集「${r.name}」？`} okText="删除" onConfirm={() => remove(list.indexOf(r))} disabled={disabled}>
-            <Button size="small" type="link" danger icon={<DeleteOutlined />} disabled={disabled}>删除</Button>
+            <Button size="small" type="text" icon={<DeleteOutlined />} disabled={disabled} aria-label="删除" title="删除" style={{ color: '#94a3b8' }} />
           </Popconfirm>
         </Space>
       ),
