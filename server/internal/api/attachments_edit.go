@@ -152,6 +152,9 @@ func (h *handlers) attachmentsContentSave(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusBadGateway, err.Error())
 		return
 	}
+	// 订阅模板直接以 bucket 文件为准：附件编辑后立即清空模板 URL 缓存，
+	// 下一次用户订阅/模板刷新即可读到新内容。
+	clearTemplateURLCache()
 	h.recordNodeLog(r.Context(), 0, 0, "attachment-edit", "success", 0, "编辑附件 "+key, "", "admin")
 	writeJSON(w, http.StatusOK, map[string]any{
 		"success": true, "key": key, "size": len(body.Content),

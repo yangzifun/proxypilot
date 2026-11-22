@@ -806,11 +806,64 @@ func (h *handlers) templateManagedHosts(ctx context.Context) []string {
 	return hosts
 }
 
+const defaultTemplateBucketBase = "https://" + templateManagedR2HostName
+
+// normalizeTemplateBucketKey 校验模板地址 key：
+// 必须位于 rule/configs/ 下、以 .yaml/.yml 结尾；禁止协议/query/fragment/反斜杠与路径穿越。
+func normalizeTemplateBucketKey(raw string) (string, error) {
+	key := strings.TrimSpace(raw)
+	if key == "" {
+		return "", errors.New("bucket_key 不能为空")
+	}
+	if strings.Contains(key, "://") || strings.ContainsAny(key, "\\?#\r\n\t ") {
+		return "", errors.New("bucket_key 只能是 rule/configs/*.yaml|yml")
+	}
+	key = strings.TrimPrefix(key, "/")
+	if len(key) > 512 {
+		return "", errors.New("bucket_key 过长")
+	}
+	decoded, err := url.PathUnescape(key)
+	if err != nil {
+		return "", errors.New("bucket_key 编码无效")
+	}
+	if strings.Contains(decoded, "..") {
+		return "", errors.New("bucket_key 不允许包含 ..")
+	}
+	if !strings.HasPrefix(decoded, strings.TrimPrefix(templateManagedR2Prefix, "/")) {
+		return "", fmt.Errorf("bucket_key 必须以 %s 开头", strings.TrimPrefix(templateManagedR2Prefix, "/"))
+	}
+	lower := strings.ToLower(decoded)
+	if !strings.HasSuffix(lower, ".yaml") && !strings.HasSuffix(lower, ".yml") {
+		return "", errors.New("bucket_key 必须以 .yaml/.yml 结尾")
+	}
+	return decoded, nil
+}
+
+// templateBucketKeyFromURL 从受管 URL 中解析 key；外部 URL/非法 URL 返回错误。
+func templateBucketKeyFromURL(rawURL string, allowedHosts []string) (string, error) {
+	return managedTemplateObjectKey(rawURL, allowedHosts)
+}
+
+// templateBucketBase 返回模板对象 URL 基址：优先 CDN 基址，未配置时用默认 S3。
+func (h *handlers) templateBucketBase(ctx context.Context) string {
+	base := strings.TrimRight(h.effectiveCDNBase(ctx), "/")
+	if base == "" {
+		return defaultTemplateBucketBase
+	}
+	return base
+}
+
+// templateBucketURL 由 key 推导模板对象 URL。
+func templateBucketURL(base, key string) string {
+	return objectCDNURL(base, key)
+}
+
 // managedTemplateObjectKey 校验模板 URL 是否属于受管 R2，并返回对象 key。
 func managedTemplateObjectKey(rawURL string, allowedHosts []string) (string, error) {
 	u, err := url.Parse(strings.TrimSpace(rawURL))
-	if err != nil || u.Hostname() == "" {
-		return "", errors.New("模板 URL 无效")
+	if err != nil || u.Hostname() == "" || !strings.EqualFold(u.Scheme, "https") ||
+		u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		return "", errors.New("模板 URL 无效（必须是受管 HTTPS 地址）")
 	}
 	host := strings.ToLower(u.Hostname())
 	allowed := false
@@ -823,9 +876,9 @@ func managedTemplateObjectKey(rawURL string, allowedHosts []string) (string, err
 	if !allowed {
 		return "", fmt.Errorf("外部模板只读：仅允许发布到受管 R2（%s），如需编辑请先转为托管模板", strings.Join(allowedHosts, " / "))
 	}
-	path := u.EscapedPath()
-	if path == "" {
-		path = u.Path
+	path, err := url.PathUnescape(u.EscapedPath())
+	if err != nil || path == "" {
+		return "", errors.New("模板 URL 路径编码无效")
 	}
 	if !strings.HasPrefix(path, templateManagedR2Prefix) {
 		return "", fmt.Errorf("模板 URL 路径必须以 %s 开头", templateManagedR2Prefix)
@@ -957,19 +1010,21 @@ func sha256String(s string) string {
 
 var errTemplateNotFound = errors.New("模板不存在")
 
-// effectiveTemplateContent 返回编辑器/预览使用的内容：草稿 → 已发布 → URL。
+// effectiveTemplateContent 返回编辑器/预览使用的内容：
+// 存储桶 URL 是唯一内容源；附件管理里的修改会直接反映到模板编辑器/订阅。
+// 只有 URL 暂时不可用时才回退草稿/已发布 DB 副本，避免完全无法编辑。
 func (h *handlers) effectiveTemplateContent(ctx context.Context, row templateContentRow) (content, source string, err error) {
+	content, urlErr := fetchTemplateURLText(ctx, row.URL)
+	if urlErr == nil {
+		return content, "url", nil
+	}
 	if strings.TrimSpace(row.DraftContent) != "" {
 		return row.DraftContent, "draft", nil
 	}
 	if strings.TrimSpace(row.PublishedContent) != "" {
 		return row.PublishedContent, "published", nil
 	}
-	content, err = fetchTemplateURLText(ctx, row.URL)
-	if err != nil {
-		return "", "url", err
-	}
-	return content, "url", nil
+	return "", "url", urlErr
 }
 
 // clashTemplateContent 运行时解析出的模板内容与来源。
@@ -979,7 +1034,8 @@ type clashTemplateContent struct {
 	URL     string // 用于兼容的 X-Template-Used
 }
 
-// resolveClashTemplateContent 运行时模板解析：DB 已发布内容优先，否则回退 URL。
+// resolveClashTemplateContent 运行时模板解析：始终读取模板 URL 指向的存储桶文件。
+// 已发布 DB 副本只用于编辑器回退/版本历史，不再参与用户订阅内容，避免附件管理修改后订阅仍旧。
 func (h *handlers) resolveClashTemplateContent(ctx context.Context, template string) (clashTemplateContent, error) {
 	template = strings.TrimSpace(template)
 	if strings.HasPrefix(template, "http://") || strings.HasPrefix(template, "https://") {
@@ -989,18 +1045,15 @@ func (h *handlers) resolveClashTemplateContent(ctx context.Context, template str
 		}
 		return clashTemplateContent{Content: content, Source: "url", URL: template}, nil
 	}
-	var rawURL, published string
+	var rawURL string
 	err := h.db.QueryRowContext(ctx,
-		`SELECT COALESCE(url,''), COALESCE(published_content,'') FROM config_templates WHERE name = ? LIMIT 1`, template).
-		Scan(&rawURL, &published)
+		`SELECT COALESCE(url,'') FROM config_templates WHERE name = ? LIMIT 1`, template).
+		Scan(&rawURL)
 	if errors.Is(err, sql.ErrNoRows) {
 		return clashTemplateContent{}, fmt.Errorf("%w：%s", errTemplateNotFound, template)
 	}
 	if err != nil {
 		return clashTemplateContent{}, errors.New("查询模板失败")
-	}
-	if strings.TrimSpace(published) != "" {
-		return clashTemplateContent{Content: published, Source: "db", URL: rawURL}, nil
 	}
 	content, err := fetchTemplateURLText(ctx, rawURL)
 	if err != nil {
@@ -1037,11 +1090,12 @@ func (h *handlers) templateContentGet(w http.ResponseWriter, r *http.Request) {
 		summary = stats.summary(doc.Content[0])
 		summary.SizeBytes = len(content)
 	}
-	managed, managedErr := false, ""
-	if _, kerr := managedTemplateObjectKey(row.URL, h.templateManagedHosts(r.Context())); kerr != nil {
+	managed, managedErr, bucketKey := false, "", ""
+	if key, kerr := templateBucketKeyFromURL(row.URL, h.templateManagedHosts(r.Context())); kerr != nil {
 		managedErr = kerr.Error()
 	} else {
 		managed = true
+		bucketKey = key
 	}
 	publishable := managed && h.effectiveR2(r.Context()).Ready()
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -1050,6 +1104,7 @@ func (h *handlers) templateContentGet(w http.ResponseWriter, r *http.Request) {
 			"id":                row.ID,
 			"name":              row.Name,
 			"url":               row.URL,
+			"bucket_key":        bucketKey,
 			"description":       row.Description,
 			"draft_content":     row.DraftContent,
 			"published_content": row.PublishedContent,
@@ -1246,6 +1301,13 @@ func (h *handlers) templateContentSave(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	validation := validateTemplateContent(body.Content)
+	if !validation.OK {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"error": "模板校验未通过", "errors": validation.Errors, "warnings": validation.Warnings,
+		})
+		return
+	}
 	row, err := h.loadTemplateContentRow(r.Context(), id)
 	if errors.Is(err, sql.ErrNoRows) {
 		writeError(w, http.StatusNotFound, "模板不存在")
@@ -1268,17 +1330,63 @@ func (h *handlers) templateContentSave(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	sha, updatedAt, err := h.saveTemplateDraft(r.Context(), row, body.Content, currentActor(r), "save_draft")
+
+	key, err := templateBucketKeyFromURL(row.URL, h.templateManagedHosts(r.Context()))
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "保存草稿失败")
+		writeError(w, http.StatusBadRequest, "该模板不是受管存储桶模板，无法直接写存储桶："+err.Error())
 		return
 	}
-	validation := validateTemplateContent(body.Content)
+	r2cfg := h.effectiveR2(r.Context())
+	if !r2cfg.Ready() {
+		writeError(w, http.StatusBadRequest, "R2 未配置，无法直接保存模板到存储桶")
+		return
+	}
+	store := newTemplateObjectStore(r2cfg)
+	if err := store.Put(r.Context(), key, []byte(body.Content), "text/yaml; charset=utf-8"); err != nil {
+		writeError(w, http.StatusBadGateway, "写入存储桶失败："+err.Error())
+		return
+	}
+
+	sha := sha256String(body.Content)
+	now := nowMillis()
+	actor := currentActor(r)
+	newVersion := row.ContentVersion + 1
+	tx, err := h.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "同步模板数据库失败")
+		return
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(r.Context(),
+		`UPDATE config_templates
+		    SET draft_content = ?, draft_sha256 = ?, draft_updated_at = ?, draft_updated_by = ?,
+		        published_content = ?, published_sha256 = ?, published_at = ?, published_by = ?,
+		        content_version = ?, updated_at = ?
+		  WHERE id = ?`,
+		body.Content, sha, now, actor, body.Content, sha, now, actor, newVersion, now, id); err != nil {
+		writeError(w, http.StatusInternalServerError, "同步模板数据库失败")
+		return
+	}
+	if _, err := tx.ExecContext(r.Context(),
+		`INSERT INTO config_template_versions (template_id, version, content, sha256, action, actor, created_at)
+		 VALUES (?, ?, ?, ?, 'direct_save', ?, ?)`,
+		id, newVersion, body.Content, sha, actor, now); err != nil {
+		writeError(w, http.StatusInternalServerError, "记录模板版本失败")
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		writeError(w, http.StatusInternalServerError, "同步模板数据库失败")
+		return
+	}
+	clearTemplateURLCache()
+	h.recordNodeLog(r.Context(), 0, 0, "template-save-bucket", "success", 0,
+		fmt.Sprintf("模板 %d（%s）直写存储桶 key=%s version=%d sha=%s", id, row.Name, key, newVersion, sha), "", actor)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"data": map[string]any{
-			"sha256": sha, "content_version": row.ContentVersion, "draft_updated_at": updatedAt,
-			"warnings": validation.Warnings,
+			"source": "bucket", "sha256": sha, "url": row.URL, "bucket_key": key,
+			"version": newVersion, "content_version": newVersion,
+			"draft_updated_at": now, "warnings": validation.Warnings,
 		},
 	})
 }
@@ -1390,6 +1498,7 @@ func (h *handlers) templatePublish(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "发布失败")
 		return
 	}
+	clearTemplateURLCache()
 	h.recordNodeLog(r.Context(), 0, 0, "template-publish", "success", 0,
 		fmt.Sprintf("模板 %d（%s）发布版本 %d，sha=%s", id, row.Name, newVersion, sha), "", actor)
 	h.log.Info("模板已发布", "template_id", id, "name", row.Name, "version", newVersion, "sha256", sha, "actor", actor)

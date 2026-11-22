@@ -22,19 +22,31 @@ import {
   Modal,
   Popconfirm,
   Row,
+  Select,
   Space,
   Table,
   Tabs,
   Tag,
   Tooltip,
 } from 'antd';
-import { safeHttpUrl } from '../safeUrl';
 import { api } from '../api';
 import { useAsync, readForm } from '../hooks';
-import { ErrorBlock, IconAction, PageCard, StatCard, Toolbar } from '../components';
+import { CopyText, ErrorBlock, IconAction, PageCard, StatCard, Toolbar } from '../components';
 import { fmtAgo, fmtBytes, fmtTime } from '../format';
 import { chartPalette } from '../theme';
 import TemplateEditor from './TemplateEditor';
+
+/** 从模板 URL 解析存储桶 key（兼容旧数据：https://cdn/rule/configs/x.yaml → rule/configs/x.yaml） */
+function bucketKeyFromUrl(url) {
+  const raw = String(url || '').trim();
+  if (!raw) return '';
+  try {
+    const u = new URL(raw);
+    return decodeURIComponent(u.pathname.replace(/^\/+/, ''));
+  } catch (e) {
+    return '';
+  }
+}
 
 export default function Templates() {
   return (
@@ -70,6 +82,17 @@ function TemplateList() {
 
   const defaults = useMemo(() => rows.filter((r) => Number(r.is_default) === 1).length, [rows]);
 
+  // 存储桶附件：rule/configs/ 下的 YAML 文件，作为「模板地址」下拉选项
+  const attachments = useAsync(() => api('attachments', { query: { prefix: 'rule/configs/' } }), []);
+  const fileOptions = useMemo(() => {
+    const list = ((attachments.data && attachments.data.files) || [])
+      .filter((f) => /\.(ya?ml)$/i.test(String((f && f.key) || '')))
+      .map((f) => ({ value: f.key, label: f.key }));
+    const current = compose && compose.row ? compose.row.bucket_key || bucketKeyFromUrl(compose.row.url) : '';
+    if (current && !list.some((o) => o.value === current)) list.unshift({ value: current, label: current });
+    return list;
+  }, [attachments.data, compose]);
+
   const openCreate = () => {
     setCompose({ mode: 'create', row: null });
     form.resetFields();
@@ -77,7 +100,11 @@ function TemplateList() {
 
   const openEdit = (row) => {
     setCompose({ mode: 'edit', row });
-    form.setFieldsValue({ name: row.name, url: row.url, description: row.description || '' });
+    form.setFieldsValue({
+      name: row.name,
+      bucket_key: row.bucket_key || bucketKeyFromUrl(row.url),
+      description: row.description || '',
+    });
   };
 
   const submit = async () => {
@@ -139,19 +166,21 @@ function TemplateList() {
       ),
     },
     {
-      title: '模板地址',
-      dataIndex: 'url',
+      title: '存储桶文件',
+      dataIndex: 'bucket_key',
       ellipsis: true,
-      render: (v) =>
-        v ? (
-          <Tooltip title={v}>
-            <a href={safeHttpUrl(v) || undefined} target="_blank" rel="noreferrer" className="pp-mono">
-              {v}
-            </a>
-          </Tooltip>
-        ) : (
-          <span className="pp-muted">—</span>
-        ),
+      render: (v, row) => {
+        const key = v || bucketKeyFromUrl(row.url);
+        if (!key) return <span className="pp-muted">—</span>;
+        return (
+          <Space size={6}>
+            <Tooltip title={key}>
+              <span className="pp-mono" style={{ fontSize: 12 }}>{key}</span>
+            </Tooltip>
+            <CopyText value={key} display={<span style={{ fontSize: 12 }}>复制</span>} tip="复制存储桶路径" />
+          </Space>
+        );
+      },
     },
     {
       title: '描述',
@@ -248,7 +277,7 @@ function TemplateList() {
                 <Input
                   allowClear
                   prefix={<SearchOutlined style={{ color: '#94a3b8' }} />}
-                  placeholder="搜索模板名称 / 地址 / 描述"
+                  placeholder="搜索模板名称 / 存储桶文件 / 描述"
                   value={q}
                   onChange={(e) => {
                     setQ(e.target.value);
@@ -304,14 +333,23 @@ function TemplateList() {
             <Input placeholder="例如：默认 Clash 模板" maxLength={100} />
           </Form.Item>
           <Form.Item
-            name="url"
-            label="模板地址"
-            rules={[
-              { required: true, message: '请填写模板 URL' },
-              { pattern: /^https?:\/\//i, message: '需以 http:// 或 https:// 开头' },
-            ]}
+            name="bucket_key"
+            label="存储桶文件"
+            rules={[{ required: true, message: '请选择存储桶文件' }]}
+            extra={
+              attachments.error
+                ? '附件列表加载失败：' + (attachments.error.message || '未知错误')
+                : '从 rule/configs/ 选择 YAML 文件；可在「附件管理」上传/编辑'
+            }
           >
-            <Input placeholder="https://s3.example.com/rule/clash.yaml" />
+            <Select
+              showSearch
+              optionFilterProp="label"
+              placeholder="选择 rule/configs/ 下的 YAML 文件"
+              options={fileOptions}
+              loading={attachments.loading}
+              notFoundContent={attachments.loading ? '加载中…' : '未找到 YAML 文件，请先在「附件管理」上传'}
+            />
           </Form.Item>
           <Form.Item name="description" label="描述">
             <Input.TextArea rows={2} placeholder="用途说明，可为空" />

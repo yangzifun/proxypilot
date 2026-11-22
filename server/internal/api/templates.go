@@ -69,6 +69,7 @@ func (h *handlers) templatesList(w http.ResponseWriter, r *http.Request) {
 		ID          int64  `json:"id"`
 		Name        string `json:"name"`
 		URL         string `json:"url"`
+		BucketKey   string `json:"bucket_key"`
 		Description string `json:"description"`
 		IsDefault   int64  `json:"is_default"`
 		CreatedAt   int64  `json:"created_at"`
@@ -80,6 +81,9 @@ func (h *handlers) templatesList(w http.ResponseWriter, r *http.Request) {
 		if err := rows.Scan(&it.ID, &it.Name, &it.URL, &it.Description, &it.IsDefault, &it.CreatedAt, &it.UpdatedAt); err != nil {
 			writeError(w, http.StatusInternalServerError, "解析模板失败")
 			return
+		}
+		if key, kerr := templateBucketKeyFromURL(it.URL, h.templateManagedHosts(r.Context())); kerr == nil {
+			it.BucketKey = key
 		}
 		data = append(data, it)
 	}

@@ -449,22 +449,21 @@ func TestResolveClashTemplateContent(t *testing.T) {
 				name, _ = args[0].(string)
 			}
 			if name == "a" {
-				return fakeRowsSet([]string{"url", "published_content"},
-					[]driver.Value{"https://s3.proxypilot.yangzifun.org/rule/configs/a.yaml", "port: 1 # published\n"}), nil
+				return fakeRowsSet([]string{"url"},
+					[]driver.Value{"https://s3.proxypilot.yangzifun.org/rule/configs/a.yaml"}), nil
 			}
-			return fakeRowsSet([]string{"url", "published_content"},
-				[]driver.Value{"https://s3.proxypilot.yangzifun.org/rule/configs/b.yaml", ""}), nil
+			return fakeRowsSet([]string{"url"},
+				[]driver.Value{"https://s3.proxypilot.yangzifun.org/rule/configs/b.yaml"}), nil
 		}
 		return &fakeRows{}, nil
 	}
 	h := &handlers{db: db, log: testLogger()}
 
-	// 已发布内容优先（source=db）
+	// 运行时以存储桶 URL 为唯一来源（不再优先 DB published_content）
 	got, err := h.resolveClashTemplateContent(context.Background(), "a")
-	if err != nil || got.Source != "db" || !strings.Contains(got.Content, "published") {
-		t.Fatalf("已发布内容未优先：%+v err=%v", got, err)
+	if err != nil || got.Source != "url" || !strings.Contains(got.Content, "from url") {
+		t.Fatalf("模板 a 应读取 URL：%+v err=%v", got, err)
 	}
-	// 未发布时回退 URL（source=url）
 	got, err = h.resolveClashTemplateContent(context.Background(), "b")
 	if err != nil || got.Source != "url" || !strings.Contains(got.Content, "from url") {
 		t.Fatalf("URL 回退失败：%+v err=%v", got, err)
@@ -503,7 +502,16 @@ func TestTemplateContentSaveOptimisticLock(t *testing.T) {
 		return &fakeRows{}, nil
 	}
 	fdb.onExec = func(query string, args []driver.Value) (driver.Result, error) { return fakeResult(1, 0), nil }
-	h := &handlers{db: db, log: testLogger()}
+	h := &handlers{
+		db:  db,
+		log: testLogger(),
+		cfg: config.Config{
+			R2Bucket: "proxypilot", R2Endpoint: "https://r2.example.com",
+			R2AccessKeyID: "ak", R2SecretAccessKey: "sk",
+		},
+	}
+	store := &fakeTemplateStore{gets: map[string][]byte{}}
+	withTemplateStore(t, store)
 
 	call := func(body string) (int, map[string]any) {
 		req := httptest.NewRequest(http.MethodPut, "/api/templates/manage/7/content", strings.NewReader(body))
@@ -515,8 +523,32 @@ func TestTemplateContentSaveOptimisticLock(t *testing.T) {
 		return rec.Code, out
 	}
 
-	if code, _ := call(`{"content":"port: 7890\n"}`); code != http.StatusOK {
-		t.Fatalf("不带 base_sha 保存应成功，得到 %d", code)
+	if code, out := call(`{"content":"port: 7890\n"}`); code != http.StatusOK {
+		t.Fatalf("不带 base_sha 保存应成功，得到 %d body=%v", code, out)
+	}
+	if _, ok := store.puts["rule/configs/tpl.yaml"]; !ok {
+		t.Fatal("内容未直写模板桶对象")
+	}
+	var updatedContent bool
+	var versionInsert bool
+	for _, call := range fdb.execCalls() {
+		if strings.Contains(call.Query, "UPDATE config_templates") && strings.Contains(call.Query, "published_content") {
+			for _, arg := range call.Args {
+				if s, ok := arg.(string); ok && strings.Contains(s, "port: 7890") {
+					updatedContent = true
+				}
+			}
+		}
+		if strings.Contains(call.Query, "INSERT INTO config_template_versions") {
+			for _, arg := range call.Args {
+				if n, ok := arg.(int64); ok && n == int64(4) {
+					versionInsert = true
+				}
+			}
+		}
+	}
+	if !updatedContent || !versionInsert {
+		t.Fatalf("DB 未同步 published_content/版本：updated=%v version=%v", updatedContent, versionInsert)
 	}
 	if code, _ := call(`{"content":"port: 7890\n","base_sha256":"stale"}`); code != http.StatusConflict {
 		t.Fatalf("base_sha 不匹配应 409，得到 %d", code)

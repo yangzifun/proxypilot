@@ -15,6 +15,7 @@ type templateBody struct {
 	ID          *int64  `json:"id"`
 	Name        *string `json:"name"`
 	URL         *string `json:"url"`
+	BucketKey   *string `json:"bucket_key"`
 	Description *string `json:"description"`
 	IsDefault   any     `json:"is_default"`
 }
@@ -78,6 +79,7 @@ func (h *handlers) templateWrite(w http.ResponseWriter, r *http.Request, pathID 
 	name := pick(body.Name, curName)
 	url := pick(body.URL, curURL)
 	description := pick(body.Description, curDesc)
+	bucketKey := ""
 
 	if name == "" {
 		writeError(w, http.StatusBadRequest, "请填写模板名称")
@@ -87,8 +89,42 @@ func (h *handlers) templateWrite(w http.ResponseWriter, r *http.Request, pathID 
 		writeError(w, http.StatusBadRequest, "模板名称过长（≤100 字符）")
 		return
 	}
-	if !httpURLRe.MatchString(url) {
-		writeError(w, http.StatusBadRequest, "URL 需以 http:// 或 https:// 开头")
+
+	// 新接口：bucket_key 优先；由后端基于 CDN 基址推导受管模板 URL。
+	// 不再接受任意 CDN/外部 URL；已有模板仅更新名称/描述时保留原 URL 以兼容。
+	if body.BucketKey != nil {
+		key, kerr := normalizeTemplateBucketKey(*body.BucketKey)
+		if kerr != nil {
+			writeError(w, http.StatusBadRequest, kerr.Error())
+			return
+		}
+		base := h.templateBucketBase(r.Context())
+		derived := templateBucketURL(base, key)
+		if derived == "" {
+			writeError(w, http.StatusBadRequest, "无法根据 bucket_key 推导模板 URL")
+			return
+		}
+		if _, kerr := templateBucketKeyFromURL(derived, h.templateManagedHosts(r.Context())); kerr != nil {
+			writeError(w, http.StatusBadRequest, "bucket_key 推导的 URL 不属于受管存储桶："+kerr.Error())
+			return
+		}
+		url = derived
+		bucketKey = key
+	} else if body.URL != nil {
+		key, kerr := templateBucketKeyFromURL(strings.TrimSpace(url), h.templateManagedHosts(r.Context()))
+		if kerr != nil {
+			writeError(w, http.StatusBadRequest, "模板地址只支持受管存储桶 rule/configs/*.yaml|yml（外部 URL 不可用）")
+			return
+		}
+		bucketKey = key
+	} else if strings.TrimSpace(url) != "" {
+		// 兼容已有外部 URL 的存量模板：仅解析，不因未改地址而阻断名称/描述编辑。
+		if key, kerr := templateBucketKeyFromURL(url, h.templateManagedHosts(r.Context())); kerr == nil {
+			bucketKey = key
+		}
+	}
+	if strings.TrimSpace(url) == "" {
+		writeError(w, http.StatusBadRequest, "请填写 bucket_key（rule/configs/*.yaml|yml）")
 		return
 	}
 
@@ -136,7 +172,7 @@ func (h *handlers) templateWrite(w http.ResponseWriter, r *http.Request, pathID 
 			writeError(w, http.StatusInternalServerError, "保存模板失败")
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"success": true, "id": *id, "created": false})
+		writeJSON(w, http.StatusOK, map[string]any{"success": true, "id": *id, "created": false, "url": url, "bucket_key": bucketKey})
 		return
 	}
 
@@ -153,7 +189,7 @@ func (h *handlers) templateWrite(w http.ResponseWriter, r *http.Request, pathID 
 		writeError(w, http.StatusInternalServerError, "保存模板失败")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"success": true, "id": newID, "created": true})
+	writeJSON(w, http.StatusOK, map[string]any{"success": true, "id": newID, "created": true, "url": url, "bucket_key": bucketKey})
 }
 
 // GET /api/templates/manage/{id}
@@ -168,6 +204,7 @@ func (h *handlers) templateItemGet(w http.ResponseWriter, r *http.Request) {
 			ID          int64  `json:"id"`
 			Name        string `json:"name"`
 			URL         string `json:"url"`
+			BucketKey   string `json:"bucket_key"`
 			Description string `json:"description"`
 			IsDefault   int64  `json:"is_default"`
 			CreatedAt   int64  `json:"created_at"`
@@ -186,6 +223,9 @@ func (h *handlers) templateItemGet(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "查询模板失败")
 		return
+	}
+	if key, kerr := templateBucketKeyFromURL(it.URL, h.templateManagedHosts(r.Context())); kerr == nil {
+		it.BucketKey = key
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"success": true, "data": it})
 }

@@ -137,6 +137,7 @@ func (h *handlers) attachmentsUpload(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, err.Error())
 		return
 	}
+	clearTemplateURLCache()
 	h.recordNodeLog(r.Context(), 0, 0, "attachment-upload", "success", 0, "上传附件 "+key, "", "admin")
 	writeJSON(w, http.StatusOK, map[string]any{
 		"success": true, "key": key, "size": size,
@@ -209,6 +210,7 @@ func (h *handlers) attachmentsDelete(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadGateway, msg)
 			return
 		}
+		clearTemplateURLCache()
 		h.recordNodeLog(r.Context(), 0, 0, "attachment-delete", "success", 0,
 			"删除目录 "+prefix+"（"+itoa64(int64(n))+" 个对象）", "", "admin")
 		writeJSON(w, http.StatusOK, map[string]any{"success": true, "prefix": prefix, "deleted": n})
@@ -223,6 +225,7 @@ func (h *handlers) attachmentsDelete(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, err.Error())
 		return
 	}
+	clearTemplateURLCache()
 	h.recordNodeLog(r.Context(), 0, 0, "attachment-delete", "success", 0, "删除附件 "+key, "", "admin")
 	writeJSON(w, http.StatusOK, map[string]any{"success": true, "key": key})
 }

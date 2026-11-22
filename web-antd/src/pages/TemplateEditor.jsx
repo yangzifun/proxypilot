@@ -4,8 +4,8 @@
  *  设计要点：
  *  · 前端不解析、不重写 YAML：所有结构化编辑都调用后端 patch-section 生成新 YAML；
  *  · 分区：基础设置 / DNS / TUN / 策略组 / 规则 / 规则集 / 原始 YAML；
- *  · 流程：加载内容（无草稿自动 import-url）→ 编辑 → 校验 → 保存草稿 → 预览 → 发布；
- *  · 版本历史可查看/回滚（回滚只写入草稿，发布后才影响订阅）；
+ *  · 流程：加载内容（直接读取存储桶/模板 URL）→ 编辑 → 校验 → 保存到存储桶（立即生效）→（可选）发布版本快照；
+ *  · 版本历史可查看/回滚（回滚写入内容，保存到存储桶后生效）；
  *  · 原始 YAML 采用「带行号的等宽 TextArea」（未引入 CodeMirror，避免新增依赖与构建体积，见报告）。
  * ================================================================= */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -205,13 +205,13 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
   );
 
   const draftState = useMemo(() => {
-    if (dirty) return { color: 'orange', text: '已修改（未保存草稿）' };
-    const ds = String((meta && meta.draft_sha256) || '');
+    if (dirty) return { color: 'orange', text: '已修改（未保存）' };
+    const ds = String((meta && (meta.draft_sha256 || meta.sha256)) || '');
     const ps = String((meta && meta.published_sha256) || '');
-    if (!ds) return { color: 'default', text: '未导入草稿' };
-    if (ds && ps && ds !== ps) return { color: 'gold', text: '有未发布修改' };
-    if (ds && ps && ds === ps) return { color: 'green', text: '已发布（草稿已同步）' };
-    if (ds && !ps) return { color: 'blue', text: '草稿已保存（未发布）' };
+    if (!ds) return { color: 'default', text: '未保存' };
+    if (ds && ps && ds !== ps) return { color: 'gold', text: '已保存到存储桶（版本快照未更新）' };
+    if (ds && ps && ds === ps) return { color: 'green', text: '已保存（与最新版本一致）' };
+    if (ds && !ps) return { color: 'blue', text: '已保存到存储桶' };
     return { color: 'default', text: '未知状态' };
   }, [dirty, meta]);
 
@@ -238,28 +238,32 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
     setLoading(true);
     setLoadError(null);
     try {
-      let m = unwrap(await api(`${base}/content`)) || {};
-      // 首次编辑没有草稿：自动从当前模板 URL 导入
-      if (!m || !m.draft_content) {
+      const m = unwrap(await api(`${base}/content`)) || {};
+      // 内容优先使用 content API 返回的 content（后端可能直接读存储桶或模板 URL），
+      // 不再强制 import-url 到草稿；仅当接口没有返回任何内容时才兜底导入（兼容旧后端）。
+      let c = String((m && (m.content || m.draft_content || m.published_content)) || '');
+      if (!c) {
         try {
           const r = unwrap(await api(`${base}/import-url`, { method: 'POST', body: {} })) || {};
           const imported = String(r.content || r.draft_content || '');
           if (imported) {
-            m = { ...(m || {}), draft_content: imported, draft_sha256: r.sha256 || (m && m.draft_sha256) || '' };
-            message.info('已从模板 URL 导入内容到草稿；编辑后点「发布」才会对所有订阅生效');
-          } else {
-            m = unwrap(await api(`${base}/content`)) || m;
+            c = imported;
+            message.info('已从模板 URL 读取内容；保存会写入存储桶并立即生效');
           }
         } catch (e) {
           if (e && e.status === 403) {
-            message.warning('需要超级管理员权限才能把 URL 内容导入草稿；当前仅可查看/预览');
+            message.warning('需要超级管理员权限才能读取模板 URL 内容；当前仅可查看/预览');
           } else {
-            message.warning(e.message || '从模板 URL 导入失败，可稍后重试（需先有草稿才能编辑）');
+            message.warning(e.message || '模板内容读取失败，可稍后重试');
           }
         }
       }
-      const c = String((m && (m.draft_content || m.published_content || m.content)) || '');
-      setMeta(m || null);
+      // 兼容后端字段：draft_sha256 / sha256；bucket_key 用于展示存储桶文件
+      const metaNext = {
+        ...(m || {}),
+        draft_sha256: String((m && (m.draft_sha256 || m.sha256)) || ''),
+      };
+      setMeta(metaNext);
       setContent(c);
       setSavedContent(c);
       setValidation(null);
@@ -340,14 +344,14 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
       } catch (e) {
         /* 校验失败不阻塞保存提示 */
       }
-      message.success(v && !v.ok ? '草稿已保存，但校验存在错误（发布前需修正）' : '草稿已保存');
+      message.success(v && !v.ok ? '已保存到存储桶（校验存在错误，可稍后修正）' : '已保存到存储桶，立即生效');
       if (onChanged) onChanged();
       return true;
     } catch (e) {
       if (e && e.status === 409) {
         message.error('保存冲突：草稿已被他人修改，请关闭后重新打开再编辑');
       } else if (e && e.status === 403) {
-        message.error('需要超级管理员权限才能保存草稿');
+        message.error('需要超级管理员权限才能保存到存储桶');
       } else {
         message.error(e.message || '保存失败');
       }
@@ -521,7 +525,7 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
         await load();
       }
       setVersions((s) => ({ ...s, open: false, view: null }));
-      message.success('已回滚为草稿：发布后才会对所有订阅生效');
+      message.success('已回滚内容：保存到存储桶后生效');
     } catch (e) {
       if (e && e.status === 403) message.error('需要超级管理员权限才能回滚版本');
       else message.error(e.message || '回滚失败');
@@ -536,8 +540,8 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
     }
     Modal.confirm({
       title: '有未保存的修改',
-      content: '关闭后本次未保存的修改会丢失。可以先保存为草稿再关闭。',
-      okText: '保存草稿并关闭',
+      content: '关闭后本次未保存的修改会丢失。可以先保存到存储桶再关闭。',
+      okText: '保存到存储桶并关闭',
       cancelText: '不保存，直接关闭',
       onOk: async () => {
         const ok = await saveDraft();
@@ -549,7 +553,7 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
     });
   };
 
-  // Ctrl/Cmd + S 保存草稿
+  // Ctrl/Cmd + S 保存到存储桶
   const saveRef = useRef(saveDraft);
   saveRef.current = saveDraft;
   useEffect(() => {
@@ -620,7 +624,7 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, height: '100%' }}>
           <div className="pp-muted" style={{ fontSize: 12, lineHeight: 1.7 }}>
-            原始 YAML 全文编辑：提交前请点「校验」或「保存草稿」由后端解析校验；结构化编辑请使用左侧其它分区。
+            原始 YAML 全文编辑：提交前请点「校验」或「保存到存储桶」由后端解析校验；结构化编辑请使用左侧其它分区。
             锚点/别名/注入位由后端保留，面板不会自动展开重写。
           </div>
           <RawYamlEditor value={content} onChange={setContent} errorLines={errorLines} />
@@ -697,16 +701,24 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
           <b style={{ fontSize: 15 }}>模板：{(meta && meta.name) || `#${id}`}</b>
           <Tag color={draftState.color} style={{ marginInlineEnd: 0 }}>{draftState.text}</Tag>
           {external ? <Tag color="default">外部模板（只读发布）</Tag> : null}
-          {(meta && meta.url) || '' ? (
+          {meta && meta.bucket_key ? (
+            <span
+              className="pp-mono pp-muted"
+              style={{ fontSize: 12, maxWidth: 420, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+              title={meta.bucket_key}
+            >
+              存储桶：{meta.bucket_key}
+            </span>
+          ) : meta && meta.url ? (
             <a
-              href={meta && meta.url}
+              href={meta.url}
               target="_blank"
               rel="noreferrer"
               className="pp-mono pp-muted"
               style={{ fontSize: 12, maxWidth: 420, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-              title={meta && meta.url}
+              title={meta.url}
             >
-              {meta && meta.url}
+              {meta.url}
             </a>
           ) : null}
           {parseLoading ? <span className="pp-muted" style={{ fontSize: 12 }}>解析中…</span> : null}
@@ -717,10 +729,12 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
             <Button size="small" icon={<EyeOutlined />} onClick={openPreview} disabled={!content}>
               预览
             </Button>
-            <Button size="small" icon={<SaveOutlined />} loading={busy === 'save'} onClick={saveDraft} disabled={!content || !dirty}>
-              保存草稿
-            </Button>
-            <Tooltip title={external ? '外部 URL 模板不能在面板内发布' : '发布后立即影响所有使用该模板的订阅'}>
+            <Tooltip title="保存后直接写入存储桶并立即生效（无需发布）">
+              <Button size="small" icon={<SaveOutlined />} loading={busy === 'save'} onClick={saveDraft} disabled={!content || !dirty}>
+                保存到存储桶
+              </Button>
+            </Tooltip>
+            <Tooltip title={external ? '外部模板不能在面板内发布' : '发布仅生成版本快照（内容保存到存储桶后已生效）'}>
               <Button
                 size="small"
                 type="primary"
@@ -760,7 +774,7 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
         >
           {summaryTags.length ? summaryTags.map((t) => <Tag key={t} style={{ marginInlineEnd: 0 }}>{t}</Tag>) : <span>加载后显示解析摘要</span>}
           {meta && meta.content_version ? <Tag color="blue" style={{ marginInlineEnd: 0 }}>草稿版本 {meta.content_version}</Tag> : null}
-          {dirty ? <span style={{ color: '#d97706' }}>有未保存修改，Ctrl/Cmd+S 可保存草稿</span> : null}
+          {dirty ? <span style={{ color: '#d97706' }}>有未保存修改，Ctrl/Cmd+S 可保存到存储桶（立即生效）</span> : null}
           <span style={{ marginLeft: 'auto' }}>
             {meta && meta.draft_updated_at ? `草稿更新：${fmtTime(meta.draft_updated_at)}` : ''}
           </span>
@@ -920,7 +934,7 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
       {/* 发布确认 */}
       <Modal
         open={publishOpen}
-        title="发布模板"
+        title="发布版本快照"
         width={600}
         centered
         destroyOnHidden
@@ -934,8 +948,8 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
           type="warning"
           showIcon
           style={{ marginBottom: 12 }}
-          message="发布后立即影响所有使用该模板的订阅"
-          description="所有引用该模板的 Clash / Mihomo 订阅会立即使用新内容；旧内容会保留在版本历史中，可随时回滚。"
+          message="内容已保存到存储桶并立即生效；发布仅生成版本快照"
+          description="所有引用该模板的 Clash / Mihomo 订阅已使用存储桶中的最新内容；发布会额外记录一个版本快照，便于历史回滚。"
         />
         <Descriptions column={1} size="small" bordered>
           <Descriptions.Item label="模板">{(meta && meta.name) || `#${id}`}</Descriptions.Item>
