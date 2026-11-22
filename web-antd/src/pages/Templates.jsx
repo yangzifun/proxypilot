@@ -38,7 +38,13 @@ import TemplateEditor from './TemplateEditor';
 import TemplateListEditor from '../components/TemplateEditor/TemplateListEditor';
 import StorageSettings from '../components/StorageSettings';
 
-/** 从模板 URL 解析存储桶 key（兼容旧数据：https://cdn/rule/configs/x.yaml → rule/configs/x.yaml） */
+/** 规范化域名列表文件名：自动补 .list，返回 rule/<name>.list */
+function normalizeListKey(name) {
+  let n = String(name || '').trim().replace(/^\/+/, '');
+  if (!n) return '';
+  if (!/\.list$/i.test(n)) n = `${n}.list`;
+  return `rule/${n}`;
+}
 function bucketKeyFromUrl(url) {
   const raw = String(url || '').trim();
   if (!raw) return '';
@@ -73,6 +79,9 @@ function TemplateList() {
   const [editor, setEditor] = useState(null); // 当前打开内容编辑器的模板行
   const [listEditorOpen, setListEditorOpen] = useState(false);
   const [listEditorKey, setListEditorKey] = useState('');
+  const [createListOpen, setCreateListOpen] = useState(false);
+  const [creatingList, setCreatingList] = useState(false);
+  const [createListForm] = Form.useForm();
   const [saving, setSaving] = useState(false);
   const [form] = Form.useForm();
 
@@ -107,6 +116,35 @@ function TemplateList() {
   const openListEditor = (key) => {
     setListEditorKey(key || '');
     setListEditorOpen(true);
+  };
+
+  // 新建 rule/*.list：写入 R2 后刷新列表并自动打开 List 编辑器选中新文件
+  const createList = async () => {
+    const values = await readForm(createListForm);
+    if (!values) return;
+    const key = normalizeListKey(values.name);
+    if (!key) return;
+    if (ruleRows.some((r) => String(r.key).toLowerCase() === key.toLowerCase())) {
+      message.error('该列表已存在，请换一个文件名');
+      return;
+    }
+    setCreatingList(true);
+    try {
+      const content = String(values.content || '').trim()
+        ? String(values.content)
+        : `# ${key.split('/').pop()} 域名列表\n\n`;
+      await api('attachments/content', { method: 'PUT', body: { key, content, content_type: 'text/plain' } });
+      message.success(`已创建 ${key}`);
+      setCreateListOpen(false);
+      createListForm.resetFields();
+      ruleLists.reload().catch(() => {});
+      setListEditorKey(key);
+      setListEditorOpen(true);
+    } catch (e) {
+      message.error(e.message || '创建列表失败（请检查对象存储 R2 配置）');
+    } finally {
+      setCreatingList(false);
+    }
   };
   const fileOptions = useMemo(() => {
     const list = ((attachments.data && attachments.data.files) || [])
@@ -387,6 +425,16 @@ function TemplateList() {
               >
                 刷新
               </Button>
+              <Button
+                type="primary"
+                icon={<PlusOutlined />}
+                onClick={() => {
+                  setCreateListOpen(true);
+                  createListForm.resetFields();
+                }}
+              >
+                新建列表
+              </Button>
             </Space>
           }
           bodyStyle={{ padding: 0 }}
@@ -498,6 +546,49 @@ function TemplateList() {
           <Form.Item name="description" label="描述">
             <Input.TextArea rows={2} placeholder="用途说明，可为空" />
           </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 新建域名列表（rule/*.list） */}
+      <Modal
+        open={createListOpen}
+        title="新建域名列表"
+        onCancel={() => setCreateListOpen(false)}
+        onOk={createList}
+        confirmLoading={creatingList}
+        okText="创建"
+        destroyOnHidden
+        width={560}
+      >
+        <Form form={createListForm} layout="vertical" requiredMark={false} style={{ marginTop: 14 }}>
+          <Form.Item
+            name="name"
+            label="文件名"
+            rules={[
+              { required: true, message: '请填写文件名' },
+              { pattern: /^[A-Za-z0-9._-]{1,64}$/, message: '仅支持字母、数字与 . _ -（1-64 位）' },
+              {
+                validator: (_, v) => {
+                  const key = normalizeListKey(v);
+                  if (!key) return Promise.resolve();
+                  const exists = ruleRows.some((r) => String(r.key).toLowerCase() === key.toLowerCase());
+                  return exists ? Promise.reject(new Error('该列表已存在')) : Promise.resolve();
+                },
+              },
+            ]}
+            extra="保存后写入 rule/<文件名>.list；输入已带 .list 时不会重复拼接"
+          >
+            <Input placeholder="例如：custom（自动补 .list）" maxLength={64} />
+          </Form.Item>
+          <Form.Item name="content" label="初始内容（可选）">
+            <Input.TextArea
+              rows={6}
+              placeholder={'# custom 域名列表\n# 每行一条：DOMAIN-SUFFIX,example.com 或裸域名'}
+            />
+          </Form.Item>
+          <div className="pp-muted" style={{ fontSize: 12, lineHeight: 1.7 }}>
+            创建成功后会打开 List 编辑器并选中该文件，可继续添加域名。
+          </div>
         </Form>
       </Modal>
 

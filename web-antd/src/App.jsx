@@ -65,6 +65,15 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [route]);
 
+  // 全站主题 hooks 必须在任何条件 return 之前调用：logout/登录切换 token 时
+  // App 会从「登录页」与「后台外壳」之间切换，若 hooks 放在 if (!token) 之后，
+  // 同一次组件渲染的 hooks 数量会变化，触发 React #300（renamed more hooks than previous render）。
+  const [siteTheme, setSiteTheme] = useState(() => getTheme());
+  useEffect(() => {
+    applyTheme(getTheme());
+    return subscribeTheme((t) => { setSiteTheme(t); applyTheme(t); });
+  }, []);
+
   if (!token) return <Login />;
 
   const legacySettings = route === 'settings';
@@ -92,12 +101,6 @@ export default function App() {
   }
 
   // 全站主题：启动时应用并订阅变化
-  const [siteTheme, setSiteTheme] = useState(() => getTheme());
-  useEffect(() => {
-    applyTheme(getTheme());
-    return subscribeTheme((t) => { setSiteTheme(t); applyTheme(t); });
-  }, []);
-
   const themeTokens = THEME_TOKENS[siteTheme] || THEME_TOKENS.light;
 
   return (
