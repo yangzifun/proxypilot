@@ -40,6 +40,7 @@ import {
   WarningOutlined,
 } from '@ant-design/icons';
 import { api } from '../api';
+import { useAsync } from '../hooks';
 import { fmtBytes, fmtTime } from '../format';
 import { CopyText } from '../components';
 import { ObjectForm, ProxyGroupsTable, RuleProvidersTable, RulesTable } from '../components/TemplateEditor/sections';
@@ -208,6 +209,9 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
   const [versions, setVersions] = useState({ open: false, list: [], loading: false, view: null });
   const [saveError, setSaveError] = useState(false);
   const [listEditorOpen, setListEditorOpen] = useState(false);
+  // CDN 公共地址：模板顶部展示完整 CDN URL（bucket_key 拼接或 meta.cdn_url）
+  const fileStatus = useAsync(() => api('attachments/status'), []);
+  const cdnBase = String((fileStatus.data && fileStatus.data.cdn_base_url) || '').replace(/\/+$/, '');
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [vw, setVw] = useState(() => (typeof window !== 'undefined' ? window.innerWidth || 1440 : 1440));
   const narrow = vw < 1200;
@@ -722,6 +726,28 @@ export default function TemplateEditor({ id, open, onClose, onChanged }) {
                 {meta.url}
               </a>
             ) : null}
+            {(() => {
+              const url = meta && (meta.cdn_url || meta.url)
+                ? String(meta.cdn_url || meta.url)
+                : (meta && meta.bucket_key && cdnBase ? `${cdnBase}/${String(meta.bucket_key).replace(/^\/+/, '')}` : '');
+              if (!url) return null;
+              return (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, minWidth: 0 }}>
+                  <Tooltip title={url}>
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="pp-mono pp-muted"
+                      style={{ maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                    >
+                      CDN：{url}
+                    </a>
+                  </Tooltip>
+                  <CopyText value={url} display={<span style={{ fontSize: 11 }}>复制</span>} tip="复制 CDN 地址" />
+                </span>
+              );
+            })()}
             {summaryTags.length ? summaryTags.map((t) => <Tag key={t} style={{ marginInlineEnd: 0 }}>{t}</Tag>) : null}
             {meta && meta.content_version ? <Tag color="blue" style={{ marginInlineEnd: 0 }}>版本 {meta.content_version}</Tag> : null}
             {parseLoading ? <span className="pp-muted" style={{ fontSize: 12 }}>解析中…</span> : null}

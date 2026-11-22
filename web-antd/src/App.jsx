@@ -27,7 +27,6 @@ import LocalServer from './pages/LocalServer';
 import Security from './pages/Security';
 import Certs from './pages/Certs';
 import Backup from './pages/Backup';
-import Attachments from './pages/Attachments';
 
 const PAGES = {
   dash: Dashboard,
@@ -50,7 +49,6 @@ const PAGES = {
   local: LocalServer,
   sysusers: AdminUsersPage,
   syssettings: SystemSettingsPage,
-  attachments: Attachments,
   backup: Backup,
   certs: Certs,
   sec: Security,

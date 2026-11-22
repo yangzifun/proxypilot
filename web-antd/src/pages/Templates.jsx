@@ -36,6 +36,7 @@ import { fmtAgo, fmtBytes, fmtTime } from '../format';
 import { chartPalette } from '../theme';
 import TemplateEditor from './TemplateEditor';
 import TemplateListEditor from '../components/TemplateEditor/TemplateListEditor';
+import StorageSettings from '../components/StorageSettings';
 
 /** 从模板 URL 解析存储桶 key（兼容旧数据：https://cdn/rule/configs/x.yaml → rule/configs/x.yaml） */
 function bucketKeyFromUrl(url) {
@@ -89,6 +90,9 @@ function TemplateList() {
   const attachments = useAsync(() => api('attachments', { query: { prefix: 'rule/configs/' } }), []);
   // 模板列表下方的域名列表（rule/*.list）管理卡片
   const ruleLists = useAsync(() => api('attachments', { query: { prefix: 'rule/' } }), []);
+  // CDN 公共地址（对象存储状态），用于展示 CDN 域名与模板完整 URL
+  const cdnStatus = useAsync(() => api('attachments/status'), []);
+  const cdnBase = String((cdnStatus.data && cdnStatus.data.cdn_base_url) || '').replace(/\/+$/, '');
   const ruleRows = useMemo(() => {
     return ((ruleLists.data && ruleLists.data.files) || [])
       .filter((f) => /\.list$/i.test(String((f && f.key) || '')))
@@ -192,13 +196,32 @@ function TemplateList() {
       render: (v, row) => {
         const key = v || bucketKeyFromUrl(row.url);
         if (!key) return <span className="pp-muted">—</span>;
+        const cdnUrl = row.cdn_url || (cdnBase ? `${cdnBase}/${String(key).replace(/^\/+/, '')}` : '');
         return (
-          <Space size={6}>
-            <Tooltip title={key}>
-              <span className="pp-mono" style={{ fontSize: 12 }}>{key}</span>
-            </Tooltip>
-            <CopyText value={key} display={<span style={{ fontSize: 12 }}>复制</span>} tip="复制存储桶路径" />
-          </Space>
+          <div>
+            <Space size={6}>
+              <Tooltip title={key}>
+                <span className="pp-mono" style={{ fontSize: 12 }}>{key}</span>
+              </Tooltip>
+              <CopyText value={key} display={<span style={{ fontSize: 12 }}>复制</span>} tip="复制存储桶路径" />
+            </Space>
+            {cdnUrl ? (
+              <div style={{ marginTop: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Tooltip title={cdnUrl}>
+                  <a
+                    href={cdnUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="pp-mono pp-muted"
+                    style={{ fontSize: 11.5, maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                  >
+                    {cdnUrl}
+                  </a>
+                </Tooltip>
+                <CopyText value={cdnUrl} display={<span style={{ fontSize: 11.5 }}>复制</span>} tip="复制 CDN 地址" />
+              </div>
+            ) : null}
+          </div>
         );
       },
     },
@@ -276,11 +299,24 @@ function TemplateList() {
         </Col>
       </Row>
 
+      <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <span className="pp-muted" style={{ fontSize: 12 }}>CDN 域名</span>
+        {cdnBase ? (
+          <>
+            <Tag color="purple">{cdnBase}</Tag>
+            <CopyText value={cdnBase} display={<span style={{ fontSize: 12 }}>复制</span>} tip="复制 CDN 域名" />
+          </>
+        ) : (
+          <span className="pp-muted" style={{ fontSize: 12 }}>未配置（可在「对象存储设置」填写 CDN 公共地址）</span>
+        )}
+      </div>
+
       <div style={{ marginTop: 16 }}>
         <PageCard
           title={<span className="pp-section-title">Clash / Mihomo 订阅模板</span>}
           extra={
             <Space>
+              <StorageSettings onSaved={() => { cdnStatus.reload().catch(() => {}); }} />
               <Button icon={<ReloadOutlined />} onClick={() => reload().catch(() => {})} loading={loading}>
                 刷新
               </Button>
@@ -447,7 +483,7 @@ function TemplateList() {
             extra={
               attachments.error
                 ? '附件列表加载失败：' + (attachments.error.message || '未知错误')
-                : '从 rule/configs/ 选择 YAML 文件；可在「附件管理」上传/编辑'
+                : '从 rule/configs/ 选择 YAML 文件；可在「对象存储设置」上传/编辑'
             }
           >
             <Select
@@ -456,7 +492,7 @@ function TemplateList() {
               placeholder="选择 rule/configs/ 下的 YAML 文件"
               options={fileOptions}
               loading={attachments.loading}
-              notFoundContent={attachments.loading ? '加载中…' : '未找到 YAML 文件，请先在「附件管理」上传'}
+              notFoundContent={attachments.loading ? '加载中…' : '未找到 YAML 文件，请先在对象存储中上传'}
             />
           </Form.Item>
           <Form.Item name="description" label="描述">

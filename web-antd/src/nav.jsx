@@ -11,7 +11,6 @@ import {
   DeploymentUnitOutlined,
   FileSearchOutlined,
   FileTextOutlined,
-  FolderOpenOutlined,
   GlobalOutlined,
   LineChartOutlined,
   NodeIndexOutlined,
@@ -147,13 +146,6 @@ export const PAGE_META = {
     accent: '#f43f5e',
 
   },
-  attachments: {
-    title: '附件管理',
-    subtitle: 'R2 对象存储（含 agent）上传 / 下载 / 删除',
-    icon: <FolderOpenOutlined />,
-    group: '系统',
-    accent: '#0ea5e9',
-  },
   backup: {
     title: '备份管理',
     subtitle: '数据库 / 桶文件 / Agent 分发导出与导入',
@@ -187,7 +179,7 @@ export const PAGE_META = {
   },
 };
 
-export const NAV_ORDER = ['dash', 'uuids', 'userst', 'tpls', 'tplhub', 'servers', 'bindings', 'cdnpref', 'masque', 'vpn', 'logs', 'attachments', 'backup', 'certs', 'sec', 'sysusers', 'syssettings'];
+export const NAV_ORDER = ['dash', 'uuids', 'userst', 'tpls', 'tplhub', 'servers', 'bindings', 'cdnpref', 'masque', 'vpn', 'logs', 'backup', 'certs', 'sec', 'sysusers', 'syssettings'];
 
 /** 侧边栏结构：置顶单页 + 3 个可折叠分组，按日常使用频率排序 */
 export const NAV_GROUPS = [
@@ -207,7 +199,7 @@ export const NAV_GROUPS = [
     key: 'ops',
     title: '运维与安全',
     icon: <ToolOutlined />,
-    keys: ['local', 'logs', 'attachments', 'backup', 'certs', 'sec', 'sysusers', 'syssettings'],
+    keys: ['local', 'logs', 'backup', 'certs', 'sec', 'sysusers', 'syssettings'],
   },
 ];
 

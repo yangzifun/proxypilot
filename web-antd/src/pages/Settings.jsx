@@ -481,8 +481,8 @@ export default function Settings({ embedded = false }) {
                     type="info"
                     showIcon
                     style={{ marginTop: 12 }}
-                    message="存储桶设置已移到「附件管理」"
-                    description="Bucket、Endpoint、CDN 公共地址请在「附件管理 → 对象存储设置」里配置。"
+                    message="存储桶设置已移到「订阅模板 → 对象存储设置」"
+                    description="Bucket、Endpoint、CDN 公共地址请在「订阅模板」页右上角的「对象存储设置」里配置。"
                   />
                   <Divider orientation="left">密钥检查</Divider>
                   <Space direction="vertical" style={{ width: '100%' }} size={10}>
