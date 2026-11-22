@@ -462,7 +462,7 @@ export default function Settings({ embedded = false }) {
                     showIcon
                     style={{ marginBottom: 12 }}
                     message="统一密钥：只用于「DNS 记录管理」与「R2 对象存储」"
-                    description="权限需包含 Account → R2 → Object Read & Write；如需在发信向导里「一键写入 DNS 记录」，再加 Zone → Zone → Read 与 Zone → DNS → Edit。存储桶（Bucket / Endpoint / CDN）的设置在「附件管理」页面。"
+                    description="权限需包含 Account → R2 → Object Read & Write；如需在发信向导里「一键写入 DNS 记录」，再加 Zone → Zone → Read 与 Zone → DNS → Edit。存储桶（Bucket / Endpoint / CDN）设置见下方「存储桶设置」。"
                   />
                   <Form.Item
                     name="cloudflare_api_token"
@@ -477,13 +477,34 @@ export default function Settings({ embedded = false }) {
                   <Form.Item name="cloudflare_account_id" label="Account ID">
                     <Input placeholder="9ef942805abcaef4dbf6574131453c58" allowClear />
                   </Form.Item>
+                  <Divider orientation="left">存储桶设置</Divider>
                   <Alert
                     type="info"
                     showIcon
-                    style={{ marginTop: 12 }}
-                    message="存储桶设置已移到「订阅模板 → 对象存储设置」"
-                    description="Bucket、Endpoint、CDN 公共地址请在「订阅模板」页右上角的「对象存储设置」里配置。"
+                    style={{ marginBottom: 12 }}
+                    message="本页保存后立即生效；也可在订阅模板页快速设置"
+                    description="Bucket / Endpoint / CDN 公共地址等保存后立即写入系统设置；订阅模板页的「对象存储设置」读取同一份配置。"
                   />
+                  <Form.Item
+                    name="r2_bucket"
+                    label="Bucket 名称"
+                    rules={[{ required: true, message: '请填写 Bucket' }]}
+                    extra="R2 控制台里创建的存储桶名，例如 proxypilot"
+                  >
+                    <Input placeholder="proxypilot" allowClear />
+                  </Form.Item>
+                  <Form.Item name="r2_endpoint" label="Endpoint" extra="留空按 Account ID 自动拼成 https://<account>.r2.cloudflarestorage.com">
+                    <Input placeholder="https://<account>.r2.cloudflarestorage.com" allowClear />
+                  </Form.Item>
+                  <Form.Item name="cdn_base_url" label="CDN 公共地址" extra="R2 绑定的自定义域名，例如 https://cdn.example.com；留空则只用鉴权下载">
+                    <Input placeholder="https://cdn.example.com" allowClear />
+                  </Form.Item>
+                  <Form.Item name="r2_account_id" label="Account ID（可选覆盖）" extra="一般留空，沿用上方统一配置的 Account ID">
+                    <Input placeholder="留空沿用统一配置" allowClear />
+                  </Form.Item>
+                  <Form.Item name="r2_access_key_id" label="Access Key ID（可选）" extra="仅当不用统一 Token 换 S3 凭证时才需要填">
+                    <Input placeholder="留空由 Token 自动换取" allowClear />
+                  </Form.Item>
                   <Divider orientation="left">密钥检查</Divider>
                   <Space direction="vertical" style={{ width: '100%' }} size={10}>
                     <Space>
