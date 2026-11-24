@@ -156,22 +156,31 @@ func (h *handlers) vpnCertNodes(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "查询节点失败")
 		return
 	}
-	fingerprint := ""
-	certStatus := "not_issued"
+	expectedFingerprint := ""
 	if cert != nil {
-		fingerprint = cert.Fingerprint
-		certStatus = "unknown"
+		expectedFingerprint = cert.Fingerprint
 	}
 	data := make([]map[string]any, 0, len(targets))
 	for _, t := range targets {
+		status := strings.TrimSpace(t.certStatus)
+		if status == "" {
+			if cert == nil {
+				status = "not_issued"
+			} else {
+				status = "pending"
+			}
+		}
 		data = append(data, map[string]any{
-			"id":                t.id,
-			"name":              t.name,
-			"domain":            t.domain,
-			"singbox_installed": t.singboxInstalled,
-			"singbox_service":   t.singboxService,
-			"certificate":       certStatus,
-			"fingerprint":       fingerprint,
+			"id":                   t.id,
+			"name":                 t.name,
+			"domain":               t.domain,
+			"singbox_installed":    t.singboxInstalled,
+			"singbox_service":      t.singboxService,
+			"certificate":          status,
+			"fingerprint":          t.certFingerprint,
+			"last_synced_at":       t.certSyncedAt,
+			"error":                t.certError,
+			"expected_fingerprint": expectedFingerprint,
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"success": true, "data": data})
@@ -184,6 +193,10 @@ type certTarget struct {
 	domain           string
 	singboxInstalled bool
 	singboxService   string
+	certFingerprint  string
+	certStatus       string
+	certSyncedAt     int64
+	certError        string
 }
 
 func (h *handlers) certTargets(ctx context.Context) ([]certTarget, error) {
@@ -192,7 +205,11 @@ func (h *handlers) certTargets(ctx context.Context) ([]certTarget, error) {
 		        COALESCE(
 		          NULLIF((SELECT n.domain FROM singbox_nodes n WHERE n.server_id = s.id AND n.domain <> '' ORDER BY n.id LIMIT 1), ''),
 		          NULLIF(s.singbox_domain,''), s.host, ''),
-		        COALESCE(m.services, '')
+		        COALESCE(m.services, ''),
+		        COALESCE(s.cert_fingerprint, ''),
+		        COALESCE(s.cert_status, ''),
+		        COALESCE(s.cert_synced_at, 0),
+		        COALESCE(s.cert_error, '')
 		   FROM servers s
 		   LEFT JOIN server_metrics m ON m.id = (
 		     SELECT MAX(id) FROM server_metrics WHERE server_id = s.id
@@ -207,7 +224,8 @@ func (h *handlers) certTargets(ctx context.Context) ([]certTarget, error) {
 	for rows.Next() {
 		var t certTarget
 		var servicesJSON string
-		if err := rows.Scan(&t.id, &t.name, &t.domain, &servicesJSON); err != nil {
+		if err := rows.Scan(&t.id, &t.name, &t.domain, &servicesJSON,
+			&t.certFingerprint, &t.certStatus, &t.certSyncedAt, &t.certError); err != nil {
 			continue
 		}
 		var services map[string]string

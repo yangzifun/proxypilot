@@ -24,6 +24,9 @@ type jobKind struct {
 	EmptyHint string
 	Items     func(h *handlers, ctx context.Context, params map[string]any) ([]jobItem, error)
 	Run       func(h *handlers, ctx context.Context, params map[string]any, item jobItem, actor string) (bool, string)
+	// RunAsync 非阻塞入队：status=queued 表示等待 Agent 回执，由 agent result 回填；
+	// status=success/failed 表示立即完成。detail 会写入 batch_job_items.detail。
+	RunAsync func(h *handlers, ctx context.Context, params map[string]any, item jobItem, actor string) (string, string, map[string]any)
 }
 
 var batchKinds = map[string]jobKind{
@@ -63,6 +66,51 @@ var batchKinds = map[string]jobKind{
 			}
 			b, _ := json.Marshal(map[string]any{"changed": changed, "queued": queued, "users": len(users)})
 			return true, "变更 " + strconv.Itoa(changed) + " 个文件，排队 " + strconv.Itoa(queued) + " 条 " + string(b)
+		},
+		RunAsync: func(h *handlers, ctx context.Context, params map[string]any, item jobItem, actor string) (string, string, map[string]any) {
+			force, _ := params["force"].(bool)
+			doPush := true
+			if v, ok := params["push"].(bool); ok {
+				doPush = v
+			}
+			files, _, users, changed, msg := h.applySingboxNode(ctx, item.TargetID, nil, force)
+			if msg != "" {
+				return "failed", msg, map[string]any{"node_id": item.TargetID}
+			}
+			if !doPush {
+				return "success", "只生成配置，未下发 Agent", map[string]any{
+					"node_id": item.TargetID, "changed": changed, "users": len(users),
+				}
+			}
+			queue := h.queueSingboxDeploy(ctx, files, actor)
+			ids := make([]int64, 0, len(queue))
+			errs := make([]string, 0)
+			for _, q := range queue {
+				if ok, _ := q["ok"].(bool); ok {
+					if id := mapInt(q, "task_id", 0); id > 0 {
+						ids = append(ids, id)
+					}
+				} else if e := mapStr(q, "error", ""); e != "" {
+					errs = append(errs, e)
+				}
+			}
+			detail := map[string]any{
+				"node_id": item.TargetID, "task_ids": ids, "task_total": len(queue),
+				"queue_errors": errs, "changed": changed, "users": len(users),
+				"queued_at": nowMillis(),
+			}
+			if len(ids) == 0 {
+				if len(errs) > 0 {
+					return "failed", "全部 Agent 任务入队失败：" + strings.Join(errs, "；"), detail
+				}
+				return "success", "无需下发 Agent 任务", detail
+			}
+			msg = "已排队 " + strconv.Itoa(len(ids)) + " 条 Agent 任务"
+			if len(errs) > 0 {
+				detail["hard_fail"] = true
+				msg += "，" + strconv.Itoa(len(errs)) + " 条入队失败"
+			}
+			return "queued", msg, detail
 		},
 	},
 	"singbox.push": {
@@ -179,7 +227,7 @@ func (h *handlers) batchCreateJob(ctx context.Context, kind string, params map[s
 	paramsText, _ := json.Marshal(params)
 	var dupID, dupTotal int64
 	err := h.db.QueryRowContext(ctx, `SELECT id, total FROM batch_jobs WHERE kind = ? AND params = ?
-	      AND status IN ('queued','running') AND created_at >= ? LIMIT 1`,
+	      AND status IN ('queued','running','waiting') AND created_at >= ? LIMIT 1`,
 		kind, string(paramsText), nowMillis()-10*60*1000).Scan(&dupID, &dupTotal)
 	if err == nil {
 		return dupID, int(dupTotal), true, ""
@@ -407,7 +455,7 @@ func (h *handlers) runBatchJobInline(ctx context.Context, jobID int64, actor str
 	if err != nil {
 		return
 	}
-	done, failed := int64(0), int64(0)
+	done, failed, queued := int64(0), int64(0), int64(0)
 	for _, itemRow := range itemRows {
 		// 每项开始前确认锁仍属于自己：任务被取消或被 cron 接管后立即退出，
 		// 避免两个 runner 拿着同一份 pending 快照重复执行（审计 P1-2）。
@@ -418,6 +466,38 @@ func (h *handlers) runBatchJobInline(ctx context.Context, jobID int64, actor str
 		ok := false
 		message := ""
 		attempts := int64(0)
+		_, _ = h.db.ExecContext(ctx, `UPDATE batch_job_items SET status = 'running', started_at = CASE WHEN started_at = 0 THEN ? ELSE started_at END WHERE id = ?`,
+			nowMillis(), mapInt(itemRow, "id", 0))
+		if def.RunAsync != nil {
+			status, asyncMsg, detail := def.RunAsync(h, ctx, params, item, actor)
+			message = asyncMsg
+			detailJSON := "{}"
+			if detail != nil {
+				if b, e := json.Marshal(detail); e == nil {
+					detailJSON = string(b)
+				}
+			}
+			if status == "queued" {
+				_, _ = h.db.ExecContext(ctx, `UPDATE batch_job_items SET status = 'queued', message = ?, detail = ?, attempts = 1 WHERE id = ?`,
+					truncateRunes(message, 500), detailJSON, mapInt(itemRow, "id", 0))
+				queued++
+				continue
+			}
+			ok = status == "success"
+			finished := nowMillis()
+			itemStatus := "failed"
+			if ok {
+				itemStatus = "success"
+				done++
+			} else {
+				failed++
+			}
+			_, _ = h.db.ExecContext(ctx, `UPDATE batch_job_items SET status = ?, message = ?, detail = ?, attempts = 1, finished_at = ? WHERE id = ?`,
+				itemStatus, truncateRunes(message, 500), detailJSON, finished, mapInt(itemRow, "id", 0))
+			_, _ = h.db.ExecContext(ctx, "UPDATE batch_jobs SET done = done + 1, failed = failed + ?, `cursor` = ?, updated_at = ? WHERE id = ?",
+				map[bool]int64{true: 0, false: 1}[ok], mapInt(itemRow, "seq", 0), finished, jobID)
+			continue
+		}
 		for try := 1; try <= 2; try++ {
 			attempts = int64(try)
 			_, _ = h.db.ExecContext(ctx, `UPDATE batch_job_items SET status = 'running', attempts = ?, started_at = CASE WHEN started_at = 0 THEN ? ELSE started_at END WHERE id = ?`,
@@ -439,6 +519,15 @@ func (h *handlers) runBatchJobInline(ctx context.Context, jobID int64, actor str
 			status, truncateRunes(message, 500), finished, mapInt(itemRow, "id", 0))
 		_, _ = h.db.ExecContext(ctx, "UPDATE batch_jobs SET done = done + 1, failed = failed + ?, `cursor` = ?, updated_at = ? WHERE id = ?",
 			map[bool]int64{true: 0, false: 1}[ok], mapInt(itemRow, "seq", 0), finished, jobID)
+	}
+	if queued > 0 {
+		stopHeartbeat()
+		// 不阻塞 runner：任务进入 waiting，由 agent 回执/超时 cron 回填逐项状态并收尾。
+		_, _ = h.db.ExecContext(ctx, `UPDATE batch_jobs SET status = 'waiting', locked_at = 0, runner_id = '', updated_at = ?
+		  WHERE id = ? AND runner_id = ?`, nowMillis(), jobID, runnerID)
+		h.recordNodeLog(ctx, 0, 0, "batch-job", "success", 0,
+			"后台任务 #"+strconv.FormatInt(jobID, 10)+" 已入队，等待 "+strconv.FormatInt(queued, 10)+" 个节点 Agent 回执", "", "system")
+		return
 	}
 	finalStatus := "success"
 	if failed > 0 {
@@ -466,7 +555,7 @@ func (h *handlers) jobsList(w http.ResponseWriter, r *http.Request) {
 	args := []any{}
 	switch {
 	case status == "active":
-		where = " WHERE status IN ('queued','running')"
+		where = " WHERE status IN ('queued','running','waiting')"
 	case status != "" && status != "all":
 		where = " WHERE status = ?"
 		args = append(args, status)
@@ -482,7 +571,7 @@ func (h *handlers) jobsList(w http.ResponseWriter, r *http.Request) {
 		data = append(data, batchJobToJSON(row))
 	}
 	var active int64
-	_ = h.db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM batch_jobs WHERE status IN ('queued','running')`).Scan(&active)
+	_ = h.db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM batch_jobs WHERE status IN ('queued','running','waiting')`).Scan(&active)
 	writeJSON(w, http.StatusOK, map[string]any{"success": true, "data": data, "active": active})
 }
 
@@ -558,7 +647,7 @@ func (h *handlers) jobsCancel(w http.ResponseWriter, r *http.Request) {
 	now := nowMillis()
 	// 取消也是终态：必须清 dedup_key，否则同参数任务之后会一直被判定为重复（审计 P1-1）。
 	_, _ = h.db.ExecContext(r.Context(), `UPDATE batch_jobs SET status = 'canceled', locked_at = 0, runner_id = '', dedup_key = NULL, finished_at = ?, updated_at = ? WHERE id = ?`, now, now, id)
-	_, _ = h.db.ExecContext(r.Context(), `UPDATE batch_job_items SET status = 'skipped' WHERE job_id = ? AND status = 'pending'`, id)
+	_, _ = h.db.ExecContext(r.Context(), `UPDATE batch_job_items SET status = 'skipped' WHERE job_id = ? AND status IN ('pending','queued')`, id)
 	writeJSON(w, http.StatusOK, map[string]any{"success": true, "message": "已取消（当前执行中的项会跑完）"})
 }
 
@@ -605,7 +694,7 @@ func (h *handlers) jobsClear(w http.ResponseWriter, r *http.Request) {
 	deleted, _ := jobRes.RowsAffected()
 	items, _ := itemRes.RowsAffected()
 	var active int64
-	_ = h.db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM batch_jobs WHERE status IN ('queued','running')`).Scan(&active)
+	_ = h.db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM batch_jobs WHERE status IN ('queued','running','waiting')`).Scan(&active)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"success": true, "deleted": deleted, "items_deleted": items, "active": active,
 		"message": "已清理 " + itoa64(deleted) + " 个已结束任务",

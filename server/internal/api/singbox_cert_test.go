@@ -168,9 +168,9 @@ func TestVPNCertNodes(t *testing.T) {
 				[]driver.Value{"yzfn.top,*.yzfn.top", "acme", certPEM, keyPEM, "", "AA:BB", int64(1), int64(2), int64(3), ""},
 			), nil
 		case strings.Contains(q, "FROM servers s"):
-			return fakeRowsSet([]string{"id", "name", "domain", "services"},
-				[]driver.Value{int64(1), "hk-01", "hk.yzfn.top", `{"sing-box":"active"}`},
-				[]driver.Value{int64(2), "jp-02", "jp.yzfn.top", `{"sing-box":"inactive"}`},
+			return fakeRowsSet([]string{"id", "name", "domain", "services", "cert_fingerprint", "cert_status", "cert_synced_at", "cert_error"},
+				[]driver.Value{int64(1), "hk-01", "hk.yzfn.top", `{"sing-box":"active"}`, "AA:BB", "synced", int64(3000), ""},
+				[]driver.Value{int64(2), "jp-02", "jp.yzfn.top", `{"sing-box":"inactive"}`, "", "failed", int64(2000), "boom"},
 			), nil
 		}
 		return &fakeRows{}, nil
@@ -190,7 +190,8 @@ func TestVPNCertNodes(t *testing.T) {
 	}
 	if out.Data[0]["name"] != "hk-01" || out.Data[0]["domain"] != "hk.yzfn.top" ||
 		out.Data[0]["singbox_service"] != "active" || out.Data[0]["singbox_installed"] != true ||
-		out.Data[0]["fingerprint"] != "AA:BB" {
+		out.Data[0]["fingerprint"] != "AA:BB" || out.Data[0]["certificate"] != "synced" ||
+		out.Data[0]["last_synced_at"] != float64(3000) {
 		t.Fatalf("节点字段异常：%#v", out.Data[0])
 	}
 	if out.Data[1]["singbox_service"] != "inactive" {
@@ -212,8 +213,8 @@ func TestVPNCertDistributeResult(t *testing.T) {
 				[]driver.Value{"yzfn.top,*.yzfn.top", "acme", certPEM, keyPEM, "", "AA:BB", int64(1), int64(2), int64(3), ""},
 			), nil
 		case strings.Contains(q, "FROM servers s"):
-			return fakeRowsSet([]string{"id", "name", "domain", "services"},
-				[]driver.Value{int64(1), "hk-01", "hk.yzfn.top", `{"sing-box":"active"}`},
+			return fakeRowsSet([]string{"id", "name", "domain", "services", "cert_fingerprint", "cert_status", "cert_synced_at", "cert_error"},
+				[]driver.Value{int64(1), "hk-01", "hk.yzfn.top", `{"sing-box":"active"}`, "", "", int64(0), ""},
 			), nil
 		case strings.Contains(q, "SELECT COUNT(*) FROM agent_tasks"):
 			return fakeRowsSet([]string{"n"}, []driver.Value{int64(0)}), nil

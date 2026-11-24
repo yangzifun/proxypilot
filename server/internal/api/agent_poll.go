@@ -862,15 +862,15 @@ func (h *handlers) agentAck(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		var (
-			typ, taskPayload string
-			configID         int64
-			taskStatus       string
-			attempts         int64
+			typ, taskPayload, actor string
+			configID                int64
+			taskStatus              string
+			attempts                int64
 		)
 		err := h.db.QueryRowContext(r.Context(),
-			`SELECT COALESCE(type,''), COALESCE(config_id,0), COALESCE(payload,''), COALESCE(status,''), COALESCE(attempts,0)
+			`SELECT COALESCE(type,''), COALESCE(config_id,0), COALESCE(payload,''), COALESCE(status,''), COALESCE(attempts,0), COALESCE(actor,'')
 			   FROM agent_tasks WHERE id = ? AND server_id = ? LIMIT 1`, taskID, srv.ID).
-			Scan(&typ, &configID, &taskPayload, &taskStatus, &attempts)
+			Scan(&typ, &configID, &taskPayload, &taskStatus, &attempts, &actor)
 		if err == sql.ErrNoRows {
 			handled = append(handled, map[string]any{"id": taskID, "ok": false, "error": "任务不存在"})
 			continue
@@ -929,6 +929,13 @@ func (h *handlers) agentAck(w http.ResponseWriter, r *http.Request) {
 			`UPDATE agent_tasks SET status = ?, attempts = ?, exit_code = ?, output = ?, finished_at = ?, sent_at = 0
 			  WHERE id = ?`, finalStatus, newAttempts, exitCode,
 			firstNonEmpty(output, map[bool]string{true: "ok", false: ""}[ok]), finishedAt, taskID)
+
+		if actor == "cert-distribute" {
+			h.recordCertTaskResult(r.Context(), srv.ID, ok && finalStatus == "done", output)
+		}
+		if typ == "deploy" && finalStatus != "pending" {
+			h.recordBatchApplyTaskResult(r.Context(), taskID, ok && finalStatus == "done", output)
+		}
 
 		if ok && typ == "deploy" && configID > 0 {
 			version := jsonInt(payload["version"])

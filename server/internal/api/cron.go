@@ -41,7 +41,7 @@ func StartCronFor(ctx context.Context, cfg config.Config, db *sql.DB, log *slog.
 	if db == nil {
 		return
 	}
-	h := &handlers{cfg: cfg, db: db, log: log}
+	h := &handlers{cfg: cfg, db: db, log: log, box: LoadSecretBox(cfg.SecretKeyFile, log)}
 	go func() {
 		ticker := time.NewTicker(15 * time.Second)
 		defer ticker.Stop()
@@ -77,6 +77,8 @@ func (h *handlers) runCronOnce(ctx context.Context) {
 	h.cronCleanup(ctx, now)
 	h.cronUUIDReconcile(ctx, now)
 	h.cronCDNPreferred(ctx, now)
+	h.cronCertLifecycle(ctx, now)
+	h.cronBatchApplyTimeouts(ctx, now)
 	h.cronTrafficReset(ctx, now)
 }
 

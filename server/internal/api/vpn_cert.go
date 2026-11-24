@@ -18,8 +18,10 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -114,10 +116,18 @@ func (h *handlers) saveCert(ctx context.Context, c *storedCert) error {
 // ---------- Cloudflare DNS-01 ----------
 
 type cfDNS struct {
-	token  string
-	zone   string
-	zoneID string
-	recs   []string
+	token   string
+	zone    string
+	zoneID  string
+	recs    []string
+	baseURL string // 测试可注入；空值使用 cfAPIBase
+}
+
+func (c *cfDNS) apiBase() string {
+	if strings.TrimSpace(c.baseURL) != "" {
+		return strings.TrimSuffix(strings.TrimSpace(c.baseURL), "/")
+	}
+	return cfAPIBase
 }
 
 func (c *cfDNS) call(ctx context.Context, method, path string, body any) (map[string]any, error) {
@@ -126,7 +136,7 @@ func (c *cfDNS) call(ctx context.Context, method, path string, body any) (map[st
 		raw, _ := json.Marshal(body)
 		rdr = bytes.NewReader(raw)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, "https://api.cloudflare.com/client/v4"+path, rdr)
+	req, err := http.NewRequestWithContext(ctx, method, c.apiBase()+path, rdr)
 	if err != nil {
 		return nil, err
 	}
@@ -210,6 +220,185 @@ func (c *cfDNS) cleanup(ctx context.Context) {
 		_, _ = c.call(ctx, http.MethodDelete, "/zones/"+c.zoneID+"/dns_records/"+id, nil)
 	}
 	c.recs = nil
+}
+
+// ---------- 证书辅助 A 记录（节点域名 DNS only） ----------
+
+var cfDNSLabelRe = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
+
+type cfDNSARecord struct {
+	ID         string `json:"id"`
+	Type       string `json:"type"`
+	Name       string `json:"name"`
+	Content    string `json:"content"`
+	Proxied    bool   `json:"proxied"`
+	TTL        int    `json:"ttl"`
+	ModifiedOn string `json:"modified_on"`
+}
+
+type cfDNSAConflictError struct {
+	Message string
+}
+
+func (e *cfDNSAConflictError) Error() string { return e.Message }
+
+func normalizeCFDNSZone(raw string) string {
+	zone := strings.ToLower(strings.TrimSpace(raw))
+	zone = strings.TrimPrefix(zone, "*.")
+	return strings.TrimSuffix(zone, ".")
+}
+
+// validateCFDNSName 只允许 zone 的一级子域，如 lax2-node.yzfn.top。
+func validateCFDNSName(raw, zone string) (string, error) {
+	zone = normalizeCFDNSZone(zone)
+	name := strings.ToLower(strings.TrimSpace(raw))
+	name = strings.TrimSuffix(name, ".")
+	if zone == "" {
+		return "", errors.New("未配置证书域名 zone")
+	}
+	if name == "" || name == zone {
+		return "", errors.New("name 必须是 zone 的一级子域")
+	}
+	suffix := "." + zone
+	if !strings.HasSuffix(name, suffix) {
+		return "", fmt.Errorf("name 必须是 %s 的一级子域", zone)
+	}
+	label := strings.TrimSuffix(name, suffix)
+	if label == "" || strings.Contains(label, ".") || len(label) > 63 || !cfDNSLabelRe.MatchString(label) {
+		return "", fmt.Errorf("name 必须是 %s 的一级子域（label 仅限字母/数字/中划线）", zone)
+	}
+	return name, nil
+}
+
+// validateCFDNSIPv4 只接受公网 IPv4；A 记录不支持 IPv6/私网。
+func validateCFDNSIPv4(raw string) (string, error) {
+	ip := net.ParseIP(strings.TrimSpace(raw))
+	if ip == nil || ip.To4() == nil {
+		return "", errors.New("ip 必须是合法 IPv4")
+	}
+	if ip.IsLoopback() || ip.IsPrivate() || ip.IsUnspecified() || ip.IsLinkLocalUnicast() || ip.IsMulticast() {
+		return "", errors.New("ip 必须是公网 IPv4")
+	}
+	return ip.To4().String(), nil
+}
+
+func (c *cfDNS) listNameRecords(ctx context.Context, name string) ([]cfDNSARecord, error) {
+	if err := c.ensureZone(ctx); err != nil {
+		return nil, err
+	}
+	out, err := c.call(ctx, http.MethodGet,
+		"/zones/"+c.zoneID+"/dns_records?name="+url.QueryEscape(name)+"&per_page=100", nil)
+	if err != nil {
+		return nil, err
+	}
+	raw, _ := json.Marshal(out["result"])
+	var recs []cfDNSARecord
+	if err := json.Unmarshal(raw, &recs); err != nil {
+		return nil, fmt.Errorf("解析 Cloudflare DNS 记录失败：%w", err)
+	}
+	return recs, nil
+}
+
+func (c *cfDNS) createARecord(ctx context.Context, name, ip string) (cfDNSARecord, error) {
+	out, err := c.call(ctx, http.MethodPost, "/zones/"+c.zoneID+"/dns_records", map[string]any{
+		"type": "A", "name": name, "content": ip, "proxied": false, "ttl": 120,
+	})
+	if err != nil {
+		return cfDNSARecord{}, err
+	}
+	var rec cfDNSARecord
+	raw, _ := json.Marshal(out["result"])
+	_ = json.Unmarshal(raw, &rec)
+	if rec.ID == "" {
+		return rec, errors.New("Cloudflare 未返回 A 记录 id")
+	}
+	return rec, nil
+}
+
+func (c *cfDNS) updateARecord(ctx context.Context, id, name, ip string) (cfDNSARecord, error) {
+	out, err := c.call(ctx, http.MethodPut, "/zones/"+c.zoneID+"/dns_records/"+url.PathEscape(id), map[string]any{
+		"type": "A", "name": name, "content": ip, "proxied": false, "ttl": 120,
+	})
+	if err != nil {
+		return cfDNSARecord{}, err
+	}
+	var rec cfDNSARecord
+	raw, _ := json.Marshal(out["result"])
+	_ = json.Unmarshal(raw, &rec)
+	if rec.ID == "" {
+		rec.ID = id
+	}
+	return rec, nil
+}
+
+func (c *cfDNS) deleteDNSRecord(ctx context.Context, id string) error {
+	_, err := c.call(ctx, http.MethodDelete, "/zones/"+c.zoneID+"/dns_records/"+url.PathEscape(id), nil)
+	return err
+}
+
+// upsertARecord 创建/更新唯一 A 记录；proxied 永远 false。
+// 同名有 CNAME/其它类型时返回 conflict，不盲目覆盖。
+func (c *cfDNS) upsertARecord(ctx context.Context, name, ip string) (string, cfDNSARecord, []string, error) {
+	if err := c.ensureZone(ctx); err != nil {
+		return "", cfDNSARecord{}, nil, err
+	}
+	all, err := c.listNameRecords(ctx, name)
+	if err != nil {
+		return "", cfDNSARecord{}, nil, err
+	}
+	aRecords := make([]cfDNSARecord, 0, len(all))
+	for _, rec := range all {
+		if strings.EqualFold(rec.Type, "A") {
+			aRecords = append(aRecords, rec)
+			continue
+		}
+		if strings.EqualFold(rec.Name, name) {
+			return "", cfDNSARecord{}, nil, &cfDNSAConflictError{
+				Message: fmt.Sprintf("%s 已被 %s 记录占用（id=%s）", name, rec.Type, rec.ID),
+			}
+		}
+	}
+	if len(aRecords) == 0 {
+		rec, err := c.createARecord(ctx, name, ip)
+		return "created", rec, nil, err
+	}
+
+	target := -1
+	for i := range aRecords {
+		if aRecords[i].Content == ip && !aRecords[i].Proxied {
+			target = i
+			break
+		}
+	}
+	if target < 0 {
+		target = 0
+	}
+
+	action := "unchanged"
+	rec := aRecords[target]
+	needUpdate := rec.Content != ip || rec.Proxied
+	if needUpdate {
+		rec, err = c.updateARecord(ctx, rec.ID, name, ip)
+		if err != nil {
+			return "", cfDNSARecord{}, nil, err
+		}
+		action = "updated"
+	}
+
+	removed := make([]string, 0)
+	for i, old := range aRecords {
+		if i == target {
+			continue
+		}
+		if err := c.deleteDNSRecord(ctx, old.ID); err != nil {
+			return "", cfDNSARecord{}, removed, fmt.Errorf("删除重复 A 记录 %s 失败：%w", old.ID, err)
+		}
+		removed = append(removed, old.ID)
+	}
+	if len(removed) > 0 && action == "unchanged" {
+		action = "deduped"
+	}
+	return action, rec, removed, nil
 }
 
 // waitTXT 轮询公共 DNS，确认 TXT 已生效。
@@ -434,6 +623,100 @@ func (h *handlers) issueWildcard(ctx context.Context, domains []string) (*stored
 
 // ---------- HTTP 接口 ----------
 
+func (h *handlers) vpnCertDNSList(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	token := strings.TrimSpace(h.settingValue(r.Context(), settingCFToken))
+	if token == "" {
+		writeError(w, http.StatusBadRequest, "未配置 Cloudflare API Token（系统设置 → 邮件/集成）")
+		return
+	}
+	zone := normalizeCFDNSZone(firstNonEmpty(h.settingValue(r.Context(), "vpn_cert_zone"), "yzfn.top"))
+	name, err := validateCFDNSName(r.URL.Query().Get("name"), zone)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	cf := &cfDNS{token: token, zone: zone, zoneID: strings.TrimSpace(h.settingValue(r.Context(), "vpn_cert_zone_id"))}
+	recs, err := cf.listNameRecords(r.Context(), name)
+	if err != nil {
+		h.log.Warn("查询 Cloudflare DNS 记录失败", "name", name, "err", err)
+		writeError(w, http.StatusBadGateway, "查询 Cloudflare 失败："+err.Error())
+		return
+	}
+	aRecords := make([]cfDNSARecord, 0, len(recs))
+	dnsOnly := true
+	for _, rec := range recs {
+		if !strings.EqualFold(rec.Type, "A") {
+			continue
+		}
+		aRecords = append(aRecords, rec)
+		if rec.Proxied {
+			dnsOnly = false
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success": true, "name": name, "zone": zone,
+		"records": aRecords, "count": len(aRecords), "dns_only": dnsOnly,
+	})
+}
+
+func (h *handlers) vpnCertDNSUpsert(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var body struct {
+		Name    string `json:"name"`
+		IP      string `json:"ip"`
+		Proxied *bool  `json:"proxied"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "无效 JSON")
+		return
+	}
+	token := strings.TrimSpace(h.settingValue(r.Context(), settingCFToken))
+	if token == "" {
+		writeError(w, http.StatusBadRequest, "未配置 Cloudflare API Token（系统设置 → 邮件/集成）")
+		return
+	}
+	zone := normalizeCFDNSZone(firstNonEmpty(h.settingValue(r.Context(), "vpn_cert_zone"), "yzfn.top"))
+	name, err := validateCFDNSName(body.Name, zone)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	ip, err := validateCFDNSIPv4(body.IP)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if body.Proxied != nil && *body.Proxied {
+		writeError(w, http.StatusBadRequest, "节点 A 记录必须 DNS only（proxied=false），不能橙云")
+		return
+	}
+
+	cf := &cfDNS{token: token, zone: zone, zoneID: strings.TrimSpace(h.settingValue(r.Context(), "vpn_cert_zone_id"))}
+	action, rec, removed, err := cf.upsertARecord(r.Context(), name, ip)
+	if err != nil {
+		var conflict *cfDNSAConflictError
+		if errors.As(err, &conflict) {
+			writeError(w, http.StatusConflict, conflict.Error())
+			return
+		}
+		h.log.Warn("写入 Cloudflare A 记录失败", "name", name, "ip", ip, "err", err)
+		writeError(w, http.StatusBadGateway, "写入 Cloudflare 失败："+err.Error())
+		return
+	}
+	h.log.Info("Cloudflare 节点 A 记录已就绪", "name", name, "ip", ip, "action", action, "removed", len(removed))
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success": true, "name": name, "ip": ip, "zone": zone,
+		"action": action, "record": rec, "removed": removed,
+	})
+}
+
 func (h *handlers) vpnCertStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -506,9 +789,6 @@ func (h *handlers) vpnCertDistribute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	types := map[string]string{
-		"mesh": "组网中心", "vpn": "节点 VPN",
-	}
 	results := make([]map[string]any, 0, 24)
 
 	// 1) 本机：组网中心 + 本机 VPN 节点
@@ -527,6 +807,9 @@ func (h *handlers) vpnCertDistribute(w http.ResponseWriter, r *http.Request) {
 	localItem["singbox_installed"] = localState != "missing"
 	if vpnErr != nil {
 		localItem["error"] = vpnErr.Error()
+		h.recordLocalCertResult(ctx, cert, false, vpnErr.Error())
+	} else {
+		h.recordLocalCertResult(ctx, cert, true, "")
 	}
 	_ = vpnOK
 	results = append(results, localItem)
@@ -539,14 +822,7 @@ func (h *handlers) vpnCertDistribute(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, n := range nodes {
 		srv := &agentServer{ID: n.id, Name: n.name}
-		script := certInstallScript(cert, types["vpn"])
-		payload := map[string]any{
-			"command":       script,
-			"timeout":       120,
-			"system_action": systemActionVPNApply,
-			"service":       "proxypilot-agent",
-		}
-		tid, _, msg := h.agentQueueTask(ctx, srv, "exec", 0, payload, "cert-distribute")
+		tid, msg := h.queueCertInstall(ctx, cert, srv)
 		item := map[string]any{
 			"target": n.name, "server_id": n.id, "domain": n.domain,
 			"singbox_installed": n.singboxInstalled, "singbox_service": n.singboxService,

@@ -66,6 +66,8 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("POST /api/vpn/cert/distribute", h.authed(authOpts{}, h.vpnCertDistribute))
 	mux.HandleFunc("GET /api/vpn/cert/nodes", h.authed(authOpts{}, h.vpnCertNodes))
 	mux.HandleFunc("GET /api/vpn/cert/download", h.authed(authOpts{superOnly: true}, h.vpnCertDownload))
+	mux.HandleFunc("POST /api/vpn/cert/dns", h.authed(authOpts{superOnly: true}, h.vpnCertDNSUpsert))
+	mux.HandleFunc("GET /api/vpn/cert/dns", h.authed(authOpts{superOnly: true}, h.vpnCertDNSList))
 	mux.HandleFunc("GET /api/vpn/ca.crt", h.vpnPublicCACert)
 	mux.HandleFunc("POST /api/admin/vpn/mesh/batch", h.authed(authOpts{}, h.vpnAdminMeshBatch))
 	mux.HandleFunc("GET /api/admin/vpn/mesh", h.authed(authOpts{}, h.vpnAdminMesh))
