@@ -81,8 +81,17 @@ export default class PageErrorBoundary extends React.Component {
         /* ignore */
       }
     }
+    const { homePath = '', homeHash = '#dash' } = this.props;
+    if (homePath) {
+      try {
+        window.location.assign(homePath);
+        return;
+      } catch (e) {
+        /* jsdom/受限环境 fallback 到 hash */
+      }
+    }
     try {
-      window.location.hash = '#dash';
+      window.location.hash = homeHash || '#dash';
     } catch (e) {
       /* ignore */
     }
@@ -91,12 +100,13 @@ export default class PageErrorBoundary extends React.Component {
   render() {
     const { error, info } = this.state;
     if (!error) return this.props.children;
+    const { title = '页面出现异常', homeLabel = '返回系统概览' } = this.props;
     const detail = errorDetail(error, info);
     return (
       <div className="pp-error-boundary" data-error-boundary="1" data-page={this.props.pageKey || ''} style={{ padding: 24 }}>
         <Result
           status="500"
-          title="页面出现异常"
+          title={title}
           subTitle={<span style={{ fontSize: 13 }}>{errorSummary(error)}</span>}
           extra={
             <Space wrap>
@@ -104,7 +114,7 @@ export default class PageErrorBoundary extends React.Component {
                 重试
               </Button>
               <Button onClick={this.handleReload}>重新加载</Button>
-              <Button onClick={this.handleHome}>返回系统概览</Button>
+              <Button onClick={this.handleHome}>{homeLabel}</Button>
             </Space>
           }
         />

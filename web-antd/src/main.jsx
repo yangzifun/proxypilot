@@ -19,6 +19,7 @@ import './styles.css';
 // Portal（用户中心）按需加载：后台 /admin 首屏不再请求 portal 代码（antd-mobile 等）。
 // 仅当 IS_PORTAL 分支渲染时才触发 import('./portal/PortalApp')。
 const PortalApp = React.lazy(() => import('./portal/PortalApp'));
+import PageErrorBoundary from './components/PageErrorBoundary';
 
 dayjs.locale('zh-cn');
 
@@ -80,18 +81,24 @@ createRoot(document.getElementById('root')).render(
   <ThemeProvider>
     <AntdApp>
       {IS_PORTAL ? (
-        <React.Suspense
-          fallback={(
-            <div
-              className="pp-portal-boot"
-              style={{ padding: '72px 16px', textAlign: 'center', color: 'var(--pp-text-secondary)', fontSize: 14 }}
-            >
-              正在加载用户中心…
-            </div>
-          )}
+        <PageErrorBoundary
+          title="用户中心出现异常"
+          homeLabel="返回用户中心"
+          homePath="/"
         >
-          <PortalApp />
-        </React.Suspense>
+          <React.Suspense
+            fallback={(
+              <div
+                className="pp-portal-boot"
+                style={{ padding: '72px 16px', textAlign: 'center', color: 'var(--pp-text-secondary)', fontSize: 14 }}
+              >
+                正在加载用户中心…
+              </div>
+            )}
+          >
+            <PortalApp />
+          </React.Suspense>
+        </PageErrorBoundary>
       ) : (
         <AuthProvider>
           <App />

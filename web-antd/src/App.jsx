@@ -11,11 +11,18 @@ import Dashboard from './pages/Dashboard';
 
 // 路由级按需加载：重页面拆到独立 chunk，首屏只保留 Dashboard / Login / AppLayout。
 // esbuild splitting 会为每个 lazy import 生成 chunks/*.js；加载失败由 PageErrorBoundary 兜底提示。
-const Groups = lazy(() => import('./pages/Groups'));
-const Templates = lazy(() => import('./pages/Templates'));
-const ServersUnified = lazy(() => import('./pages/ServersUnified'));
+// 常用页面 loader 复用同一构造函数（esbuild 保证同一动态 import 指向同一 chunk）
+const loadGroups = () => import('./pages/Groups');
+const loadTemplates = () => import('./pages/Templates');
+const loadServersUnified = () => import('./pages/ServersUnified');
+const loadUserTraffic = () => import('./pages/UserTraffic');
+const loadSystem = () => import('./pages/System');
+
+const Groups = lazy(loadGroups);
+const Templates = lazy(loadTemplates);
+const ServersUnified = lazy(loadServersUnified);
 const Nodes = lazy(() => import('./pages/Nodes'));
-const UserTraffic = lazy(() => import('./pages/UserTraffic'));
+const UserTraffic = lazy(loadUserTraffic);
 const MihomoPage = lazy(() => import('./pages/Mihomo'));
 const NodeBindings = lazy(() => import('./pages/NodeBindings'));
 const TemplateHub = lazy(() => import('./pages/TemplateHub'));
@@ -24,12 +31,20 @@ const MasquePage = lazy(() => import('./pages/MasquePage'));
 const VpnPage = lazy(() => import('./pages/VpnPage'));
 const CdnPreferred = lazy(() => import('./pages/CdnPreferred'));
 const Logs = lazy(() => import('./pages/Logs'));
-const AdminUsersPage = lazy(() => import('./pages/System').then((m) => ({ default: m.AdminUsersPage })));
-const SystemSettingsPage = lazy(() => import('./pages/System').then((m) => ({ default: m.SystemSettingsPage })));
+const AdminUsersPage = lazy(() => loadSystem().then((m) => ({ default: m.AdminUsersPage })));
+const SystemSettingsPage = lazy(() => loadSystem().then((m) => ({ default: m.SystemSettingsPage })));
 const LocalServer = lazy(() => import('./pages/LocalServer'));
 const Security = lazy(() => import('./pages/Security'));
 const Certs = lazy(() => import('./pages/Certs'));
 const Backup = lazy(() => import('./pages/Backup'));
+
+// 首屏后的空闲预取列表：常用页面 chunk（失败静默，不阻塞首屏）
+const PREFETCH_LOADERS = [loadGroups, loadTemplates, loadServersUnified, loadUserTraffic, loadSystem];
+
+/** 空闲预取常用路由 chunk；返回 Promise（失败项为 null），供测试/调试调用。 */
+export function prefetchCommonPages() {
+  return Promise.all(PREFETCH_LOADERS.map((load) => Promise.resolve().then(load).catch(() => null)));
+}
 
 const PAGES = {
   dash: Dashboard,
@@ -67,6 +82,33 @@ export default function App() {
     const timer = setTimeout(() => setRouteLoading(false), 360);
     return () => clearTimeout(timer);
   }, [route]);
+
+  // 已登录后空闲预取常用路由 chunk：requestIdleCallback（fallback setTimeout 2500ms），失败静默。
+  useEffect(() => {
+    if (!token) return undefined;
+    let idleId = null;
+    let timer = null;
+    const run = () => {
+      prefetchCommonPages();
+    };
+    try {
+      if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+        idleId = window.requestIdleCallback(run, { timeout: 4000 });
+      } else {
+        timer = setTimeout(run, 2500);
+      }
+    } catch (e) {
+      timer = setTimeout(run, 2500);
+    }
+    return () => {
+      try {
+        if (idleId != null && typeof window.cancelIdleCallback === 'function') window.cancelIdleCallback(idleId);
+      } catch (e) {
+        /* ignore */
+      }
+      if (timer) clearTimeout(timer);
+    };
+  }, [token]);
 
   // 主题由 main.jsx 的 ThemeProvider 统一提供（单一 ConfigProvider），App 不再重复包裹。
   if (!token) return <Login />;
