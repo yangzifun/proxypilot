@@ -159,10 +159,10 @@ export default function PortalHome({ email, onLogout }) {
             <Empty
               image={Empty.PRESENTED_IMAGE_SIMPLE}
               description={
-                <span style={{ color: '#64748b' }}>
+                <span style={{ color: 'var(--pp-text-secondary)' }}>
                   该邮箱还没有绑定订阅
                   <br />
-                  <span style={{ fontSize: 12, color: '#94a3b8' }}>请联系管理员把 UUID 绑定到你的邮箱</span>
+                  <span style={{ fontSize: 12, color: 'var(--pp-text-tertiary)' }}>请联系管理员把 UUID 绑定到你的邮箱</span>
                 </span>
               }
             />
@@ -320,9 +320,9 @@ export default function PortalHome({ email, onLogout }) {
               type="svg"
               errorLevel="M"
               bordered={false}
-              style={{ padding: 18, background: '#fff', borderRadius: 12, display: 'inline-block' }}
+              style={{ padding: 18, background: 'var(--pp-surface)', borderRadius: 12, display: 'inline-block' }}
             />
-            <div style={{ marginTop: 12, fontSize: 12, color: '#94a3b8', wordBreak: 'break-all' }}>{qr.url}</div>
+            <div style={{ marginTop: 12, fontSize: 12, color: 'var(--pp-text-tertiary)', wordBreak: 'break-all' }}>{qr.url}</div>
             <CopyText value={qr.url} display={<Button size="small" style={{ marginTop: 10 }}>复制链接</Button>} />
           </div>
         ) : null}

@@ -267,7 +267,7 @@ export default function PortalLogin({ onLoggedIn }) {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="订阅所属邮箱"
-              prefix={<MailOutlined style={{ color: '#94a3b8' }} />}
+              prefix={<MailOutlined style={{ color: 'var(--pp-text-tertiary)' }} />}
               suffix={mode === 'code' ? (
                 <button
                   type="button"
@@ -307,7 +307,7 @@ export default function PortalLogin({ onLoggedIn }) {
                   onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   onPressEnter={login}
                   placeholder="6 位验证码"
-                  prefix={<LockOutlined style={{ color: '#94a3b8' }} />}
+                  prefix={<LockOutlined style={{ color: 'var(--pp-text-tertiary)' }} />}
                   inputMode="numeric"
                   maxLength={6}
                   className="pp-auth-input pp-auth-code"
@@ -326,7 +326,7 @@ export default function PortalLogin({ onLoggedIn }) {
                   onChange={(e) => setPassword(e.target.value)}
                   onPressEnter={loginByPassword}
                   placeholder="登录密码"
-                  prefix={<KeyOutlined style={{ color: '#94a3b8' }} />}
+                  prefix={<KeyOutlined style={{ color: 'var(--pp-text-tertiary)' }} />}
                   autoComplete="current-password"
                   className="pp-auth-input"
                 />
@@ -391,11 +391,11 @@ export default function PortalLogin({ onLoggedIn }) {
           <div className="pp-turnstile" ref={turnstile.slotRef} />
         </div>
         {turnstile.status === 'error' ? (
-          <div style={{ fontSize: 12, color: '#f43f5e', textAlign: 'center', marginTop: 8 }}>
+          <div style={{ fontSize: 12, color: 'var(--pp-danger)', textAlign: 'center', marginTop: 8 }}>
             验证组件加载失败，<a onClick={() => turnstile.reload()}>点此重试</a>
           </div>
         ) : null}
-        <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', marginTop: 10 }}>
+        <div style={{ fontSize: 12, color: 'var(--pp-text-tertiary)', textAlign: 'center', marginTop: 10 }}>
           {pending === 'pwd' ? '完成验证后将自动登录' : '完成验证后将自动发送验证码'}
         </div>
       </Modal>

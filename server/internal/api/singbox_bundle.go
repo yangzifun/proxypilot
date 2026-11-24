@@ -46,6 +46,8 @@ func serverComponentVersion(row serverRow, name string) string {
 
 // singboxRenderBundle 复刻 Worker：校验 + 生成待下发文件。
 func singboxRenderBundle(tpl *singboxTemplate, node singboxRenderNode, srv serverRow, extraFn func([]sbUser, map[string]int) []any) ([]map[string]any, map[string]int, []map[string]string, string) {
+	// TLS server_name 使用节点域名；该值只参与本次渲染，不写回模板。
+	tpl.ServerName = strings.TrimSpace(node.Domain)
 	users := singboxParseUsers(currentTemplateUsers(tpl))
 	for _, u := range users {
 		if strings.ToLower(u.UUID) == singboxDemoUUID {

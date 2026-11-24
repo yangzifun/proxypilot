@@ -19,7 +19,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -520,6 +519,18 @@ func (h *handlers) vpnCertDistribute(w http.ResponseWriter, r *http.Request) {
 	}
 	results = append(results, item)
 
+	// 本机 VPN：除 tunnel 外还写 /etc/sing-box；sing-box 仅在 active 时重启。
+	vpnOK, vpnErr := h.installLocalCert(cert, "vpn")
+	localItem := map[string]any{"target": "本机节点 VPN", "ok": vpnErr == nil}
+	localState := localSingboxServiceState()
+	localItem["singbox_service"] = localState
+	localItem["singbox_installed"] = localState != "missing"
+	if vpnErr != nil {
+		localItem["error"] = vpnErr.Error()
+	}
+	_ = vpnOK
+	results = append(results, localItem)
+
 	// 2) 远端节点：通过 Agent 任务下发
 	nodes, err := h.certTargets(ctx)
 	if err != nil {
@@ -536,7 +547,11 @@ func (h *handlers) vpnCertDistribute(w http.ResponseWriter, r *http.Request) {
 			"service":       "proxypilot-agent",
 		}
 		tid, _, msg := h.agentQueueTask(ctx, srv, "exec", 0, payload, "cert-distribute")
-		item := map[string]any{"target": n.name, "server_id": n.id, "ok": msg == "", "task_id": tid}
+		item := map[string]any{
+			"target": n.name, "server_id": n.id, "domain": n.domain,
+			"singbox_installed": n.singboxInstalled, "singbox_service": n.singboxService,
+			"ok": msg == "", "task_id": tid,
+		}
 		if msg != "" {
 			item["error"] = msg
 		}
@@ -549,65 +564,91 @@ func (h *handlers) vpnCertDistribute(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-type certTarget struct {
-	id   int64
-	name string
-}
-
-func (h *handlers) certTargets(ctx context.Context) ([]certTarget, error) {
-	rows, err := h.db.QueryContext(ctx,
-		`SELECT id, name FROM servers WHERE link_mode <> 'local' ORDER BY id`)
-	if err != nil {
-		return nil, err
+// installLocalCert 在本机原子写证书；VPN 同时写 tunnel 与 sing-box 证书目录。
+// 仅当 sing-box 服务已经 active 时才重启它；服务不存在/未启用不阻断。
+func (h *handlers) installLocalCert(cert *storedCert, kind string) (bool, error) {
+	if err := validateCertKeyPair(cert.CertPEM, cert.KeyPEM); err != nil {
+		return false, err
 	}
-	defer rows.Close()
-	var out []certTarget
-	for rows.Next() {
-		var t certTarget
-		if err := rows.Scan(&t.id, &t.name); err == nil {
-			out = append(out, t)
+	service := "proxypilot-mesh"
+	dirs := []string{certLocalMeshDir}
+	if kind == "vpn" {
+		service = "proxypilot-agent"
+		dirs = []string{certLocalVPNDir}
+		if certLocalSingboxDir != "" {
+			dirs = append(dirs, certLocalSingboxDir)
 		}
 	}
-	return out, rows.Err()
-}
+	for i, dir := range dirs {
+		certPEM := cert.CertPEM
+		certName, keyName := "cert.pem", "key.pem"
+		if kind == "vpn" && i == 1 {
+			// sing-box 使用 cert.crt/private.key，并带完整链。
+			certPEM = cert.CertPEM + cert.ChainPEM
+			certName, keyName = "cert.crt", "private.key"
+		}
+		if err := installCertToDir(dir, certName, keyName, certPEM, cert.KeyPEM); err != nil {
+			return false, err
+		}
+	}
 
-// installLocalCert 在本机写证书并重启对应服务（面板以 root 运行）。
-func (h *handlers) installLocalCert(cert *storedCert, kind string) (bool, error) {
-	dir := "/etc/proxypilot/mesh/tls"
-	service := "proxypilot-mesh"
 	if kind == "vpn" {
-		dir = "/etc/proxypilot/tunnel/tls"
-		service = "proxypilot-agent"
+		switch state := localSingboxServiceState(); state {
+		case "active":
+			if out, err := certSystemctl("restart", "sing-box"); err != nil {
+				return false, fmt.Errorf("重启 sing-box 失败：%v %s", err, strings.TrimSpace(string(out)))
+			}
+			if certLocalRestartWait > 0 {
+				time.Sleep(certLocalRestartWait)
+			}
+		case "missing", "inactive", "unknown", "":
+			if h.log != nil {
+				h.log.Info("sing-box 不存在或未启用，跳过重启", "state", state)
+			}
+		}
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return false, err
-	}
-	if err := os.WriteFile(filepath.Join(dir, "cert.pem"), []byte(cert.CertPEM), 0o644); err != nil {
-		return false, err
-	}
-	if err := os.WriteFile(filepath.Join(dir, "key.pem"), []byte(cert.KeyPEM), 0o600); err != nil {
-		return false, err
-	}
-	if out, err := exec.Command("systemctl", "restart", service).CombinedOutput(); err != nil {
+
+	if out, err := certSystemctl("restart", service); err != nil {
 		return false, fmt.Errorf("重启 %s 失败：%v %s", service, err, strings.TrimSpace(string(out)))
 	}
-	time.Sleep(2 * time.Second)
-	if out, err := exec.Command("systemctl", "is-active", service).CombinedOutput(); err != nil {
+	if certLocalRestartWait > 0 {
+		time.Sleep(certLocalRestartWait)
+	}
+	if out, err := certSystemctl("is-active", service); err != nil {
 		return false, fmt.Errorf("%s 未启动：%s", service, strings.TrimSpace(string(out)))
 	}
 	return true, nil
 }
 
-// certInstallScript 节点端安装脚本：写证书、改 vpn.json、重启并回读指纹。
+// certInstallScript 节点端安装脚本：原子写入 tunnel + sing-box 证书、改 vpn.json、
+// 仅在 sing-box active 时重启，回读 SHA-256/指纹，最后延迟重启 Agent。
 func certInstallScript(cert *storedCert, label string) string {
 	certB64 := base64.StdEncoding.EncodeToString([]byte(cert.CertPEM + cert.ChainPEM))
 	keyB64 := base64.StdEncoding.EncodeToString([]byte(cert.KeyPEM))
+	expectedFP := strings.TrimSpace(cert.Fingerprint)
+	if expectedFP == "" {
+		expectedFP = "unknown"
+	}
 	return fmt.Sprintf(`set -e
-mkdir -p /etc/proxypilot/tunnel/tls /etc/proxypilot/agent
-echo '%s' | base64 -d > /etc/proxypilot/tunnel/tls/cert.pem
-echo '%s' | base64 -d > /etc/proxypilot/tunnel/tls/key.pem
-chmod 644 /etc/proxypilot/tunnel/tls/cert.pem
-chmod 600 /etc/proxypilot/tunnel/tls/key.pem
+mkdir -p /etc/proxypilot/tunnel/tls /etc/proxypilot/agent /etc/sing-box
+write_atomic() {
+  dst="$1"; mode="$2"; tmp="${dst}.tmp.$$"
+  cat > "$tmp"
+  chmod "$mode" "$tmp"
+  mv -f "$tmp" "$dst"
+}
+printf '%%s' '%s' | base64 -d | write_atomic /etc/proxypilot/tunnel/tls/cert.pem 0644
+printf '%%s' '%s' | base64 -d | write_atomic /etc/proxypilot/tunnel/tls/key.pem 0600
+printf '%%s' '%s' | base64 -d | write_atomic /etc/sing-box/cert.crt 0644
+printf '%%s' '%s' | base64 -d | write_atomic /etc/sing-box/private.key 0600
+if command -v openssl >/dev/null 2>&1; then
+  CPUB="$(openssl x509 -in /etc/sing-box/cert.crt -noout -pubkey 2>/dev/null || true)"
+  KPUB="$(openssl pkey -in /etc/sing-box/private.key -pubout 2>/dev/null || true)"
+  if [ -z "$CPUB" ] || [ "$CPUB" != "$KPUB" ]; then
+    echo "sing-box cert/key mismatch" >&2
+    exit 1
+  fi
+fi
 if [ -f /etc/proxypilot/agent/vpn.json ] && command -v python3 >/dev/null 2>&1; then
 python3 - <<'PY'
 import json
@@ -618,11 +659,25 @@ d['key_file']='/etc/proxypilot/tunnel/tls/key.pem'
 json.dump(d,open(p,'w'),indent=2,ensure_ascii=False)
 PY
 fi
+SB_STATE="$(systemctl is-active sing-box 2>/dev/null || true)"
+if [ "$SB_STATE" = "active" ]; then
+  systemctl restart sing-box
+fi
+echo "singbox_service=$SB_STATE"
+SB_SHA=""
+if command -v sha256sum >/dev/null 2>&1; then
+  SB_SHA="$(sha256sum /etc/sing-box/cert.crt | awk '{print $1}')"
+elif command -v shasum >/dev/null 2>&1; then
+  SB_SHA="$(shasum -a 256 /etc/sing-box/cert.crt | awk '{print $1}')"
+fi
+echo "singbox_sha256=$SB_SHA"
 # 重启动作延迟并脱离当前任务（否则 agent 重启会杀掉执行任务的子进程）
 nohup sh -c 'sleep 2; systemctl restart proxypilot-agent' >/dev/null 2>&1 &
 echo "restart scheduled"
-openssl x509 -in /etc/proxypilot/tunnel/tls/cert.pem -noout -fingerprint -sha256 | sed 's/.*=//'`,
-		certB64, keyB64)
+SB_FP="$(openssl x509 -in /etc/sing-box/cert.crt -noout -fingerprint -sha256 2>/dev/null | sed 's/.*=//' || true)"
+if [ -z "$SB_FP" ]; then SB_FP='%s'; fi
+echo "$SB_FP"`,
+		certB64, keyB64, certB64, keyB64, expectedFP)
 }
 
 // vpnCertDiag 诊断 Cloudflare Token：能看哪些域名、能不能读写 DNS 记录。

@@ -334,7 +334,7 @@ export default function PortalUuid({ uuid, onBack, onUnauthorized, embedded = fa
     {
       title: '客户端',
       dataIndex: 'user_agent',
-      render: (v) => <span style={{ fontSize: 12, color: '#94a3b8' }}>{shortData(v, 72) || '—'}</span>,
+      render: (v) => <span style={{ fontSize: 12, color: 'var(--pp-text-tertiary)' }}>{shortData(v, 72) || '—'}</span>,
     },
   ];
 
@@ -358,7 +358,7 @@ export default function PortalUuid({ uuid, onBack, onUnauthorized, embedded = fa
                     <Space wrap style={{ marginBottom: 12 }}>
                       <Input
                         allowClear
-                        prefix={<SearchOutlined style={{ color: '#94a3b8' }} />}
+                        prefix={<SearchOutlined style={{ color: 'var(--pp-text-tertiary)' }} />}
                         placeholder="搜索备注或配置内容"
                         value={filters.q}
                         onChange={(e) => setFilters((s) => ({ ...s, q: e.target.value }))}
@@ -429,7 +429,7 @@ export default function PortalUuid({ uuid, onBack, onUnauthorized, embedded = fa
                         <b>批量配置</b>
                         全部节点明文导出（一行一个），适合一次性导入、脚本处理，或粘到自己的工具里做二次加工。
                       </div>
-                      <div style={{ marginTop: 4, color: '#94a3b8' }}>
+                      <div style={{ marginTop: 4, color: 'var(--pp-text-tertiary)' }}>
                         三种导入方式：<code>复制链接</code> 粘到客户端订阅栏 · <code>二维码</code> 手机扫码直接导入 · <code>生成并下载</code> 得到
                         <code>.txt</code> / <code>.yaml</code> 文件再导入。
                       </div>
@@ -571,7 +571,7 @@ export default function PortalUuid({ uuid, onBack, onUnauthorized, embedded = fa
                             <Col key={it.label} xs={12} md={6}>
                               <div className="pp-sub-link" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
                                 <div className="pp-sub-link-hint">{it.label}</div>
-                                <div style={{ fontSize: 22, fontWeight: 700, color: '#0f172a' }}>{fmtNum(it.value || 0)}</div>
+                                <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--pp-text)' }}>{fmtNum(it.value || 0)}</div>
                               </div>
                             </Col>
                           ))}
@@ -739,7 +739,7 @@ export default function PortalUuid({ uuid, onBack, onUnauthorized, embedded = fa
                             更换 UUID
                           </Button>
                         </Space>
-                        <div style={{ marginTop: 10, fontSize: 12, color: '#94a3b8', lineHeight: 1.7 }}>
+                        <div style={{ marginTop: 10, fontSize: 12, color: 'var(--pp-text-tertiary)', lineHeight: 1.7 }}>
                           更换 UUID 会立即作废旧订阅链接与已下发的节点配置，客户端需要重新导入新链接。
                         </div>
                       </>
@@ -870,9 +870,9 @@ export default function PortalUuid({ uuid, onBack, onUnauthorized, embedded = fa
               type="svg"
               errorLevel="M"
               bordered={false}
-              style={{ padding: 18, background: '#fff', borderRadius: 12, display: 'inline-block' }}
+              style={{ padding: 18, background: 'var(--pp-surface)', borderRadius: 12, display: 'inline-block' }}
             />
-            <div style={{ marginTop: 12, fontSize: 12, color: '#94a3b8', wordBreak: 'break-all' }}>{qr.url}</div>
+            <div style={{ marginTop: 12, fontSize: 12, color: 'var(--pp-text-tertiary)', wordBreak: 'break-all' }}>{qr.url}</div>
           </div>
         ) : null}
       </Modal>
@@ -1141,14 +1141,14 @@ export function UuidRotateModal({ open, uuid, onClose }) {
               message="更换成功，旧 UUID 已作废"
               description="旧订阅链接与已下发的旧配置已全部失效，请在客户端里重新导入下面的新链接；旧链接不会再恢复。"
             />
-            <div style={{ fontSize: 13, color: '#64748b', marginBottom: 6 }}>新 UUID</div>
+            <div style={{ fontSize: 13, color: 'var(--pp-text-secondary)', marginBottom: 6 }}>新 UUID</div>
             <CopyText
               value={newUuid}
               display={<span className="pp-mono" style={{ fontSize: 13, wordBreak: 'break-all' }}>{newUuid}</span>}
               tip="点击复制新 UUID"
             />
             <div style={{ height: 16 }} />
-            <div style={{ fontSize: 13, color: '#64748b', marginBottom: 6 }}>新的订阅链接</div>
+            <div style={{ fontSize: 13, color: 'var(--pp-text-secondary)', marginBottom: 6 }}>新的订阅链接</div>
             <Space orientation="vertical" size={10} style={{ width: '100%' }}>
               {newLinks.map((it) => (
                 <div key={it.key} className="pp-sub-link">
@@ -1157,7 +1157,7 @@ export function UuidRotateModal({ open, uuid, onClose }) {
                     <div
                       className="pp-mono"
                       title={it.url}
-                      style={{ fontSize: 11.5, color: '#64748b', marginTop: 3, wordBreak: 'break-all' }}
+                      style={{ fontSize: 11.5, color: 'var(--pp-text-secondary)', marginTop: 3, wordBreak: 'break-all' }}
                     >
                       {it.url}
                     </div>
@@ -1171,7 +1171,7 @@ export function UuidRotateModal({ open, uuid, onClose }) {
             {result && result.warning ? (
               <Alert type="warning" showIcon style={{ marginTop: 14 }} message={String(result.warning)} />
             ) : null}
-            <div style={{ marginTop: 14, fontSize: 12, color: '#94a3b8', lineHeight: 1.8 }}>
+            <div style={{ marginTop: 14, fontSize: 12, color: 'var(--pp-text-tertiary)', lineHeight: 1.8 }}>
               页面数据仍按旧 UUID 加载：请先复制上面的新链接，再点下方按钮刷新页面；
               刷新后会重新拉取 /api/portal/uuids 并显示新 UUID。
             </div>
@@ -1185,7 +1185,7 @@ export function UuidRotateModal({ open, uuid, onClose }) {
               message="旧订阅链接与旧配置将立即失效"
               description="更换后，原 UUID 的订阅链接、已下发的节点配置全部作废，所有客户端必须重新导入新链接；此操作不可撤销。"
             />
-            <div style={{ fontSize: 13, color: '#64748b', marginBottom: 6 }}>当前 UUID</div>
+            <div style={{ fontSize: 13, color: 'var(--pp-text-secondary)', marginBottom: 6 }}>当前 UUID</div>
             <CopyText
               value={uuid || ''}
               display={<span className="pp-mono" style={{ fontSize: 13, wordBreak: 'break-all' }}>{uuid || '—'}</span>}
@@ -1203,7 +1203,7 @@ export function UuidRotateModal({ open, uuid, onClose }) {
             ) : null}
             {!pwd.loading && !pwd.error && pwd.hasPassword ? (
               <>
-                <div style={{ fontSize: 13, color: '#64748b', marginBottom: 6 }}>
+                <div style={{ fontSize: 13, color: 'var(--pp-text-secondary)', marginBottom: 6 }}>
                   二次认证：输入当前登录密码
                 </div>
                 <Input.Password
@@ -1211,17 +1211,17 @@ export function UuidRotateModal({ open, uuid, onClose }) {
                   onChange={(e) => { setPassword(e.target.value); setErr(''); }}
                   onPressEnter={submit}
                   placeholder="当前登录密码"
-                  prefix={<SafetyOutlined style={{ color: '#94a3b8' }} />}
+                  prefix={<SafetyOutlined style={{ color: 'var(--pp-text-tertiary)' }} />}
                   autoComplete="current-password"
                 />
-                <div style={{ marginTop: 6, fontSize: 12, color: '#94a3b8' }}>
+                <div style={{ marginTop: 6, fontSize: 12, color: 'var(--pp-text-tertiary)' }}>
                   密码只用于本次校验，不会保存或写入日志。
                 </div>
               </>
             ) : null}
             {!pwd.loading && !pwd.error && !pwd.hasPassword ? (
               <>
-                <div style={{ fontSize: 13, color: '#64748b', marginBottom: 6 }}>
+                <div style={{ fontSize: 13, color: 'var(--pp-text-secondary)', marginBottom: 6 }}>
                   二次认证：账号还没有设置密码，改为向绑定邮箱发送 6 位验证码
                 </div>
                 <Space.Compact style={{ width: '100%' }}>
@@ -1237,7 +1237,7 @@ export function UuidRotateModal({ open, uuid, onClose }) {
                     {countdown > 0 ? `${countdown}s 后重发` : '发送验证码'}
                   </Button>
                 </Space.Compact>
-                <div style={{ marginTop: 6, fontSize: 12, color: '#94a3b8' }}>
+                <div style={{ marginTop: 6, fontSize: 12, color: 'var(--pp-text-tertiary)' }}>
                   验证码发送到绑定邮箱，10 分钟内有效，且只能使用一次。
                 </div>
               </>
@@ -1264,11 +1264,11 @@ export function UuidRotateModal({ open, uuid, onClose }) {
           <div className="pp-turnstile" ref={turnstile.slotRef} />
         </div>
         {turnstile.status === 'error' ? (
-          <div style={{ fontSize: 12, color: '#f43f5e', textAlign: 'center', marginTop: 8 }}>
+          <div style={{ fontSize: 12, color: 'var(--pp-danger)', textAlign: 'center', marginTop: 8 }}>
             验证组件加载失败，<a onClick={() => turnstile.reload()}>点此重试</a>
           </div>
         ) : null}
-        <div style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', marginTop: 10 }}>
+        <div style={{ fontSize: 12, color: 'var(--pp-text-tertiary)', textAlign: 'center', marginTop: 10 }}>
           完成验证后将自动发送验证码
         </div>
       </Modal>

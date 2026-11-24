@@ -78,7 +78,7 @@ export default function MtprotoCard({ mobile = false }) {
       {!state.loading && !state.error && !rows.length ? (
         <Empty
           image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description={<span style={{ color: '#94a3b8' }}>管理员还没有为你开通 Telegram 代理</span>}
+          description={<span style={{ color: 'var(--pp-text-tertiary)' }}>管理员还没有为你开通 Telegram 代理</span>}
         />
       ) : null}
 
@@ -88,9 +88,9 @@ export default function MtprotoCard({ mobile = false }) {
           style={{
             padding: '12px 14px',
             marginBottom: 12,
-            border: '1px solid #eef2f7',
+            border: '1px solid var(--pp-border)',
             borderRadius: 14,
-            background: '#fbfcff',
+            background: 'var(--pp-surface-muted)',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
@@ -144,7 +144,7 @@ export default function MtprotoCard({ mobile = false }) {
               type="svg"
               errorLevel="M"
               bordered={false}
-              style={{ padding: 18, background: '#fff', borderRadius: 12, display: 'inline-block' }}
+              style={{ padding: 18, background: 'var(--pp-surface)', borderRadius: 12, display: 'inline-block' }}
             />
             <p className="pp-muted" style={{ margin: '12px 0 8px', fontSize: 13 }}>
               手机扫码，或在 Telegram 里点「添加代理」；也可以点下面的链接直接唤起。

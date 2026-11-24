@@ -110,6 +110,9 @@ const PROTO_DOCS = {
   },
 };
 
+/** 依赖可信 TLS 证书的协议（REALITY 例外：借用目标站点证书）。 */
+const CERT_REQUIRED_PROTOCOLS = new Set(['anytls', 'hy2', 'vmess', 'vlws']);
+
 const SWITCHES = [
   { name: 'enable_ss', label: 'SS2022' },
   { name: 'enable_anytls', label: 'AnyTLS' },
@@ -436,6 +439,12 @@ export default function Nodes({ initialTab, templatesOnly }) {
 
   return (
     <div>
+      <Alert
+        type="info"
+        showIcon
+        style={{ marginBottom: 12 }}
+        message="节点 TLS 域名请使用 *.yzfn.top 的一级子域（如 hk.yzfn.top），用于证书 SNI 与客户端连接；CDN 域名在节点编辑里单独填写，不要与 TLS 域名混用。"
+      />
       <div>
         <Tabs
           defaultActiveKey="tpl"
@@ -542,6 +551,12 @@ export default function Nodes({ initialTab, templatesOnly }) {
         centered
         destroyOnHidden
       >
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 12 }}
+          message="AnyTLS / Hysteria2 / TUIC / VLESS-WS 需要可信证书；请先在「证书管理」签发并下发 *.yzfn.top 通配证书，REALITY 不需要自有证书。"
+        />
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(430px, 1fr))', gap: 12 }}>
           {Object.entries(PROTO_DOCS).map(([key, d]) => (
             <div key={key} style={{ border: '1px solid var(--pp-border)', borderRadius: 12, padding: '14px 16px', background: 'var(--pp-surface)' }}>
@@ -549,6 +564,7 @@ export default function Nodes({ initialTab, templatesOnly }) {
                 <b style={{ fontSize: 14 }}>{d.label}</b>
                 <Tag color="purple" style={{ marginInlineEnd: 0 }}>{d.port}</Tag>
                 <span className="pp-muted" style={{ fontSize: 12 }}>{d.transport}</span>
+                {CERT_REQUIRED_PROTOCOLS.has(key) ? <Tag color="gold">需可信证书</Tag> : null}
               </div>
               <div style={{ fontSize: 13, lineHeight: 1.8, color: 'var(--pp-text)', marginTop: 6 }}>{d.desc}</div>
               <ul style={{ margin: '8px 0 0', paddingLeft: 18, fontSize: 12.5, lineHeight: 1.8, color: 'var(--pp-text)' }}>
@@ -771,7 +787,12 @@ function NodeEditor({ state, servers, templates, onClose, onSaved }) {
                   },
                 },
               ]}
-              extra="用于节点链接与证书；可填域名或 IPv4，不要带协议/路径/端口"
+              extra={(
+                <span>
+                  必须是 <b>*.yzfn.top</b> 一级子域（如 <span className="pp-mono">hk.yzfn.top</span>），用于 TLS 证书 SNI 与客户端连接；
+                  CDN 域名请在下方「CDN 域名」单独填写，二者不要混用。
+                </span>
+              )}
             >
               <Input placeholder="hk.example.com 或 203.0.113.10" />
             </Form.Item>

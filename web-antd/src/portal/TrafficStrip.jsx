@@ -34,9 +34,9 @@ export default function TrafficStrip({ uuid }) {
 
   const item = (label, value, hint) => (
     <div style={{ flex: '1 1 120px', minWidth: 120 }}>
-      <div style={{ fontSize: 12, color: '#94a3b8' }}>{label}</div>
-      <div style={{ fontSize: 18, fontWeight: 600, color: '#0f172a', lineHeight: 1.4 }}>{value}</div>
-      {hint ? <div style={{ fontSize: 11, color: '#94a3b8' }}>{hint}</div> : null}
+      <div style={{ fontSize: 12, color: 'var(--pp-text-tertiary)' }}>{label}</div>
+      <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--pp-text)', lineHeight: 1.4 }}>{value}</div>
+      {hint ? <div style={{ fontSize: 11, color: 'var(--pp-text-tertiary)' }}>{hint}</div> : null}
     </div>
   );
 
@@ -45,8 +45,8 @@ export default function TrafficStrip({ uuid }) {
       style={{
         margin: '0 0 14px',
         padding: '14px 18px',
-        background: '#fff',
-        border: '1px solid #eef2f7',
+        background: 'var(--pp-surface)',
+        border: '1px solid var(--pp-border)',
         borderRadius: 14,
         display: 'flex',
         gap: 18,
@@ -55,13 +55,13 @@ export default function TrafficStrip({ uuid }) {
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 120 }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>我的流量</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--pp-text)' }}>我的流量</span>
         {d.active ? <Tag color="success">在线</Tag> : <Tag>离线</Tag>}
       </div>
       {item('今日', fmtBytes(today.total || 0), `↑${fmtBytes(today.up || 0)} / ↓${fmtBytes(today.down || 0)}`)}
       {item('近 7 天', fmtBytes(week.total || 0), `↑${fmtBytes(week.up || 0)} / ↓${fmtBytes(week.down || 0)}`)}
       {item('累计', fmtBytes(total.total || 0), `↑${fmtBytes(total.up || 0)} / ↓${fmtBytes(total.down || 0)}`)}
-      <div style={{ fontSize: 11, color: '#94a3b8', marginLeft: 'auto' }}>
+      <div style={{ fontSize: 11, color: 'var(--pp-text-tertiary)', marginLeft: 'auto' }}>
         {d.last_active_at ? `最近活跃 ${fmtAgo(d.last_active_at)}` : '暂无流量记录'}
       </div>
     </div>

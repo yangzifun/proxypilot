@@ -547,7 +547,6 @@ func singboxClientLinks(tpl *singboxTemplate, node singboxNode, users []sbUser) 
 	realityPub := tpl.realityPublicKey()
 	wsPath := firstNonEmpty(strings.TrimSpace(jsonStr(optMap(opts, "vlws")["path"])), "/vlws")
 	realitySni := firstNonEmpty(strings.TrimSpace(jsonStr(optMap(opts, "reality")["server_name"])), strings.TrimSpace(tpl.RealitySNI), "www.microsoft.com")
-	wsSni := firstNonEmpty(strings.TrimSpace(tpl.WSSNI), "www.bing.com")
 
 	add := func(protocol string, port int, user, link, note string) {
 		out = append(out, map[string]any{
@@ -570,15 +569,15 @@ func singboxClientLinks(tpl *singboxTemplate, node singboxNode, users []sbUser) 
 				"ss://"+auth+"@"+domain+":"+strconv.Itoa(ports["ss"])+"#"+enc(tag("ss")),
 				"SS2022 多用户：密码 = 服务器密钥:用户密钥")
 		}
-		if engineSb && tpl.EnableAnyTLS != 0 {
+		if engineSb && tpl.EnableAnyTLS != 0 && domain != "" {
 			link := "anytls://" + u.UUID + "@" + domain + ":" + strconv.Itoa(ports["anytls"]) +
-				"/?security=tls&sni=" + enc(wsSni) + "&insecure=1#" + enc(tag("anytls"))
-			add("anytls", ports["anytls"], u.Name, link, "自签证书：客户端需允许不安全")
+				"/?security=tls&sni=" + enc(domain) + "#" + enc(tag("anytls"))
+			add("anytls", ports["anytls"], u.Name, link, "可信证书 / 节点域名")
 		}
-		if engineSb && tpl.EnableHY2 != 0 {
+		if engineSb && tpl.EnableHY2 != 0 && domain != "" {
 			link := "hysteria2://" + u.UUID + "@" + domain + ":" + strconv.Itoa(ports["hy2"]) +
-				"/?sni=" + enc(wsSni) + "&insecure=1&alpn=h3#" + enc(tag("hy2"))
-			add("hysteria2", ports["hy2"], u.Name, link, "UDP 端口：注意放行与 NAT 映射")
+				"/?sni=" + enc(domain) + "&alpn=h3#" + enc(tag("hy2"))
+			add("hysteria2", ports["hy2"], u.Name, link, "UDP 端口：注意放行与 NAT 映射；可信证书 / 节点域名")
 		}
 		if engineSb && tpl.EnableReality != 0 && realityPub != "" {
 			link := "vless://" + u.UUID + "@" + domain + ":" + strconv.Itoa(ports["reality"]) +
@@ -648,8 +647,8 @@ func singboxClientLinks(tpl *singboxTemplate, node singboxNode, users []sbUser) 
 		}
 		if engineSb && tpl.EnableVMess != 0 && domain != "" {
 			link := "tuic://" + enc(u.UUID) + ":" + enc(u.UUID) + "@" + domain + ":" + strconv.Itoa(ports["vmess"]) +
-				"/?congestion_control=bbr&alpn=h3&sni=" + enc(domain) + "&allow_insecure=1#" + enc(tag("tuic"))
-			add("tuic", ports["vmess"], u.Name, link, "TUIC v5（QUIC，UDP 13704）")
+				"/?congestion_control=bbr&alpn=h3&sni=" + enc(domain) + "#" + enc(tag("tuic"))
+			add("tuic", ports["vmess"], u.Name, link, "TUIC v5（QUIC，UDP 13704）；可信证书 / 节点域名")
 		}
 	}
 	if len(entries) > 0 && len(out) > singboxMaxCDNLinks {

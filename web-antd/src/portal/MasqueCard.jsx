@@ -73,14 +73,14 @@ export default function MasqueCard({ mobile = false }) {
       ) : !data.granted ? (
         <Alert type="info" showIcon message="管理员还没有为你的账号授权 WARP" />
       ) : (
-        <div style={{ border: '1px solid #eef2f7', borderRadius: 12, padding: 12 }}>
+        <div style={{ border: '1px solid var(--pp-border)', borderRadius: 12, padding: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
             <Tag color="green" style={{ marginInlineEnd: 0 }}>已授权</Tag>
-            <span style={{ fontSize: 12, color: '#64748b', fontFamily: 'monospace' }}>
+            <span style={{ fontSize: 12, color: 'var(--pp-text-secondary)', fontFamily: 'monospace' }}>
               {data.warp_ipv4 || data.warp_ipv6 || ''}
             </span>
           </div>
-          <div style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.7, marginBottom: 10 }}>
+          <div style={{ fontSize: 12, color: 'var(--pp-text-tertiary)', lineHeight: 1.7, marginBottom: 10 }}>
             WARP 出口 IP 由 Cloudflare 分配，免费版不支持选择国家。配置文件包含私钥，请勿转发。
           </div>
           <Button type="primary" icon={<CloudDownloadOutlined />} loading={busy} onClick={download}>

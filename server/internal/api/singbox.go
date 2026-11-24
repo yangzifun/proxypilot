@@ -44,6 +44,8 @@ type singboxTemplate struct {
 	EnableSingbox     *int64 `json:"enable_singbox"`
 	MasquePath        string `json:"masque_path"`
 	SingboxVersion    string `json:"singbox_version"`
+	// ServerName 只在渲染时由节点 domain 注入，不入库；供 TLS 入站 server_name 使用。
+	ServerName string `json:"-"`
 }
 
 type sbUser struct {
@@ -205,6 +207,13 @@ func singboxRenderSb(tpl *singboxTemplate, users []sbUser, ports map[string]int,
 			"key_path":         strings.TrimSpace(tpl.KeyPath),
 		}
 	}
+	serverName := strings.TrimSpace(tpl.ServerName)
+	withServerName := func(tls map[string]any) map[string]any {
+		if serverName != "" {
+			tls["server_name"] = serverName
+		}
+		return tls
+	}
 	ssKey := strings.TrimSpace(tpl.SSServerKey)
 	opts := tpl.protoOptions()
 	statsOn := strings.TrimSpace(statsSecret) != ""
@@ -242,7 +251,9 @@ func singboxRenderSb(tpl *singboxTemplate, users []sbUser, ports map[string]int,
 		}
 		inbounds = append(inbounds, map[string]any{
 			"type": "anytls", "tag": "anytls-sb", "listen": "::", "listen_port": ports["anytls"],
-			"tls":   map[string]any{"enabled": true, "certificate_path": tlsPair()["certificate_path"], "key_path": tlsPair()["key_path"]},
+			"tls": withServerName(map[string]any{
+				"enabled": true, "certificate_path": tlsPair()["certificate_path"], "key_path": tlsPair()["key_path"],
+			}),
 			"users": u,
 		})
 	}
@@ -250,10 +261,10 @@ func singboxRenderSb(tpl *singboxTemplate, users []sbUser, ports map[string]int,
 		hy2Opt := optMap(opts, "hy2")
 		hy2 := map[string]any{
 			"type": "hysteria2", "tag": "hy2-sb", "listen": "::", "listen_port": ports["hy2"],
-			"tls": map[string]any{
+			"tls": withServerName(map[string]any{
 				"enabled": true, "alpn": []string{"h3"},
 				"certificate_path": tlsPair()["certificate_path"], "key_path": tlsPair()["key_path"],
-			},
+			}),
 		}
 		u := make([]any, 0, len(users))
 		for _, x := range users {
@@ -276,10 +287,10 @@ func singboxRenderSb(tpl *singboxTemplate, users []sbUser, ports map[string]int,
 		inbounds = append(inbounds, map[string]any{
 			"type": "tuic", "tag": "tuic-sb", "listen": "::", "listen_port": ports["vmess"],
 			"congestion_control": "bbr", "auth_timeout": "3s", "zero_rtt_handshake": false,
-			"tls": map[string]any{
+			"tls": withServerName(map[string]any{
 				"enabled": true, "alpn": []string{"h3"},
 				"certificate_path": tlsPair()["certificate_path"], "key_path": tlsPair()["key_path"],
-			},
+			}),
 			"users": u,
 		})
 	}
@@ -321,10 +332,10 @@ func singboxRenderSb(tpl *singboxTemplate, users []sbUser, ports map[string]int,
 		}
 		wsPath := singboxWsPath(firstNonEmpty(strings.TrimSpace(jsonStr(optMap(opts, "vlws")["path"])), "/vlws"))
 		tlsBlock := func() map[string]any {
-			return map[string]any{
+			return withServerName(map[string]any{
 				"enabled": true, "alpn": []string{"h2", "http/1.1"},
 				"certificate_path": tlsPair()["certificate_path"], "key_path": tlsPair()["key_path"],
-			}
+			})
 		}
 		inbounds = append(inbounds, map[string]any{
 			"type": "vless", "tag": "vless-ws-in", "listen": "::", "listen_port": ports["vlws"],
@@ -365,10 +376,10 @@ func singboxRenderSb(tpl *singboxTemplate, users []sbUser, ports map[string]int,
 		}
 		endpoints = append(endpoints, map[string]any{
 			"type": "masque-server", "tag": "masque-in", "listen": "::", "listen_port": ports["masque"],
-			"tls": map[string]any{
+			"tls": withServerName(map[string]any{
 				"enabled": true, "alpn": []string{"h2", "h3"},
 				"certificate_path": tlsPair()["certificate_path"], "key_path": tlsPair()["key_path"],
-			},
+			}),
 			"users":   u,
 			"path":    firstNonEmpty(strings.TrimSpace(jsonStr(mqOpt["path"])), "/.well-known/masque/ip/{target}/{ipproto}/"),
 			"version": versions,

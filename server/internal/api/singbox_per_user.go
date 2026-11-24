@@ -28,7 +28,11 @@ func singboxPerUserInbounds(tpl *singboxTemplate, users []sbUser, userPorts map[
 	}
 	cert := strings.TrimSpace(tpl.CertPath)
 	key := strings.TrimSpace(tpl.KeyPath)
+	serverName := strings.TrimSpace(tpl.ServerName)
 	tls := map[string]any{"enabled": true, "certificate_path": cert, "key_path": key}
+	if serverName != "" {
+		tls["server_name"] = serverName
+	}
 
 	out := []any{}
 	for _, u := range users {
@@ -39,7 +43,7 @@ func singboxPerUserInbounds(tpl *singboxTemplate, users []sbUser, userPorts map[
 		if tpl.EnableAnyTLS != 0 && u.UUID != "" {
 			out = append(out, map[string]any{
 				"type": "anytls", "tag": "anytls-" + short(u), "listen": "::", "listen_port": port,
-				"tls": tls,
+				"tls":   tls,
 				"users": []any{map[string]any{"name": name(u), "password": u.UUID}},
 			})
 		}
@@ -51,6 +55,9 @@ func singboxPerUserInbounds(tpl *singboxTemplate, users []sbUser, userPorts map[
 					"certificate_path": cert, "key_path": key,
 				},
 				"users": []any{map[string]any{"name": name(u), "password": u.UUID}},
+			}
+			if serverName != "" {
+				hy2["tls"].(map[string]any)["server_name"] = serverName
 			}
 			opts := optMap(tpl.protoOptions(), "hy2")
 			if up := intOrJS(opts["up_mbps"], 0, 0, 1<<30); up > 0 {

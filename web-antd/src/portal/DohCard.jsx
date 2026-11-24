@@ -67,7 +67,7 @@ export default function DohCard({ mobile = false }) {
       ) : !bound || !url ? (
         <Alert type="info" showIcon message="你的账号还没有 DoH 链接，请联系管理员绑定 UUID" />
       ) : (
-        <div style={{ border: '1px solid #eef2f7', borderRadius: 12, padding: 12 }}>
+        <div style={{ border: '1px solid var(--pp-border)', borderRadius: 12, padding: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
             <Tag color="green" style={{ marginInlineEnd: 0 }}>
               <GlobalOutlined /> 已启用
@@ -77,14 +77,14 @@ export default function DohCard({ mobile = false }) {
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 12, color: '#64748b' }}>DoH URL</span>
+            <span style={{ fontSize: 12, color: 'var(--pp-text-secondary)' }}>DoH URL</span>
             <CopyText value={url} />
           </div>
-          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>
+          <div style={{ fontSize: 12, color: 'var(--pp-text-secondary)', marginBottom: 8 }}>
             近 30 天查询 <b>{fmtNum(queries30d)}</b> 次 · 最近使用{' '}
             {lastUsed ? <span title={String(lastUsed)}>{fmtAgo(lastUsed)}</span> : '暂无记录'}
           </div>
-          <div style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.7 }}>
+          <div style={{ fontSize: 12, color: 'var(--pp-text-tertiary)', lineHeight: 1.7 }}>
             使用说明：Chrome / Android「私人 DNS」/ AdGuard Home 等客户端填入上面的完整 URL（含 /dns-query/&lt;uuid&gt;）。
             该链接含个人标识，请勿公开分享；需管理员把 DoH 域名解析到面板并启用 HTTPS。
           </div>

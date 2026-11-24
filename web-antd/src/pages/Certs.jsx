@@ -10,6 +10,7 @@ import {
   Space,
   Table,
   Tag,
+  Tooltip,
   Typography,
   message,
 } from 'antd';
@@ -25,6 +26,8 @@ import { api, apiPost, getToken } from '../api';
 import { CopyText, ErrorBlock, PageCard, StatCard } from '../components';
 
 const { Text } = Typography;
+
+const WILDCARD_DOMAINS = 'yzfn.top,*.yzfn.top';
 
 function fmtTime(ms) {
   const n = Number(ms || 0);
@@ -50,12 +53,14 @@ function daysTag(days, expired) {
 export default function Certs() {
   const ca = useAsync(() => api('vpn/ca/status'), []);
   const cert = useAsync(() => api('vpn/cert/status'), []);
+  const certNodes = useAsync(() => api('vpn/cert/nodes'), []);
   const [zone, setZone] = useState('');
   const [busy, setBusy] = useState('');
 
   const caData = ca.data || {};
   const certData = cert.data || {};
   const siteCert = certData.cert;
+  const nodeRows = (certNodes.data && certNodes.data.data) || [];
   const daysLeft = useMemo(() => {
     if (!siteCert || !siteCert.not_after) return 0;
     return Math.floor((Number(siteCert.not_after) - Date.now()) / 86400000);
@@ -79,8 +84,9 @@ export default function Certs() {
     setBusy('distribute');
     try {
       const res = await apiPost('vpn/cert/distribute', {});
-      const ok = res.installed ?? res.count ?? '';
+      const ok = res.queued ?? res.installed ?? res.count ?? '';
       message.success(`已下发到组网中心与节点${ok !== '' ? `（${ok} 处）` : ''}`);
+      certNodes.reload().catch(() => {});
     } catch (e) {
       message.error('下发失败：' + (e.message || e));
     } finally {
@@ -222,7 +228,7 @@ export default function Certs() {
         <Col xs={24} xl={12}>
       <PageCard
         title="功能证书（站点 / 节点通配）"
-        subtitle="通过 Cloudflare DNS-01 申请通配证书，可一键下发到组网中心与全部节点"
+        subtitle="通过 Cloudflare DNS-01 申请通配证书，同时下发到组网中心、VPN 与 sing-box"
         extra={
           <Space>
             <Button
@@ -250,6 +256,36 @@ export default function Certs() {
           </Space>
         }
       >
+        <Descriptions
+          bordered
+          size="small"
+          column={1}
+          style={{ marginBottom: 12 }}
+          items={[
+            {
+              key: 'wildcard',
+              label: '目标通配域名',
+              children: <span className="pp-mono">{WILDCARD_DOMAINS}</span>,
+            },
+            {
+              key: 'paths',
+              label: '下发路径',
+              children: (
+                <span>
+                  <span className="pp-mono">/etc/proxypilot/tunnel/tls/</span>
+                  {' · '}
+                  <span className="pp-mono">/etc/sing-box/cert.crt + private.key</span>
+                </span>
+              ),
+            },
+          ]}
+        />
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 12 }}
+          message="证书会同时写入 tunnel 与 sing-box；sing-box 仅在服务 active 时自动重启。"
+        />
         <Space wrap style={{ marginBottom: 12 }}>
           <Text type="secondary">签发 Zone：</Text>
           <Input
@@ -267,7 +303,7 @@ export default function Certs() {
         {cert.error ? (
           <ErrorBlock error={cert.error} />
         ) : !siteCert ? (
-          <Alert type="warning" showIcon message="尚未签发功能证书，点击右上角「签发 / 续签」开始。" />
+          <Alert type="warning" showIcon message={<>尚未签发功能证书。通配证书目标为 <b>{WILDCARD_DOMAINS}</b>，请先点击右上角「签发 / 续签」。</>} />
         ) : (
           <>
             <Descriptions
@@ -317,6 +353,70 @@ export default function Certs() {
 
       <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
         <Col span={24}>
+      <PageCard
+        title="节点证书同步"
+        subtitle="证书下发目标与 sing-box 服务状态；下发后刷新查看"
+        extra={<Button icon={<ReloadOutlined />} onClick={() => certNodes.reload().catch(() => {})} loading={certNodes.loading}>刷新</Button>}
+      >
+        {certNodes.error ? (
+          <ErrorBlock error={certNodes.error} />
+        ) : (
+          <Table
+            className="pp-table"
+            size="small"
+            rowKey="id"
+            loading={certNodes.loading}
+            dataSource={nodeRows}
+            pagination={false}
+            locale={{ emptyText: '暂无节点（link_mode=local 的本机节点不在此表）' }}
+            columns={[
+              {
+                title: '节点名称',
+                dataIndex: 'name',
+                render: (v, row) => <span>{v || `#${row.id}`}</span>,
+              },
+              {
+                title: 'TLS 域名',
+                dataIndex: 'domain',
+                render: (v) => (v ? <span className="pp-mono">{v}</span> : <span className="pp-muted">—</span>),
+              },
+              {
+                title: 'sing-box 服务',
+                dataIndex: 'singbox_service',
+                render: (v) => {
+                  const state = String(v || 'unknown');
+                  const color = state === 'active' ? 'green' : state === 'inactive' ? 'orange' : 'default';
+                  return <Tag color={color}>{state}</Tag>;
+                },
+              },
+              {
+                title: '证书状态',
+                dataIndex: 'certificate',
+                render: (v, row) => (
+                  <Tooltip title={row.fingerprint || undefined}>
+                    <Tag color="blue">{String(v || 'unknown')}</Tag>
+                  </Tooltip>
+                ),
+              },
+              {
+                title: '最近同步',
+                dataIndex: 'last_synced_at',
+                render: (v, row) => (v || row.updated_at ? fmtTime(v || row.updated_at) : <span className="pp-muted">—</span>),
+              },
+              {
+                title: '错误',
+                dataIndex: 'error',
+                render: (v) => (v ? <span className="pp-danger">{v}</span> : <span className="pp-muted">—</span>),
+              },
+            ]}
+          />
+        )}
+      </PageCard>
+        </Col>
+      </Row>
+
+      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+        <Col span={24}>
       <PageCard title="使用说明" subtitle="证书用途与注意事项">
         <Table
           size="small"
@@ -328,8 +428,8 @@ export default function Certs() {
           ]}
           dataSource={[
             { k: '本站 CA', v: '面板内置 CA，启动时自动创建并加密存库；用于给节点 VPN 签发内部证书（90 天）。' },
-            { k: '功能证书', v: '站点通配证书（*.域名），走 Cloudflare DNS-01 校验，自动续签需自行配置定时任务。' },
-            { k: '下发', v: '写入组网中心 /etc/proxypilot/mesh/tls 与本机 VPN，随后通过 Agent 任务队列分发到各节点。' },
+            { k: '功能证书', v: '站点/节点通配证书（yzfn.top,*.yzfn.top），走 Cloudflare DNS-01 校验；自动续签需自行配置定时任务。' },
+            { k: '下发', v: '写入组网中心 /etc/proxypilot/mesh/tls、本机 VPN /etc/proxypilot/tunnel/tls 与 sing-box /etc/sing-box；随后通过 Agent 任务队列分发到各节点。' },
             { k: '客户端信任', v: '使用内部 CA 时，客户端可下载 CA 证书并以 -ca 参数指定，或改用 ACME 公共证书。' },
           ]}
         />

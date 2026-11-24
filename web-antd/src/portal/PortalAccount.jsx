@@ -140,7 +140,7 @@ export default function PortalAccount({ email, count, uuid, sub, onEmailChanged,
           ) : state.loading ? (
             <Skeleton active paragraph={{ rows: 2 }} title={false} />
           ) : state.error ? (
-            <div className="pp-account-meta" style={{ color: '#be123c' }}>
+            <div className="pp-account-meta" style={{ color: 'var(--pp-danger)' }}>
               {state.error.message || '加载失败'}
             </div>
           ) : (

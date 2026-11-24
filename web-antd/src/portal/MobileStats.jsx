@@ -11,7 +11,7 @@ import { AreaChart, DonutChart } from '../charts';
 import { useUuidStats } from './hooks/usePortalData';
 import { fmtNum, fmtTime, shortUuid } from '../format';
 
-const PALETTE = { sub: '#10b981', api: '#f59e0b' };
+const PALETTE = { sub: 'var(--pp-success)', api: 'var(--pp-warning)' };
 
 const KPIS = [
   { key: 'total', label: '总访问', tone: 'indigo', icon: <EyeOutlined />, field: 'total_access' },
