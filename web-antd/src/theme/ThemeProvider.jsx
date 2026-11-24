@@ -67,7 +67,14 @@ export function ThemeProvider({ children }) {
 
   return (
     <ThemeCtx.Provider value={value}>
-      <ConfigProvider locale={zhCN} theme={antdTheme} button={{ autoInsertSpace: false }}>
+      <ConfigProvider
+        locale={zhCN}
+        theme={antdTheme}
+        variant="outlined"
+        button={{ autoInsertSpace: false }}
+        input={{ allowClear: true }}
+        select={{ allowClear: true }}
+      >
         {children}
       </ConfigProvider>
     </ThemeCtx.Provider>

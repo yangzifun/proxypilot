@@ -447,8 +447,8 @@ export default function Groups() {
               showSizeChanger: true,
               pageSizeOptions: [10, 20, 50, 100],
               showTotal: (t) => `共 ${t} 个用户`,
-              onChange: (p, s) => {
-                setPage(p);
+              onChange: (p, s, info) => {
+                setPage(s !== size && info && info.recommendPage ? info.recommendPage : p);
                 setSize(s);
               },
             }}

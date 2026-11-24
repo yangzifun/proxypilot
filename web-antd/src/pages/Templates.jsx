@@ -403,8 +403,8 @@ function TemplateList() {
               total,
               showSizeChanger: true,
               showTotal: (t) => `共 ${t} 个模板`,
-              onChange: (p, s) => {
-                setPage(p);
+              onChange: (p, s, info) => {
+                setPage(s !== size && info && info.recommendPage ? info.recommendPage : p);
                 setSize(s);
               },
             }}

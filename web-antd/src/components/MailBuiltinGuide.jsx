@@ -319,6 +319,7 @@ export default function MailBuiltinGuide({ guide, reload }) {
             columns={columns}
             dataSource={records}
             expandable={{
+              showExpandAll: true,
               expandedRowRender: (r) => (
                 <div style={{ fontSize: 12, color: 'var(--pp-text-secondary)', lineHeight: 1.7 }}>
                   {r.note}
