@@ -468,6 +468,7 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /admin-settings.js", h.adminSettingsJS)
 	mux.HandleFunc("GET /admin-certs.js", h.adminCertsJS)
 	mux.HandleFunc("GET /admin-app.js", h.adminAppJS)
+	mux.HandleFunc("GET /chunks/", h.chunksJS)
 	mux.HandleFunc("GET /g6-app.js", h.g6AppJS)
 	mux.HandleFunc("GET /xterm-app.js", h.xtermAppJS)
 	mux.HandleFunc("GET /admin-app.css", h.adminAppCSS)

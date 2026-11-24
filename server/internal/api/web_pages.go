@@ -3,9 +3,10 @@ package api
 import (
 	"context"
 	"crypto/sha256"
-	_ "embed"
+	"embed"
 	"encoding/hex"
 	"encoding/json"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -52,6 +53,14 @@ var embeddedXtermJSGz []byte
 //go:embed assets_web/meta.json
 var embeddedAppMeta []byte
 
+// 路由拆包后的按需 chunk（ESM）：build 产物 dist/chunks/* 同步到 assets_web/chunks/，
+// 文件名带内容 hash，可长期 immutable 缓存。
+//
+//go:embed assets_web/chunks/*
+var embeddedChunks embed.FS
+
+var embeddedChunksFS, _ = fs.Sub(embeddedChunks, "assets_web/chunks")
+
 //go:embed assets_web/world.svg
 var embeddedWorldSVG []byte
 
@@ -59,8 +68,9 @@ var embeddedWorldSVG []byte
 var embeddedFaviconSVG []byte
 
 type webMeta struct {
-	Version string `json:"version"`
-	BuiltAt string `json:"builtAt"`
+	Version string   `json:"version"`
+	BuiltAt string   `json:"builtAt"`
+	Chunks  []string `json:"chunks,omitempty"`
 }
 
 func (h *handlers) webMetaInfo() webMeta {
@@ -119,6 +129,15 @@ func (h *handlers) shellHTML(mode string) string {
 		theme = "#f6f7fb"
 	}
 	ver := h.assetVersion()
+	// 路由拆包：入口为 ESM，先把首屏共享 chunk 以 modulepreload 预取（文件名带 hash，可缓存）。
+	var modulePreloads strings.Builder
+	for _, c := range meta.Chunks {
+		if c == "" || strings.ContainsAny(c, "\\/\"'<>") {
+			continue
+		}
+		modulePreloads.WriteString(`<link rel="modulepreload" href="/chunks/` + c + `?v=` + ver + `">`)
+		modulePreloads.WriteString("\n")
+	}
 	return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -131,8 +150,8 @@ func (h *handlers) shellHTML(mode string) string {
 <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=` + ver + `">
 <link rel="shortcut icon" href="/favicon.ico?v=` + ver + `">
 <link rel="apple-touch-icon" href="/favicon.svg?v=` + ver + `">
-<link rel="preload" as="script" href="/admin-app.js?v=` + ver + `" fetchpriority="high">
-<link rel="preload" as="style" href="/admin-app.css?v=` + ver + `">
+<link rel="modulepreload" href="/admin-app.js?v=` + ver + `" fetchpriority="high">
+` + modulePreloads.String() + `<link rel="preload" as="style" href="/admin-app.css?v=` + ver + `">
 <link rel="stylesheet" href="/admin-app.css?v=` + ver + `">
 </head>
 <body>
@@ -168,7 +187,7 @@ func (h *handlers) shellHTML(mode string) string {
 </div>
 <script type="application/json" id="pp-boot">` + h.bootJSON(mode) + `</script>
 <script data-cfasync="false" src="` + pageScriptBoot + `"></script>
-<script data-cfasync="false" src="/admin-app.js?v=` + ver + `" defer fetchpriority="high"></script>
+<script type="module" data-cfasync="false" src="/admin-app.js?v=` + ver + `" fetchpriority="high"></script>
 <noscript><p style="font-family:system-ui;padding:24px">当前界面需要启用 JavaScript。</p></noscript>
 </body>
 </html>`
@@ -253,6 +272,29 @@ func (h *handlers) worldSVG(w http.ResponseWriter, r *http.Request) {
 func (h *handlers) adminAppJS(w http.ResponseWriter, r *http.Request) {
 	serveEmbeddedCompressed(w, r, embeddedAppJS, embeddedAppJSBr, embeddedAppJSGz,
 		"application/javascript; charset=utf-8", `"app-`+h.assetVersion()+`-js"`)
+}
+
+// GET /chunks/*：路由拆包后的按需 chunk（ESM），文件名带 hash，immutable 缓存 + 预压缩。
+func (h *handlers) chunksJS(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimPrefix(r.URL.Path, "/chunks/")
+	if name == "" || strings.Contains(name, "..") || strings.ContainsAny(name, "\\/\"'<>") || !strings.HasSuffix(name, ".js") {
+		http.NotFound(w, r)
+		return
+	}
+	raw, err := fs.ReadFile(embeddedChunksFS, name)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	var br, gz []byte
+	if b, e := fs.ReadFile(embeddedChunksFS, name+".br"); e == nil {
+		br = b
+	}
+	if b, e := fs.ReadFile(embeddedChunksFS, name+".gz"); e == nil {
+		gz = b
+	}
+	serveEmbeddedCompressed(w, r, raw, br, gz,
+		"application/javascript; charset=utf-8", `"chunk-`+name+`-`+h.assetVersion()+`"`)
 }
 
 // GET /g6-app.js：AntV G6 流量流向图按需加载。

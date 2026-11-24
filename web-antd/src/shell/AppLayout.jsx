@@ -1,15 +1,39 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Segmented, Tooltip } from 'antd';
 import { getTheme, setTheme, subscribeTheme, THEME_OPTIONS } from '../theme';
 import { SCALE_OPTIONS, useScale } from '../uiScale';
-import { Avatar, Badge, Dropdown, Layout, Menu, Tag } from 'antd';
-import { LogoutOutlined, SafetyCertificateOutlined, UserOutlined } from '@ant-design/icons';
+import { Avatar, Badge, Button, Dropdown, Layout, Menu, Tag } from 'antd';
+import {
+  LogoutOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
+  SafetyCertificateOutlined,
+  UserOutlined,
+} from '@ant-design/icons';
 import { useAuth } from '../auth';
 import { menuItems, PAGE_META, NAV_GROUPS, groupOf } from '../nav';
 import { LOGO_URL } from '../theme';
 import JobCenter from '../components/JobCenter';
 
 const { Sider, Header, Content } = Layout;
+
+const SIDER_COLLAPSED_KEY = 'pp.sider.collapsed';
+
+function readSiderCollapsed() {
+  try {
+    return localStorage.getItem(SIDER_COLLAPSED_KEY) === '1';
+  } catch (e) {
+    return false;
+  }
+}
+
+function persistSiderCollapsed(value) {
+  try {
+    localStorage.setItem(SIDER_COLLAPSED_KEY, value ? '1' : '0');
+  } catch (e) {
+    /* ignore */
+  }
+}
 
 /* 版本号以服务端注入的 boot 为准，避免前端硬编码落后于后端 */
 const boot = (typeof window !== 'undefined' && window.__PP_BOOT__) || {};
@@ -23,13 +47,27 @@ export default function AppLayout({ activeKey, onNavigate, children }) {
 
   const items = useMemo(() => menuItems(isSuper), [isSuper]);
 
-  // 管理后台是桌面端工具，**不做移动端适配**：侧边栏始终展开。
-  //
-  // 之前按 window.innerWidth < 1100 自动折叠，窗口一缩小就退化成
-  // 只有图标的窄栏 + 悬浮子菜单（截图里那种），既难认也难点。
-  // 这里有意识地不做响应式折叠；窗口太窄时页面自身会出现横向滚动条，
-  // 而不是把导航藏进图标里。
-  const collapsed = false;
+  // 侧边栏折叠：初始值读取 localStorage，展开/收起时持久化。
+  const [collapsed, setCollapsed] = useState(readSiderCollapsed);
+  const siderRef = useRef(null);
+  useEffect(() => {
+    const node = siderRef.current;
+    if (!node) return;
+    const width = collapsed ? '80px' : '224px';
+    // styles.css 对 .pp-admin > .ant-layout-sider 有 224px !important 约束；
+    // 折叠时用 inline !important 覆盖，避免只折叠菜单而侧边栏宽度不变。
+    node.style.setProperty('width', width, 'important');
+    node.style.setProperty('min-width', width, 'important');
+    node.style.setProperty('max-width', width, 'important');
+    node.style.setProperty('flex', `0 0 ${width}`, 'important');
+  }, [collapsed]);
+  const toggleSider = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      persistSiderCollapsed(next);
+      return next;
+    });
+  };
 
   // 展开的分组：记住用户选择，并始终包含当前页面所在分组
   const OPEN_KEY = 'pp.nav.openGroups';
@@ -65,8 +103,19 @@ export default function AppLayout({ activeKey, onNavigate, children }) {
 
   return (
     <Layout className="pp-admin" style={{ minHeight: '100vh' }}>
-      <Sider className="pp-sider" theme="dark" width={224}>
-        <div className="pp-brand">
+      <Sider
+        ref={siderRef}
+        className="pp-sider"
+        theme="dark"
+        width={224}
+        collapsed={collapsed}
+        collapsedWidth={80}
+        trigger={null}
+      >
+        <div
+          className="pp-brand"
+          style={collapsed ? { justifyContent: 'center', padding: '0 8px' } : undefined}
+        >
           <div className="pp-brand-mark">
             <img
               src={LOGO_URL}
@@ -77,7 +126,7 @@ export default function AppLayout({ activeKey, onNavigate, children }) {
               }}
             />
           </div>
-          <div className="pp-brand-text">
+          <div className="pp-brand-text" style={{ display: collapsed ? 'none' : undefined }}>
             <div className="pp-brand-title">ProxyPilot</div>
             <div className="pp-brand-sub">控制台 · Ant Design</div>
           </div>
@@ -118,6 +167,16 @@ export default function AppLayout({ activeKey, onNavigate, children }) {
           </div>
 
           <div className="pp-header-actions">
+            <Tooltip title={collapsed ? '展开侧边栏' : '收起侧边栏'}>
+              <Button
+                type="text"
+                size="small"
+                aria-label={collapsed ? '展开侧边栏' : '收起侧边栏'}
+                aria-expanded={!collapsed}
+                icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+                onClick={toggleSider}
+              />
+            </Tooltip>
             <Tooltip title="界面缩放比例">
               <Segmented
                 size="small"

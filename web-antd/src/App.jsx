@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Button, Result } from 'antd';
+import React, { lazy, Suspense, useEffect, useState } from 'react';
+import { Button, Result, Spin } from 'antd';
 import { useAuth } from './auth';
 import { useHashRoute } from './hooks';
 import { PAGE_META } from './nav';
@@ -8,24 +8,28 @@ import PageErrorBoundary from './components/PageErrorBoundary';
 
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
-import Groups from './pages/Groups';
-import Templates from './pages/Templates';
-import ServersUnified from './pages/ServersUnified';
-import Nodes from './pages/Nodes';
-import UserTraffic from './pages/UserTraffic';
-import MihomoPage from './pages/Mihomo';
-import NodeBindings from './pages/NodeBindings';
-import TemplateHub from './pages/TemplateHub';
-import MtprotoPage from './pages/MtprotoPage';
-import MasquePage from './pages/MasquePage';
-import VpnPage from './pages/VpnPage';
-import CdnPreferred from './pages/CdnPreferred';
-import Logs from './pages/Logs';
-import System, { AdminUsersPage, SystemSettingsPage } from './pages/System';
-import LocalServer from './pages/LocalServer';
-import Security from './pages/Security';
-import Certs from './pages/Certs';
-import Backup from './pages/Backup';
+
+// 路由级按需加载：重页面拆到独立 chunk，首屏只保留 Dashboard / Login / AppLayout。
+// esbuild splitting 会为每个 lazy import 生成 chunks/*.js；加载失败由 PageErrorBoundary 兜底提示。
+const Groups = lazy(() => import('./pages/Groups'));
+const Templates = lazy(() => import('./pages/Templates'));
+const ServersUnified = lazy(() => import('./pages/ServersUnified'));
+const Nodes = lazy(() => import('./pages/Nodes'));
+const UserTraffic = lazy(() => import('./pages/UserTraffic'));
+const MihomoPage = lazy(() => import('./pages/Mihomo'));
+const NodeBindings = lazy(() => import('./pages/NodeBindings'));
+const TemplateHub = lazy(() => import('./pages/TemplateHub'));
+const MtprotoPage = lazy(() => import('./pages/MtprotoPage'));
+const MasquePage = lazy(() => import('./pages/MasquePage'));
+const VpnPage = lazy(() => import('./pages/VpnPage'));
+const CdnPreferred = lazy(() => import('./pages/CdnPreferred'));
+const Logs = lazy(() => import('./pages/Logs'));
+const AdminUsersPage = lazy(() => import('./pages/System').then((m) => ({ default: m.AdminUsersPage })));
+const SystemSettingsPage = lazy(() => import('./pages/System').then((m) => ({ default: m.SystemSettingsPage })));
+const LocalServer = lazy(() => import('./pages/LocalServer'));
+const Security = lazy(() => import('./pages/Security'));
+const Certs = lazy(() => import('./pages/Certs'));
+const Backup = lazy(() => import('./pages/Backup'));
 
 const PAGES = {
   dash: Dashboard,
@@ -98,9 +102,17 @@ export default function App() {
     <AppLayout activeKey={key} onNavigate={navigate}>
       {routeLoading ? <div className="pp-route-progress" aria-hidden="true"><span /></div> : null}
       <PageErrorBoundary key={key} pageKey={key} onHome={() => navigate('dash')}>
-        <div className="pp-page-enter" key={key}>
-          {body}
-        </div>
+        <Suspense
+          fallback={(
+            <div className="pp-route-loading" style={{ padding: '48px 0', textAlign: 'center' }}>
+              <Spin />
+            </div>
+          )}
+        >
+          <div className="pp-page-enter" key={key}>
+            {body}
+          </div>
+        </Suspense>
       </PageErrorBoundary>
     </AppLayout>
   );

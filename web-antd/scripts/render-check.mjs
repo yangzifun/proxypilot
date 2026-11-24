@@ -12,11 +12,41 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { JSDOM, VirtualConsole } from 'jsdom';
+import { build as esbuildBuild } from 'esbuild';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const webRoot = path.resolve(here, '..');
-const appJs = fs.readFileSync(path.join(webRoot, 'dist', 'app.js'), 'utf8');
+let appJs = fs.readFileSync(path.join(webRoot, 'dist', 'app.js'), 'utf8');
 const appCss = fs.readFileSync(path.join(webRoot, 'dist', 'app.css'), 'utf8');
+
+// 路由拆包后 dist/app.js 为 ESM（含静态/动态 import chunks），jsdom 的 classic <script> 不能执行。
+// 这里用 esbuild 把同一入口临时重打为 IIFE（不拆包，动态 import 内联）再交给 jsdom，
+// 等价于浏览器回归：所有页面/懒加载路由都在同一次 bundle 中被检查。
+const looksEsm = /(^|[;\n])import[\s{*"']/.test(appJs.slice(0, 5000)) || appJs.includes('import.meta');
+if (looksEsm) {
+  const tmpFile = path.join(webRoot, 'dist', '.render-check-app.iife.js');
+  await esbuildBuild({
+    entryPoints: [path.join(webRoot, 'src/main.jsx')],
+    outfile: tmpFile,
+    bundle: true,
+    minify: false,
+    format: 'iife',
+    target: ['es2020'],
+    jsx: 'automatic',
+    loader: { '.js': 'jsx', '.jsx': 'jsx', '.svg': 'text', '.png': 'dataurl' },
+    define: { 'process.env.NODE_ENV': '"production"' },
+    legalComments: 'none',
+    charset: 'utf8',
+    treeShaking: true,
+    logLevel: 'error',
+  });
+  appJs = fs.readFileSync(tmpFile, 'utf8');
+  try {
+    fs.unlinkSync(tmpFile);
+  } catch (e) {
+    /* ignore */
+  }
+}
 
 let pass = 0;
 let fail = 0;
