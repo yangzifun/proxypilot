@@ -101,7 +101,7 @@ function truncateText(text, maxPx, fontSize) {
 }
 
 /** 服务器机架风格图标（纯 SVG 线条，颜色跟随主题） */
-function rackIcon(w, h) {
+function rackIcon(w, h, themeVars = {}) {
   return (
     <g>
       <rect x={0.5} y={0.5} width={Math.max(0, w - 1)} height={Math.max(0, h - 1)} rx={4}
@@ -430,7 +430,7 @@ export default function FlowGraph({ users = [], nodes = [], edges = [], height =
                     <rect x={n.x} y={n.y} width={n.side} height={n.side} rx={12}
                       fill={themeVars['--pp-surface'] || 'var(--pp-surface)'} stroke={themeVars['--pp-border'] || 'var(--pp-border-soft)'} strokeWidth="1" />
                     {/* 服务器机架图标 */}
-                    <g transform={'translate(' + iconX + ',' + iconY + ')'}>{rackIcon(iconW, iconH)}</g>
+                    <g transform={'translate(' + iconX + ',' + iconY + ')'}>{rackIcon(iconW, iconH, themeVars)}</g>
                     {/* 国旗 + 节点名：水平排列，间距 8，按可用宽度截断 */}
                     {n.cc ? (
                       <image
