@@ -2,7 +2,9 @@ package api
 
 import (
 	"context"
+	"encoding/csv"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -119,4 +121,157 @@ func (h *handlers) cleanupClientErrors(ctx context.Context, now int64) {
 	}
 	_ = h.putSetting(ctx, "client_error_cleanup_at", itoa64(now))
 	h.invalidateSettings()
+}
+
+// clientErrorAdminFilter 解析批量删除/导出条件；至少需要 mode 或 before 之一。
+func clientErrorAdminFilter(r *http.Request) (string, []any, error) {
+	qs := r.URL.Query()
+	mode := truncateRunes(strings.ToLower(strings.TrimSpace(qs.Get("mode"))), clientErrorMode)
+	beforeRaw := strings.TrimSpace(qs.Get("before"))
+	var before int64
+	if beforeRaw != "" {
+		n, err := strconv.ParseInt(beforeRaw, 10, 64)
+		if err != nil || n <= 0 {
+			return "", nil, errInvalidClientErrorBefore
+		}
+		before = n
+	}
+	if mode == "" && before == 0 {
+		return "", nil, errClientErrorFilterRequired
+	}
+	conds := []string{}
+	args := []any{}
+	if mode != "" {
+		conds = append(conds, "mode = ?")
+		args = append(args, mode)
+	}
+	if before > 0 {
+		conds = append(conds, "created_at > 0 AND created_at < ?")
+		args = append(args, before)
+	}
+	return " WHERE " + strings.Join(conds, " AND "), args, nil
+}
+
+var (
+	errClientErrorFilterRequired = &clientErrorFilterError{"至少需要 mode 或 before 一个条件"}
+	errInvalidClientErrorBefore  = &clientErrorFilterError{"before 必须是毫秒时间戳"}
+)
+
+type clientErrorFilterError struct{ msg string }
+
+func (e *clientErrorFilterError) Error() string { return e.msg }
+
+// DELETE /api/client-errors/{id}（superOnly）
+func (h *handlers) clientErrorDeleteOne(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "无效的错误 ID")
+		return
+	}
+	if h.db == nil {
+		writeError(w, http.StatusInternalServerError, "数据库未配置")
+		return
+	}
+	res, err := h.db.ExecContext(r.Context(), `DELETE FROM client_errors WHERE id = ?`, id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "删除失败")
+		return
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		writeError(w, http.StatusNotFound, "客户端错误不存在")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"success": true, "deleted": n})
+}
+
+// DELETE /api/client-errors?mode=&before=（superOnly）
+func (h *handlers) clientErrorDeleteBatch(w http.ResponseWriter, r *http.Request) {
+	where, args, err := clientErrorAdminFilter(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if h.db == nil {
+		writeError(w, http.StatusInternalServerError, "数据库未配置")
+		return
+	}
+	res, err := h.db.ExecContext(r.Context(), `DELETE FROM client_errors`+where, args...)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "批量删除失败")
+		return
+	}
+	n, _ := res.RowsAffected()
+	writeJSON(w, http.StatusOK, map[string]any{"success": true, "deleted": n})
+}
+
+// GET /api/client-errors/export（superOnly，最多 10000 条）
+func (h *handlers) clientErrorExport(w http.ResponseWriter, r *http.Request) {
+	if h.db == nil {
+		writeError(w, http.StatusInternalServerError, "数据库未配置")
+		return
+	}
+	qs := r.URL.Query()
+	mode := truncateRunes(strings.ToLower(strings.TrimSpace(qs.Get("mode"))), clientErrorMode)
+	beforeRaw := strings.TrimSpace(qs.Get("before"))
+	var before int64
+	if beforeRaw != "" {
+		n, err := strconv.ParseInt(beforeRaw, 10, 64)
+		if err != nil || n <= 0 {
+			writeError(w, http.StatusBadRequest, errInvalidClientErrorBefore.Error())
+			return
+		}
+		before = n
+	}
+	conds := []string{}
+	args := []any{}
+	if mode != "" {
+		conds = append(conds, "mode = ?")
+		args = append(args, mode)
+	}
+	if before > 0 {
+		conds = append(conds, "created_at > 0 AND created_at < ?")
+		args = append(args, before)
+	}
+	where := ""
+	if len(conds) > 0 {
+		where = " WHERE " + strings.Join(conds, " AND ")
+	}
+	rows, err := h.db.QueryContext(r.Context(),
+		`SELECT id, COALESCE(created_at,0), COALESCE(mode,''), COALESCE(page,''),
+		        COALESCE(url,''), COALESCE(message,''), COALESCE(ua,'')
+		   FROM client_errors`+where+`
+		  ORDER BY created_at DESC, id DESC
+		  LIMIT 10000`, args...)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "导出失败")
+		return
+	}
+	defer rows.Close()
+
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="client-errors.csv"`)
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	cw := csv.NewWriter(w)
+	_ = cw.Write([]string{"id", "created_at", "mode", "page", "url", "message", "ua"})
+	for rows.Next() {
+		var (
+			id        int64
+			createdAt int64
+			modeVal   string
+			pageVal   string
+			urlVal    string
+			message   string
+			ua        string
+		)
+		if err := rows.Scan(&id, &createdAt, &modeVal, &pageVal, &urlVal, &message, &ua); err != nil {
+			return
+		}
+		_ = cw.Write([]string{
+			strconv.FormatInt(id, 10),
+			strconv.FormatInt(createdAt, 10),
+			modeVal, pageVal, urlVal, message, ua,
+		})
+	}
+	cw.Flush()
 }

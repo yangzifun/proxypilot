@@ -3,6 +3,7 @@ import {
   BugOutlined,
   ClockCircleOutlined,
   DeleteOutlined,
+  DownloadOutlined,
   FileSearchOutlined,
   HistoryOutlined,
   ReloadOutlined,
@@ -24,7 +25,8 @@ import {
   Tabs,
   Tag,
 } from 'antd';
-import { api } from '../api';
+import { api, getToken } from '../api';
+import { useAuth } from '../auth';
 import { useAsync } from '../hooks';
 import { ColumnChart } from '../charts';
 import { EmptyBlock, ErrorBlock, PageCard, StatCard, StatusPill } from '../components';
@@ -235,11 +237,14 @@ function clientErrorModeColor(mode) {
 }
 
 function ClientErrors() {
+  const { message } = AntdApp.useApp();
+  const { isSuper } = useAuth();
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(20);
   const [mode, setMode] = useState('all');
   const [state, setState] = useState({ data: [], total: 0, loading: false, error: null });
   const [detail, setDetail] = useState(null);
+  const [exporting, setExporting] = useState(false);
 
   const load = useCallback(async () => {
     setState((s) => ({ ...s, loading: true, error: null }));
@@ -265,6 +270,70 @@ function ClientErrors() {
   const changeMode = (next) => {
     setMode(next);
     setPage(1);
+  };
+
+  const reloadAfterChange = () => {
+    if (page > 1 && state.data.length <= 1) setPage(page - 1);
+    else load();
+  };
+
+  // 删除单条：DELETE /api/client-errors/{id}（superOnly）
+  const removeOne = async (row) => {
+    try {
+      await api(`client-errors/${row.id}`, { method: 'DELETE' });
+      message.success('已删除该条前端错误');
+      reloadAfterChange();
+    } catch (e) {
+      message.error(e.message || '删除失败');
+    }
+  };
+
+  // 清理 30 天前：DELETE /api/client-errors?before=<毫秒时间戳>（superOnly；与 created_at 存储单位一致）
+  const cleanupOld = async () => {
+    try {
+      const before = Date.now() - 30 * 24 * 3600 * 1000;
+      const res = await api('client-errors', { method: 'DELETE', query: { before } });
+      const deleted = res && res.deleted !== undefined ? ` ${fmtNum(res.deleted)}` : '';
+      message.success(`已清理${deleted} 条 30 天前的错误`);
+      if (page > 1) setPage(1);
+      else load();
+    } catch (e) {
+      message.error(e.message || '清理失败');
+    }
+  };
+
+  // 导出 CSV：api 封装不能直接下载带 Authorization 的文件，这里用 fetch + Blob 下载
+  const exportCsv = async () => {
+    setExporting(true);
+    try {
+      const token = getToken();
+      const res = await fetch('/api/client-errors/export', {
+        method: 'GET',
+        headers: token ? { Authorization: 'Bearer ' + token } : {},
+        credentials: 'same-origin',
+      });
+      if (!res || !res.ok) {
+        throw new Error('导出失败（HTTP ' + ((res && res.status) || '网络错误') + '）');
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'client-errors-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.csv';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      try {
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        /* ignore */
+      }
+      message.success('已开始下载 CSV');
+    } catch (e) {
+      message.error(e.message || '导出失败');
+    } finally {
+      setExporting(false);
+    }
   };
 
   const columns = [
@@ -324,11 +393,25 @@ function ClientErrors() {
     },
     {
       title: '操作',
-      width: 108,
+      width: isSuper ? 200 : 108,
       render: (_, row) => (
-        <Button type="link" size="small" onClick={() => setDetail(row)}>
-          查看堆栈
-        </Button>
+        <Space size={0}>
+          <Button type="link" size="small" onClick={() => setDetail(row)}>
+            查看堆栈
+          </Button>
+          {isSuper ? (
+            <Popconfirm
+              title="删除该条前端错误？"
+              okText="删除"
+              okButtonProps={{ danger: true }}
+              onConfirm={() => removeOne(row)}
+            >
+              <Button type="link" size="small" danger>
+                删除
+              </Button>
+            </Popconfirm>
+          ) : null}
+        </Space>
       ),
     },
   ];
@@ -347,6 +430,24 @@ function ClientErrors() {
           <Button icon={<ReloadOutlined />} onClick={load} loading={state.loading}>
             刷新
           </Button>
+          {isSuper ? (
+            <Button icon={<DownloadOutlined />} onClick={exportCsv} loading={exporting}>
+              导出 CSV
+            </Button>
+          ) : null}
+          {isSuper ? (
+            <Popconfirm
+              title="清理 30 天前的错误记录？"
+              description="将删除 created_at 早于 30 天前的记录，且不可恢复。"
+              okText="清理"
+              okButtonProps={{ danger: true }}
+              onConfirm={cleanupOld}
+            >
+              <Button danger icon={<DeleteOutlined />}>
+                清理 30 天前
+              </Button>
+            </Popconfirm>
+          ) : null}
         </Space>
       }
       bodyStyle={{ padding: 0 }}
