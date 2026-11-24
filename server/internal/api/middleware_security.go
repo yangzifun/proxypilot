@@ -23,8 +23,7 @@ import "net/http"
 //   - style-src 保留 'unsafe-inline'（内联样式不构成脚本执行面）；
 //   - report-uri 保留，强制模式下违规仍上报到 /api/csp-report 便于线上观察。
 const cspPolicy = "default-src 'self'; " +
-	"script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com https://challenges.cloudflare.com https://www.googletagmanager.com https://www.google-analytics.com " +
-	"'sha256-wwrrtuUadF6CQecsCTLabpUoz2J5SZF3uDnUHL8+Y+8=' 'sha256-bGSVHoMEJKsgXk/66rgtBJc6YaOnmGNN54yqJW2tBjA=' 'sha256-dZPFXHEna3ofktEdUMdYUPV93X93VVfSs6peU4WqI1k='; " +
+	"script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com https://challenges.cloudflare.com https://www.googletagmanager.com https://www.google-analytics.com; " +
 	"style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://s3.yangzifun.org https://www.googletagmanager.com https://www.google-analytics.com; " +
 	"font-src 'self' data:; connect-src 'self' ws: wss: https://cloudflareinsights.com https://challenges.cloudflare.com https://www.googletagmanager.com https://www.google-analytics.com https://region1.google-analytics.com; " +
 	"frame-src https://challenges.cloudflare.com; frame-ancestors 'self'; base-uri 'self'; " +
