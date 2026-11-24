@@ -450,6 +450,8 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 
 	// 前端页面（SPA；构建产物缺失时返回 503 说明）
 	mux.HandleFunc("GET /{$}", h.pageIndex)
+	mux.HandleFunc("GET /me", h.pageIndex)
+	mux.HandleFunc("GET /me/", h.pageIndex)
 	mux.HandleFunc("GET /admin", h.pageIndex)
 	mux.HandleFunc("GET /admin/", h.pageIndex)
 	// 旧独立管理页已删除；显式 404，避免被 /admin/ 子树捕获。

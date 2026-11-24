@@ -47,6 +47,15 @@ func TestPageShellModes(t *testing.T) {
 		t.Fatalf("portal shell 内容异常: %s", body[:min(200, len(body))])
 	}
 
+	// /me 用户中心入口
+	rr = httptest.NewRecorder()
+	h.pageIndex(rr, httptest.NewRequest(http.MethodGet, "/me", nil))
+	body = rr.Body.String()
+	meBoot := bootFromHTML(t, body)
+	if meBoot["mode"] != "portal" {
+		t.Fatalf("/me 应返回 portal shell，实际 boot=%#v", meBoot)
+	}
+
 	// admin
 	rr = httptest.NewRecorder()
 	h.pageIndex(rr, httptest.NewRequest(http.MethodGet, "/admin", nil))

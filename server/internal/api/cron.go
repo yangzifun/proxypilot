@@ -276,6 +276,11 @@ func (h *handlers) cronCleanup(ctx context.Context, now int64) {
 	trafficDays := int64(intOrJS(h.getSetting(ctx, "traffic_retention_days", "90"), 90, 7, 3650))
 	h.pruneUserTraffic(ctx, trafficDays)
 
+	// DoH 小时统计保留 180 天；表只存聚合，不含查询内容。
+	dohDays := int64(intOrJS(h.getSetting(ctx, "doh_retention_days", "180"), 180, 7, 3650))
+	dohCutoff := now - dohDays*24*3600*1000
+	_, _ = h.db.ExecContext(ctx, `DELETE FROM doh_usage_hourly WHERE hour_ts < ?`, dohCutoff)
+
 	_ = h.putSetting(ctx, "batch_cleanup_at", itoa64(now))
 }
 

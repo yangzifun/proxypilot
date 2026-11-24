@@ -50,7 +50,6 @@ func TestRemovedLegacyRoutes(t *testing.T) {
 		{http.MethodGet, "/api/uuid-configs/stats"},
 		{http.MethodGet, "/api/servers/services"},
 		{http.MethodGet, "/api/mihomo/stats"},
-		{http.MethodGet, "/me"},
 		{http.MethodGet, "/ui"},
 		{http.MethodGet, "/manage"},
 		{http.MethodGet, "/manage/"},
