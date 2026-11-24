@@ -160,6 +160,7 @@ func (h *handlers) clientErrorReport(w http.ResponseWriter, r *http.Request) {
 	if err := h.storeClientError(r.Context(), p); err != nil && h.log != nil {
 		h.log.Warn("客户端错误落库失败（best-effort，已忽略）", "err", err)
 	}
+	h.triggerClientErrorAlertAsync()
 
 	writeJSON(w, http.StatusOK, map[string]any{"success": true})
 }

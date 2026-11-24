@@ -33,6 +33,7 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("POST /api/csp-report", h.cspReport)
 	mux.HandleFunc("POST /api/client-errors", h.clientErrorReport)
 	mux.HandleFunc("GET /api/client-errors", h.authed(authOpts{}, h.clientErrorsList))
+	mux.HandleFunc("GET /api/client-errors/stats", h.authed(authOpts{}, h.clientErrorStats))
 	mux.HandleFunc("DELETE /api/client-errors", h.authed(authOpts{superOnly: true}, h.clientErrorDeleteBatch))
 	mux.HandleFunc("DELETE /api/client-errors/{id}", h.authed(authOpts{superOnly: true}, h.clientErrorDeleteOne))
 	mux.HandleFunc("GET /api/client-errors/export", h.authed(authOpts{superOnly: true}, h.clientErrorExport))

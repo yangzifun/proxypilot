@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type clientErrorRecord struct {
@@ -58,12 +59,39 @@ func (h *handlers) clientErrorsList(w http.ResponseWriter, r *http.Request) {
 		size = 100
 	}
 	mode := truncateRunes(strings.ToLower(strings.TrimSpace(qs.Get("mode"))), clientErrorMode)
+	q := truncateRunes(strings.TrimSpace(qs.Get("q")), 100)
+	from, fromOK := parseClientErrorMillis(qs.Get("from"))
+	to, toOK := parseClientErrorMillis(qs.Get("to"))
+	if (!fromOK && strings.TrimSpace(qs.Get("from")) != "") || (!toOK && strings.TrimSpace(qs.Get("to")) != "") {
+		writeError(w, http.StatusBadRequest, "from/to 必须是毫秒时间戳")
+		return
+	}
+	if from > 0 && to > 0 && from > to {
+		writeError(w, http.StatusBadRequest, "from 不能大于 to")
+		return
+	}
 
-	where := ""
+	conds := []string{}
 	args := []any{}
 	if mode != "" {
-		where = " WHERE mode = ?"
+		conds = append(conds, "mode = ?")
 		args = append(args, mode)
+	}
+	if q != "" {
+		conds = append(conds, "(LOCATE(?, message) > 0 OR LOCATE(?, page) > 0 OR LOCATE(?, url) > 0)")
+		args = append(args, q, q, q)
+	}
+	if from > 0 {
+		conds = append(conds, "created_at >= ?")
+		args = append(args, from)
+	}
+	if to > 0 {
+		conds = append(conds, "created_at <= ?")
+		args = append(args, to)
+	}
+	where := ""
+	if len(conds) > 0 {
+		where = " WHERE " + strings.Join(conds, " AND ")
 	}
 
 	var total int64
@@ -101,6 +129,124 @@ func (h *handlers) clientErrorsList(w http.ResponseWriter, r *http.Request) {
 		"page":    page,
 		"size":    size,
 		"data":    data,
+	})
+}
+
+// parseClientErrorMillis 解析可选毫秒时间戳；空字符串返回 0,true。
+func parseClientErrorMillis(raw string) (int64, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, true
+	}
+	n, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || n <= 0 {
+		return 0, false
+	}
+	return n, true
+}
+
+// GET /api/client-errors/stats?range=24h|7d|30d（authed，普通管理员可读）
+func (h *handlers) clientErrorStats(w http.ResponseWriter, r *http.Request) {
+	if h.db == nil {
+		writeError(w, http.StatusInternalServerError, "数据库未配置")
+		return
+	}
+	rangeKey := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("range")))
+	if rangeKey == "" {
+		rangeKey = "7d"
+	}
+	var window, bucket int64
+	granularity := "day"
+	switch rangeKey {
+	case "24h":
+		window, bucket, granularity = 24*3600*1000, 3600*1000, "hour"
+	case "7d":
+		window, bucket = 7*24*3600*1000, 24*3600*1000
+	case "30d":
+		window, bucket = 30*24*3600*1000, 24*3600*1000
+	default:
+		writeError(w, http.StatusBadRequest, "range 只能是 24h / 7d / 30d")
+		return
+	}
+	now := nowMillis()
+	since := now - window
+
+	var total, latest int64
+	if err := h.db.QueryRowContext(r.Context(),
+		`SELECT COUNT(*), COALESCE(MAX(created_at),0) FROM client_errors WHERE created_at >= ?`, since).
+		Scan(&total, &latest); err != nil {
+		writeError(w, http.StatusInternalServerError, "统计失败")
+		return
+	}
+
+	byMode := []map[string]any{}
+	rows, err := h.db.QueryContext(r.Context(),
+		`SELECT COALESCE(mode,''), COUNT(*) AS cnt FROM client_errors
+		  WHERE created_at >= ? GROUP BY mode ORDER BY cnt DESC, mode ASC`, since)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "统计失败")
+		return
+	}
+	for rows.Next() {
+		var mode string
+		var cnt int64
+		if rows.Scan(&mode, &cnt) == nil {
+			byMode = append(byMode, map[string]any{"mode": mode, "count": cnt})
+		}
+	}
+	rows.Close()
+
+	trend := []map[string]any{}
+	rows, err = h.db.QueryContext(r.Context(),
+		`SELECT CAST(FLOOR(created_at / ?) * ? AS SIGNED) AS bucket, COUNT(*) AS cnt FROM client_errors
+		  WHERE created_at >= ? GROUP BY bucket ORDER BY bucket ASC`, bucket, bucket, since)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "统计失败")
+		return
+	}
+	for rows.Next() {
+		var b, cnt int64
+		if rows.Scan(&b, &cnt) == nil {
+			label := time.UnixMilli(b).UTC().Format("01-02 15:00")
+			if granularity == "day" {
+				label = time.UnixMilli(b).UTC().Format("2006-01-02")
+			}
+			trend = append(trend, map[string]any{"bucket": b, "label": label, "count": cnt})
+		}
+	}
+	rows.Close()
+
+	pickTop := func(column string, limit int) []map[string]any {
+		out := []map[string]any{}
+		q := `SELECT ` + column + `, COUNT(*) AS cnt FROM client_errors WHERE created_at >= ? AND ` + column + ` <> '' GROUP BY ` + column + ` ORDER BY cnt DESC, ` + column + ` ASC LIMIT ?`
+		r, qerr := h.db.QueryContext(r.Context(), q, since, limit)
+		if qerr != nil {
+			return out
+		}
+		defer r.Close()
+		for r.Next() {
+			var val string
+			var cnt int64
+			if r.Scan(&val, &cnt) == nil {
+				out = append(out, map[string]any{column: truncateRunes(val, 160), "count": cnt})
+			}
+		}
+		return out
+	}
+	topMessages := pickTop("message", 10)
+	topPages := pickTop("page", 10)
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success":      true,
+		"range":        rangeKey,
+		"since":        since,
+		"total":        total,
+		"by_mode":      byMode,
+		"trend":        trend,
+		"granularity":  granularity,
+		"top_messages": topMessages,
+		"top_pages":    topPages,
+		"latest_at":    latest,
 	})
 }
 

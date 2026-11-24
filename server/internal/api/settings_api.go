@@ -189,11 +189,12 @@ func (h *handlers) settingsAPI(w http.ResponseWriter, r *http.Request) {
 					writeError(w, http.StatusBadRequest, "mail_provider 只能是 auto / builtin / smtp")
 					return
 				}
-			case "monitor_notify_emails":
+			case "monitor_notify_emails", "client_error_alert_emails":
 				v = normalizeEmailList(v)
 			case "monitor_notify_cooldown_min", "uuid_reconcile_interval_min",
 				"batch_retention_days", "agent_task_retention_days", "metrics_retention_days",
-				"client_error_retention_days":
+				"client_error_retention_days", "client_error_alert_threshold",
+				"client_error_alert_cooldown_min":
 				if v != "" {
 					n := intOrJS(v, -1, -1, 1<<30)
 					if n < 0 {
@@ -208,6 +209,10 @@ func (h *handlers) settingsAPI(w http.ResponseWriter, r *http.Request) {
 						lo, hi = 5, 1440
 					case "client_error_retention_days":
 						lo, hi = 7, 365
+					case "client_error_alert_threshold":
+						lo, hi = 1, 1000
+					case "client_error_alert_cooldown_min":
+						lo, hi = 5, 1440
 					}
 					if n < lo || n > hi {
 						writeError(w, http.StatusBadRequest, key+" 超出范围（"+itoa64(lo)+"-"+itoa64(hi)+"）")

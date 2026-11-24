@@ -126,6 +126,10 @@ var settingDefs = []settingDef{
 	{Key: "agent_task_retention_days"},
 	{Key: "metrics_retention_days"},
 	{Key: "client_error_retention_days"},
+	{Key: "client_error_alert_enabled", Bool: true},
+	{Key: "client_error_alert_emails"},
+	{Key: "client_error_alert_threshold"},
+	{Key: "client_error_alert_cooldown_min"},
 
 	// DoH
 	{Key: settingDoHEnabled, Bool: true},

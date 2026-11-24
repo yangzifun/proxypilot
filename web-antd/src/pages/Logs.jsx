@@ -29,7 +29,7 @@ import { api, getToken } from '../api';
 import { useAuth } from '../auth';
 import { useAsync } from '../hooks';
 import { ColumnChart } from '../charts';
-import { EmptyBlock, ErrorBlock, PageCard, StatCard, StatusPill } from '../components';
+import { EmptyBlock, ErrorBlock, PageCard, StatCard, StatusPill, Toolbar } from '../components';
 import { fmtAgo, fmtNum, fmtTime } from '../format';
 
 const DAY_OPTIONS = [
@@ -230,6 +230,26 @@ const CLIENT_ERROR_MODE_OPTIONS = [
   { label: 'portal', value: 'portal' },
 ];
 
+const CLIENT_STATS_RANGES = [
+  { label: '近 24h', value: '24h' },
+  { label: '近 7d', value: '7d' },
+  { label: '近 30d', value: '30d' },
+];
+
+const CLIENT_TIME_FILTERS = [
+  { label: '全部时间', value: 'all' },
+  { label: '近 24h', value: '24h' },
+  { label: '近 7d', value: '7d' },
+  { label: '近 30d', value: '30d' },
+];
+
+function clientTimeWindowMs(value) {
+  if (value === '24h') return 24 * 3600 * 1000;
+  if (value === '7d') return 7 * 24 * 3600 * 1000;
+  if (value === '30d') return 30 * 24 * 3600 * 1000;
+  return 0;
+}
+
 function clientErrorModeColor(mode) {
   if (mode === 'portal') return 'purple';
   if (mode === 'admin') return 'geekblue';
@@ -245,12 +265,24 @@ function ClientErrors() {
   const [state, setState] = useState({ data: [], total: 0, loading: false, error: null });
   const [detail, setDetail] = useState(null);
   const [exporting, setExporting] = useState(false);
+  const [qInput, setQInput] = useState('');
+  const [q, setQ] = useState('');
+  const [timeRange, setTimeRange] = useState('all');
+  const [statsRange, setStatsRange] = useState('7d');
+  const [stats, setStats] = useState({ loading: false, error: null, byRange: {} });
 
   const load = useCallback(async () => {
     setState((s) => ({ ...s, loading: true, error: null }));
     try {
       const query = { page, size };
       if (mode !== 'all') query.mode = mode;
+      if (q) query.q = q;
+      const windowMs = clientTimeWindowMs(timeRange);
+      if (windowMs > 0) {
+        const now = Date.now();
+        query.from = now - windowMs;
+        query.to = now;
+      }
       const res = await api('client-errors', { query });
       setState({
         data: res && Array.isArray(res.data) ? res.data : [],
@@ -261,7 +293,30 @@ function ClientErrors() {
     } catch (e) {
       setState({ data: [], total: 0, loading: false, error: e });
     }
-  }, [page, size, mode]);
+  }, [page, size, mode, q, timeRange]);
+
+  // 统计（近 24h/7d/30d）：GET /api/client-errors/stats?range=
+  const loadStats = useCallback(async () => {
+    setStats((s) => ({ ...s, loading: true, error: null }));
+    const results = await Promise.all(
+      CLIENT_STATS_RANGES.map((r) =>
+        api('client-errors/stats', { query: { range: r.value } })
+          .then((data) => ({ range: r.value, data, error: null }))
+          .catch((error) => ({ range: r.value, data: null, error }))
+      )
+    );
+    const byRange = {};
+    let firstError = null;
+    results.forEach((it) => {
+      if (it.data) byRange[it.range] = it.data;
+      if (!firstError && it.error) firstError = it.error;
+    });
+    setStats({ loading: false, error: Object.keys(byRange).length ? null : firstError, byRange });
+  }, []);
+
+  useEffect(() => {
+    loadStats();
+  }, [loadStats]);
 
   useEffect(() => {
     load();
@@ -271,6 +326,23 @@ function ClientErrors() {
     setMode(next);
     setPage(1);
   };
+
+  const resetFilters = () => {
+    setQInput('');
+    setQ('');
+    setTimeRange('all');
+    setMode('all');
+    setPage(1);
+  };
+
+  const statsData = stats.byRange[statsRange] || null;
+  const trendRows = (Array.isArray(statsData && statsData.trend) ? statsData.trend : []).map((it) => ({
+    label: it && it.label ? String(it.label) : it && it.bucket ? fmtTime(it.bucket) : '',
+    count: Number((it && it.count) || 0) || 0,
+  }));
+  const activeModes = (Array.isArray(statsData && statsData.by_mode) ? statsData.by_mode : []).filter(
+    (m) => Number(m && m.count) > 0
+  );
 
   const reloadAfterChange = () => {
     if (page > 1 && state.data.length <= 1) setPage(page - 1);
@@ -417,8 +489,59 @@ function ClientErrors() {
   ];
 
   return (
-    <PageCard
-      title={<span className="pp-section-title">前端错误上报</span>}
+    <div>
+      <Row gutter={[16, 16]}>
+        {CLIENT_STATS_RANGES.map((r) => (
+          <Col xs={12} sm={8} lg={5} key={r.value}>
+            <StatCard
+              icon={<BugOutlined />}
+              label={`${r.label}错误`}
+              value={stats.loading ? '…' : fmtNum((stats.byRange[r.value] && stats.byRange[r.value].total) || 0)}
+              hint={statsRange === r.value ? '当前统计区间' : undefined}
+            />
+          </Col>
+        ))}
+        <Col xs={12} sm={8} lg={5}>
+          <StatCard
+            icon={<BugOutlined />}
+            label="活跃模式数"
+            value={stats.loading ? '…' : fmtNum(activeModes.length)}
+            hint={activeModes.map((m) => `${(m && m.mode) || 'unknown'}:${fmtNum((m && m.count) || 0)}`).join(' / ') || '—'}
+          />
+        </Col>
+        <Col xs={12} sm={8} lg={4}>
+          <StatCard
+            icon={<ClockCircleOutlined />}
+            label="最近一次"
+            value={statsData && statsData.latest_at ? fmtAgo(statsData.latest_at) : '—'}
+            hint={statsData && statsData.latest_at ? fmtTime(statsData.latest_at) : '所选区间暂无数据'}
+          />
+        </Col>
+      </Row>
+
+      <div style={{ marginTop: 16 }}>
+        <PageCard
+          title={<span className="pp-section-title">前端错误趋势</span>}
+          extra={<Segmented size="small" value={statsRange} onChange={setStatsRange} options={CLIENT_STATS_RANGES} />}
+        >
+          {stats.error ? <ErrorBlock error={stats.error} onRetry={loadStats} title="错误统计加载失败" /> : null}
+          {!stats.error && !trendRows.length ? (
+            <EmptyBlock text={stats.loading ? '统计加载中…' : '所选区间暂无错误'} />
+          ) : null}
+          {!stats.error && trendRows.length ? (
+            <ColumnChart
+              data={trendRows}
+              series={[{ key: 'count', name: '错误数', color: 'var(--pp-chart-2)' }]}
+              height={220}
+              unit=" 次"
+            />
+          ) : null}
+        </PageCard>
+      </div>
+
+      <div style={{ marginTop: 16 }}>
+        <PageCard
+          title={<span className="pp-section-title">前端错误上报</span>}
       extra={
         <Space>
           <Select
@@ -452,6 +575,37 @@ function ClientErrors() {
       }
       bodyStyle={{ padding: 0 }}
     >
+      <div style={{ padding: '16px 18px 4px' }}>
+        <Toolbar
+          left={
+            <Space wrap>
+              <Input.Search
+                allowClear
+                value={qInput}
+                placeholder="搜索错误信息 / 页面 / URL"
+                onChange={(e) => setQInput(e.target.value)}
+                onSearch={(v) => {
+                  setQ(String(v || '').trim());
+                  setPage(1);
+                }}
+                style={{ width: 260 }}
+              />
+              <Select
+                value={timeRange}
+                onChange={(v) => {
+                  setTimeRange(v);
+                  setPage(1);
+                }}
+                options={CLIENT_TIME_FILTERS}
+                style={{ width: 130 }}
+              />
+              {qInput || q || timeRange !== 'all' || mode !== 'all' ? (
+                <Button onClick={resetFilters}>清空筛选</Button>
+              ) : null}
+            </Space>
+          }
+        />
+      </div>
       {state.error ? (
         <div style={{ padding: 18 }}>
           <ErrorBlock error={state.error} onRetry={load} title="前端错误读取失败" />
@@ -541,7 +695,9 @@ function ClientErrors() {
           </div>
         ) : null}
       </Modal>
-    </PageCard>
+        </PageCard>
+      </div>
+    </div>
   );
 }
 

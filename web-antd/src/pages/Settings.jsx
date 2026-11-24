@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   ApiOutlined,
+  BugOutlined,
   CloudOutlined,
   GlobalOutlined,
   LockOutlined,
@@ -104,6 +105,9 @@ export default function Settings({ embedded = false }) {
       auth_oidc_enabled: v.auth_oidc_enabled === '1',
       monitor_notify_enabled: v.monitor_notify_enabled === '1',
       monitor_notify_cooldown_min: Number(v.monitor_notify_cooldown_min) || 10,
+      client_error_alert_enabled: v.client_error_alert_enabled === '1',
+      client_error_alert_threshold: Number(v.client_error_alert_threshold) || 20,
+      client_error_alert_cooldown_min: Number(v.client_error_alert_cooldown_min) || 30,
       uuid_reconcile_interval_min: Number(v.uuid_reconcile_interval_min) || 30,
       batch_retention_days: Number(v.batch_retention_days) || 7,
       agent_task_retention_days: Number(v.agent_task_retention_days) || 7,
@@ -465,6 +469,43 @@ export default function Settings({ embedded = false }) {
                   </Form.Item>
                   <Form.Item name="monitor_notify_cooldown_min" label="通知冷却（分钟）">
                     <InputNumber min={1} max={1440} style={{ width: 180 }} />
+                  </Form.Item>
+
+                  <Divider orientation="left">
+                    <BugOutlined /> 客户端错误告警
+                  </Divider>
+                  <Alert
+                    type="info"
+                    showIcon
+                    style={{ marginBottom: 12 }}
+                    message="近 5 分钟前端错误数达到阈值时发送邮件"
+                    description="冷却期内不重复发送；未配置邮件服务或未启用发信通道时自动跳过。收件邮箱留空则回退使用上方「离线通知」收件邮箱。"
+                  />
+                  <BoolField
+                    name="client_error_alert_enabled"
+                    label="启用客户端错误告警"
+                    extra="达到阈值时向告警收件邮箱发送邮件"
+                  />
+                  <Form.Item
+                    name="client_error_alert_emails"
+                    label="告警收件邮箱"
+                    extra="多个用逗号分隔；留空回退到「离线通知」收件邮箱"
+                  >
+                    <Input placeholder="ops@example.com,admin@example.com" allowClear />
+                  </Form.Item>
+                  <Form.Item
+                    name="client_error_alert_threshold"
+                    label="错误数阈值（近 5 分钟）"
+                    extra="1–1000，近 5 分钟错误数达到该值才发送告警"
+                  >
+                    <InputNumber min={1} max={1000} style={{ width: 180 }} />
+                  </Form.Item>
+                  <Form.Item
+                    name="client_error_alert_cooldown_min"
+                    label="告警冷却（分钟）"
+                    extra="5–1440，冷却期内不重复发送"
+                  >
+                    <InputNumber min={5} max={1440} style={{ width: 180 }} />
                   </Form.Item>
                 </>
               ),
