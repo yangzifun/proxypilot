@@ -5,6 +5,7 @@
  * ================================================================= */
 import React from 'react';
 import { Button, Result, Space } from 'antd';
+import { reportClientError } from '../clientError';
 
 function errorSummary(error) {
   if (!error) return '未知错误';
@@ -41,6 +42,16 @@ export default class PageErrorBoundary extends React.Component {
     try {
       // eslint-disable-next-line no-console
       console.error('[PageErrorBoundary] 页面渲染异常：', errorSummary(error));
+    } catch (e) {
+      /* ignore */
+    }
+    // 上报到后端（静默、去重、限流；mode 由 boot/路径推断）
+    try {
+      reportClientError({
+        message: errorSummary(error),
+        stack: (error && error.stack) || (info && info.componentStack) || '',
+        source: 'boundary',
+      });
     } catch (e) {
       /* ignore */
     }

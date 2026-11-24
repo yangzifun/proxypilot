@@ -31,6 +31,7 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("POST /api/login", h.login)
 	mux.HandleFunc("GET /api/auth/me", h.authed(authOpts{}, h.authMe))
 	mux.HandleFunc("POST /api/csp-report", h.cspReport)
+	mux.HandleFunc("POST /api/client-errors", h.clientErrorReport)
 
 	// 账号
 	mux.HandleFunc("POST /api/change-password", h.authed(authOpts{}, h.changePassword))

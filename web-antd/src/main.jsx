@@ -7,6 +7,7 @@ import 'dayjs/locale/zh-cn';
 import { ThemeProvider } from './theme';
 import { AuthProvider } from './auth';
 import App from './App';
+import { installGlobalErrorReporting } from './clientError';
 
 // three.js 单独包复用主包的 React，避免重复打包
 window.__PP_REACT__ = React;
@@ -76,6 +77,10 @@ if (window.__PP_BOOT__ && !window.__PP_BOOT__.version) window.__PP_BOOT__.versio
 /* 用户中心与后台共用同一个 bundle：由外壳注入的 mode（或路径）决定挂哪个应用 */
 const IS_PORTAL =
   (window.__PP_BOOT__ && window.__PP_BOOT__.mode === 'portal') || /^\/(me\/?)?$/.test(window.location.pathname);
+
+// 全局前端错误上报：window.error / unhandledrejection（静默、去重、限流；
+// 与 PageErrorBoundary 的 boundary 上报按 message+stack 去重）。
+installGlobalErrorReporting();
 
 createRoot(document.getElementById('root')).render(
   <ThemeProvider>
