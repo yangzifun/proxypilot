@@ -281,6 +281,9 @@ func (h *handlers) cronCleanup(ctx context.Context, now int64) {
 	dohCutoff := now - dohDays*24*3600*1000
 	_, _ = h.db.ExecContext(ctx, `DELETE FROM doh_usage_hourly WHERE hour_ts < ?`, dohCutoff)
 
+	// 客户端错误默认保留 30 天（7–365），每日随 cronCleanup 清理。
+	h.cleanupClientErrors(ctx, now)
+
 	_ = h.putSetting(ctx, "batch_cleanup_at", itoa64(now))
 }
 

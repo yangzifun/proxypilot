@@ -1,5 +1,6 @@
-﻿import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  BugOutlined,
   ClockCircleOutlined,
   DeleteOutlined,
   FileSearchOutlined,
@@ -43,6 +44,7 @@ export default function Logs() {
       items={[
         { key: 'summary', label: <span><FileSearchOutlined /> 访问日志</span>, children: <LogSummary /> },
         { key: 'push', label: <span><HistoryOutlined /> 下发记录</span>, children: <PushLogs /> },
+        { key: 'client', label: <span><BugOutlined /> 前端错误</span>, children: <ClientErrors /> },
       ]}
     />
   );
@@ -217,6 +219,230 @@ const LOG_MODULES = [
   { value: 'cloudflared', label: 'cloudflared' },
   { value: 'agent', label: 'agent' },
 ];
+
+/* ---------------- 前端错误上报（client-errors） ---------------- */
+
+const CLIENT_ERROR_MODE_OPTIONS = [
+  { label: '全部模式', value: 'all' },
+  { label: 'admin', value: 'admin' },
+  { label: 'portal', value: 'portal' },
+];
+
+function clientErrorModeColor(mode) {
+  if (mode === 'portal') return 'purple';
+  if (mode === 'admin') return 'geekblue';
+  return 'default';
+}
+
+function ClientErrors() {
+  const [page, setPage] = useState(1);
+  const [size, setSize] = useState(20);
+  const [mode, setMode] = useState('all');
+  const [state, setState] = useState({ data: [], total: 0, loading: false, error: null });
+  const [detail, setDetail] = useState(null);
+
+  const load = useCallback(async () => {
+    setState((s) => ({ ...s, loading: true, error: null }));
+    try {
+      const query = { page, size };
+      if (mode !== 'all') query.mode = mode;
+      const res = await api('client-errors', { query });
+      setState({
+        data: res && Array.isArray(res.data) ? res.data : [],
+        total: Number((res && res.total) || 0) || 0,
+        loading: false,
+        error: null,
+      });
+    } catch (e) {
+      setState({ data: [], total: 0, loading: false, error: e });
+    }
+  }, [page, size, mode]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const changeMode = (next) => {
+    setMode(next);
+    setPage(1);
+  };
+
+  const columns = [
+    {
+      title: '时间',
+      dataIndex: 'created_at',
+      width: 160,
+      render: (v) => <span className="pp-muted">{v ? fmtTime(v) : '—'}</span>,
+    },
+    {
+      title: '模式',
+      dataIndex: 'mode',
+      width: 96,
+      render: (v) => <Tag color={clientErrorModeColor(v)}>{v || 'unknown'}</Tag>,
+    },
+    {
+      title: '页面',
+      dataIndex: 'page',
+      width: 170,
+      ellipsis: true,
+      render: (v) => (
+        <span className="pp-mono" style={{ fontSize: 12, color: 'var(--pp-text-secondary)' }}>{v || '—'}</span>
+      ),
+    },
+    {
+      title: '错误信息',
+      dataIndex: 'message',
+      ellipsis: true,
+      render: (v) => (
+        <span className="pp-mono" style={{ fontSize: 12, color: 'var(--pp-text-secondary)' }}>
+          {String(v || '—').slice(0, 160)}
+        </span>
+      ),
+    },
+    {
+      title: 'URL',
+      dataIndex: 'url',
+      width: 260,
+      ellipsis: true,
+      render: (v) =>
+        v ? (
+          <a href={v} target="_blank" rel="noreferrer" className="pp-mono" style={{ fontSize: 12 }}>
+            {v}
+          </a>
+        ) : (
+          <span className="pp-muted">—</span>
+        ),
+    },
+    {
+      title: 'UA',
+      dataIndex: 'ua',
+      width: 200,
+      ellipsis: true,
+      render: (v) => (
+        <span className="pp-muted" style={{ fontSize: 12 }}>{v ? String(v).slice(0, 90) : '—'}</span>
+      ),
+    },
+    {
+      title: '操作',
+      width: 108,
+      render: (_, row) => (
+        <Button type="link" size="small" onClick={() => setDetail(row)}>
+          查看堆栈
+        </Button>
+      ),
+    },
+  ];
+
+  return (
+    <PageCard
+      title={<span className="pp-section-title">前端错误上报</span>}
+      extra={
+        <Space>
+          <Select
+            value={mode}
+            onChange={changeMode}
+            options={CLIENT_ERROR_MODE_OPTIONS}
+            style={{ width: 132 }}
+          />
+          <Button icon={<ReloadOutlined />} onClick={load} loading={state.loading}>
+            刷新
+          </Button>
+        </Space>
+      }
+      bodyStyle={{ padding: 0 }}
+    >
+      {state.error ? (
+        <div style={{ padding: 18 }}>
+          <ErrorBlock error={state.error} onRetry={load} title="前端错误读取失败" />
+        </div>
+      ) : null}
+      <Table
+        className="pp-table"
+        rowKey={(row) => String((row && row.id) || `${row && row.created_at}-${row && row.message}`)}
+        size="medium"
+        loading={state.loading}
+        dataSource={state.data}
+        columns={columns}
+        scroll={{ x: 1240 }}
+        pagination={{
+          current: page,
+          pageSize: size,
+          total: state.total,
+          showSizeChanger: true,
+          pageSizeOptions: ['10', '20', '50'],
+          showTotal: (t) => `共 ${t} 条前端错误`,
+          onChange: (p, s) => {
+            setPage(p);
+            setSize(s);
+          },
+        }}
+        locale={{ emptyText: <EmptyBlock text="暂无前端错误记录" /> }}
+      />
+
+      <Modal
+        open={!!detail}
+        title={detail ? `前端错误 #${detail.id || ''}` : ''}
+        onCancel={() => setDetail(null)}
+        footer={<Button onClick={() => setDetail(null)}>关闭</Button>}
+        width={860}
+      >
+        {detail ? (
+          <div>
+            <Descriptions
+              size="small"
+              column={1}
+              bordered
+              items={[
+                { key: 't', label: '时间', children: detail.created_at ? fmtTime(detail.created_at) : '—' },
+                {
+                  key: 'mode',
+                  label: '模式',
+                  children: <Tag color={clientErrorModeColor(detail.mode)}>{detail.mode || 'unknown'}</Tag>,
+                },
+                { key: 'page', label: '页面', children: detail.page || '—' },
+                { key: 'url', label: 'URL', children: detail.url || '—' },
+                {
+                  key: 'ua',
+                  label: 'UA',
+                  children: <span className="pp-muted" style={{ fontSize: 12 }}>{detail.ua || '—'}</span>,
+                },
+                {
+                  key: 'msg',
+                  label: '错误信息',
+                  children: (
+                    <span className="pp-mono" style={{ fontSize: 12 }}>{detail.message || '—'}</span>
+                  ),
+                },
+              ]}
+            />
+            <div style={{ marginTop: 12 }}>
+              <div className="pp-muted" style={{ fontSize: 12, marginBottom: 6 }}>堆栈</div>
+              <pre
+                className="pp-mono"
+                style={{
+                  margin: 0,
+                  padding: '12px 14px',
+                  maxHeight: 360,
+                  overflow: 'auto',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                  background: 'var(--pp-code-bg)',
+                  color: 'var(--pp-code-text)',
+                  border: '1px solid var(--pp-border)',
+                  borderRadius: 'var(--pp-radius-md)',
+                  fontSize: 12,
+                  lineHeight: 1.6,
+                }}
+              >
+                {detail.stack || '（无堆栈信息）'}
+              </pre>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
+    </PageCard>
+  );
+}
 
 function PushLogs() {
   const [limit, setLimit] = useState(50);

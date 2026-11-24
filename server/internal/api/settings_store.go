@@ -57,13 +57,13 @@ const (
 	settingDoHMaxQPS       = "doh_max_qps"
 	settingDoHLogQueries   = "doh_log_queries"
 	settingDoHMaxBodyBytes = "doh_max_body_bytes"
-	settingOIDCIssuer     = "oidc_issuer"
-	settingOIDCClientID   = "oidc_client_id"
-	settingOIDCSecret     = "oidc_client_secret"
-	settingOIDCScopes     = "oidc_scopes"
-	settingOIDCProvider   = "oidc_provider_name"
-	settingOIDCButton     = "oidc_button_text"
-	settingOIDCRedirect   = "oidc_redirect_uri"
+	settingOIDCIssuer      = "oidc_issuer"
+	settingOIDCClientID    = "oidc_client_id"
+	settingOIDCSecret      = "oidc_client_secret"
+	settingOIDCScopes      = "oidc_scopes"
+	settingOIDCProvider    = "oidc_provider_name"
+	settingOIDCButton      = "oidc_button_text"
+	settingOIDCRedirect    = "oidc_redirect_uri"
 )
 
 type settingDef struct {
@@ -125,6 +125,7 @@ var settingDefs = []settingDef{
 	{Key: "batch_retention_days"},
 	{Key: "agent_task_retention_days"},
 	{Key: "metrics_retention_days"},
+	{Key: "client_error_retention_days"},
 
 	// DoH
 	{Key: settingDoHEnabled, Bool: true},
