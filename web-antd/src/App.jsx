@@ -1,10 +1,11 @@
-import React, { lazy, Suspense, useEffect, useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import { Button, Result, Spin } from 'antd';
 import { useAuth } from './auth';
 import { useHashRoute } from './hooks';
 import { PAGE_META } from './nav';
 import AppLayout from './shell/AppLayout';
 import PageErrorBoundary from './components/PageErrorBoundary';
+import { lazyWithRetry } from './lazyRoute';
 
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -18,25 +19,25 @@ const loadServersUnified = () => import('./pages/ServersUnified');
 const loadUserTraffic = () => import('./pages/UserTraffic');
 const loadSystem = () => import('./pages/System');
 
-const Groups = lazy(loadGroups);
-const Templates = lazy(loadTemplates);
-const ServersUnified = lazy(loadServersUnified);
-const Nodes = lazy(() => import('./pages/Nodes'));
-const UserTraffic = lazy(loadUserTraffic);
-const MihomoPage = lazy(() => import('./pages/Mihomo'));
-const NodeBindings = lazy(() => import('./pages/NodeBindings'));
-const TemplateHub = lazy(() => import('./pages/TemplateHub'));
-const MtprotoPage = lazy(() => import('./pages/MtprotoPage'));
-const MasquePage = lazy(() => import('./pages/MasquePage'));
-const VpnPage = lazy(() => import('./pages/VpnPage'));
-const CdnPreferred = lazy(() => import('./pages/CdnPreferred'));
-const Logs = lazy(() => import('./pages/Logs'));
-const AdminUsersPage = lazy(() => loadSystem().then((m) => ({ default: m.AdminUsersPage })));
-const SystemSettingsPage = lazy(() => loadSystem().then((m) => ({ default: m.SystemSettingsPage })));
-const LocalServer = lazy(() => import('./pages/LocalServer'));
-const Security = lazy(() => import('./pages/Security'));
-const Certs = lazy(() => import('./pages/Certs'));
-const Backup = lazy(() => import('./pages/Backup'));
+const Groups = lazyWithRetry(loadGroups);
+const Templates = lazyWithRetry(loadTemplates);
+const ServersUnified = lazyWithRetry(loadServersUnified);
+const Nodes = lazyWithRetry(() => import('./pages/Nodes'));
+const UserTraffic = lazyWithRetry(loadUserTraffic);
+const MihomoPage = lazyWithRetry(() => import('./pages/Mihomo'));
+const NodeBindings = lazyWithRetry(() => import('./pages/NodeBindings'));
+const TemplateHub = lazyWithRetry(() => import('./pages/TemplateHub'));
+const MtprotoPage = lazyWithRetry(() => import('./pages/MtprotoPage'));
+const MasquePage = lazyWithRetry(() => import('./pages/MasquePage'));
+const VpnPage = lazyWithRetry(() => import('./pages/VpnPage'));
+const CdnPreferred = lazyWithRetry(() => import('./pages/CdnPreferred'));
+const Logs = lazyWithRetry(() => import('./pages/Logs'));
+const AdminUsersPage = lazyWithRetry(() => loadSystem().then((m) => ({ default: m.AdminUsersPage })));
+const SystemSettingsPage = lazyWithRetry(() => loadSystem().then((m) => ({ default: m.SystemSettingsPage })));
+const LocalServer = lazyWithRetry(() => import('./pages/LocalServer'));
+const Security = lazyWithRetry(() => import('./pages/Security'));
+const Certs = lazyWithRetry(() => import('./pages/Certs'));
+const Backup = lazyWithRetry(() => import('./pages/Backup'));
 
 // 首屏后的空闲预取列表：常用页面 chunk（失败静默，不阻塞首屏）
 const PREFETCH_LOADERS = [loadGroups, loadTemplates, loadServersUnified, loadUserTraffic, loadSystem];

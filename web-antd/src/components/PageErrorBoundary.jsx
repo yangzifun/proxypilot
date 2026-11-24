@@ -6,6 +6,7 @@
 import React from 'react';
 import { Button, Result, Space } from 'antd';
 import { reportClientError } from '../clientError';
+import { isChunkLoadError, recoverChunkLoad } from '../lazyRoute';
 
 function errorSummary(error) {
   if (!error) return '未知错误';
@@ -26,18 +27,21 @@ function errorDetail(error, info) {
 export default class PageErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { error: null, info: null };
+    this.state = { error: null, info: null, chunkError: false, autoReloading: false };
     this.handleRetry = this.handleRetry.bind(this);
     this.handleReload = this.handleReload.bind(this);
     this.handleHome = this.handleHome.bind(this);
   }
 
   static getDerivedStateFromError(error) {
-    return { error };
+    return { error, chunkError: isChunkLoadError(error) };
   }
 
   componentDidCatch(error, info) {
-    this.setState({ error, info });
+    const chunkError = isChunkLoadError(error);
+    // 旧 chunk 404：第一次自动刷新一次；10 秒内已刷新过则不再刷新，进入友好提示。
+    const autoReloading = chunkError ? recoverChunkLoad() : false;
+    this.setState({ error, info, chunkError, autoReloading });
     // 只打印摘要，避免控制台被大段堆栈刷屏
     try {
       // eslint-disable-next-line no-console
@@ -65,7 +69,7 @@ export default class PageErrorBoundary extends React.Component {
   }
 
   handleRetry() {
-    this.setState({ error: null, info: null });
+    this.setState({ error: null, info: null, chunkError: false, autoReloading: false });
     if (typeof this.props.onReset === 'function') {
       try {
         this.props.onReset();
@@ -109,9 +113,28 @@ export default class PageErrorBoundary extends React.Component {
   }
 
   render() {
-    const { error, info } = this.state;
+    const { error, info, chunkError, autoReloading } = this.state;
     if (!error) return this.props.children;
     const { title = '页面出现异常', homeLabel = '返回系统概览' } = this.props;
+    if (chunkError) {
+      return (
+        <div className="pp-error-boundary" data-error-boundary="1" data-chunk-error="1" data-page={this.props.pageKey || ''} style={{ padding: 24 }}>
+          <Result
+            status="warning"
+            title="页面资源已更新，请重新加载"
+            subTitle={autoReloading
+              ? '检测到旧版本页面资源，正在自动刷新页面……若未自动刷新，请点击下方“重新加载”。'
+              : '检测到旧版本页面资源（通常发生在面板更新后），请点击“重新加载”获取最新版本。'}
+            extra={
+              <Space wrap>
+                <Button type="primary" onClick={this.handleReload}>重新加载</Button>
+                <Button onClick={this.handleHome}>{homeLabel}</Button>
+              </Space>
+            }
+          />
+        </div>
+      );
+    }
     const detail = errorDetail(error, info);
     return (
       <div className="pp-error-boundary" data-error-boundary="1" data-page={this.props.pageKey || ''} style={{ padding: 24 }}>
