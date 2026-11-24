@@ -23,6 +23,7 @@
   --pp-chart-1: #4f46e5; --pp-chart-2: #06b6d4; --pp-chart-3: #f59e0b; --pp-chart-4: #10b981;
   --pp-chart-5: #f43f5e; --pp-chart-6: #8b5cf6; --pp-chart-7: #0ea5e9; --pp-chart-8: #f97316;
   --pp-chart-axis: #94a3b8; --pp-chart-grid: #eef2f7;
+  --pp-sider-bg: #0f172a; --pp-sider-bg-hover: rgba(148,163,184,.10); --pp-sider-text: #94a3b8; --pp-sider-text-active: #e0e7ff; --pp-sider-border: rgba(148,163,184,.12); --pp-sider-brand: #4f46e5; --pp-sider-brand-soft: #eef2ff;
   --pp-body-bg: radial-gradient(1200px 600px at 50% -10%, #eef2ff 0%, #f6f7fb 55%, #f6f7fb 100%);
 }
 
@@ -36,6 +37,7 @@ body.pp-site-theme-emerald {
   --pp-table-header-bg: #f0fbf6; --pp-table-row-hover: #f0fdf7; --pp-code-bg: #f2fbf7; --pp-code-text: #134e4a;
   --pp-shadow-sm: 0 1px 2px rgba(6,78,59,.05); --pp-shadow-md: 0 10px 30px -22px rgba(5,150,105,.55); --pp-shadow-lg: 0 18px 44px -30px rgba(5,150,105,.65);
   --pp-chart-1: #10b981; --pp-chart-2: #0d9488; --pp-chart-axis: #7fa697; --pp-chart-grid: #d9f0e4;
+  --pp-sider-bg: #ecfdf5; --pp-sider-bg-hover: #d1fae5; --pp-sider-text: #065f46; --pp-sider-text-active: #064e3b; --pp-sider-border: #a7f3d0; --pp-sider-brand: #059669; --pp-sider-brand-soft: #d1fae5;
 }
 body.pp-site-theme-pulse {
   --pp-bg: #f7f7f8; --pp-body-bg: linear-gradient(180deg, #fafafa 0%, #f7f7f8 100%);
@@ -46,6 +48,7 @@ body.pp-site-theme-pulse {
   --pp-shadow-sm: none; --pp-shadow-md: none; --pp-shadow-lg: 0 8px 24px -24px rgba(17,24,39,.35);
   --pp-radius-sm: 4px; --pp-radius-md: 8px; --pp-radius-lg: 10px;
   --pp-chart-1: #111827; --pp-chart-2: #6b7280; --pp-chart-3: #9ca3af; --pp-chart-axis: #9ca3af; --pp-chart-grid: #e5e7eb;
+  --pp-sider-bg: #f3f4f6; --pp-sider-bg-hover: #e5e7eb; --pp-sider-text: #4b5563; --pp-sider-text-active: #111827; --pp-sider-border: #d1d5db; --pp-sider-brand: #111827; --pp-sider-brand-soft: #ffffff;
 }
 body.pp-site-theme-horizon {
   --pp-bg: #f8fafc; --pp-body-bg: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
@@ -56,6 +59,7 @@ body.pp-site-theme-horizon {
   --pp-shadow-sm: none; --pp-shadow-md: none; --pp-shadow-lg: 0 10px 30px -28px rgba(15,23,42,.4);
   --pp-radius-sm: 4px; --pp-radius-md: 8px; --pp-radius-lg: 10px;
   --pp-chart-1: #2563eb; --pp-chart-2: #0ea5e9; --pp-chart-4: #16a34a; --pp-chart-axis: #94a3b8; --pp-chart-grid: #e2e8f0;
+  --pp-sider-bg: #1e3a8a; --pp-sider-bg-hover: rgba(96,165,250,.18); --pp-sider-text: #bfdbfe; --pp-sider-text-active: #ffffff; --pp-sider-border: rgba(191,219,254,.22); --pp-sider-brand: #2563eb; --pp-sider-brand-soft: #dbeafe;
 }
 body.pp-site-theme-glass {
   --pp-bg: #eef2ff; --pp-bg-elevated: rgba(255,255,255,.72); --pp-surface: rgba(255,255,255,.55); --pp-surface-muted: rgba(255,255,255,.45); --pp-surface-hover: rgba(255,255,255,.8);
@@ -67,6 +71,7 @@ body.pp-site-theme-glass {
   --pp-shadow-sm: 0 1px 2px rgba(15,23,42,.04); --pp-shadow-md: 0 16px 40px -30px rgba(15,23,42,.6); --pp-shadow-lg: 0 24px 60px -34px rgba(15,23,42,.65);
   --pp-radius-sm: 8px; --pp-radius-md: 12px; --pp-radius-lg: 16px;
   --pp-chart-axis: #64748b; --pp-chart-grid: rgba(226,232,240,.7);
+  --pp-sider-bg: rgba(255,255,255,.62); --pp-sider-bg-hover: rgba(99,102,241,.12); --pp-sider-text: #334155; --pp-sider-text-active: #312e81; --pp-sider-border: rgba(255,255,255,.85); --pp-sider-brand: #4f46e5; --pp-sider-brand-soft: #eef2ff;
 }
 
 body { background: var(--pp-body-bg, var(--pp-bg)); color: var(--pp-text); }
@@ -151,6 +156,8 @@ body {
   z-index: 20;
   display: flex;
   flex-direction: column;
+  background: var(--pp-sider-bg) !important;
+  color: var(--pp-sider-text);
 }
 /* 品牌区固定 64px（与顶部栏等高），菜单在中间独立滚动，标题永远不被裁切 */
 .pp-sider .ant-layout-sider-children {
@@ -166,7 +173,7 @@ body {
   overflow-x: hidden;
 }
 .pp-sider::-webkit-scrollbar { width: 6px; }
-.pp-sider::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.25); border-radius: 6px; }
+.pp-sider::-webkit-scrollbar-thumb { background: var(--pp-sider-border); border-radius: 6px; }
 
 .pp-brand {
   display: flex;
@@ -184,25 +191,25 @@ body {
   width: 34px;
   height: 34px;
   border-radius: 11px;
-  background: #eef2ff;
-  color: #4f46e5;
+  background: var(--pp-sider-brand-soft);
+  color: var(--pp-sider-brand);
   font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 6px 14px -8px rgba(30, 41, 59, 0.45);
+  box-shadow: 0 6px 14px -8px var(--pp-sider-border);
   font-size: 17px;
 }
 .pp-brand-text { min-width: 0; }
 .pp-brand-title {
-  color: #f1f5f9;
+  color: var(--pp-sider-text-active);
   font-weight: 600;
   font-size: 14px;
   line-height: 1.25;
   letter-spacing: 0.2px;
 }
-.pp-brand-sub { color: #64748b; font-size: 11px; margin-top: 2px; }
-.pp-sider-divider { height: 1px; background: rgba(148, 163, 184, 0.12); margin: 0 16px 8px; }
+.pp-brand-sub { color: var(--pp-sider-text); font-size: 11px; margin-top: 2px; }
+.pp-sider-divider { height: 1px; background: var(--pp-sider-border); margin: 0 16px 8px; }
 
 .pp-header {
   position: sticky;
@@ -3710,12 +3717,10 @@ body.pp-site-theme-emerald .pp-card { background: rgba(255,255,255,0.85) !import
 body.pp-site-theme-emerald .pp-section-title { color: #065f46 !important; }
 body.pp-site-theme-emerald .ant-table-thead > tr > th { background: #ecfdf5 !important; color: #065f46 !important; }
 body.pp-site-theme-emerald .ant-btn-primary { background: #10b981 !important; border-color: #10b981 !important; }
-body.pp-site-theme-emerald .ant-menu-dark .ant-menu-item-selected { background: rgba(16,185,129,0.22) !important; }
 
 body.pp-site-theme-pulse .pp-content { background: #ffffff !important; }
 body.pp-site-theme-pulse .pp-card { background: #ffffff !important; border: 1px solid #e5e7eb !important; box-shadow: none !important; }
 body.pp-site-theme-pulse .ant-btn-primary { background: #111827 !important; border-color: #111827 !important; }
-body.pp-site-theme-pulse .ant-menu-dark .ant-menu-item-selected { background: #111827 !important; }
 
 body.pp-site-theme-horizon .pp-content { background: #f8fafc !important; }
 body.pp-site-theme-horizon .pp-card { background: #ffffff !important; border: 1px solid #e2e8f0 !important; box-shadow: none !important; border-radius: 8px !important; }
@@ -3734,6 +3739,10 @@ body.pp-site-theme-glass .pp-card {
   box-shadow: 0 16px 40px -30px rgba(15,23,42,0.6) !important;
 }
 body.pp-site-theme-glass .ant-btn-primary { background: rgba(79,70,229,0.9) !important; border-color: transparent !important; }
+body.pp-site-theme-glass .pp-sider {
+  backdrop-filter: blur(18px) saturate(160%);
+  border-right: 1px solid var(--pp-sider-border);
+}
 /* ---- 登录页主题 ---- */
 body.pp-site-theme-emerald .pp-login { background: linear-gradient(160deg, #eafaf1 0%, #f7fdfa 40%, #ffffff 100%) !important; }
 body.pp-site-theme-emerald .pp-login-form { background: rgba(255,255,255,0.9) !important; border-color: rgba(16,185,129,0.18) !important; }
@@ -3958,13 +3967,13 @@ h3 { font-size: 14px; }
   font-size: 11.5px;
   font-weight: 600;
   letter-spacing: 0.3px;
-  color: #64748b !important;
+  color: var(--pp-sider-text) !important;
   height: 30px !important;
   line-height: 30px !important;
   margin: 6px 0 2px !important;
   padding-left: 10px !important;
 }
-.pp-nav .ant-menu-submenu-title:hover { color: #cbd5e1 !important; }
+.pp-nav .ant-menu-submenu-title:hover { color: var(--pp-sider-text-active) !important; }
 .pp-nav .ant-menu-submenu .ant-menu-sub .ant-menu-item { padding-left: 34px !important; }
 
 /* 当前项：左侧主色强调条，提升扫视锚点感 */
@@ -3977,11 +3986,11 @@ h3 { font-size: 14px; }
   bottom: 7px;
   width: 3px;
   border-radius: 0 3px 3px 0;
-  background: #818cf8;
+  background: var(--pp-sider-brand);
 }
 .pp-nav .ant-menu-item-selected {
-  background: rgba(99, 102, 241, 0.26) !important;
-  color: #e0e7ff !important;
+  background: color-mix(in srgb, var(--pp-sider-brand) 26%, transparent) !important;
+  color: var(--pp-sider-text-active) !important;
   font-weight: 600;
 }
 
@@ -3996,18 +4005,18 @@ h3 { font-size: 14px; }
   margin: 8px 12px 12px;
   padding: 6px 10px;
   border-radius: 999px;
-  background: rgba(148, 163, 184, 0.08);
+  background: var(--pp-sider-bg-hover);
   cursor: default;
 }
 .pp-sider-foot-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #818cf8;
-  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.16);
+  background: var(--pp-sider-brand);
+  box-shadow: 0 0 0 3px var(--pp-sider-brand-soft);
   flex: 0 0 auto;
 }
-.pp-sider-foot-text { font-size: 11px; color: #94a3b8; letter-spacing: 0.2px; }
+.pp-sider-foot-text { font-size: 11px; color: var(--pp-sider-text); letter-spacing: 0.2px; }
 
 /* 用户中心登录：验证码/密码 与 SSO 之间的分隔 */
 .pp-auth-or {

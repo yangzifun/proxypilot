@@ -1,4 +1,4 @@
-﻿/* =================================================================
+/* =================================================================
  *  web-antd / scripts / render-check.mjs
  *  用 jsdom 真跑一遍前端 bundle（dist/app.js）：
  *    1) 未登录 → 渲染 Ant Design 登录页
@@ -77,10 +77,11 @@ const RESPONSES = [
     ],
     summary: { servers: 3, online: 2, offline: 1, failed_services: 1, failed_list: [{ server_id: 2, server_name: 'jp-02', service: 'singbox', state: 'failed' }], not_installed: 0 },
   }],
+  [/\/api\/auth\/me/, { success: true, username: 'admin', is_super: true, is_root: true }],
   [/\/api\/admin\/users/, { users: [
-    { id: 1, username: 'admin', email: 'admin@example.com', email_verified: 1, email_verified_at: NOW, mfa_enabled: 1, last_mfa_login: NOW - 3600000, created_at: NOW - 86400000 * 30 },
-    { id: 2, username: 'ops', email: '', email_verified: 0, mfa_enabled: 0, created_at: NOW - 86400000 * 3 },
-  ], self: 'admin' }],
+    { id: 1, username: 'admin', is_super: true, is_root: true, email: 'admin@example.com', email_verified: 1, email_verified_at: NOW, mfa_enabled: 1, last_mfa_login: NOW - 3600000, created_at: NOW - 86400000 * 30 },
+    { id: 2, username: 'ops', is_super: false, is_root: false, email: '', email_verified: 0, mfa_enabled: 0, created_at: NOW - 86400000 * 3 },
+  ], self: 'admin', self_is_super: true }],
   [/\/api\/apikeys/, { success: true, total: 1, data: [
     { id: 1, key_name: 'ci-deploy', key_hint: 'pk_ab12…', enabled: 1, permissions: 'groups:read,configs:write', permissions_text: '配置分组 · 读取，节点配置 · 写入', expires_at: 0, usage_count: 42, last_used_at: NOW - 60000, created_at: NOW - 86400000 },
   ] }],
@@ -218,8 +219,8 @@ console.log('\nProxyPilot · Ant Design 前端渲染检查\n');
   const { window, errors } = await mount({ token: fakeJwt, hash: '#dash' });
   await new Promise((r) => setTimeout(r, 250));
   const body = text(window);
-  check('渲染侧边菜单（9 个入口）', ['系统概览', '订阅分组', '订阅模板', '服务器管理', '节点管理', '服务器监控', '日志管理', '系统管理', '安全中心']
-    .every((t) => body.includes(t)), body.slice(0, 200));
+  check('渲染侧边菜单（当前分组/入口）', ['系统概览', '用户与业务', '订阅用户', '用户流量', '订阅模板', '节点与网络', '节点服务', '节点绑定', '域名优先', 'WARP', '自建组网', '协议管理', '运维与安全', '本机管理', '日志管理', '证书管理', '安全中心', '系统设置']
+    .every((t) => body.includes(t)), body.slice(0, 260));
   check('顶栏显示登录账号', body.includes('admin'));
   check('概览：4 个指标卡', q(window, '.pp-stat') >= 4, 'stat=' + q(window, '.pp-stat'));
   check('概览：指标数值已填充', /18,234|18234|1\.8万/.test(body), body.slice(0, 300));
@@ -235,9 +236,9 @@ console.log('\nProxyPilot · Ant Design 前端渲染检查\n');
   const { window, errors } = await mount({ token: fakeJwt, hash: '#status' });
   await new Promise((r) => setTimeout(r, 300));
   const body = text(window);
-  check('监控：标题正确', body.includes('服务器监控'));
-  check('监控：仪表盘渲染', q(window, '.pp-gauge svg') >= 2, 'gauges=' + q(window, '.pp-gauge svg'));
-  check('监控：柱状图渲染', q(window, '.pp-chart svg rect') >= 3, 'rects=' + q(window, '.pp-chart svg rect'));
+  check('监控：标题正确', body.includes('节点服务') && body.includes('节点服务概览'), body.slice(0, 160));
+  check('监控：仪表盘/环形进度渲染', q(window, '.pp-srv-ring') >= 2 && q(window, '.pp-srv-ring svg') >= 2, 'rings=' + q(window, '.pp-srv-ring') + ' svg=' + q(window, '.pp-srv-ring svg'));
+  check('监控：概览趋势图渲染', q(window, '.pp-ov-chart svg') >= 1, 'charts=' + q(window, '.pp-ov-chart svg'));
   check('监控：服务矩阵已移除（改在详情里看）', !body.includes('服务状态矩阵'), body.slice(-200));
   check('监控：服务器以卡片展示', q(window, '.pp-srv-card') >= 1, 'cards=' + q(window, '.pp-srv-card'));
   check('监控：告警列出失败服务', body.includes('jp-02'));
@@ -246,21 +247,22 @@ console.log('\nProxyPilot · Ant Design 前端渲染检查\n');
 
 /* 4) 系统管理 */
 {
-  const { window, errors } = await mount({ token: fakeJwt, hash: '#sys' });
+  const { window, errors } = await mount({ token: fakeJwt, hash: '#sysusers' });
   await new Promise((r) => setTimeout(r, 300));
   const body = text(window);
   check('系统管理：超管身份生效（非 403）', !body.includes('仅超级管理员可访问'), body.slice(0, 160));
   check('系统管理：账号表渲染出 rows', body.includes('ops') && body.includes('admin'), body.slice(0, 240));
-  check('系统管理：指标卡 + 表格', q(window, '.pp-stat') >= 4 && q(window, '.ant-table') >= 1, 'stat=' + q(window, '.pp-stat') + ' tables=' + q(window, '.ant-table'));
+  const tableCount = q(window, '.pp-table') + q(window, '.ant-table');
+  check('系统管理：指标卡 + 表格', q(window, '.pp-stat') >= 3 && tableCount >= 1, 'stat=' + q(window, '.pp-stat') + ' tables=' + tableCount);
   check('系统管理：无运行时错误', errors.length === 0, errors.map((e) => e && e.message).join(' | '));
 }
 
 /* 5) 其余页面全量过一遍：不能有运行时错误，且关键内容要出现 */
 {
   const ROUTES = [
-    { hash: '#uuids', name: '订阅分组', need: ['订阅分组', 'alice', '新建分组', 'b@b.com'] },
+    { hash: '#uuids', name: '订阅用户', need: ['订阅用户', 'alice', '新建用户', 'b@b.com'] },
     { hash: '#tpls', name: '订阅模板', need: ['订阅模板', '默认 Clash', '新建模板', '对象存储文件'] },
-    { hash: '#servers', name: '服务器管理', need: ['服务器列表', 'hk-01', '检测全部', '接入服务器'] },
+    { hash: '#servers', name: '节点服务', need: ['节点服务', '服务器列表', 'hk-01', '添加服务器'] },
     { hash: '#singbox', name: '节点管理', need: ['协议模板', 'sb-default', '新建模板', '节点绑定（'] },
     { hash: '#logs', name: '日志管理', need: ['日志总量', '按保留期的可删行数', '执行清理', '下发记录'] },
     { hash: '#sec', name: '安全中心', need: ['修改密码', '双因素认证', '重新生成备份码', '关闭双因素认证'] },
