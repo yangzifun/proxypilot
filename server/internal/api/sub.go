@@ -57,6 +57,7 @@ func (h *handlers) rawSubscription(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "生成订阅失败")
 		return
 	}
+	lines = maybeApplyHiddifyCompat(r, lines)
 	if len(lines) == 0 {
 		w.Header().Set("Content-Type", "text/plain;charset=UTF-8")
 		w.WriteHeader(http.StatusNotFound)
@@ -88,6 +89,7 @@ func (h *handlers) batchSubscription(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "生成订阅失败")
 		return
 	}
+	lines = maybeApplyHiddifyCompat(r, lines)
 	if len(lines) == 0 {
 		writeError(w, http.StatusNotFound, "UUID Not Found or Empty（本地配置与外部订阅源均为空）")
 		return

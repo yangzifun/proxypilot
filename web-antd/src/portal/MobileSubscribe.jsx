@@ -9,10 +9,34 @@ import { CheckCircleFilled, QrcodeOutlined } from '@ant-design/icons';
 import { portalReq } from './portalApi';
 
 const FORMATS = [
-  { key: 'raw', label: '原始', hint: 'v2rayN / Shadowrocket 等通用客户端' },
-  { key: 'clash', label: 'Clash', hint: 'Clash / Mihomo 专用，可套用订阅模板' },
-  { key: 'batch', label: '批量', hint: '一次性导出全部节点' },
-  { key: 'mihomo', label: 'Mihomo', hint: 'mihomo 专用 YAML，按绑定生成' },
+  {
+    key: 'raw',
+    label: '原始',
+    hint: '通用 Base64 节点列表，兼容性最好',
+    clients: ['Hiddify', 'v2rayN', 'Shadowrocket', 'Stash', 'Karing', 'NekoBox', 'sing-box'],
+    note: 'Hiddify 请选择「原始」订阅；通用客户端（v2rayN / Shadowrocket / Stash / Karing / NekoBox / sing-box）也选它。',
+  },
+  {
+    key: 'clash',
+    label: 'Clash',
+    hint: 'Clash / Mihomo 专用，可套用订阅模板',
+    clients: ['Clash Verge', 'ClashX', 'Clash for Windows', 'Mihomo', 'FlClash'],
+    note: 'Clash Verge / ClashX / Clash for Windows / Mihomo / FlClash 等 Clash 系客户端。',
+  },
+  {
+    key: 'mihomo',
+    label: 'Mihomo',
+    hint: 'mihomo 专用 YAML，按绑定生成',
+    clients: ['mihomo 内核', 'Clash Meta 系'],
+    note: '供 mihomo 内核 / Clash Meta 系客户端按节点绑定生成。',
+  },
+  {
+    key: 'batch',
+    label: '批量',
+    hint: '一次性导出全部节点',
+    clients: ['脚本', '一次性导入', '二次加工'],
+    note: '适合脚本处理、一次性导入或二次加工，不建议长期作为订阅链接。',
+  },
 ];
 
 /* 模板名是中文，订阅链接是 UTF-8：btoa 只吃 Latin-1，先转义再编码 */
@@ -49,6 +73,7 @@ export default function MobileSubscribe({ uuid }) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [qr, setQr] = useState(null);
+  const currentFmt = FORMATS.find((f) => f.key === fmt) || FORMATS[0];
 
   useEffect(() => {
     let alive = true;
@@ -142,6 +167,26 @@ export default function MobileSubscribe({ uuid }) {
       />
       <div className="msub-hint">{FORMATS.find((f) => f.key === fmt).hint}</div>
 
+      <div className="msub-clients" style={{ margin: '0 2px 10px' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+          {(currentFmt.clients || []).map((c) => (
+            <span
+              key={c}
+              style={{
+                fontSize: 12,
+                padding: '2px 8px',
+                borderRadius: 999,
+                border: '1px solid var(--pp-border)',
+                color: 'var(--pp-text-secondary)',
+              }}
+            >
+              {c}
+            </span>
+          ))}
+        </div>
+        <div style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--pp-text-tertiary)' }}>{currentFmt.note}</div>
+      </div>
+
       {fmt === 'clash' ? (
         <Card
           className="msub-pick"
@@ -200,7 +245,7 @@ export default function MobileSubscribe({ uuid }) {
           <ol>
             <li>
               <b>1</b>
-              <span>选格式：通用客户端选「原始」，Clash / Mihomo 选「Clash」</span>
+              <span>选格式：通用客户端选「原始」（Hiddify 也选「原始」），Clash / Mihomo 选对应格式</span>
             </li>
             <li>
               <b>2</b>

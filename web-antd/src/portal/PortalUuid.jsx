@@ -102,11 +102,40 @@ export default function PortalUuid({ uuid, onBack, onUnauthorized, embedded = fa
   /* 订阅生成：一次只展示一种格式，避免三块几乎一样的内容并排堆叠 */
   const [fmt, setFmt] = useState('raw');
   const FORMATS = [
-    { key: 'raw', title: '原始订阅', hint: '通用链接，v2rayN / Shadowrocket 等客户端直接导入', ext: '.txt' },
-    { key: 'clash', title: 'Clash 订阅', hint: 'Clash / Mihomo 专用，可套用订阅模板', ext: '.yaml' },
-    { key: 'batch', title: '批量配置', hint: '一次性导出全部节点，一行一个', ext: '.txt' },
-  { key: 'mihomo', title: 'Mihomo 订阅', hint: 'mihomo 专用 YAML（按节点绑定生成）', ext: '.yaml' },
+    {
+      key: 'raw',
+      title: '原始订阅',
+      hint: '通用 Base64 节点列表，兼容性最好',
+      ext: '.txt',
+      clients: ['Hiddify', 'v2rayN', 'Shadowrocket', 'Stash', 'Karing', 'NekoBox', 'sing-box'],
+      note: 'Hiddify 请选择「原始订阅」；v2rayN / Shadowrocket / Stash / Karing / NekoBox / sing-box 等通用客户端也用它。',
+    },
+    {
+      key: 'clash',
+      title: 'Clash 订阅',
+      hint: 'Clash / Mihomo 专用，可套用订阅模板',
+      ext: '.yaml',
+      clients: ['Clash Verge', 'ClashX', 'Clash for Windows', 'Mihomo', 'FlClash'],
+      note: 'Clash Verge / ClashX / Clash for Windows / Mihomo / FlClash 等 Clash 系客户端。',
+    },
+    {
+      key: 'mihomo',
+      title: 'Mihomo 订阅',
+      hint: 'mihomo 内核专用 YAML（按节点绑定生成）',
+      ext: '.yaml',
+      clients: ['mihomo 内核', 'Clash Meta 系（Mihomo / FlClash）'],
+      note: '供 mihomo 内核 / Clash Meta 系客户端按节点绑定生成。',
+    },
+    {
+      key: 'batch',
+      title: '批量配置',
+      hint: '一次性导出全部节点，一行一个',
+      ext: '.txt',
+      clients: ['脚本', '一次性导入', '二次加工'],
+      note: '适合脚本处理、一次性导入或二次加工，不建议长期作为订阅链接使用。',
+    },
   ];
+  const currentFmt = FORMATS.find((f) => f.key === fmt) || FORMATS[0];
   const [templates, setTemplates] = useState([]);
   const [qr, setQr] = useState(null);
   /* 最近访问：表格收进弹窗，页面上只留一行摘要 */
@@ -408,32 +437,40 @@ export default function PortalUuid({ uuid, onBack, onUnauthorized, embedded = fa
                 children: (
                   <div style={{ padding: 16 }}>
                     <Guide
-                      title="订阅怎么用：选格式 → 导入客户端"
-                      desc="同一个 UUID 提供三种订阅格式，内容一致、面向不同客户端；生成后可以用链接、二维码或文件导入。"
+                      title="订阅怎么用：按客户端选格式 → 导入"
+                      desc="同一个 UUID 提供四种订阅格式，内容一致、面向不同客户端；生成后可以用链接、二维码或文件导入。"
                       steps={[
-                        '按客户端挑一种格式（下方三张卡）',
+                        '按客户端挑一种格式（下方格式切换与适用客户端）',
                         '点「生成并下载」保存文件，或复制链接 / 扫码',
                         '在客户端里「从剪贴板导入」或「添加订阅」粘上链接',
                       ]}
                       tip="订阅链接含你的 UUID，等同于账号密码，请勿公开分享；节点变动后客户端「更新订阅」即可同步。"
                     >
                       <div>
-                        <b>原始订阅</b>
-                        Base64 编码的节点列表，通用性最好：v2rayN、Shadowrocket、Stash、Sing-box 都能直接吃，也是各客户端「添加订阅」时最稳的一种。
+                        <b>原始订阅</b>：Base64 节点列表，兼容性最好 —— Hiddify、v2rayN、Shadowrocket、Stash、Karing、NekoBox、sing-box 等通用客户端；<b>Hiddify 请选择「原始订阅」</b>。
                       </div>
                       <div>
-                        <b>Clash 订阅</b>
-                        YAML 配置，给 Clash Verge / ClashX / Mihomo 用；支持策略组与规则，<b style={{ marginLeft: 0 }}>可以套用模板</b>改变分组和分流策略。
+                        <b>Clash 订阅</b>：YAML 配置，适用于 Clash Verge / ClashX / Clash for Windows / Mihomo / FlClash；支持策略组与规则，<b style={{ marginLeft: 0 }}>可以套用模板</b>改变分组和分流策略。
                       </div>
                       <div>
-                        <b>批量配置</b>
-                        全部节点明文导出（一行一个），适合一次性导入、脚本处理，或粘到自己的工具里做二次加工。
+                        <b>Mihomo 订阅</b>：供 mihomo 内核 / Clash Meta 系客户端（Mihomo、FlClash 等）按节点绑定生成。
+                      </div>
+                      <div>
+                        <b>批量配置</b>：全部节点明文导出（一行一个），适合脚本处理、一次性导入，或粘到自己的工具里做二次加工。
                       </div>
                       <div style={{ marginTop: 4, color: 'var(--pp-text-tertiary)' }}>
                         三种导入方式：<code>复制链接</code> 粘到客户端订阅栏 · <code>二维码</code> 手机扫码直接导入 · <code>生成并下载</code> 得到
                         <code>.txt</code> / <code>.yaml</code> 文件再导入。
                       </div>
                     </Guide>
+
+                    <Alert
+                      type="info"
+                      showIcon
+                      style={{ marginBottom: 12 }}
+                      message="Hiddify 用户请选择「原始订阅」"
+                      description="Hiddify / v2rayN / Shadowrocket / Stash / Karing / NekoBox / sing-box 等通用客户端使用原始订阅；Clash 系客户端选择「Clash 订阅」或「Mihomo 订阅」。"
+                    />
 
                     <Space wrap style={{ marginBottom: 12 }}>
                       <Button danger icon={<SwapOutlined />} onClick={() => setRotateOpen(true)}>
@@ -452,6 +489,31 @@ export default function PortalUuid({ uuid, onBack, onUnauthorized, embedded = fa
                         options={FORMATS.map((f) => ({ value: f.key, label: f.title }))}
                       />
                       <div className="pp-fmt-hint">{FORMATS.find((f) => f.key === fmt).hint}</div>
+
+                      <div
+                        className="pp-fmt-clients"
+                        style={{
+                          marginTop: 10,
+                          padding: '10px 12px',
+                          border: '1px solid var(--pp-border)',
+                          borderRadius: 'var(--pp-radius-md, 10px)',
+                          background: 'var(--pp-bg-soft, transparent)',
+                        }}
+                      >
+                        <div style={{ fontSize: 12, color: 'var(--pp-text-secondary)', marginBottom: 6 }}>
+                          适用客户端（{currentFmt.title}）
+                        </div>
+                        <Space wrap size={[6, 6]}>
+                          {currentFmt.clients.map((c) => (
+                            <Tag key={c} style={{ marginInlineEnd: 0 }}>
+                              {c}
+                            </Tag>
+                          ))}
+                        </Space>
+                        <div style={{ fontSize: 12, color: 'var(--pp-text-tertiary)', marginTop: 8, lineHeight: 1.6 }}>
+                          {currentFmt.note}
+                        </div>
+                      </div>
 
                       {fmt === 'clash' ? (
                         <div className="pp-fmt-template">

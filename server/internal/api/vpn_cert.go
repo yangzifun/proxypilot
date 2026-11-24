@@ -884,6 +884,20 @@ func (h *handlers) installLocalCert(cert *storedCert, kind string) (bool, error)
 		}
 	}
 
+	// 本机面板可能没有安装 proxypilot-agent（例如仅运行面板本身）。
+	// 此时证书文件仍应写入，但不能把「服务不存在」当成证书下发失败。
+	if kind == "vpn" {
+		if out, err := certSystemctl("cat", service); err != nil {
+			msg := strings.ToLower(string(out))
+			if strings.Contains(msg, "no files found") || strings.Contains(msg, "not found") {
+				if h.log != nil {
+					h.log.Info("本机未安装 proxypilot-agent，跳过 Agent 重启", "service", service)
+				}
+				return true, nil
+			}
+		}
+	}
+
 	if out, err := certSystemctl("restart", service); err != nil {
 		return false, fmt.Errorf("重启 %s 失败：%v %s", service, err, strings.TrimSpace(string(out)))
 	}
