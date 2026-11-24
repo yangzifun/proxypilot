@@ -2,7 +2,9 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   CloudOutlined,
   CodeOutlined,
+  CopyOutlined,
   DeleteOutlined,
+  DownloadOutlined,
   EditOutlined,
   FileTextOutlined,
   FolderOpenOutlined,
@@ -45,6 +47,14 @@ function normalizeListKey(name) {
   if (!/\.list$/i.test(n)) n = `${n}.list`;
   return `rule/${n}`;
 }
+
+/** 规范化模板 YAML 文件名：自动补 .yaml，返回 rule/configs/<name>.yaml */
+function normalizeYamlKey(name) {
+  let n = String(name || '').trim().replace(/^\/+/, '');
+  if (!n) return '';
+  if (!/\.(ya?ml)$/i.test(n)) n = `${n}.yaml`;
+  return `rule/configs/${n}`;
+}
 function bucketKeyFromUrl(url) {
   const raw = String(url || '').trim();
   if (!raw) return '';
@@ -82,6 +92,9 @@ function TemplateList() {
   const [createListOpen, setCreateListOpen] = useState(false);
   const [creatingList, setCreatingList] = useState(false);
   const [createListForm] = Form.useForm();
+  const [createYamlOpen, setCreateYamlOpen] = useState(false);
+  const [creatingYaml, setCreatingYaml] = useState(false);
+  const [createYamlForm] = Form.useForm();
   const [saving, setSaving] = useState(false);
   const [form] = Form.useForm();
 
@@ -146,6 +159,112 @@ function TemplateList() {
       setCreatingList(false);
     }
   };
+  // 新建模板 YAML 文件（rule/configs/*.yaml）：写入 R2 后刷新下拉并打开「新建模板」表单预填
+  const createYaml = async () => {
+    const values = await readForm(createYamlForm);
+    if (!values) return;
+    const key = normalizeYamlKey(values.name);
+    if (!key) return;
+    const exists = ((attachments.data && attachments.data.files) || []).some(
+      (f) => String((f && f.key) || '').toLowerCase() === key.toLowerCase()
+    );
+    if (exists) {
+      message.error('该模板文件已存在，请换一个文件名');
+      return;
+    }
+    setCreatingYaml(true);
+    try {
+      const content = String(values.content || '').trim()
+        ? String(values.content)
+        : `# ${key.split('/').pop()} 新模板\nport: 7890\nmode: rule\n`;
+      await api('attachments/content', {
+        method: 'PUT',
+        body: { key, content, content_type: 'text/yaml' },
+      });
+      message.success(`已创建 ${key}`);
+      setCreateYamlOpen(false);
+      createYamlForm.resetFields();
+      await attachments.reload().catch(() => {});
+      const base = key.split('/').pop().replace(/\.(ya?ml)$/i, '');
+      // 打开「新建模板」表单并预填文件名/存储桶文件（由 useEffect 在弹窗挂载后写入表单）
+      setCompose({ mode: 'create', row: null, prefill: { name: base, bucket_key: key, description: '' } });
+    } catch (e) {
+      message.error(e.message || '创建模板文件失败（请检查对象存储 R2 配置）');
+    } finally {
+      setCreatingYaml(false);
+    }
+  };
+
+  // 下载域名列表（rule/*.list）：GET 内容后用 Blob 触发浏览器下载
+  const downloadList = async (row) => {
+    try {
+      const res = await api('attachments/content', { query: { key: row.key } });
+      const content = String((res && res.content) || '');
+      const name = String(row.key || '').split('/').pop() || 'list.list';
+      let url = '';
+      try {
+        const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+        url = typeof URL !== 'undefined' && URL.createObjectURL ? URL.createObjectURL(blob) : '';
+      } catch (e) {
+        url = '';
+      }
+      if (!url) {
+        message.info('当前环境不支持直接下载，内容已输出到控制台');
+        try {
+          // eslint-disable-next-line no-console
+          console.log(content);
+        } catch (e) {
+          /* ignore */
+        }
+        return;
+      }
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      try {
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        /* ignore */
+      }
+      message.success(`已下载 ${name}`);
+    } catch (e) {
+      message.error(e.message || '下载列表失败');
+    }
+  };
+
+  // 复制域名列表：新建 <原名>-copy.list（重名时追加 -2/-3…），内容相同，刷新并打开编辑器
+  const copyList = async (row) => {
+    const src = String(row.key || '');
+    if (!src) return;
+    const base = src.replace(/\.list$/i, '');
+    let key = '';
+    for (let i = 1; i <= 99; i += 1) {
+      const candidate = `${base}-copy${i === 1 ? '' : '-' + i}.list`;
+      if (!ruleRows.some((r) => String(r.key).toLowerCase() === candidate.toLowerCase())) {
+        key = candidate;
+        break;
+      }
+    }
+    if (!key) {
+      message.error('无法生成副本文件名（重名过多）');
+      return;
+    }
+    try {
+      const res = await api('attachments/content', { query: { key: src } });
+      const content = String((res && res.content) || '');
+      await api('attachments/content', { method: 'PUT', body: { key, content, content_type: 'text/plain' } });
+      message.success(`已复制为 ${key}`);
+      ruleLists.reload().catch(() => {});
+      setListEditorKey(key);
+      setListEditorOpen(true);
+    } catch (e) {
+      message.error(e.message || '复制列表失败');
+    }
+  };
+
   const fileOptions = useMemo(() => {
     const list = ((attachments.data && attachments.data.files) || [])
       .filter((f) => /\.(ya?ml)$/i.test(String((f && f.key) || '')))
@@ -159,6 +278,14 @@ function TemplateList() {
     setCompose({ mode: 'create', row: null });
     form.resetFields();
   };
+
+  // 新建模板文件成功后：等「新建模板」弹窗挂载完成再预填表单（直接 setFieldsValue 在未挂载时会丢失 Select 值）
+  useEffect(() => {
+    if (!compose) return;
+    if (compose.prefill) {
+      form.setFieldsValue(compose.prefill);
+    }
+  }, [compose, form]);
 
   const openEdit = (row) => {
     setCompose({ mode: 'edit', row });
@@ -358,6 +485,15 @@ function TemplateList() {
               <Button icon={<ReloadOutlined />} onClick={() => reload().catch(() => {})} loading={loading}>
                 刷新
               </Button>
+              <Button
+                icon={<FileTextOutlined />}
+                onClick={() => {
+                  setCreateYamlOpen(true);
+                  createYamlForm.resetFields();
+                }}
+              >
+                新建模板文件
+              </Button>
               <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
                 新建模板
               </Button>
@@ -491,17 +627,37 @@ function TemplateList() {
                 },
                 {
                   title: '操作',
-                  width: 90,
+                  width: 230,
                   render: (_, row) => (
-                    <Button
-                      type="link"
-                      size="small"
-                      icon={<EditOutlined />}
-                      style={{ paddingInline: 4 }}
-                      onClick={() => openListEditor(row.key)}
-                    >
-                      编辑
-                    </Button>
+                    <Space size={0}>
+                      <Button
+                        type="link"
+                        size="small"
+                        icon={<EditOutlined />}
+                        style={{ paddingInline: 4 }}
+                        onClick={() => openListEditor(row.key)}
+                      >
+                        编辑
+                      </Button>
+                      <Button
+                        type="link"
+                        size="small"
+                        icon={<DownloadOutlined />}
+                        style={{ paddingInline: 4 }}
+                        onClick={() => downloadList(row)}
+                      >
+                        下载
+                      </Button>
+                      <Button
+                        type="link"
+                        size="small"
+                        icon={<CopyOutlined />}
+                        style={{ paddingInline: 4 }}
+                        onClick={() => copyList(row)}
+                      >
+                        复制
+                      </Button>
+                    </Space>
                   ),
                 },
               ]}
@@ -546,6 +702,47 @@ function TemplateList() {
           <Form.Item name="description" label="描述">
             <Input.TextArea rows={2} placeholder="用途说明，可为空" />
           </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 新建模板 YAML 文件（rule/configs/*.yaml） */}
+      <Modal
+        open={createYamlOpen}
+        title="新建模板文件"
+        onCancel={() => setCreateYamlOpen(false)}
+        onOk={createYaml}
+        confirmLoading={creatingYaml}
+        okText="创建"
+        destroyOnHidden
+        width={560}
+      >
+        <Form form={createYamlForm} layout="vertical" requiredMark={false} style={{ marginTop: 14 }}>
+          <Form.Item
+            name="name"
+            label="文件名"
+            rules={[
+              { required: true, message: '请填写文件名' },
+              { pattern: /^[A-Za-z0-9._-]{1,64}$/, message: '仅支持字母、数字与 . _ -（1-64 位）' },
+              {
+                validator: (_, v) => {
+                  const key = normalizeYamlKey(v);
+                  if (!key) return Promise.resolve();
+                  const files = (attachments.data && attachments.data.files) || [];
+                  const exists = files.some((f) => String((f && f.key) || '').toLowerCase() === key.toLowerCase());
+                  return exists ? Promise.reject(new Error('该模板文件已存在')) : Promise.resolve();
+                },
+              },
+            ]}
+            extra="保存后写入 rule/configs/<文件名>.yaml；输入已带 .yaml 时不会重复拼接"
+          >
+            <Input placeholder="例如：custom（自动补 .yaml）" maxLength={64} />
+          </Form.Item>
+          <Form.Item name="content" label="初始内容（可选）">
+            <Input.TextArea rows={8} placeholder={'# custom.yaml 新模板\nport: 7890\nmode: rule\n'} />
+          </Form.Item>
+          <div className="pp-muted" style={{ fontSize: 12, lineHeight: 1.7 }}>
+            创建成功后会打开「新建模板」表单并预填文件名与存储桶文件，请继续填写模板名称/描述后保存。
+          </div>
         </Form>
       </Modal>
 

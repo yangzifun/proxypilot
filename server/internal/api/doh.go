@@ -183,23 +183,21 @@ func (h *handlers) dohRuntime(ctx context.Context) dohRuntimeConfig {
 
 // ---------------- UUID / 限速 ----------------
 
-// dohUUIDStatus 查询 UUID 状态；无记录按 active 兼容（与订阅接口一致）。
+// dohUUIDStatus 查询 UUID 状态：只有 uuid_info.status=active 才放行。
+// 无记录（未注册/已删除）一律拒绝，避免任意随机 UUID 滥用 DoH。
 func (h *handlers) dohUUIDStatus(ctx context.Context, uuid string) (string, bool, error) {
 	var status sql.NullString
 	err := h.db.QueryRowContext(ctx,
 		`SELECT status FROM uuid_info WHERE uuid = ? LIMIT 1`, uuid).Scan(&status)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "active", true, nil
+		return "missing", false, nil
 	}
 	if err != nil {
 		return "", false, err
 	}
 	s := strings.ToLower(strings.TrimSpace(status.String))
-	if s == "inactive" || s == "suspended" {
+	if s != "active" {
 		return s, false, nil
-	}
-	if s == "" {
-		s = "active"
 	}
 	return s, true, nil
 }
@@ -428,11 +426,15 @@ func (h *handlers) dohQuery(w http.ResponseWriter, r *http.Request) {
 	// UUID 大小写不影响归属；统一小写查 uuid_info，避免大写路径绕过停用状态。
 	uuid = strings.ToLower(uuid)
 	ctx := r.Context()
-	if _, ok, err := h.dohUUIDStatus(ctx, uuid); err != nil {
+	if status, ok, err := h.dohUUIDStatus(ctx, uuid); err != nil {
 		writeError(w, http.StatusInternalServerError, "查询 UUID 状态失败")
 		return
 	} else if !ok {
-		writeError(w, http.StatusForbidden, "UUID 已停用")
+		if status == "missing" || status == "" {
+			writeError(w, http.StatusForbidden, "UUID 不存在或未授权")
+		} else {
+			writeError(w, http.StatusForbidden, "UUID 已停用")
+		}
 		return
 	}
 	if !dohRate.allow(dohRateKey(uuid, clientIP(r)), cfg.MaxQPS, time.Now()) {

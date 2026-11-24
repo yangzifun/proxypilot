@@ -4,6 +4,7 @@ import { useAuth } from './auth';
 import { useHashRoute } from './hooks';
 import { PAGE_META } from './nav';
 import AppLayout from './shell/AppLayout';
+import PageErrorBoundary from './components/PageErrorBoundary';
 
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -91,12 +92,16 @@ export default function App() {
   }
 
   // 全站主题：main.jsx 的 ThemeProvider 已按当前主题生成唯一 ConfigProvider（token+components）。
+  // 路由内容包在错误边界内：页面渲染异常时显示错误页而不是白屏；
+  // key=route 使切换页面时自动重置错误状态。
   return (
     <AppLayout activeKey={key} onNavigate={navigate}>
       {routeLoading ? <div className="pp-route-progress" aria-hidden="true"><span /></div> : null}
-      <div className="pp-page-enter" key={key}>
-        {body}
-      </div>
+      <PageErrorBoundary key={key} pageKey={key} onHome={() => navigate('dash')}>
+        <div className="pp-page-enter" key={key}>
+          {body}
+        </div>
+      </PageErrorBoundary>
     </AppLayout>
   );
 }

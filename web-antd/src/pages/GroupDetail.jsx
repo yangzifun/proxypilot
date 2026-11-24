@@ -358,8 +358,8 @@ function Configs({ uuid, onChanged }) {
           size: 'small',
           showSizeChanger: true,
           pageSizeOptions: [10, 20, 50],
-          onChange: (p, s) => {
-            setPage(p);
+          onChange: (p, s, info) => {
+            setPage(s !== size && info && info.recommendPage ? info.recommendPage : p);
             setSize(s);
           },
         }}

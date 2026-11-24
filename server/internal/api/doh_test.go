@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"database/sql/driver"
 	"encoding/base64"
 	"encoding/json"
@@ -132,6 +133,19 @@ func TestDoHValidationAndDisabled(t *testing.T) {
 		t.Fatalf("inactive UUID 应 403，实际 %d", rec.Code)
 	}
 
+	// suspended UUID 同样拒绝。
+	fdb.onQuery = func(q string, args []driver.Value) (driver.Rows, error) {
+		if strings.Contains(q, "FROM uuid_info WHERE uuid") {
+			return fakeRowsSet([]string{"status"}, []driver.Value{"suspended"}), nil
+		}
+		return &fakeRows{}, nil
+	}
+	rec = httptest.NewRecorder()
+	h.dohQuery(rec, dohRequest(http.MethodGet, dohTestUUID, "abc"))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("suspended UUID 应 403，实际 %d", rec.Code)
+	}
+
 	// 非法 UUID
 	rec = httptest.NewRecorder()
 	h.dohQuery(rec, dohRequest(http.MethodGet, "not-a-uuid", "abc"))
@@ -218,7 +232,7 @@ func TestDoHRateLimit(t *testing.T) {
 	}
 }
 
-func TestDoHMissingUUIDIsActiveAndBodyLimit(t *testing.T) {
+func TestDoHMissingUUIDRejectedAndBodyLimit(t *testing.T) {
 	wireResp := []byte{7, 7, 7}
 	upstreamHit := 0
 	_, upstream := startDoHUpstream(t, func(w http.ResponseWriter, r *http.Request) {
@@ -230,32 +244,73 @@ func TestDoHMissingUUIDIsActiveAndBodyLimit(t *testing.T) {
 		"doh_enabled": "1", "doh_upstreams": upstream, "doh_max_qps": "20", "doh_max_body_bytes": "512",
 	})
 	fdb.onQuery = func(q string, args []driver.Value) (driver.Rows, error) {
-		return &fakeRows{}, nil // no uuid_info row -> active
+		return &fakeRows{}, nil // no uuid_info row -> reject
 	}
 
-	// 无记录 UUID 放行。
+	// 无记录 UUID → 403，不访问上游、不记成功统计。
 	rec := httptest.NewRecorder()
 	h.dohQuery(rec, dohRequest(http.MethodGet, dohTestUUID, "abc"))
-	if rec.Code != http.StatusOK || upstreamHit != 1 {
-		t.Fatalf("无记录 UUID 应按 active 放行：%d hit=%d", rec.Code, upstreamHit)
+	if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "UUID 不存在或未授权") {
+		t.Fatalf("无记录 UUID 应 403：%d %s", rec.Code, rec.Body.String())
+	}
+	if upstreamHit != 0 {
+		t.Fatalf("无记录 UUID 不应访问上游，实际 %d 次", upstreamHit)
+	}
+	if n := fdb.countExec("doh_usage_hourly"); n != 0 {
+		t.Fatalf("无记录 UUID 不应记录 DoH 统计，实际 %d 次", n)
 	}
 
-	// 超过 512 字节 → 400，不访问上游。
+	// 校验 body 限制/Content-Type 需要 active UUID。
+	dohActiveQueries(fdb)
 	big := strings.Repeat("x", 600)
 	rec = httptest.NewRecorder()
 	h.dohQuery(rec, dohRequest(http.MethodPost, dohTestUUID, big))
-	if rec.Code != http.StatusBadRequest || upstreamHit != 1 {
+	if rec.Code != http.StatusBadRequest || upstreamHit != 0 {
 		t.Fatalf("超限 body 应 400 且不打上游：%d hit=%d", rec.Code, upstreamHit)
 	}
 
-	// 错误 Content-Type → 400。
 	req := httptest.NewRequest(http.MethodPost, "/dns-query/"+dohTestUUID, strings.NewReader("abc"))
 	req.SetPathValue("uuid", dohTestUUID)
 	req.Header.Set("Content-Type", "application/octet-stream")
 	rec = httptest.NewRecorder()
 	h.dohQuery(rec, req)
-	if rec.Code != http.StatusBadRequest || upstreamHit != 1 {
+	if rec.Code != http.StatusBadRequest || upstreamHit != 0 {
 		t.Fatalf("错误 Content-Type 应 400：%d hit=%d", rec.Code, upstreamHit)
+	}
+}
+
+func TestDoHUUIDStatusOnlyActive(t *testing.T) {
+	cases := []struct {
+		name    string
+		rows    []driver.Value
+		status  string
+		allowed bool
+	}{
+		{name: "missing", rows: nil, status: "missing", allowed: false},
+		{name: "active", rows: []driver.Value{"active"}, status: "active", allowed: true},
+		{name: "inactive", rows: []driver.Value{"inactive"}, status: "inactive", allowed: false},
+		{name: "suspended", rows: []driver.Value{"suspended"}, status: "suspended", allowed: false},
+		{name: "pending", rows: []driver.Value{"pending"}, status: "pending", allowed: false},
+		{name: "empty", rows: []driver.Value{""}, status: "", allowed: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fdb, db := newFakeDB(t)
+			fdb.onQuery = func(q string, args []driver.Value) (driver.Rows, error) {
+				if strings.Contains(q, "FROM uuid_info WHERE uuid") {
+					if tc.rows == nil {
+						return &fakeRows{}, nil
+					}
+					return fakeRowsSet([]string{"status"}, tc.rows), nil
+				}
+				return &fakeRows{}, nil
+			}
+			h := &handlers{db: db, log: testLogger()}
+			status, ok, err := h.dohUUIDStatus(context.Background(), dohTestUUID)
+			if err != nil || status != tc.status || ok != tc.allowed {
+				t.Fatalf("status=%q ok=%v err=%v，期望 %q/%v", status, ok, err, tc.status, tc.allowed)
+			}
+		})
 	}
 }
 func TestDoHConfigDefaultsAndValidation(t *testing.T) {

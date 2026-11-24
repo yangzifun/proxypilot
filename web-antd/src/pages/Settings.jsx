@@ -5,6 +5,7 @@ import {
   GlobalOutlined,
   LockOutlined,
   MailOutlined,
+  ReloadOutlined,
   SafetyCertificateOutlined,
   SaveOutlined,
   SettingOutlined,
@@ -20,7 +21,9 @@ import {
   InputNumber,
   Select,
   Space,
+  Spin,
   Switch,
+  Table,
   Tabs,
   Tag,
   Typography,
@@ -28,7 +31,8 @@ import {
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { useAsync } from '../hooks';
-import { ErrorBlock, PageCard, Toolbar } from '../components';
+import { ErrorBlock, PageCard, StatCard, Toolbar } from '../components';
+import { fmtBytes, fmtNum, fmtTime, shortUuid } from '../format';
 import MailBuiltinGuide from '../components/MailBuiltinGuide';
 
 const SECRETS = ['turnstile_secret', 'smtp_pass', 'oidc_client_secret', 'cloudflare_api_token'];
@@ -50,6 +54,8 @@ export default function Settings({ embedded = false }) {
   const vpnSettings = useAsync(() => api('admin/vpn/settings'), []);
   const mailGuide = useAsync(() => api('admin/mail/guide'), []);
   const dohConfig = useAsync(() => api('doh/config'), []);
+  const dohStats30 = useAsync(() => api('doh/stats', { query: { range: '30d' } }), []);
+  const dohStats24 = useAsync(() => api('doh/stats', { query: { range: '24h' } }), []);
   const [saving, setSaving] = useState(false);
   const [checking, setChecking] = useState(false);
   const [checkResult, setCheckResult] = useState(null);
@@ -231,6 +237,21 @@ export default function Settings({ embedded = false }) {
     eff.email_code_enabled ? '邮箱验证码' : null,
     eff.oidc_enabled ? 'OIDC 登录' : null,
   ].filter(Boolean);
+
+  // DoH 统计：接口按小时聚合，range=30d 为近 30 天，range=24h 为近 24 小时。
+  const dohRows30 = (dohStats30.data && dohStats30.data.data) || [];
+  const dohRows24 = (dohStats24.data && dohStats24.data.data) || [];
+  const dohStatsLoading = dohStats30.loading || dohStats24.loading;
+  const dohStatsError = dohStats30.error || dohStats24.error;
+  const sumDohQueries = (rows) => rows.reduce((acc, r) => acc + (Number(r.queries) || 0), 0);
+  const sumDohBytes = (rows) => rows.reduce((acc, r) => acc + (Number(r.bytes_in) || 0) + (Number(r.bytes_out) || 0), 0);
+  const dohTopRows = dohRows30.slice(0, 10);
+  const refreshDohStats = () => {
+    Promise.all([
+      dohStats30.reload().catch(() => {}),
+      dohStats24.reload().catch(() => {}),
+    ]);
+  };
 
   return (
     <PageCard
@@ -716,6 +737,94 @@ export default function Settings({ embedded = false }) {
                     <Button type="primary" icon={<SaveOutlined />} loading={dohSaving} onClick={saveDoh}>
                       保存 DoH 配置
                     </Button>
+                  </div>
+
+                  <div style={{ marginTop: 24 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
+                      <div>
+                        <div className="pp-section-title">DoH 使用统计</div>
+                        <div className="pp-muted" style={{ fontSize: 12, marginTop: 2 }}>
+                          按 UUID 聚合；近 30 天与近 24 小时（接口按小时表统计，无自然日粒度）
+                        </div>
+                      </div>
+                      <Button icon={<ReloadOutlined />} onClick={refreshDohStats} loading={dohStatsLoading}>
+                        刷新统计
+                      </Button>
+                    </div>
+
+                    {dohStatsError ? (
+                      <ErrorBlock error={dohStatsError} onRetry={refreshDohStats} title="DoH 统计读取失败" />
+                    ) : null}
+
+                    <Spin spinning={dohStatsLoading}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12, marginBottom: 16 }}>
+                        <StatCard
+                          icon={<ApiOutlined />}
+                          label="近 30 天查询量"
+                          value={fmtNum(sumDohQueries(dohRows30))}
+                          accent="var(--pp-chart-1)"
+                        />
+                        <StatCard
+                          icon={<ThunderboltOutlined />}
+                          label="近 24 小时查询量"
+                          value={fmtNum(sumDohQueries(dohRows24))}
+                          accent="var(--pp-chart-3)"
+                          hint="接口无自然日粒度"
+                        />
+                        <StatCard
+                          icon={<SafetyCertificateOutlined />}
+                          label="活跃 UUID 数"
+                          value={fmtNum(dohRows30.filter((r) => (Number(r.queries) || 0) > 0).length)}
+                          accent="var(--pp-chart-4)"
+                        />
+                        <StatCard
+                          icon={<CloudOutlined />}
+                          label="近 30 天字节数"
+                          value={fmtBytes(sumDohBytes(dohRows30))}
+                          accent="var(--pp-chart-6)"
+                        />
+                      </div>
+
+                      <Table
+                        className="pp-table"
+                        rowKey="uuid"
+                        size="small"
+                        loading={dohStatsLoading}
+                        dataSource={dohTopRows}
+                        pagination={false}
+                        locale={{ emptyText: '近 30 天暂无 DoH 查询' }}
+                        columns={[
+                          {
+                            title: 'UUID',
+                            dataIndex: 'uuid',
+                            render: (v) => (
+                              <span className="pp-mono" title={v}>
+                                {shortUuid(v)}
+                              </span>
+                            ),
+                          },
+                          {
+                            title: '查询量',
+                            dataIndex: 'queries',
+                            width: 100,
+                            align: 'right',
+                            render: (v) => fmtNum(v),
+                          },
+                          {
+                            title: '字节',
+                            width: 110,
+                            align: 'right',
+                            render: (_, r) => fmtBytes((Number(r.bytes_in) || 0) + (Number(r.bytes_out) || 0)),
+                          },
+                          {
+                            title: '最近使用',
+                            dataIndex: 'last_used',
+                            width: 170,
+                            render: (v) => (v ? fmtTime(v) : '—'),
+                          },
+                        ]}
+                      />
+                    </Spin>
                   </div>
                 </>
               ),
