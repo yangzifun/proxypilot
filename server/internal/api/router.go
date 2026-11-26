@@ -434,6 +434,8 @@ func New(cfg config.Config, pool *sql.DB, log *slog.Logger) http.Handler {
 	mux.HandleFunc("POST /api/settings", h.authed(authOpts{}, h.settingsAPI))
 
 	mux.HandleFunc("GET /api/monitor/notify", h.authed(authOpts{}, h.monitorNotify))
+	mux.HandleFunc("GET /api/notification-logs", h.authed(authOpts{}, h.notificationLogsList))
+	mux.HandleFunc("GET /api/server-status-events", h.authed(authOpts{}, h.serverStatusEventsList))
 	mux.HandleFunc("POST /api/monitor/notify", h.authed(authOpts{}, h.monitorNotify))
 	mux.HandleFunc("POST /api/monitor/notify/test", h.authed(authOpts{}, h.monitorNotifyTest))
 	mux.HandleFunc("GET /api/monitor/uuid-check", h.authed(authOpts{}, h.monitorUUIDCheck))

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  BellOutlined,
   BugOutlined,
   ClockCircleOutlined,
   DeleteOutlined,
@@ -8,6 +9,7 @@ import {
   HistoryOutlined,
   ReloadOutlined,
   ThunderboltOutlined,
+  WifiOutlined,
 } from '@ant-design/icons';
 import {
   App as AntdApp,
@@ -47,6 +49,8 @@ export default function Logs() {
         { key: 'summary', label: <span><FileSearchOutlined /> 访问日志</span>, children: <LogSummary /> },
         { key: 'push', label: <span><HistoryOutlined /> 下发记录</span>, children: <PushLogs /> },
         { key: 'client', label: <span><BugOutlined /> 前端错误</span>, children: <ClientErrors /> },
+        { key: 'notify', label: <span><BellOutlined /> 通知记录</span>, children: <NotificationLogs /> },
+        { key: 'events', label: <span><WifiOutlined /> 设备上下线</span>, children: <ServerStatusEvents /> },
       ]}
     />
   );
@@ -698,6 +702,333 @@ function ClientErrors() {
         </PageCard>
       </div>
     </div>
+  );
+}
+
+/* ---------------- 通知记录（notification-logs） ---------------- */
+
+const NOTIFY_KIND_OPTIONS = [
+  { label: '全部类型', value: 'all' },
+  { label: '离线', value: 'offline' },
+  { label: '恢复', value: 'recovery' },
+  { label: '流量', value: 'traffic' },
+];
+
+const NOTIFY_STATUS_OPTIONS = [
+  { label: '全部状态', value: 'all' },
+  { label: '已发送', value: 'sent' },
+  { label: '失败', value: 'failed' },
+  { label: '已跳过', value: 'skipped' },
+];
+
+function notifyKindLabel(value) {
+  const hit = NOTIFY_KIND_OPTIONS.find((it) => it.value === value);
+  return hit && value !== 'all' ? hit.label : value || '—';
+}
+
+function notifyStatusColor(value) {
+  if (value === 'sent') return 'green';
+  if (value === 'failed') return 'red';
+  if (value === 'skipped') return 'orange';
+  return 'default';
+}
+
+function parseJsonList(value) {
+  if (Array.isArray(value)) return value;
+  if (value === undefined || value === null || value === '') return [];
+  if (typeof value === 'number') return [value];
+  try {
+    const arr = JSON.parse(String(value));
+    return Array.isArray(arr) ? arr : [arr];
+  } catch (e) {
+    return String(value).split(',').map((x) => x.trim()).filter(Boolean);
+  }
+}
+
+function fmtDurationSec(sec) {
+  const n = Number(sec);
+  if (!Number.isFinite(n) || n <= 0) return '—';
+  const d = Math.floor(n / 86400);
+  const h = Math.floor((n % 86400) / 3600);
+  const m = Math.floor((n % 3600) / 60);
+  const s = Math.floor(n % 60);
+  if (d > 0) return `${d} 天 ${h} 小时`;
+  if (h > 0) return `${h} 小时 ${m} 分`;
+  if (m > 0) return `${m} 分 ${s} 秒`;
+  return `${s} 秒`;
+}
+
+function NotificationLogs() {
+  const [page, setPage] = useState(1);
+  const [size, setSize] = useState(20);
+  const [kind, setKind] = useState('all');
+  const [status, setStatus] = useState('all');
+  const [state, setState] = useState({ data: [], total: 0, loading: false, error: null });
+
+  const load = useCallback(async () => {
+    setState((s) => ({ ...s, loading: true, error: null }));
+    try {
+      const query = { page, size };
+      if (kind !== 'all') query.kind = kind;
+      if (status !== 'all') query.status = status;
+      const res = await api('notification-logs', { query });
+      setState({
+        data: res && Array.isArray(res.data) ? res.data : [],
+        total: Number((res && res.total) || 0) || 0,
+        loading: false,
+        error: null,
+      });
+    } catch (e) {
+      setState({ data: [], total: 0, loading: false, error: e });
+    }
+  }, [page, size, kind, status]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const columns = [
+    {
+      title: '时间',
+      dataIndex: 'created_at',
+      width: 160,
+      render: (v) => <span className="pp-muted">{v ? fmtTime(v) : '—'}</span>,
+    },
+    {
+      title: '类型',
+      dataIndex: 'kind',
+      width: 96,
+      render: (v) => <Tag color={notifyStatusColor(v === 'offline' ? 'failed' : v === 'recovery' ? 'sent' : 'skipped')}>{notifyKindLabel(v)}</Tag>,
+    },
+    { title: '标题', dataIndex: 'title', ellipsis: true, render: (v) => v || '—' },
+    {
+      title: '涉及设备',
+      dataIndex: 'server_ids',
+      width: 170,
+      ellipsis: true,
+      render: (v) => {
+        const list = parseJsonList(v);
+        return list.length ? (
+          <span className="pp-mono" style={{ fontSize: 12 }}>{list.map((id) => `#${id}`).join(', ')}</span>
+        ) : (
+          <span className="pp-muted">—</span>
+        );
+      },
+    },
+    {
+      title: '收件人',
+      dataIndex: 'recipients',
+      width: 220,
+      ellipsis: true,
+      render: (v) => {
+        const list = parseJsonList(v);
+        const text = list.length ? list.join(', ') : String(v || '');
+        return text ? <span className="pp-mono" style={{ fontSize: 12 }}>{text}</span> : <span className="pp-muted">—</span>;
+      },
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      width: 100,
+      render: (v) => <Tag color={notifyStatusColor(v)}>{v || '—'}</Tag>,
+    },
+    {
+      title: '错误',
+      dataIndex: 'error',
+      width: 220,
+      ellipsis: true,
+      render: (v) => (v ? <span style={{ color: 'var(--pp-danger)', fontSize: 12 }}>{v}</span> : <span className="pp-muted">—</span>),
+    },
+  ];
+
+  return (
+    <PageCard
+      title={<span className="pp-section-title">通知记录</span>}
+      extra={
+        <Space>
+          <Select value={kind} onChange={(v) => { setKind(v); setPage(1); }} options={NOTIFY_KIND_OPTIONS} style={{ width: 120 }} />
+          <Select value={status} onChange={(v) => { setStatus(v); setPage(1); }} options={NOTIFY_STATUS_OPTIONS} style={{ width: 120 }} />
+          <Button icon={<ReloadOutlined />} onClick={load} loading={state.loading}>刷新</Button>
+        </Space>
+      }
+      bodyStyle={{ padding: 0 }}
+    >
+      {state.error ? (
+        <div style={{ padding: 18 }}>
+          <ErrorBlock error={state.error} onRetry={load} title="通知记录读取失败" />
+        </div>
+      ) : null}
+      <Table
+        className="pp-table"
+        rowKey={(row) => String((row && row.id) || `${row && row.created_at}-${row && row.title}`)}
+        size="medium"
+        loading={state.loading}
+        dataSource={state.data}
+        columns={columns}
+        scroll={{ x: 1280 }}
+        pagination={{
+          current: page,
+          pageSize: size,
+          total: state.total,
+          showSizeChanger: true,
+          pageSizeOptions: ['10', '20', '50'],
+          showTotal: (t) => `共 ${t} 条通知`,
+          onChange: (p, s) => { setPage(p); setSize(s); },
+        }}
+        locale={{ emptyText: <EmptyBlock text="暂无通知记录" /> }}
+      />
+    </PageCard>
+  );
+}
+
+/* ---------------- 设备/服务器上下线（server-status-events） ---------------- */
+
+const SERVER_EVENT_OPTIONS = [
+  { label: '全部事件', value: 'all' },
+  { label: '上线', value: 'online' },
+  { label: '离线', value: 'offline' },
+];
+
+function serverEventLabel(value) {
+  if (value === 'online') return '上线';
+  if (value === 'offline') return '离线';
+  return value || '—';
+}
+
+function serverEventColor(value) {
+  if (value === 'online') return 'green';
+  if (value === 'offline') return 'red';
+  return 'default';
+}
+
+function ServerStatusEvents() {
+  const [page, setPage] = useState(1);
+  const [size, setSize] = useState(20);
+  const [event, setEvent] = useState('all');
+  const [serverId, setServerId] = useState('all');
+  const [servers, setServers] = useState([]);
+  const [state, setState] = useState({ data: [], total: 0, loading: false, error: null });
+
+  useEffect(() => {
+    let alive = true;
+    api('servers')
+      .then((r) => {
+        if (alive) setServers(Array.isArray(r && r.data) ? r.data : []);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const load = useCallback(async () => {
+    setState((s) => ({ ...s, loading: true, error: null }));
+    try {
+      const query = { page, size };
+      if (event !== 'all') query.event = event;
+      if (serverId !== 'all') query.server_id = serverId;
+      const res = await api('server-status-events', { query });
+      setState({
+        data: res && Array.isArray(res.data) ? res.data : [],
+        total: Number((res && res.total) || 0) || 0,
+        loading: false,
+        error: null,
+      });
+    } catch (e) {
+      setState({ data: [], total: 0, loading: false, error: e });
+    }
+  }, [page, size, event, serverId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const serverOptions = useMemo(
+    () => [
+      { label: '全部服务器', value: 'all' },
+      ...servers.map((s) => ({ label: s.name || `#${s.id}`, value: String(s.id) })),
+    ],
+    [servers]
+  );
+
+  const serverName = (row) => {
+    if (!row) return '—';
+    if (row.server_name) return row.server_name;
+    const hit = servers.find((s) => String(s.id) === String(row.server_id));
+    return hit && hit.name ? hit.name : `#${row.server_id ?? '—'}`;
+  };
+
+  const columns = [
+    {
+      title: '时间',
+      dataIndex: 'occurred_at',
+      width: 168,
+      render: (v, row) => <span className="pp-muted">{fmtTime(v || (row && row.created_at))}</span>,
+    },
+    {
+      title: '设备 / 服务器',
+      dataIndex: 'server_id',
+      width: 180,
+      ellipsis: true,
+      render: (v, row) => <span>{serverName(row)}</span>,
+    },
+    {
+      title: '事件',
+      dataIndex: 'event',
+      width: 96,
+      render: (v) => <Tag color={serverEventColor(v)}>{serverEventLabel(v)}</Tag>,
+    },
+    {
+      title: '原因',
+      dataIndex: 'reason',
+      ellipsis: true,
+      render: (v) => (v ? <span style={{ fontSize: 12, color: 'var(--pp-text-secondary)' }}>{v}</span> : <span className="pp-muted">—</span>),
+    },
+    {
+      title: '离线时长',
+      dataIndex: 'duration_sec',
+      width: 130,
+      render: (v) => <span className="pp-muted">{fmtDurationSec(v)}</span>,
+    },
+  ];
+
+  return (
+    <PageCard
+      title={<span className="pp-section-title">设备上下线</span>}
+      extra={
+        <Space>
+          <Select value={serverId} onChange={(v) => { setServerId(v); setPage(1); }} options={serverOptions} style={{ width: 160 }} />
+          <Select value={event} onChange={(v) => { setEvent(v); setPage(1); }} options={SERVER_EVENT_OPTIONS} style={{ width: 120 }} />
+          <Button icon={<ReloadOutlined />} onClick={load} loading={state.loading}>刷新</Button>
+        </Space>
+      }
+      bodyStyle={{ padding: 0 }}
+    >
+      {state.error ? (
+        <div style={{ padding: 18 }}>
+          <ErrorBlock error={state.error} onRetry={load} title="设备上下线记录读取失败" />
+        </div>
+      ) : null}
+      <Table
+        className="pp-table"
+        rowKey={(row) => String((row && row.id) || `${row && row.occurred_at}-${row && row.server_id}`)}
+        size="medium"
+        loading={state.loading}
+        dataSource={state.data}
+        columns={columns}
+        scroll={{ x: 960 }}
+        pagination={{
+          current: page,
+          pageSize: size,
+          total: state.total,
+          showSizeChanger: true,
+          pageSizeOptions: ['10', '20', '50'],
+          showTotal: (t) => `共 ${t} 条上下线事件`,
+          onChange: (p, s) => { setPage(p); setSize(s); },
+        }}
+        locale={{ emptyText: <EmptyBlock text="暂无设备上下线记录" /> }}
+      />
+    </PageCard>
   );
 }
 

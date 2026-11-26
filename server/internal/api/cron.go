@@ -103,9 +103,7 @@ func (h *handlers) cronOffline(ctx context.Context, now int64) {
 			lastSeen = mapInt(r, "last_check_at", 0)
 		}
 		if lastSeen <= 0 {
-			if _, err := h.db.ExecContext(ctx,
-				`UPDATE servers SET last_status = 'offline', last_error = ?, updated_at = ? WHERE id = ?`,
-				"尚未收到 Agent 心跳", now, id); err == nil {
+			if h.markServerOffline(ctx, id, now, "尚未收到 Agent 心跳") {
 				h.recordNodeLog(ctx, id, 0, "agent-offline", "failed", 0, "尚未收到 Agent 心跳", "", "cron")
 				offline = append(offline, mapStr(r, "name", ""))
 				notices = append(notices, serverStatusNotice{ID: id, Detail: "尚未收到 Agent 心跳"})
@@ -116,9 +114,8 @@ func (h *handlers) cronOffline(ctx context.Context, now int64) {
 		if now-lastSeen <= agentOfflineTimeoutMs(pollSec) {
 			continue
 		}
-		if _, err := h.db.ExecContext(ctx,
-			`UPDATE servers SET last_status = 'offline', last_error = ?, updated_at = ? WHERE id = ?`,
-			"Agent 心跳超时（"+itoa64((now-lastSeen)/1000)+" 秒未上报）", now, id); err != nil {
+		reason := "Agent 心跳超时（" + itoa64((now-lastSeen)/1000) + " 秒未上报）"
+		if !h.markServerOffline(ctx, id, now, reason) {
 			continue
 		}
 		h.recordNodeLog(ctx, id, 0, "agent-offline", "failed", 0, "agent 心跳超时", "", "cron")
@@ -140,19 +137,46 @@ func (h *handlers) notifyStatus(ctx context.Context, title string, notices []ser
 	if h.db == nil || len(notices) == 0 {
 		return
 	}
+	kind := notifyKindFromTitle(title)
+	serverIDs := make([]int64, 0, len(notices))
+	for _, n := range notices {
+		if n.ID > 0 {
+			serverIDs = append(serverIDs, n.ID)
+		}
+	}
+
+	// 同一进程内串行化：冷却检查、预占 last_at、发信必须是一个临界区。
+	// 之前并发 Agent 恢复 goroutine 全部通过检查，造成 04:20 的邮件风暴。
+	notifyStatusMu.Lock()
+	defer notifyStatusMu.Unlock()
+
 	enabled := strings.TrimSpace(h.getSetting(ctx, "monitor_notify_enabled", "0"))
 	if enabled != "1" && !strings.EqualFold(enabled, "true") {
+		h.writeNotificationLog(ctx, kind, title, serverIDs, "", "skipped", "通知未启用")
 		return
 	}
 	emails := normalizeEmailList(h.getSetting(ctx, "monitor_notify_emails", ""))
 	if emails == "" {
+		h.writeNotificationLog(ctx, kind, title, serverIDs, "", "skipped", "未配置收件邮箱")
 		return
 	}
 	cooldown := int64(intOrJS(h.getSetting(ctx, "monitor_notify_cooldown_min", "10"), 10, 1, 1440))
 	last := int64(intOrJS(h.getSetting(ctx, "monitor_notify_last_at", "0"), 0, 0, 1<<60))
-	if nowMillis()-last < cooldown*60_000 {
+	if notifyStatusLastReserved > last {
+		last = notifyStatusLastReserved
+	}
+	now := nowMillis()
+	if now-last < cooldown*60_000 {
+		h.writeNotificationLog(ctx, kind, title, serverIDs, emails, "skipped", "冷却中")
 		return
 	}
+	// 先原子预占冷却时间：即使随后发信失败，也不会被并发请求重复发送。
+	if err := h.putSetting(ctx, "monitor_notify_last_at", itoa64(now)); err != nil {
+		h.writeNotificationLog(ctx, kind, title, serverIDs, emails, "failed", "预占通知冷却失败："+err.Error())
+		return
+	}
+	h.invalidateSettings()
+	notifyStatusLastReserved = now
 
 	var rows strings.Builder
 	for _, n := range notices {
@@ -184,6 +208,7 @@ func (h *handlers) notifyStatus(ctx context.Context, title string, notices []ser
 			html.EscapeString(version), html.EscapeString(detail))
 	}
 	if rows.Len() == 0 {
+		h.writeNotificationLog(ctx, kind, title, serverIDs, emails, "skipped", "没有可发送的节点信息")
 		return
 	}
 
@@ -205,14 +230,25 @@ func (h *handlers) notifyStatus(ctx context.Context, title string, notices []ser
 	mailBody := emailHTML(title, intro, "", 0)
 	subject := fmt.Sprintf("【代理配置管理】%s（%d 台）", title, len(notices))
 	sent := false
+	errTexts := []string{}
+	seen := map[string]bool{}
 	for _, to := range strings.Split(emails, ",") {
-		if err := h.sendMail(to, subject, mailBody); err == nil {
-			sent = true
+		to = strings.TrimSpace(to)
+		if to == "" || seen[strings.ToLower(to)] {
+			continue
 		}
+		seen[strings.ToLower(to)] = true
+		if err := notifyStatusSendMail(h, to, subject, mailBody); err != nil {
+			errTexts = append(errTexts, maskEmailForLog(to)+": "+err.Error())
+			continue
+		}
+		sent = true
 	}
+	status := "failed"
 	if sent {
-		_ = h.putSetting(ctx, "monitor_notify_last_at", itoa64(nowMillis()))
+		status = "sent"
 	}
+	h.writeNotificationLog(ctx, kind, title, serverIDs, emails, status, strings.Join(errTexts, "；"))
 }
 
 func (h *handlers) cronTaskMaintenance(ctx context.Context, now int64) {

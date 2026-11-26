@@ -454,6 +454,11 @@ func (h *handlers) agentUpdateSnapshot(ctx context.Context, srv *agentServer, m 
 	if touchPoll {
 		pollFlag = 1
 	}
+	// 并发恢复去重：只有真正把 offline→online 成功切换的 goroutine 才写 online 事件/通知。
+	recovered := false
+	if srv.LastStatus == "offline" {
+		recovered = h.markServerOnlineIfOffline(ctx, srv.ID)
+	}
 	_, err := h.db.ExecContext(ctx, `UPDATE servers SET last_status = ?, last_error = ?, last_check_at = ?,
 	      last_metrics = ?, os_info = ?, link_mode = ?, agent_platform = ?, agent_version = ?,
 	      agent_last_seen = ?, agent_last_poll_at = IF(?, ?, agent_last_poll_at),
@@ -473,7 +478,13 @@ func (h *handlers) agentUpdateSnapshot(ctx context.Context, srv *agentServer, m 
 		opts.ClearIP4, opts.IP4, opts.IP4,
 		opts.ClearIP6, opts.IP6, opts.IP6,
 		opts.PrivateIP, opts.MeshIP4, opts.MeshIP6, now, now, srv.ID)
-	if err == nil && srv.LastStatus == "offline" {
+	if err == nil && recovered {
+		offlineAt := h.latestOfflineAt(ctx, srv.ID)
+		duration := int64(0)
+		if offlineAt > 0 && now > offlineAt {
+			duration = (now - offlineAt) / 1000
+		}
+		h.recordServerStatusEvent(ctx, srv.ID, "online", "Agent 心跳恢复", now, duration)
 		go h.notifyStatus(context.Background(), "服务器恢复", []serverStatusNotice{{ID: srv.ID, Detail: "Agent 心跳恢复"}})
 	}
 	return err
