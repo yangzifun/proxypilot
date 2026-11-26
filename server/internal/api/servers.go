@@ -372,12 +372,15 @@ func agentOnlineStatus(lastSeen int64, status string, nextPoll int64) string {
 }
 
 // agentOfflineTimeoutMs 返回「允许多久没有心跳才判离线」。
-// 必须严格大于心跳间隔，并至少留 60 秒缓冲，避免网络抖动/采集耗时导致误判。
+//
+// 必须明显大于心跳间隔，并至少留 5 分钟缓冲：
+// Agent 所在机器短暂 CPU/网络抖动、重启或更新时，94 秒级的心跳空档
+// 不应被判定为离线并触发“服务器离线/恢复”邮件。
 func agentOfflineTimeoutMs(nextPoll int64) int64 {
 	poll := clampInt(nextPoll, 2, 900)
-	timeout := poll * 4 * 1000
-	if timeout < 60_000 {
-		timeout = 60_000
+	timeout := poll * 6 * 1000
+	if timeout < 300_000 {
+		timeout = 300_000
 	}
 	if timeout <= poll*1000 {
 		timeout = (poll + 1) * 1000

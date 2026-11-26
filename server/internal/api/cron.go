@@ -106,7 +106,8 @@ func (h *handlers) cronOffline(ctx context.Context, now int64) {
 			if h.markServerOffline(ctx, id, now, "尚未收到 Agent 心跳") {
 				h.recordNodeLog(ctx, id, 0, "agent-offline", "failed", 0, "尚未收到 Agent 心跳", "", "cron")
 				offline = append(offline, mapStr(r, "name", ""))
-				notices = append(notices, serverStatusNotice{ID: id, Detail: "尚未收到 Agent 心跳"})
+				// 新装机器尚未完成首次心跳时只记录状态，不发“离线”邮件；
+				// 否则每台新机器安装阶段都会触发一次离线通知。
 			}
 			continue
 		}

@@ -485,7 +485,11 @@ func (h *handlers) agentUpdateSnapshot(ctx context.Context, srv *agentServer, m 
 			duration = (now - offlineAt) / 1000
 		}
 		h.recordServerStatusEvent(ctx, srv.ID, "online", "Agent 心跳恢复", now, duration)
-		go h.notifyStatus(context.Background(), "服务器恢复", []serverStatusNotice{{ID: srv.ID, Detail: "Agent 心跳恢复"}})
+		// 首次心跳恢复（安装前从未上报过）不发送“服务器恢复”邮件；
+		// 只有曾经在线过、真正经历离线阈值后才通知恢复。
+		if srv.AgentLastSeen > 0 {
+			go h.notifyStatus(context.Background(), "服务器恢复", []serverStatusNotice{{ID: srv.ID, Detail: "Agent 心跳恢复"}})
+		}
 	}
 	return err
 }
